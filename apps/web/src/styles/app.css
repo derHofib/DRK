@@ -131,3 +131,117 @@
   background: var(--zv-accent-soft);
   color: var(--zv-accent-strong);
 }
+
+.zv-pill-vergeben {
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+}
+
+.zv-pill-zugeordnet {
+  background: var(--zv-status-ok-bg);
+  color: var(--zv-status-ok);
+}
+
+.zv-sub-inline {
+  color: var(--zv-text-faint);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.zv-mono {
+  font-family: var(--zv-font-mono);
+}
+
+.zv-tabbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+}
+
+.zv-tabbar button {
+  padding: 12px 4px;
+  margin-right: 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--zv-text-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.zv-tabbar button.active {
+  color: var(--zv-accent-strong);
+  border-bottom-color: var(--zv-accent);
+}
+
+.zv-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.zv-room-card {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow);
+  padding: 14px;
+}
+
+.zv-room-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.zv-room-nummer {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.zv-room-klient {
+  font-size: 13.5px;
+  margin-bottom: 8px;
+}
+
+.zv-link-btn {
+  background: none;
+  border: none;
+  color: var(--zv-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.zv-verlauf-liste {
+  list-style: none;
+  padding: 10px 0 0;
+  margin: 10px 0 0;
+  border-top: 1px solid var(--zv-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zv-verlauf-liste li {
+  font-size: 12.5px;
+}
+
+.zv-inline-form {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.zv-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}

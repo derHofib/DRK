@@ -8,10 +8,11 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 0 (Fundament)
+## Stand: Phase 1 (Standorte, Zimmer, Klienten, Belegung)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
+**Phase 0 — Fundament**
 - Monorepo (pnpm-Workspaces): `apps/api` (NestJS), `apps/web` (React/Vite),
   `packages/shared` (gemeinsame Typen)
 - Schema für `mandant` und `benutzer` inkl. Row-Level-Security, als reine
@@ -27,9 +28,28 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
   und beweist über den echten HTTP-Pfad (Login → Token → Abfrage), dass
   niemals Zeilen des anderen Mandanten sichtbar werden
 
-Noch nicht angefasst: Standorte, Zimmer, Klienten, Belegung, Kassenbuch,
-Kostenübernahmen, Rechnungen, Dokumente, mobile Ansicht. Das sind die
-nächsten Phasen.
+**Phase 1 — Standorte, Zimmer, Klienten, Belegung**
+- Schema für `standort`, `zimmer` (kein Statusfeld), `klient`, `belegung`
+  und `benutzer_standort` (optionale Standort-Einschränkung je Benutzer)
+- Zwei Exclusion-Constraints auf `belegung`: ein Zimmer kann nicht doppelt
+  belegt werden, eine Person nicht gleichzeitig in zwei Zimmern — beide von
+  der Datenbank erzwungen, nicht im Anwendungscode
+- `GET /zimmer` leitet den Status ausschließlich per `LEFT JOIN` auf offene
+  Belegungen ab; kein gespeichertes Statusfeld existiert
+- `GET /zimmer/:id/belegungsverlauf` liefert frühere Bewohner:innen nur mit
+  Initialen, außer für die Rollen `leitung`/`verwaltung` — Anonymisierung
+  passiert beim Lesen, gespeichert wird immer der volle Name
+- `POST /belegungen` übersetzt eine verletzte Exclusion-Constraint
+  (SQLSTATE `23P01`) in ein `409 Conflict`
+- Web-Oberfläche: Zimmerübersicht (gruppiert nach Standort, mit
+  Belegungsverlauf), Klientenliste mit Anlegeformular
+- Zwei e2e-Testsuiten (9 Tests), beide mit Gegenprobe verifiziert: RLS bzw.
+  die jeweilige Exclusion-Constraint testweise entfernt, Test wird rot,
+  wieder hergestellt, Test wird grün — siehe Commit-Historie
+
+Noch nicht angefasst: Kassenbuch, HZL-Wochenauszahlung mit
+Unterschriftsbestätigung, Kostenübernahmen, Rechnungen, Dokumente, mobile
+Ansicht, 2FA-Erzwingung. Das sind die nächsten Phasen.
 
 ## Was hier bewusst fehlt
 
@@ -91,19 +111,35 @@ pnpm test:api          # alle API-Tests
 pnpm test:mandanten    # nur der Mandantentrennungs-Test
 ```
 
-Der Mandantentrennungs-Test braucht eine erreichbare, migrierte Datenbank
-(`MIGRATIONS_DATABASE_URL` und `APP_DATABASE_URL` gesetzt) — kein Mock, RLS
-lässt sich nicht sinnvoll mocken.
+Beide Testsuiten (`mandanten-trennung.e2e-spec.ts`, `belegung.e2e-spec.ts`)
+brauchen eine erreichbare, migrierte Datenbank (`MIGRATIONS_DATABASE_URL`
+und `APP_DATABASE_URL` gesetzt) — kein Mock, weder RLS noch
+Exclusion-Constraints lassen sich sinnvoll mocken.
 
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
 - **Zustände werden nie gespeichert, nur abgeleitet.** Kein
-  `zimmer.status`-Feld wird es geben — der Belegungsstatus folgt aus der
-  `belegung`-Tabelle (Phase 1). Siehe Bauplan, Punkt 03.
+  `zimmer.status`-Feld existiert — der Belegungsstatus folgt per `LEFT
+  JOIN` aus der `belegung`-Tabelle (siehe `zimmer.service.ts`). Siehe
+  Bauplan, Punkt 03. Dasselbe Prinzip gilt für alles, was noch kommt:
+  Stundensaldo, Kassenbuch-Kontostand — Bewegungstabelle, nie ein Feld.
 - **Jede neue fachliche Tabelle braucht eine `mandant_id`-Spalte und eine
   RLS-Policy nach dem Muster in `migrations/0003_mandant.sql` /
   `0004_benutzer.sql`.** Kein `WHERE mandant_id = ...` im Anwendungscode als
   Ersatz — das ist genau der Fehler, den RLS verhindern soll.
+- **Zeiträume, die sich nicht überlappen dürfen, gehören als
+  Exclusion-Constraint in die Datenbank**, nicht als Prüfung im
+  Service-Layer (siehe `migrations/0010_belegung.sql`) — sonst ist es eine
+  Race Condition zwischen zwei gleichzeitigen Anfragen.
 - **Der einzige Ort, der mit der Datenbank spricht, ist `DatabaseService`.**
   `withTenant()` für alles Normale, `withoutTenant()` ausschließlich für den
   Login-Pfad vor dem Kennen des Mandanten (siehe Kommentar dort).
+- **Anonymisierung passiert beim Lesen, nie beim Schreiben.** Gespeichert
+  wird immer der volle Name; welche Rolle wie viel davon zu sehen bekommt,
+  entscheidet der Service (siehe `ROLLEN_MIT_VOLLEM_VERLAUF` in
+  `zimmer.service.ts`).
+- **`pg` liefert `date`-Spalten sonst als JS-`Date`-Objekt zurück.** Der
+  globale Type-Parser in `database.service.ts` (OID 1082) reicht sie
+  stattdessen als reinen `YYYY-MM-DD`-String durch — ohne das kippt ein
+  Einzugsdatum je nach Server-Zeitzone auf den falschen Tag, sobald es über
+  JSON läuft.

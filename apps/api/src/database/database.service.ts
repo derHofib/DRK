@@ -1,6 +1,17 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
-import { Pool, PoolClient } from "pg";
+import { Pool, PoolClient, types } from "pg";
 import { requireTenantContext } from "../common/tenant-context";
+
+// OID 1082 = date. Ohne das liefert node-postgres fuer reine Datumsspalten
+// (einzug, auszug, geburtsdatum) ein JS-Date-Objekt zurueck -- das bringt
+// eine Uhrzeit- und Zeitzonenkomponente ins Spiel, die fuer ein Datum ohne
+// Uhrzeit nicht existiert. JSON.stringify macht daraus
+// "2024-06-01T00:00:00.000Z" statt "2024-06-01", und je nach Server-
+// Zeitzone kann das sogar auf den falschen Tag kippen. Deshalb: als reinen
+// String durchreichen, so wie Postgres ihn sendet (YYYY-MM-DD). Muss vor
+// der ersten Query stehen -- deshalb hier auf Modulebene, nicht in der
+// Klasse.
+types.setTypeParser(1082, (value) => value);
 
 /**
  * Der einzige Ort, an dem die App-Rolle mit der Datenbank spricht.
