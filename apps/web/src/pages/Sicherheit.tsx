@@ -1,0 +1,124 @@
+import { FormEvent, useEffect, useState } from "react";
+import type { TotpEinrichtenResponse } from "@zimmerakte/shared";
+import { api } from "../api/client";
+
+export function Sicherheit() {
+  const [aktiviert, setAktiviert] = useState<boolean | null>(null);
+  const [setup, setSetup] = useState<TotpEinrichtenResponse | null>(null);
+  const [deaktivierenOffen, setDeaktivierenOffen] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [erfolg, setErfolg] = useState<string | null>(null);
+
+  function ladeStatus() {
+    api.totpStatus().then((r) => setAktiviert(r.aktiviert)).catch((err) => setFehler(err.message));
+  }
+
+  useEffect(ladeStatus, []);
+
+  async function einrichten() {
+    setFehler(null);
+    setErfolg(null);
+    try {
+      setSetup(await api.totpEinrichten());
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Einrichtung konnte nicht gestartet werden.");
+    }
+  }
+
+  async function aktivieren(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    setFehler(null);
+    try {
+      await api.totpAktivieren(String(form.get("code")));
+      setSetup(null);
+      setErfolg("Zwei-Faktor-Anmeldung ist jetzt aktiv.");
+      ladeStatus();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Code ungültig.");
+    }
+  }
+
+  async function deaktivieren(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    setFehler(null);
+    try {
+      await api.totpDeaktivieren(String(form.get("code")));
+      setDeaktivierenOffen(false);
+      formElement.reset();
+      setErfolg("Zwei-Faktor-Anmeldung wurde deaktiviert.");
+      ladeStatus();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Code ungültig.");
+    }
+  }
+
+  return (
+    <div className="zv-card" style={{ maxWidth: 420, padding: 20 }}>
+      <h2 style={{ marginTop: 0, fontSize: 16 }}>Zwei-Faktor-Anmeldung (2FA)</h2>
+
+      {fehler && <div className="zv-error">{fehler}</div>}
+      {erfolg && (
+        <div className="zv-field" style={{ color: "var(--zv-status-ok)", fontSize: 13.5, marginBottom: 14 }}>
+          {erfolg}
+        </div>
+      )}
+
+      {aktiviert === null && <p className="zv-sub">Lädt…</p>}
+
+      {aktiviert === true && !deaktivierenOffen && (
+        <div>
+          <p className="zv-sub">2FA ist für dieses Konto aktiv.</p>
+          <button className="zv-link-btn" onClick={() => setDeaktivierenOffen(true)}>
+            2FA deaktivieren
+          </button>
+        </div>
+      )}
+
+      {aktiviert === true && deaktivierenOffen && (
+        <form className="zv-inline-form" onSubmit={deaktivieren}>
+          <div className="zv-field">
+            <label>Code aus der Authenticator-App zur Bestätigung</label>
+            <input name="code" inputMode="numeric" autoComplete="one-time-code" required />
+          </div>
+          <button className="zv-btn" type="submit">
+            Deaktivieren
+          </button>
+        </form>
+      )}
+
+      {aktiviert === false && !setup && (
+        <div>
+          <p className="zv-sub">2FA ist für dieses Konto nicht aktiv.</p>
+          <button className="zv-btn" style={{ width: "auto", padding: "6px 14px" }} onClick={einrichten}>
+            2FA einrichten
+          </button>
+        </div>
+      )}
+
+      {setup && (
+        <div>
+          <p className="zv-sub">
+            Mit einer Authenticator-App (z. B. Google Authenticator, Authy) scannen oder den Code manuell eintragen:
+          </p>
+          <img src={setup.qrCodeDataUrl} alt="QR-Code für 2FA-Einrichtung" style={{ width: 180, height: 180 }} />
+          <p className="zv-mono" style={{ fontSize: 12.5, wordBreak: "break-all", marginBottom: 14 }}>
+            {setup.secret}
+          </p>
+          <form onSubmit={aktivieren}>
+            <div className="zv-field">
+              <label>Code aus der App zur Bestätigung</label>
+              <input name="code" inputMode="numeric" autoComplete="one-time-code" required />
+            </div>
+            <button className="zv-btn" type="submit">
+              Aktivieren
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

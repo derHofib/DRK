@@ -13,6 +13,7 @@ import type {
   RechnungDto,
   RechnungStatus,
   StandortDto,
+  TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
@@ -67,6 +68,19 @@ async function blobUrl(path: string): Promise<string> {
 export const api = {
   login: (payload: LoginRequest) =>
     request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+  loginTotp: (pendingToken: string, code: string) =>
+    request<{ accessToken: string }>("/auth/login/totp", {
+      method: "POST",
+      body: JSON.stringify({ pendingToken, code }),
+    }),
+
+  totpStatus: () => request<{ aktiviert: boolean }>("/auth/totp/status"),
+  totpEinrichten: () => request<TotpEinrichtenResponse>("/auth/totp/einrichten", { method: "POST" }),
+  totpAktivieren: (code: string) =>
+    request<{ aktiviert: boolean }>("/auth/totp/aktivieren", { method: "POST", body: JSON.stringify({ code }) }),
+  totpDeaktivieren: (code: string) =>
+    request<{ aktiviert: boolean }>("/auth/totp/deaktivieren", { method: "POST", body: JSON.stringify({ code }) }),
+
   eigenerMandant: () => request<MandantDto>("/mandant/me"),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
 

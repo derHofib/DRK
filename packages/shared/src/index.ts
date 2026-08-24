@@ -13,8 +13,12 @@ export interface LoginRequest {
   passwort: string;
 }
 
-export interface LoginResponse {
-  accessToken: string;
+export type LoginResponse = { accessToken: string } | { totpErforderlich: true; pendingToken: string };
+
+export interface TotpEinrichtenResponse {
+  secret: string;
+  otpauthUrl: string;
+  qrCodeDataUrl: string;
 }
 
 export interface MandantDto {

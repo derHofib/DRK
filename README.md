@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 3 (Kostenübernahmen, Rechnungen, Klientenakte als Vollansicht)
+## Stand: Phase 4 (2FA-Erzwingung)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -122,14 +122,57 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
   Rechnung mit hochgeladenem PDF anlegen → genehmigen → auszahlen → zweite
   Rechnung ablehnen → Dokument abrufen), inklusive Screenshots
 
-Noch nicht angefasst: mobile Ansicht, 2FA-Erzwingung, Produktions-Deployment.
-Das sind die nächsten Phasen.
+**Phase 4 — 2FA-Erzwingung**
+- Login wird zweistufig, sobald `benutzer.totp_aktiviert = true` ist:
+  `POST /auth/login` liefert dann kein Zugriffstoken mehr direkt, sondern
+  ein kurzlebiges (5 Minuten) "pending"-Token; erst `POST /auth/login/totp`
+  mit diesem Token plus einem gültigen TOTP-Code liefert das echte
+  Zugriffstoken. Ohne aktivierte 2FA bleibt der Login einstufig wie bisher.
+- Jedes JWT trägt jetzt ein `typ`-Feld (`"access"` vs. `"totp_pending"`).
+  `AuthGuard` lässt nur `"access"` durch — eine explizite Allowlist, damit
+  ein pending-Token niemals als vollwertiges Zugriffstoken auf einen
+  normalen, geschützten Endpunkt durchgeht.
+- Replay-Schutz: jeder erfolgreich verifizierte TOTP-Code merkt sich seinen
+  Zeitschritt (`benutzer.totp_letzter_schritt`); ein Code aus einem
+  bereits verbrauchten oder früheren Zeitschritt wird beim Login abgelehnt,
+  selbst wenn er sonst gültig wäre.
+- `benutzer.totp_secret` wird an der Anwendungsschicht mit AES-256-GCM
+  verschlüsselt gespeichert (siehe `common/geheimnis.ts`) — das war schon
+  in der Phase-0-Migration als Vorgabe kommentiert, jetzt eingelöst. Ein
+  DB-Dump allein reicht nicht, um TOTP-Codes fälschen zu können.
+- Self-Service-Flow: `POST /auth/totp/einrichten` erzeugt ein neues, noch
+  nicht aktives Secret (inkl. QR-Code als Data-URL) für den eingeloggten
+  Benutzer selbst — die ID kommt nie aus dem Request-Body, niemand kann
+  2FA für ein fremdes Konto einrichten. Aktiv wird es erst nach einem
+  bestätigten Code über `POST /auth/totp/aktivieren`, damit ein Tippfehler
+  beim Einscannen niemand aussperrt. `POST /auth/totp/deaktivieren`
+  verlangt ebenfalls einen gültigen Code.
+- Web-Oberfläche: zweistufiges Login-Formular (Passwort → Code, sobald
+  angefordert) und ein neuer "Sicherheit"-Tab zum Einrichten/Deaktivieren
+  der eigenen 2FA (QR-Code, Secret zur manuellen Eingabe, Bestätigungscode).
+- Fünfte e2e-Testsuite (11 Tests), inklusive zweier Gegenproben, die dieses
+  Mal keine Datenbank-Policy betreffen, sondern Anwendungscode: die
+  `typ`-Prüfung in `AuthGuard` und die Replay-Schutz-Prüfung in
+  `totpVerifizieren()` wurden einzeln testweise auskommentiert, genau der
+  jeweils zugehörige Test wurde rot, alle anderen blieben grün —
+  wiederhergestellt, wieder alle 11 grün.
+- Ein echter Bug wurde beim Bauen der Tests gefunden und behoben: TOTP-Codes
+  sind deterministisch je 30-Sekunden-Zeitfenster, ein Testlauf schneller
+  als 30s erzeugt für zwei aufeinanderfolgende Prüfungen denselben Code —
+  der eigene Replay-Schutz hat das (korrekt!) abgelehnt. Betroffene Tests
+  warten jetzt real bis zur nächsten Zeitscheibe, statt die Systemzeit zu
+  fälschen.
+- Ein zweiter, kompletter Klick-Durchlauf im echten Browser verifiziert:
+  2FA einrichten (QR-Code + Secret aus der UI gelesen) → aktivieren →
+  abmelden → mit Passwort neu anmelden → derselbe (bereits verbrauchte)
+  Code wird abgelehnt → nach Warten auf eine neue Zeitscheibe wird ein
+  frischer Code akzeptiert → deaktivieren.
+
+Noch nicht angefasst: mobile Ansicht, Produktions-Deployment. Das sind die
+nächsten Phasen.
 
 ## Was hier bewusst fehlt
 
-- **2FA-Erzwingung.** Das Feld `benutzer.totp_secret` existiert, der
-  Anmelde-Flow prüft es aber noch nicht ab. Vor Produktivbetrieb
-  nachzuziehen (siehe `auth.service.ts`, TODO-Kommentar an der Stelle).
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. `apps/web/src/styles/tokens.css`
   enthält ein neutrales Platzhaltersystem — austauschbar, ohne dass
@@ -185,12 +228,14 @@ pnpm test:api          # alle API-Tests
 pnpm test:mandanten    # nur der Mandantentrennungs-Test
 ```
 
-Alle vier Testsuiten (`mandanten-trennung.e2e-spec.ts`,
-`belegung.e2e-spec.ts`, `kassenbuch.e2e-spec.ts`, `rechnung.e2e-spec.ts`)
-brauchen eine erreichbare, migrierte Datenbank (`MIGRATIONS_DATABASE_URL`
-und `APP_DATABASE_URL` gesetzt) — kein Mock, weder RLS noch
-Exclusion-Constraints noch Trigger noch spaltenscharfe GRANTs lassen sich
-sinnvoll mocken.
+Alle fünf Testsuiten (`mandanten-trennung.e2e-spec.ts`,
+`belegung.e2e-spec.ts`, `kassenbuch.e2e-spec.ts`, `rechnung.e2e-spec.ts`,
+`totp.e2e-spec.ts`) brauchen eine erreichbare, migrierte Datenbank
+(`MIGRATIONS_DATABASE_URL`, `APP_DATABASE_URL` und `TOTP_ENCRYPTION_KEY`
+gesetzt) — kein Mock, weder RLS noch Exclusion-Constraints noch Trigger
+noch spaltenscharfe GRANTs lassen sich sinnvoll mocken.
+`totp.e2e-spec.ts` braucht wegen zweier echter 30-Sekunden-Wartezeiten
+(siehe Phase 4 oben) knapp eine Minute — das ist kein Hänger.
 
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
@@ -245,3 +290,22 @@ sinnvoll mocken.
   Mehrzeilen-Transaktions-Invariante über zwei Tabellen ist. Die
   Faustregel: eine Tabelle betroffen → Trigger/Constraint in der
   Migration; mehrere Tabellen betroffen → Service.
+- **Ein Token-Typ-Feld ist eine Allowlist, keine Denylist.** Jedes JWT
+  trägt `typ: "access"` oder `typ: "totp_pending"`; `AuthGuard` prüft
+  explizit auf `"access"`, statt nur die bekannten "schlechten" Typen
+  auszuschließen — ein künftiger dritter Token-Typ (z. B. für
+  Passwort-Reset) rutscht so nicht versehentlich als Zugriffstoken durch,
+  nur weil niemand daran gedacht hat, ihn auf eine Sperrliste zu setzen.
+- **Sicherheitsrelevante Prüfungen im Anwendungscode verdienen dieselbe
+  Gegenprobe wie Datenbank-Constraints.** Die `typ`-Prüfung in
+  `auth.guard.ts` und der Replay-Schutz in `totpVerifizieren()` wurden
+  testweise auskommentiert, nicht nur gedanklich für richtig befunden —
+  siehe Commit-Historie zu Phase 4. Ein Test, der nie beobachtet rot war,
+  ist kein verifizierter Test.
+- **Geheimnisse, die in der Datenbank landen müssen (hier:
+  `benutzer.totp_secret`), gehören an der Anwendungsschicht verschlüsselt,
+  nicht im Klartext im Schema vertraut** (siehe `common/geheimnis.ts`,
+  AES-256-GCM mit Schlüssel aus `TOTP_ENCRYPTION_KEY`). Das war schon in
+  der ursprünglichen Migration (0004) als Vorgabe kommentiert, bevor der
+  2FA-Code überhaupt existierte — ein Hinweis, wie früh solche
+  Entscheidungen festgelegt werden sollten.
