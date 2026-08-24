@@ -23,7 +23,10 @@ jobs:
           --health-retries 10
     env:
       MIGRATIONS_DATABASE_URL: postgresql://zimmerakte_admin:ci_only_not_secret@localhost:5432/zimmerakte
-      APP_DATABASE_URL: postgresql://zimmerakte_app:ci_only_not_secret_either@localhost:5432/zimmerakte
+      # zimmerakte_app wird von der Migration selbst mit diesem Dev-Default
+      # angelegt (siehe migrations/0002_app_role.sql) -- kann hier nicht
+      # frei gewaehlt werden, ohne die Migration zu aendern.
+      APP_DATABASE_URL: postgresql://zimmerakte_app:dev_only_change_me_too@localhost:5432/zimmerakte
       JWT_SECRET: ci_only_test_secret
       # 32 zufaellige Bytes, base64 -- nur fuer CI-Testlaeufe, kein echtes
       # Geheimnis (siehe common/geheimnis.ts).
@@ -31,9 +34,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keine "version:" hier -- liest pnpm@10.33.0 aus dem
+      # "packageManager"-Feld in package.json, damit lokale Entwicklung, CI
+      # und Docker-Build garantiert dieselbe pnpm-Version benutzen.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -53,9 +57,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keine "version:" hier -- liest pnpm@10.33.0 aus dem
+      # "packageManager"-Feld in package.json, damit lokale Entwicklung, CI
+      # und Docker-Build garantiert dieselbe pnpm-Version benutzen.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
