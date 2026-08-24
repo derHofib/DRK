@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 2 (Kassenbuch, HZL-Wochenübersicht, Unterschriftsbestätigung)
+## Stand: Phase 3 (Kostenübernahmen, Rechnungen, Klientenakte als Vollansicht)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -82,8 +82,48 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
   das neue Kassenbuch-Formular als auch das bereits bestehende
   Klienten-Anlegeformular aus Phase 1
 
-Noch nicht angefasst: Kostenübernahmen, Rechnungen, Dokumente, mobile
-Ansicht, 2FA-Erzwingung. Das sind die nächsten Phasen.
+**Phase 3 — Kostenübernahmen, Rechnungen, Klientenakte als Vollansicht**
+- Schema für `kostenuebernahme` (Zeitraum-Zuordnung Klient↔Amt): wie
+  `belegung` wird `bis` offen angelegt und genau einmal per Update
+  geschlossen (`PATCH /kostenuebernahmen/:id/beenden`), kein Statusfeld.
+  Eine Exclusion-Constraint verhindert zwei sich überschneidende Zeiträume
+  desselben Klienten — dieselbe Technik wie bei `belegung`, hier auf ein
+  fachlich anderes "kann sich nicht überlappen"-Problem angewendet
+- Schema für `rechnung` (unveränderlich, append-only wie `kassenbuchung`)
+  und `rechnung_statuswechsel`: der Status (`beantragt` → `genehmigt` →
+  `ausgezahlt`, oder `beantragt`/`genehmigt` → `abgelehnt`) wird **nie als
+  Feld gespeichert**, sondern ist immer die zuletzt eingefügte Zeile in
+  `rechnung_statuswechsel` — dasselbe Ableitungsprinzip wie beim
+  Zimmerstatus, hier auf einen mehrstufigen Workflow statt auf ein
+  Ja/Nein angewendet
+- Der Workflow selbst (welche Statuswechsel erlaubt sind, `ausgezahlt` und
+  `abgelehnt` sind Endzustände) wird von einem `BEFORE INSERT`-Trigger in
+  der Datenbank erzwungen (`rechnung_statuswechsel_pruefen()`), nicht im
+  Service — es ist eine Prüfung innerhalb einer einzelnen Tabelle gegen die
+  vorherige Zeile derselben `rechnung_id`, damit gehört sie dorthin, nach
+  demselben Muster wie der `benutzer_standort`-Trigger aus Phase 0
+- `rechnung_dokument` (optionales Beleg-Dokument, PDF oder Bild) folgt
+  demselben `bytea`+SHA-256-Hash-Kompromiss wie `unterschrift` aus Phase 2,
+  mit derselben offenen Objektspeicher-Frage für den Produktivbetrieb
+- Web-Oberfläche: die Klientenliste öffnet jetzt eine volle
+  Klientenakten-Ansicht (nicht mehr nur eine Zeile in der Tabelle) mit den
+  Reitern Übersicht, Kostenübernahmen, Rechnungen und Kassenbuch (gefiltert
+  auf diesen Klienten) — das war die ursprüngliche Anforderung aus der
+  allerersten Anfrage ("Ich brauche in der Klientensicht, dass ich das noch
+  als volles Fenster anzeigen kann")
+- Vierte e2e-Testsuite (14 Tests), mit Gegenprobe verifiziert: die
+  Exclusion-Constraint auf `kostenuebernahme`, der
+  Statuswechsel-Trigger und die Änderungssperre auf `rechnung` wurden
+  einzeln testweise entfernt, genau die davon abhängigen Tests wurden rot
+  (6 von 14), alle anderen blieben grün — wiederhergestellt, wieder alle 14
+  grün
+- Kompletter Klick-Durchlauf im echten Browser verifiziert (Login →
+  Klientenakte → Kostenübernahme anlegen/überlappen lassen/beenden →
+  Rechnung mit hochgeladenem PDF anlegen → genehmigen → auszahlen → zweite
+  Rechnung ablehnen → Dokument abrufen), inklusive Screenshots
+
+Noch nicht angefasst: mobile Ansicht, 2FA-Erzwingung, Produktions-Deployment.
+Das sind die nächsten Phasen.
 
 ## Was hier bewusst fehlt
 
@@ -145,11 +185,12 @@ pnpm test:api          # alle API-Tests
 pnpm test:mandanten    # nur der Mandantentrennungs-Test
 ```
 
-Alle drei Testsuiten (`mandanten-trennung.e2e-spec.ts`,
-`belegung.e2e-spec.ts`, `kassenbuch.e2e-spec.ts`) brauchen eine erreichbare,
-migrierte Datenbank (`MIGRATIONS_DATABASE_URL` und `APP_DATABASE_URL`
-gesetzt) — kein Mock, weder RLS noch Exclusion-Constraints noch
-spaltenscharfe GRANTs lassen sich sinnvoll mocken.
+Alle vier Testsuiten (`mandanten-trennung.e2e-spec.ts`,
+`belegung.e2e-spec.ts`, `kassenbuch.e2e-spec.ts`, `rechnung.e2e-spec.ts`)
+brauchen eine erreichbare, migrierte Datenbank (`MIGRATIONS_DATABASE_URL`
+und `APP_DATABASE_URL` gesetzt) — kein Mock, weder RLS noch
+Exclusion-Constraints noch Trigger noch spaltenscharfe GRANTs lassen sich
+sinnvoll mocken.
 
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
@@ -196,3 +237,11 @@ spaltenscharfe GRANTs lassen sich sinnvoll mocken.
   `await` zwischenspeichern.** React setzt es danach auf `null` zurück
   (facebook/react#20544) — betrifft jeden `onSubmit`-Handler, der nach
   einem await noch `.reset()` o. Ä. auf dem Formularelement aufruft.
+- **Ein mehrstufiger Workflow-Status (`rechnung`: beantragt → genehmigt →
+  ausgezahlt/abgelehnt) ist eine Prüfung innerhalb einer Tabelle** (die
+  neue Statuszeile gegen die vorherige Zeile derselben `rechnung_id`) und
+  gehört deshalb als `BEFORE INSERT`-Trigger in die Migration, nicht in
+  den Service — anders als die Unterschriftspflicht aus Phase 2, die eine
+  Mehrzeilen-Transaktions-Invariante über zwei Tabellen ist. Die
+  Faustregel: eine Tabelle betroffen → Trigger/Constraint in der
+  Migration; mehrere Tabellen betroffen → Service.

@@ -5,9 +5,13 @@ import type {
   KassenbuchungTyp,
   KlientDetailDto,
   KlientListEintragDto,
+  KostenuebernahmeDto,
   LoginRequest,
   LoginResponse,
   MandantDto,
+  RechnungDetailDto,
+  RechnungDto,
+  RechnungStatus,
   StandortDto,
   WochenuebersichtEintragDto,
   ZimmerListEintragDto,
@@ -45,6 +49,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+// Fuer Binaerdateien (Bilder, PDFs) statt JSON -- deshalb nicht ueber
+// request<T>(), das braucht ausserdem den Auth-Header, den ein rohes
+// <img src="..."> nicht mitschickt.
+async function blobUrl(path: string): Promise<string> {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Datei konnte nicht geladen werden (${res.status})`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export const api = {
@@ -99,15 +116,30 @@ export const api = {
   wochenuebersicht: (isoJahr: number, isoWoche: number) =>
     request<WochenuebersichtEintragDto[]>(`/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}`),
 
-  // Binaerbild, kein JSON -- deshalb nicht ueber request<T>(), das braucht
-  // ausserdem den Auth-Header, den ein rohes <img src="..."> nicht mitschickt.
-  unterschriftBildUrl: async (kassenbuchungId: string): Promise<string> => {
-    const token = getToken();
-    const res = await fetch(`/api/kassenbuchungen/${kassenbuchungId}/unterschrift`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`Unterschrift konnte nicht geladen werden (${res.status})`);
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  },
+  unterschriftBildUrl: (kassenbuchungId: string) => blobUrl(`/kassenbuchungen/${kassenbuchungId}/unterschrift`),
+
+  kostenuebernahmenListe: (klientId: string) =>
+    request<KostenuebernahmeDto[]>(`/kostenuebernahmen?klientId=${klientId}`),
+  kostenuebernahmeAnlegen: (payload: { klientId: string; amt: string; von: string }) =>
+    request<KostenuebernahmeDto>("/kostenuebernahmen", { method: "POST", body: JSON.stringify(payload) }),
+  kostenuebernahmeBeenden: (id: string, bis: string) =>
+    request<KostenuebernahmeDto>(`/kostenuebernahmen/${id}/beenden`, {
+      method: "PATCH",
+      body: JSON.stringify({ bis }),
+    }),
+
+  rechnungenListe: (klientId?: string) =>
+    request<RechnungDto[]>(`/rechnungen${klientId ? `?klientId=${klientId}` : ""}`),
+  rechnung: (id: string) => request<RechnungDetailDto>(`/rechnungen/${id}`),
+  rechnungAnlegen: (payload: {
+    klientId: string;
+    betragCent: number;
+    beschreibung: string;
+    dokumentBase64?: string;
+    dokumentDateiname?: string;
+    dokumentMimeType?: string;
+  }) => request<RechnungDto>("/rechnungen", { method: "POST", body: JSON.stringify(payload) }),
+  rechnungStatusAendern: (id: string, status: RechnungStatus, grund?: string) =>
+    request<RechnungDto>(`/rechnungen/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, grund }) }),
+  rechnungDokumentUrl: (rechnungId: string) => blobUrl(`/rechnungen/${rechnungId}/dokument`),
 };

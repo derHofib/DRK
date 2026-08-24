@@ -52,7 +52,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         </button>
       </div>
 
-      <div className="zv-content" style={{ maxWidth: tab === "kassenbuch" ? 900 : undefined }}>
+      <div className="zv-content" style={{ maxWidth: tab === "kassenbuch" || tab === "klienten" ? 900 : undefined }}>
         {tab === "zimmer" && <Zimmer />}
         {tab === "klienten" && <Klienten />}
         {tab === "kassenbuch" && <Kassenbuch />}

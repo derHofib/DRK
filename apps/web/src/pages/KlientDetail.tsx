@@ -1,0 +1,467 @@
+import { Fragment, FormEvent, useEffect, useState } from "react";
+import type {
+  KassenbuchungDto,
+  KlientDetailDto,
+  KostenuebernahmeDto,
+  RechnungDto,
+  RechnungStatus,
+} from "@zimmerakte/shared";
+import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
+import { api } from "../api/client";
+import { formatBetrag } from "../format";
+
+type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch";
+
+const eingabeFeldStil = {
+  padding: "6px 8px",
+  borderRadius: "var(--zv-radius-s)",
+  border: "1px solid var(--zv-border)",
+  background: "var(--zv-bg)",
+  color: "var(--zv-text)",
+  fontSize: 14,
+};
+
+function dateiZuBase64(datei: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(datei);
+  });
+}
+
+export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
+  const [klient, setKlient] = useState<KlientDetailDto | null>(null);
+  const [tab, setTab] = useState<Tab>("uebersicht");
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
+  }, [klientId]);
+
+  return (
+    <div>
+      <button className="zv-link-btn" onClick={onZurueck} style={{ marginBottom: 14 }}>
+        ← Zurück zur Liste
+      </button>
+
+      {fehler && <div className="zv-error">{fehler}</div>}
+
+      {klient && (
+        <div className="zv-card" style={{ maxWidth: "none", marginBottom: 20, padding: 20 }}>
+          <h2 style={{ margin: "0 0 4px", fontSize: 19 }}>
+            {klient.vorname} {klient.nachname}
+          </h2>
+          <p className="zv-sub" style={{ margin: 0 }}>
+            Aktenzeichen {klient.aktenzeichen} · {klient.amt} · geb. {klient.geburtsdatum} · HZL{" "}
+            {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}
+          </p>
+        </div>
+      )}
+
+      <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>
+        <button className={tab === "uebersicht" ? "active" : ""} onClick={() => setTab("uebersicht")}>
+          Übersicht
+        </button>
+        <button className={tab === "kostenuebernahmen" ? "active" : ""} onClick={() => setTab("kostenuebernahmen")}>
+          Kostenübernahmen
+        </button>
+        <button className={tab === "rechnungen" ? "active" : ""} onClick={() => setTab("rechnungen")}>
+          Rechnungen
+        </button>
+        <button className={tab === "kassenbuch" ? "active" : ""} onClick={() => setTab("kassenbuch")}>
+          Kassenbuch
+        </button>
+      </div>
+
+      {tab === "uebersicht" && klient && <UebersichtTab klient={klient} />}
+      {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
+      {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
+      {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
+    </div>
+  );
+}
+
+function UebersichtTab({ klient }: { klient: KlientDetailDto }) {
+  const [aktuelleKostenuebernahme, setAktuelleKostenuebernahme] = useState<KostenuebernahmeDto | null | undefined>(
+    undefined
+  );
+
+  useEffect(() => {
+    api.kostenuebernahmenListe(klient.id).then((liste) => {
+      setAktuelleKostenuebernahme(liste.find((k) => k.bis === null) ?? null);
+    });
+  }, [klient.id]);
+
+  return (
+    <div className="zv-card" style={{ maxWidth: "none", padding: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", rowGap: 12, fontSize: 14 }}>
+        <div style={{ color: "var(--zv-text-muted)" }}>Zimmer</div>
+        <div>
+          {klient.aktuellesZimmer
+            ? `${klient.aktuellesZimmer.nummer} · ${klient.aktuellesZimmer.standortName}`
+            : "Kein Zimmer zugeordnet"}
+        </div>
+        <div style={{ color: "var(--zv-text-muted)" }}>Aktuelle Kostenübernahme</div>
+        <div>
+          {aktuelleKostenuebernahme === undefined
+            ? "…"
+            : aktuelleKostenuebernahme
+              ? `${aktuelleKostenuebernahme.amt}, seit ${aktuelleKostenuebernahme.von}`
+              : "Kein offener Zeitraum"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KostenuebernahmenTab({ klientId }: { klientId: string }) {
+  const [liste, setListe] = useState<KostenuebernahmeDto[]>([]);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [formularOffen, setFormularOffen] = useState(false);
+  const [beendenId, setBeendenId] = useState<string | null>(null);
+
+  function laden() {
+    api.kostenuebernahmenListe(klientId).then(setListe).catch((err) => setFehler(err.message));
+  }
+  useEffect(laden, [klientId]);
+
+  async function anlegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    try {
+      await api.kostenuebernahmeAnlegen({ klientId, amt: String(form.get("amt")), von: String(form.get("von")) });
+      setFormularOffen(false);
+      formElement.reset();
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Zeitraum konnte nicht angelegt werden.");
+    }
+  }
+
+  async function beenden(e: FormEvent<HTMLFormElement>, id: string) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    try {
+      await api.kostenuebernahmeBeenden(id, String(form.get("bis")));
+      setBeendenId(null);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Zeitraum konnte nicht beendet werden.");
+    }
+  }
+
+  return (
+    <div>
+      {fehler && <div className="zv-error">{fehler}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Kostenübernahme-Zeiträume</h3>
+        <button
+          className="zv-btn"
+          style={{ width: "auto", padding: "6px 14px" }}
+          onClick={() => setFormularOffen((v) => !v)}
+        >
+          {formularOffen ? "Abbrechen" : "+ Neuer Zeitraum"}
+        </button>
+      </div>
+
+      {formularOffen && (
+        <form className="zv-inline-form" onSubmit={anlegen}>
+          <div className="zv-field-row">
+            <div className="zv-field">
+              <label>Amt</label>
+              <input name="amt" required />
+            </div>
+            <div className="zv-field">
+              <label>Von</label>
+              <input name="von" type="date" required />
+            </div>
+          </div>
+          <button className="zv-btn" type="submit">
+            Anlegen
+          </button>
+        </form>
+      )}
+
+      <table className="zv-table">
+        <thead>
+          <tr>
+            <th>Amt</th>
+            <th>Von</th>
+            <th>Bis</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {liste.map((k) => (
+            <tr key={k.id}>
+              <td>{k.amt}</td>
+              <td>{k.von}</td>
+              <td>{k.bis ?? <span className="zv-pill zv-pill-zugeordnet">Offen</span>}</td>
+              <td>
+                {k.bis === null &&
+                  (beendenId === k.id ? (
+                    <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => beenden(e, k.id)}>
+                      <input name="bis" type="date" required style={eingabeFeldStil} />
+                      <button className="zv-link-btn" type="submit">
+                        Speichern
+                      </button>
+                    </form>
+                  ) : (
+                    <button className="zv-link-btn" onClick={() => setBeendenId(k.id)}>
+                      Beenden
+                    </button>
+                  ))}
+              </td>
+            </tr>
+          ))}
+          {liste.length === 0 && (
+            <tr>
+              <td colSpan={4} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
+                Noch keine Kostenübernahme erfasst.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RechnungenTab({ klientId }: { klientId: string }) {
+  const [liste, setListe] = useState<RechnungDto[]>([]);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [formularOffen, setFormularOffen] = useState(false);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+  const [offenesDokument, setOffenesDokument] = useState<{ id: string; url: string } | null>(null);
+
+  function laden() {
+    api.rechnungenListe(klientId).then(setListe).catch((err) => setFehler(err.message));
+  }
+  useEffect(laden, [klientId]);
+
+  async function anlegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    const betragCent = Math.round(Number(String(form.get("betrag")).replace(",", ".")) * 100);
+    const datei = form.get("dokument") as File | null;
+
+    setWirdGespeichert(true);
+    try {
+      let dokumentBase64: string | undefined;
+      let dokumentDateiname: string | undefined;
+      let dokumentMimeType: string | undefined;
+      if (datei && datei.size > 0) {
+        dokumentBase64 = await dateiZuBase64(datei);
+        dokumentDateiname = datei.name;
+        dokumentMimeType = datei.type || "application/octet-stream";
+      }
+      await api.rechnungAnlegen({
+        klientId,
+        betragCent,
+        beschreibung: String(form.get("beschreibung")),
+        dokumentBase64,
+        dokumentDateiname,
+        dokumentMimeType,
+      });
+      setFormularOffen(false);
+      formElement.reset();
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Rechnung konnte nicht angelegt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function statusAendern(r: RechnungDto, status: RechnungStatus) {
+    let grund: string | undefined;
+    if (status === "abgelehnt") {
+      const eingabe = window.prompt("Grund für die Ablehnung:");
+      if (!eingabe) return;
+      grund = eingabe;
+    }
+    try {
+      await api.rechnungStatusAendern(r.id, status, grund);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Status konnte nicht geändert werden.");
+    }
+  }
+
+  async function dokumentAnzeigen(id: string) {
+    if (offenesDokument?.id === id) {
+      setOffenesDokument(null);
+      return;
+    }
+    try {
+      const url = await api.rechnungDokumentUrl(id);
+      setOffenesDokument({ id, url });
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Dokument konnte nicht geladen werden.");
+    }
+  }
+
+  return (
+    <div>
+      {fehler && <div className="zv-error">{fehler}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Rechnungen</h3>
+        <button
+          className="zv-btn"
+          style={{ width: "auto", padding: "6px 14px" }}
+          onClick={() => setFormularOffen((v) => !v)}
+        >
+          {formularOffen ? "Abbrechen" : "+ Neue Rechnung"}
+        </button>
+      </div>
+
+      {formularOffen && (
+        <form className="zv-inline-form" onSubmit={anlegen}>
+          <div className="zv-field-row">
+            <div className="zv-field">
+              <label>Betrag (€)</label>
+              <input name="betrag" type="text" inputMode="decimal" placeholder="150,00" required />
+            </div>
+            <div className="zv-field">
+              <label>Beschreibung</label>
+              <input name="beschreibung" required />
+            </div>
+          </div>
+          <div className="zv-field">
+            <label>Dokument (optional)</label>
+            <input name="dokument" type="file" accept="application/pdf,image/*" />
+          </div>
+          <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
+            {wirdGespeichert ? "Speichert…" : "Rechnung anlegen"}
+          </button>
+        </form>
+      )}
+
+      <table className="zv-table">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Betrag</th>
+            <th>Beschreibung</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {liste.map((r) => (
+            <Fragment key={r.id}>
+              <tr>
+                <td>{r.erstelltAm.slice(0, 10)}</td>
+                <td>{formatBetrag(r.betragCent)}</td>
+                <td>{r.beschreibung}</td>
+                <td>
+                  <span
+                    className={`zv-pill ${
+                      r.status === "abgelehnt" ? "zv-pill-danger" : r.status === "ausgezahlt" ? "zv-pill-zugeordnet" : ""
+                    }`}
+                  >
+                    {RECHNUNG_STATUS_LABEL[r.status]}
+                  </span>
+                  {r.status === "abgelehnt" && r.statusGrund && <span className="zv-sub-inline">{r.statusGrund}</span>}
+                </td>
+                <td style={{ display: "flex", gap: 10 }}>
+                  {r.hatDokument && (
+                    <button className="zv-link-btn" onClick={() => dokumentAnzeigen(r.id)}>
+                      Dokument
+                    </button>
+                  )}
+                  {r.status === "beantragt" && (
+                    <>
+                      <button className="zv-link-btn" onClick={() => statusAendern(r, "genehmigt")}>
+                        Genehmigen
+                      </button>
+                      <button className="zv-link-btn" onClick={() => statusAendern(r, "abgelehnt")}>
+                        Ablehnen
+                      </button>
+                    </>
+                  )}
+                  {r.status === "genehmigt" && (
+                    <button className="zv-link-btn" onClick={() => statusAendern(r, "ausgezahlt")}>
+                      Auszahlen
+                    </button>
+                  )}
+                </td>
+              </tr>
+              {offenesDokument?.id === r.id && (
+                <tr>
+                  <td colSpan={5} style={{ background: "var(--zv-surface-2)" }}>
+                    <a href={offenesDokument.url} target="_blank" rel="noreferrer">
+                      Dokument in neuem Tab öffnen
+                    </a>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+          {liste.length === 0 && (
+            <tr>
+              <td colSpan={5} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
+                Noch keine Rechnungen erfasst.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function KlientKassenbuchTab({ klientId }: { klientId: string }) {
+  const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.kassenbuchungenListe(klientId).then(setBuchungen).catch((err) => setFehler(err.message));
+  }, [klientId]);
+
+  return (
+    <div>
+      {fehler && <div className="zv-error">{fehler}</div>}
+      <table className="zv-table">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Betrag</th>
+            <th>Zweck</th>
+            <th>Typ</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {buchungen.map((b) => (
+            <tr key={b.id}>
+              <td>{b.datum}</td>
+              <td style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}>
+                {formatBetrag(b.betragCent)}
+              </td>
+              <td>{b.verwendungszweck}</td>
+              <td>{KASSENBUCHUNG_TYP_LABEL[b.typ]}</td>
+              <td>
+                {b.storniert ? (
+                  <span className="zv-pill zv-pill-vergeben">Storniert</span>
+                ) : (
+                  <span className="zv-pill zv-pill-zugeordnet">Aktiv</span>
+                )}
+              </td>
+            </tr>
+          ))}
+          {buchungen.length === 0 && (
+            <tr>
+              <td colSpan={5} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
+                Keine Kassenbuch-Einträge für diesen Klienten.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}

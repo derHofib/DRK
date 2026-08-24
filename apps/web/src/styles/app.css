@@ -143,6 +143,11 @@
   color: var(--zv-status-ok);
 }
 
+.zv-pill-danger {
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+}
+
 .zv-sub-inline {
   color: var(--zv-text-faint);
   font-size: 12px;

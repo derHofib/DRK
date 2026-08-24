@@ -2,17 +2,23 @@ import { FormEvent, useEffect, useState } from "react";
 import type { HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { KlientDetail } from "./KlientDetail";
 
 export function Klienten() {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);
+  const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(null);
 
   function laden() {
     api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
   }
 
   useEffect(laden, []);
+
+  if (ausgewaehlterKlientId) {
+    return <KlientDetail klientId={ausgewaehlterKlientId} onZurueck={() => setAusgewaehlterKlientId(null)} />;
+  }
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -106,7 +112,7 @@ export function Klienten() {
         </thead>
         <tbody>
           {klienten.map((k) => (
-            <tr key={k.id}>
+            <tr key={k.id} onClick={() => setAusgewaehlterKlientId(k.id)} style={{ cursor: "pointer" }}>
               <td>
                 {k.vorname} {k.nachname}
               </td>

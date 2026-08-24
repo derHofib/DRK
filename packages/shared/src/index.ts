@@ -118,3 +118,36 @@ export const KASSENBUCHUNG_TYP_LABEL: Record<KassenbuchungTyp, string> = {
   einzahlung: "Einzahlung",
   sonstiges: "Sonstiges",
 };
+
+export interface KostenuebernahmeDto {
+  id: string;
+  klientId: string;
+  amt: string;
+  von: string;
+  bis: string | null;
+}
+
+export type RechnungStatus = "beantragt" | "genehmigt" | "ausgezahlt" | "abgelehnt";
+
+export interface RechnungDto {
+  id: string;
+  klientId: string;
+  klientName: string;
+  betragCent: number;
+  beschreibung: string;
+  erstelltAm: string;
+  status: RechnungStatus;
+  statusGrund: string | null;
+  hatDokument: boolean;
+}
+
+export interface RechnungDetailDto extends RechnungDto {
+  statusVerlauf: { status: RechnungStatus; grund: string | null; geaendertAm: string }[];
+}
+
+export const RECHNUNG_STATUS_LABEL: Record<RechnungStatus, string> = {
+  beantragt: "Beantragt",
+  genehmigt: "Genehmigt",
+  ausgezahlt: "Ausgezahlt",
+  abgelehnt: "Abgelehnt",
+};

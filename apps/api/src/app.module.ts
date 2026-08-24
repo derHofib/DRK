@@ -8,6 +8,8 @@ import { ZimmerModule } from "./zimmer/zimmer.module";
 import { KlientModule } from "./klienten/klient.module";
 import { BelegungModule } from "./belegungen/belegung.module";
 import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
+import { KostenuebernahmeModule } from "./kostenuebernahmen/kostenuebernahme.module";
+import { RechnungModule } from "./rechnungen/rechnung.module";
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
     KlientModule,
     BelegungModule,
     KassenbuchungModule,
+    KostenuebernahmeModule,
+    RechnungModule,
   ],
 })
 export class AppModule {}

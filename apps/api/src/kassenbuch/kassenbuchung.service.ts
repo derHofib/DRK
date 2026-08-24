@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
+import { dateiAusBase64 } from "../common/datei";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -31,15 +32,6 @@ export interface WochenuebersichtEintrag {
   buchungId: string | null;
   betragCent: number | null;
   datum: string | null;
-}
-
-function bildAusBase64(input: string): Buffer {
-  // Nimmt sowohl rohes Base64 als auch canvas.toDataURL()-Ausgaben
-  // ("data:image/png;base64,...") entgegen -- das Frontend soll sich nicht
-  // um das Prefix kuemmern muessen.
-  const kommaIndex = input.indexOf(",");
-  const reinesBase64 = input.startsWith("data:") && kommaIndex !== -1 ? input.slice(kommaIndex + 1) : input;
-  return Buffer.from(reinesBase64, "base64");
 }
 
 @Injectable()
@@ -93,7 +85,7 @@ export class KassenbuchungService {
         const buchungId = rows[0].id;
 
         if (input.unterschriftBase64) {
-          const bild = bildAusBase64(input.unterschriftBase64);
+          const bild = dateiAusBase64(input.unterschriftBase64);
           const bildHash = createHash("sha256").update(bild).digest("hex");
           await client.query(
             "INSERT INTO unterschrift (mandant_id, kassenbuchung_id, bild, bild_hash) VALUES ($1, $2, $3, $4)",

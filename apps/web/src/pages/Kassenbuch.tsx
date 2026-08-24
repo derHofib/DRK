@@ -3,6 +3,7 @@ import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, Wochenue
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { SignaturePad } from "../components/SignaturePad";
+import { formatBetrag } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
 
@@ -16,10 +17,6 @@ function aktuelleIsoWoche(): { jahr: number; woche: number } {
   ersterDonnerstag.setUTCDate(ersterDonnerstag.getUTCDate() - ersterTagNr + 3);
   const woche = 1 + Math.round((d.getTime() - ersterDonnerstag.getTime()) / (7 * 24 * 3600 * 1000));
   return { jahr: d.getUTCFullYear(), woche };
-}
-
-function formatBetrag(cent: number): string {
-  return (cent / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
 
 export function Kassenbuch() {
