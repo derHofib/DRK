@@ -117,7 +117,13 @@ jobs:
       - name: Web-Image tatsächlich starten und die Startseite abrufen
         run: |
           docker run -d --name web -p 8080:80 zimmerakte-web:ci
-          sleep 2
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/)
+
+          # Wie beim API-Check: nginx im frisch gestarteten Container braucht
+          # auf einem ausgelasteten Runner manchmal laenger als die vorherigen
+          # 2s Fixwartezeit, bis der Port tatsaechlich Verbindungen annimmt --
+          # ein einzelner curl-Versuch ohne Retry schlug deshalb mit
+          # Exit-Code 7 (Verbindung abgelehnt) fehl, bevor "test" ueberhaupt
+          # erreicht wurde. Deshalb wie oben mit --retry statt festem sleep.
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8080/)
           echo "GET / : $status"
           test "$status" = "200"
