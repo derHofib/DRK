@@ -116,18 +116,22 @@ jobs:
 
       - name: Web-Image tatsächlich starten und die Startseite abrufen
         run: |
-          docker run -d --name web -p 8080:80 zimmerakte-web:ci
+          # WICHTIG: muss im selben Docker-Netzwerk wie der API-Container
+          # laufen. nginx.conf verweist mit einem statischen Hostnamen
+          # ("proxy_pass http://api:3000/") auf ihn -- ohne eigenen
+          # "resolver" loest nginx diesen Namen einmalig beim Start auf.
+          # Ohne "--network zimmerakte-ci" landet der Container stattdessen
+          # auf dem Standard-Bridge-Netzwerk, das gar keine
+          # namensbasierte DNS-Aufloesung kennt: "api" ist unauflösbar,
+          # nginx bricht die Konfigurationspruefung ab und beendet sich
+          # sofort wieder -- Port 80 wird nie erreichbar, jeder curl-Versuch
+          # scheitert dauerhaft mit "Verbindung abgelehnt", kein Timing-
+          # Problem, das ein Retry beheben koennte.
+          docker run -d --name web --network zimmerakte-ci -p 8080:80 zimmerakte-web:ci
 
-          # Wie beim API-Check: nginx im frisch gestarteten Container braucht
-          # auf einem ausgelasteten Runner manchmal laenger als eine feste
-          # Wartezeit, bis der Port tatsaechlich Verbindungen annimmt. Ein
-          # einzelner curl-Versuch ohne Retry schlug zunaechst mit Exit-Code 7
-          # (Verbindung abgelehnt) fehl -- mit "--retry-connrefused" allein
-          # kam dann aber Exit-Code 56 (Verbindung wurde waehrend des
-          # Verbindungsaufbaus zurueckgesetzt, da Dockers Port-Weiterleitung
-          # die TCP-Verbindung schon annimmt, bevor nginx selbst lauscht).
-          # "--retry-connrefused" deckt nur Exit 7 ab, deshalb jetzt
-          # "--retry-all-errors" fuer jede Art von curl-Fehlschlag.
+          # Trotzdem mit Retry statt festem sleep, fuer den Fall, dass
+          # nginx selbst (jetzt mit gueltiger Konfiguration) auf einem
+          # ausgelasteten Runner etwas Anlaufzeit braucht.
           status=$(curl -s -o /dev/null -w "%{http_code}" --retry 15 --retry-delay 2 --retry-all-errors http://localhost:8080/)
           echo "GET / : $status"
           test "$status" = "200"
