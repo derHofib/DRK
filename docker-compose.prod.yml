@@ -1,0 +1,84 @@
+# Voller Stack (Datenbank + API + Web) für einen produktionsnahen Testlauf
+# oder eine einfache Docker-basierte Bereitstellung. Der bestehende
+# docker-compose.yml bleibt unverändert für die lokale Entwicklung (nur
+# Postgres, API/Web laufen dort direkt über pnpm).
+#
+# Nutzung:
+#   cp .env.example .env.prod
+#   # .env.prod anpassen: POSTGRES_PASSWORD, APP_DB_PASSWORD, JWT_SECRET,
+#   # TOTP_ENCRYPTION_KEY -- alles mit echten, zufälligen Werten, nicht den
+#   # dev_only_*-Platzhaltern.
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up --build
+#
+# Direkt nach dem allerersten Start (sobald "migrate" durchgelaufen ist)
+# einmalig das App-Rollen-Passwort auf den echten Wert setzen -- die
+# Migration legt die Rolle mit einem Dev-Default an (siehe Kommentar in
+# migrations/0002_app_role.sql) und kann kein Passwort aus der Umgebung
+# lesen:
+#   docker compose -f docker-compose.prod.yml exec db \
+#     psql -U zimmerakte_admin -d zimmerakte -c \
+#     "ALTER ROLE zimmerakte_app WITH PASSWORD '<APP_DB_PASSWORD-Wert>';"
+#
+# WICHTIG: Diese Datei ist geschrieben, aber in dieser Entwicklungsumgebung
+# nicht gegen einen echten Docker-Daemon getestet worden (keiner
+# verfügbar, siehe README). Der Deploy-Mechanismus, den apps/api/Dockerfile
+# benutzt (pnpm deploy --prod --legacy), wurde separat außerhalb von
+# Docker gegen eine echte PostgreSQL-Instanz verifiziert.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zimmerakte
+      POSTGRES_USER: zimmerakte_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss gesetzt sein}
+    volumes:
+      - zimmerakte_prod_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zimmerakte_admin -d zimmerakte"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    # Exakt der Befehl, der ausserhalb von Docker gegen die deployte
+    # Verzeichnisstruktur (pnpm deploy --prod --legacy) getestet wurde.
+    command: ["node_modules/.bin/tsx", "scripts/migrate.ts"]
+    environment:
+      MIGRATIONS_DATABASE_URL: postgresql://zimmerakte_admin:${POSTGRES_PASSWORD}@db:5432/zimmerakte
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_DATABASE_URL: postgresql://zimmerakte_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD muss gesetzt sein}@db:5432/zimmerakte
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET muss gesetzt sein}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY muss gesetzt sein}
+      PORT: "3000"
+      NODE_ENV: production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  zimmerakte_prod_db_data:

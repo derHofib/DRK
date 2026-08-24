@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 5 (Mobile-Ansicht, PWA)
+## Stand: Phase 6 (Produktions-Deployment)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -215,8 +215,49 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
      DOM vor `zv-content` steht — behoben mit CSS `order`, ohne die
      Quellreihenfolge in `Shell.tsx` anzufassen.
 
-Noch nicht angefasst: Produktions-Deployment (Docker, CI). Das ist die
-nächste Phase.
+**Phase 6 — Produktions-Deployment (Docker, CI)**
+- `apps/api/Dockerfile`: Multi-Stage-Build, der `pnpm deploy --prod --legacy`
+  benutzt, um ein eigenständiges, produktionsreines `node_modules` für nur
+  `@zimmerakte/api` zu erzeugen (keine Symlinks nach außerhalb, keine
+  devDependencies) — der von pnpm selbst für genau diesen
+  Docker-Anwendungsfall vorgesehene Mechanismus. Läuft als eigener,
+  nicht-root Benutzer.
+- `apps/web/Dockerfile`: Multi-Stage-Build (Vite-Build → statische Dateien),
+  ausgeliefert über `nginx:alpine` mit einer kleinen Konfiguration
+  (`apps/web/nginx.conf`), die `/api/*` an den API-Container weiterreicht —
+  dasselbe Verhältnis wie der Vite-Dev-Proxy, nur für den Produktivbetrieb.
+- `docker-compose.prod.yml`: kompletter Stack (Datenbank + einmaliger
+  `migrate`-Dienst + API + Web) für einen produktionsnahen Testlauf. Der
+  bestehende `docker-compose.yml` bleibt unverändert für die lokale
+  Entwicklung (nur Postgres).
+- **Wichtiger Vorbehalt, transparent statt verschwiegen:** In dieser
+  Entwicklungsumgebung ist kein Docker-Daemon verfügbar (siehe unten,
+  "Was hier bewusst fehlt") — die Dockerfiles selbst konnten hier nicht
+  gebaut werden. Der eigentliche Mechanismus dahinter (`pnpm deploy --prod
+  --legacy`, dann `node dist/src/main.js` bzw. `tsx scripts/migrate.ts`
+  aus dem deployten Verzeichnis) wurde stattdessen **außerhalb von Docker,
+  aber mit genau derselben Verzeichnisstruktur** gegen eine echte
+  PostgreSQL-Instanz nachgebaut und verifiziert: Server startet, Login
+  funktioniert, Migrationen laufen durch. Die eigentliche Docker-Bauprobe
+  läuft jetzt in der CI (siehe unten) — dort mit echtem Docker-Daemon.
+- `.github/workflows/ci.yml`: drei Jobs bei jedem Push.
+  1. `api-tests` — startet einen echten PostgreSQL-16-Service-Container,
+     wendet die Migrationen an, führt die komplette Jest-Testsuite aus
+     (alle 42 Tests, kein Mock).
+  2. `web-build` — Typecheck + Vite-Build.
+  3. `docker-build` — baut beide Dockerfiles wirklich, startet dann beide
+     Images tatsächlich (API gegen einen echten Postgres-Container im
+     selben Docker-Netzwerk, Web dahinter) und prüft per `curl` einen
+     echten HTTP-Statuscode von jedem laufenden Container — nicht nur,
+     dass der Build durchläuft, sondern dass die gebauten Images auch
+     funktionieren.
+- `tsx` (für `scripts/migrate.ts`) von `devDependencies` zu `dependencies`
+  verschoben, nachdem der Deploy-Test zeigte, dass ein `--prod`-Deploy es
+  sonst weggelassen hätte — Migrationen laufen zu lassen ist ein
+  Produktivbetrieb-Vorgang, keine Dev-Bequemlichkeit.
+
+Damit ist der ursprüngliche Phasenplan durch. Was jetzt noch fehlt, ist in
+"Was hier bewusst fehlt" unten aufgeführt.
 
 ## Was hier bewusst fehlt
 
@@ -225,8 +266,23 @@ nächste Phase.
   enthält ein neutrales Platzhaltersystem — austauschbar, ohne dass
   irgendwo sonst im Code eine Farbe oder Schriftart fest verdrahtet ist.
   Sobald echte Werte vorliegen: nur diese eine Datei ersetzen.
-- **Produktions-Deployment.** Kein Dockerfile für API/Web, kein CI. Folgt,
-  sobald es etwas Sinnvolles zu deployen gibt.
+- **Die Dockerfiles wurden nie in dieser Entwicklungsumgebung selbst
+  gebaut.** Kein Docker-Daemon hier verfügbar (`dockerd` startet nicht,
+  fehlende Berechtigung für `ulimit` in dieser Sandbox). Der zugrunde
+  liegende Mechanismus (`pnpm deploy --prod --legacy` + Start aus dem
+  deployten Verzeichnis) wurde stattdessen manuell nachgebaut und gegen
+  eine echte Datenbank verifiziert (siehe Phase 6 oben); die tatsächliche
+  Docker-Bauprobe — inklusive beide Images wirklich starten und per `curl`
+  echte Antworten prüfen — läuft jetzt bei jedem Push in
+  `.github/workflows/ci.yml` (Job `docker-build`) mit echtem
+  Docker-Daemon. Vor dem ersten echten Produktivbetrieb trotzdem einmal
+  lokal (oder auf dem Zielserver) durchbauen und -starten, bevor man sich
+  darauf verlässt.
+- **Kein Secret-Rotations-Mechanismus.** `docker-compose.prod.yml`
+  dokumentiert den nötigen manuellen `ALTER ROLE`-Schritt nach dem ersten
+  Start (siehe Kommentar dort), automatisiert ihn aber nicht. Für einen
+  echten Produktivbetrieb gehört das in ein Secret-Management-Werkzeug,
+  nicht in eine Compose-Datei.
 - **Offline-Unterstützung ist bewusst nur die App-Shell, keine Daten.** Der
   Service Worker (Phase 5) cacht HTML/CSS/JS, damit die Anwendung ohne
   Netzwerk überhaupt startet — er cacht nie Zimmer-, Klienten- oder
@@ -291,6 +347,25 @@ gesetzt) — kein Mock, weder RLS noch Exclusion-Constraints noch Trigger
 noch spaltenscharfe GRANTs lassen sich sinnvoll mocken.
 `totp.e2e-spec.ts` braucht wegen zweier echter 30-Sekunden-Wartezeiten
 (siehe Phase 4 oben) knapp eine Minute — das ist kein Hänger.
+
+### Deployment (Docker)
+
+```bash
+cp .env.example .env.prod
+# .env.prod anpassen: POSTGRES_PASSWORD, APP_DB_PASSWORD, JWT_SECRET,
+# TOTP_ENCRYPTION_KEY -- echte, zufällige Werte, nicht die dev_only_*-Platzhalter.
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod up --build
+```
+
+Danach einmalig (siehe Kommentar in `docker-compose.prod.yml`) das
+App-Rollen-Passwort von seinem Migrations-Default auf den echten Wert
+setzen. Web läuft danach auf Port 8080, API auf Port 3000.
+
+Siehe "Was hier bewusst fehlt" für den wichtigen Vorbehalt: dieser Stack
+wurde nicht in der Entwicklungsumgebung selbst gebaut (kein Docker-Daemon
+verfügbar), sondern nur über die CI (`.github/workflows/ci.yml`) und einen
+manuellen Nachbau des Deploy-Mechanismus außerhalb von Docker verifiziert.
 
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
@@ -383,3 +458,19 @@ noch spaltenscharfe GRANTs lassen sich sinnvoll mocken.
   für `/api/*` — jede Erweiterung auf echtes Offline-Arbeiten mit Daten
   braucht eine explizite, separat zu entwerfende Synchronisationsstrategie
   (siehe "Was hier bewusst fehlt").
+- **Ein Deploy-Mechanismus lässt sich verifizieren, auch ohne das
+  Ziel-Tool (hier: Docker) selbst zur Verfügung zu haben** -- den
+  eigentlichen Kern (`pnpm deploy --prod --legacy`, dann aus dem
+  deployten Verzeichnis heraus starten) manuell außerhalb von Docker
+  gegen eine echte Datenbank nachzubauen, hat vor dem Schreiben des
+  Dockerfiles zwei echte Probleme aufgedeckt (fehlendes `tsx` bei
+  `--prod`, die richtige `pnpm deploy`-Variante für diesen Workspace) --
+  billiger, sie so zu finden, als sie erst beim ersten echten
+  Docker-Build zu entdecken.
+- **CI ist der Ort, an dem sich eine unbewiesene Behauptung ("die
+  Dockerfiles sollten bauen") tatsächlich beweisen lässt**, wenn die
+  lokale Umgebung das nicht kann. `docker-build` in der CI baut nicht nur
+  beide Images, sondern startet sie auch wirklich (API gegen einen echten
+  Postgres-Container, Web dahinter) und prüft per `curl` einen echten
+  HTTP-Status -- dieselbe Faustregel wie überall sonst in diesem Projekt:
+  laufen lassen und messen, nicht nur beschreiben.

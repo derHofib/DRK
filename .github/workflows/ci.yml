@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zimmerakte_admin
+          POSTGRES_PASSWORD: ci_only_not_secret
+          POSTGRES_DB: zimmerakte
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MIGRATIONS_DATABASE_URL: postgresql://zimmerakte_admin:ci_only_not_secret@localhost:5432/zimmerakte
+      APP_DATABASE_URL: postgresql://zimmerakte_app:ci_only_not_secret_either@localhost:5432/zimmerakte
+      JWT_SECRET: ci_only_test_secret
+      # 32 zufaellige Bytes, base64 -- nur fuer CI-Testlaeufe, kein echtes
+      # Geheimnis (siehe common/geheimnis.ts).
+      TOTP_ENCRYPTION_KEY: dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE=
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Migrationen anwenden
+        run: pnpm --filter @zimmerakte/api migrate
+
+      - name: API-Testsuite (gegen echte PostgreSQL, kein Mock)
+        run: pnpm --filter @zimmerakte/api test
+
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @zimmerakte/shared build
+      - run: pnpm --filter @zimmerakte/web build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: API-Image bauen
+        run: docker build -f apps/api/Dockerfile -t zimmerakte-api:ci .
+
+      - name: Web-Image bauen
+        run: docker build -f apps/web/Dockerfile -t zimmerakte-web:ci .
+
+      - name: API-Image tatsächlich starten und gegen eine echte Postgres testen
+        run: |
+          docker network create zimmerakte-ci
+          docker run -d --name pg --network zimmerakte-ci \
+            -e POSTGRES_USER=zimmerakte_admin \
+            -e POSTGRES_PASSWORD=ci_only_not_secret \
+            -e POSTGRES_DB=zimmerakte \
+            postgres:16
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U zimmerakte_admin -d zimmerakte && break
+            sleep 2
+          done
+
+          docker run --rm --network zimmerakte-ci \
+            -e MIGRATIONS_DATABASE_URL=postgresql://zimmerakte_admin:ci_only_not_secret@pg:5432/zimmerakte \
+            --entrypoint node_modules/.bin/tsx \
+            zimmerakte-api:ci scripts/migrate.ts
+
+          docker run -d --name api --network zimmerakte-ci -p 3000:3000 \
+            -e APP_DATABASE_URL=postgresql://zimmerakte_app:dev_only_change_me_too@pg:5432/zimmerakte \
+            -e JWT_SECRET=ci_only_test_secret \
+            -e TOTP_ENCRYPTION_KEY=dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE= \
+            zimmerakte-api:ci
+
+          for i in $(seq 1 15); do
+            curl -sf -o /dev/null http://localhost:3000/mandant/me && break
+            sleep 2
+          done
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/mandant/me)
+          echo "GET /mandant/me ohne Token: $status"
+          test "$status" = "401"
+
+      - name: Web-Image tatsächlich starten und die Startseite abrufen
+        run: |
+          docker run -d --name web -p 8080:80 zimmerakte-web:ci
+          sleep 2
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/)
+          echo "GET / : $status"
+          test "$status" = "200"
