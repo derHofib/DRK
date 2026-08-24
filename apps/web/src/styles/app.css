@@ -1,0 +1,133 @@
+.zv-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zv-card {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow);
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+}
+
+.zv-card h1 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.zv-card p.zv-sub {
+  color: var(--zv-text-muted);
+  font-size: 13.5px;
+  margin: 0 0 24px;
+}
+
+.zv-field {
+  margin-bottom: 14px;
+}
+
+.zv-field label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--zv-text-muted);
+  margin-bottom: 5px;
+}
+
+.zv-field input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  font-size: 14px;
+}
+
+.zv-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-accent);
+  background: var(--zv-accent);
+  color: var(--zv-accent-contrast);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.zv-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.zv-error {
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+  border-radius: var(--zv-radius-s);
+  padding: 9px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.zv-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+}
+
+.zv-topbar strong {
+  font-size: 15px;
+}
+
+.zv-topbar span {
+  color: var(--zv-text-faint);
+  font-size: 12.5px;
+  font-family: var(--zv-font-mono);
+}
+
+.zv-content {
+  padding: 24px;
+  max-width: 720px;
+}
+
+.zv-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+}
+
+.zv-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zv-text-faint);
+  background: var(--zv-surface-2);
+  padding: 10px 14px;
+}
+
+.zv-table td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--zv-border);
+  font-size: 14px;
+}
+
+.zv-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+}

@@ -1,0 +1,16 @@
+{
+  "name": "zimmerakte",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @zimmerakte/api start:dev",
+    "dev:web": "pnpm --filter @zimmerakte/web dev",
+    "migrate": "pnpm --filter @zimmerakte/api migrate",
+    "test:api": "pnpm --filter @zimmerakte/api test",
+    "test:mandanten": "pnpm --filter @zimmerakte/api test mandanten-trennung",
+    "build": "pnpm -r build"
+  }
+}

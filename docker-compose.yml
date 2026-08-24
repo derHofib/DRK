@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zimmerakte
+      POSTGRES_USER: zimmerakte_admin
+      POSTGRES_PASSWORD: dev_only_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - zimmerakte_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zimmerakte_admin -d zimmerakte"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  zimmerakte_db_data:

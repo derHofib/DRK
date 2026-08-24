@@ -1,0 +1,87 @@
+/*
+ * PLATZHALTER-DESIGN-TOKENS
+ * =========================
+ * fieldvibe.de war aus dieser Entwicklungsumgebung nicht erreichbar
+ * (Netzwerksperre). Diese Datei ist deshalb bewusst NICHT an fieldvibe
+ * angelehnt, sondern ein neutrales, professionelles Platzhaltersystem --
+ * austauschbar, ohne dass irgendwo sonst im Code eine Farbe oder Schriftart
+ * fest verdrahtet ist.
+ *
+ * Sobald echte Werte vorliegen (Hex-Codes, Schriftfamilien, Logo):
+ * NUR diese Datei ersetzen. Jede Komponente greift ausschliesslich ueber
+ * die Custom Properties unten zu, nie ueber Literalwerte.
+ *
+ * Was gebraucht wird, um diese Datei korrekt zu befuellen:
+ *  - Primaerfarbe (+ eine dunklere Variante fuer Hover/Aktiv-Zustaende)
+ *  - Schriftfamilie(n) fuer Ueberschriften und Fliesstext
+ *  - Hell- und Dunkelmodus-Werte, falls fieldvibe beide unterstuetzt
+ *  - Logo/Wortmarke als SVG
+ */
+
+:root {
+  --zv-bg: #f5f5f5;
+  --zv-surface: #ffffff;
+  --zv-surface-2: #ededed;
+  --zv-border: #d8d8d8;
+  --zv-text: #1a1a1a;
+  --zv-text-muted: #5c5c5c;
+  --zv-text-faint: #8c8c8c;
+
+  --zv-accent: #2c5f5a;
+  --zv-accent-strong: #1e4a46;
+  --zv-accent-soft: #dceae7;
+  --zv-accent-contrast: #ffffff;
+
+  --zv-status-ok: #2f8f5b;
+  --zv-status-ok-bg: #e3f4e9;
+  --zv-status-warn: #b87a2e;
+  --zv-status-warn-bg: #fbeedd;
+  --zv-status-danger: #c1520c;
+  --zv-status-danger-bg: #fbe8db;
+
+  --zv-radius-s: 6px;
+  --zv-radius-m: 10px;
+  --zv-shadow: 0 1px 2px rgba(0, 0, 0, 0.07), 0 6px 16px rgba(0, 0, 0, 0.06);
+
+  --zv-font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --zv-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --zv-bg: #161616;
+    --zv-surface: #1f1f1f;
+    --zv-surface-2: #272727;
+    --zv-border: #3a3a3a;
+    --zv-text: #f1f1f1;
+    --zv-text-muted: #adadad;
+    --zv-text-faint: #7a7a7a;
+
+    --zv-accent: #5fafa6;
+    --zv-accent-strong: #7fc5bc;
+    --zv-accent-soft: #1f3b37;
+    --zv-accent-contrast: #ffffff;
+
+    --zv-status-ok: #5fbe84;
+    --zv-status-ok-bg: #17301f;
+    --zv-status-warn: #d99b4e;
+    --zv-status-warn-bg: #3a2c18;
+    --zv-status-danger: #e8792e;
+    --zv-status-danger-bg: #3a2412;
+
+    --zv-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  font-family: var(--zv-font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
