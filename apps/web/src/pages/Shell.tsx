@@ -23,7 +23,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   }
 
   return (
-    <div>
+    <div className="zv-shell-app">
       <div className="zv-topbar">
         <div>
           <strong>Zimmerakte</strong>{" "}
@@ -38,7 +38,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         </button>
       </div>
 
-      <div className="zv-tabbar">
+      <div className="zv-tabbar zv-tabbar-app">
         <button className={tab === "zimmer" ? "active" : ""} onClick={() => setTab("zimmer")}>
           Zimmer
         </button>

@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 4 (2FA-Erzwingung)
+## Stand: Phase 5 (Mobile-Ansicht, PWA)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -168,8 +168,55 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
   Code wird abgelehnt → nach Warten auf eine neue Zeitscheibe wird ein
   frischer Code akzeptiert → deaktivieren.
 
-Noch nicht angefasst: mobile Ansicht, Produktions-Deployment. Das sind die
-nächsten Phasen.
+**Phase 5 — Mobile-Ansicht, PWA**
+- Ein echtes, reproduzierbares Layout-Problem gefunden, bevor irgendetwas
+  gebaut wurde: auf einem 390px-Viewport (iPhone-Breite) überliefen sowohl
+  jede Tabelle als auch die obere Tab-Leiste die Seite horizontal — mit
+  Playwright objektiv gemessen (`document.documentElement.scrollWidth >
+  clientWidth`), nicht nur "sieht komisch aus"
+- `.zv-table` scrollt jetzt für sich selbst (`display: block; overflow-x:
+  auto` auf dem `<table>`-Element, `thead`/`tbody`/`tr`/`td` behalten ihre
+  Tabellen-Ausrichtung), statt die ganze Seite aufzureißen — eine einzige
+  CSS-Regel für alle sieben Tabellen-Stellen im Code, keine
+  Komponentenänderung nötig
+- Unter 640px wird die obere App-Navigation (`zv-tabbar-app`, nur die aus
+  `Shell.tsx` — die zweite Reiterleiste innerhalb der Klientenakte bleibt
+  bewusst oben) zu einer unteren Navigationsleiste, dem auf Mobilgeräten
+  erwarteten Muster. "Office" (Desktop, oberer Tab-Leiste) und "Mobile"
+  (unten, größere Touch-Ziele) bekommen damit tatsächlich unterschiedliche
+  Layouts aus demselben Code — keine zweite Anwendung, eine Media Query
+- Bewusst **kein** `position: fixed` für die untere Leiste: das kollidiert
+  auf echten Mobilbrowsern mit dem ein-/ausblendenden Adressleisten-Bereich
+  (Layout- vs. visueller Viewport bekommen unterschiedliche Höhen, die
+  Leiste landet dann außerhalb des sichtbaren Bereichs — beim Testen exakt
+  so reproduziert, siehe unten). Stattdessen eine Flex-Spalte über
+  `100dvh`, in der `zv-content` scrollt und die Navigation ein normales
+  Flex-Kind ist
+- PWA-Grundausstattung über `vite-plugin-pwa`: Manifest (Name, Icons,
+  `display: standalone`, Platzhalter-Markenfarbe wie in `tokens.css`) und
+  ein generierter Service Worker, der ausschließlich die App-Shell cacht,
+  **nie** API-Antworten — ein veralteter, gecachter Kassenbuch-Stand wäre
+  irreführend. Verifiziert: der Service Worker registriert und aktiviert
+  sich, und die Login-Seite lädt tatsächlich bei gekapptem Netzwerk (mit
+  Playwright `context.setOffline(true)` erzwungen, nicht nur angenommen)
+- Zwei Platzhalter-Icons (192px, 512px, plus maskable-Variante) als
+  einfaches Monogramm in der Platzhalter-Markenfarbe — bewusst kein
+  Rotkreuz-Symbol, aus denselben rechtlichen Gründen wie beim Design ganz
+  am Anfang. Quell-SVGs liegen in `apps/web/design-sources/`, zum
+  Austauschen sobald echte Icons vorliegen
+- Zwei echte Layout-Bugs beim Bauen gefunden und behoben, beide nur durch
+  tatsächliches Messen im Browser aufgefallen, nicht durch Ansehen:
+  1. Die neue untere Navigation lag anfangs *über* der zweiten Reiterleiste
+     der Klientenakte, weil beide dieselbe CSS-Klasse `zv-tabbar` teilten —
+     behoben mit einer eigenen Klasse `zv-tabbar-app` nur für die
+     App-weite Navigation.
+  2. Nach dem Umstieg von `position: fixed` auf Flexbox erschien die
+     Navigation zunächst *unter* dem Topbar statt am Fußende, weil sie im
+     DOM vor `zv-content` steht — behoben mit CSS `order`, ohne die
+     Quellreihenfolge in `Shell.tsx` anzufassen.
+
+Noch nicht angefasst: Produktions-Deployment (Docker, CI). Das ist die
+nächste Phase.
 
 ## Was hier bewusst fehlt
 
@@ -180,6 +227,14 @@ nächsten Phasen.
   Sobald echte Werte vorliegen: nur diese eine Datei ersetzen.
 - **Produktions-Deployment.** Kein Dockerfile für API/Web, kein CI. Folgt,
   sobald es etwas Sinnvolles zu deployen gibt.
+- **Offline-Unterstützung ist bewusst nur die App-Shell, keine Daten.** Der
+  Service Worker (Phase 5) cacht HTML/CSS/JS, damit die Anwendung ohne
+  Netzwerk überhaupt startet — er cacht nie Zimmer-, Klienten- oder
+  Kassenbuch-Daten. Ohne Verbindung sieht man also die Login-Seite (oder
+  die zuletzt geladene Ansicht als leere Hülle), nicht die zuletzt
+  bekannten Daten. Ein echtes Offline-Arbeiten (z. B. eine Auszahlung ohne
+  Empfang erfassen und später synchronisieren) ist nicht Teil dieser
+  Phase und bräuchte eine eigene Warteschlangen-Logik.
 
 ## Lokale Entwicklung
 
@@ -309,3 +364,22 @@ noch spaltenscharfe GRANTs lassen sich sinnvoll mocken.
   der ursprünglichen Migration (0004) als Vorgabe kommentiert, bevor der
   2FA-Code überhaupt existierte — ein Hinweis, wie früh solche
   Entscheidungen festgelegt werden sollten.
+- **Layout-Behauptungen ("passt jetzt auf dem Handy") gehören gemessen,
+  nicht nur angeschaut.** `document.documentElement.scrollWidth >
+  clientWidth` per Playwright ist eine objektive Ja/Nein-Prüfung für
+  horizontales Überlaufen; ein Screenshot allein hätte das anfängliche
+  `position: fixed`-Problem der unteren Navigation (siehe Phase 5) nicht
+  zuverlässig gezeigt, weil es erst bei echtem Scroll-Verhalten sichtbar
+  wird.
+- **`position: fixed` für eine untere Mobile-Navigation ist ein bekannter
+  Stolperstein**, nicht die naheliegendste Lösung: Layout- und visueller
+  Viewport haben auf echten Mobilbrowsern wegen der ein-/ausblendenden
+  Adressleiste unterschiedliche Höhen. Eine Flex-Spalte über `100dvh` mit
+  der Navigation als normalem Flex-Kind (Reihenfolge per CSS `order`
+  gesteuert) ist robuster als jede Sonderbehandlung für `position: fixed`.
+- **Ein Service Worker, der API-Antworten cacht, ist ein Feature, kein
+  Standardverhalten.** Der hier generierte Service Worker cacht bewusst
+  nur die App-Shell (HTML/CSS/JS) über `workbox.navigateFallbackDenylist`
+  für `/api/*` — jede Erweiterung auf echtes Offline-Arbeiten mit Daten
+  braucht eine explizite, separat zu entwerfende Synchronisationsstrategie
+  (siehe "Was hier bewusst fehlt").
