@@ -86,3 +86,35 @@ export const HZL_RHYTHMUS_LABEL: Record<HzlRhythmus, string> = {
   monatlich: "Monatlich",
   woechentlich: "Wöchentlich",
 };
+
+export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
+
+export interface KassenbuchungDto {
+  id: string;
+  klientId: string;
+  klientName: string;
+  datum: string;
+  betragCent: number;
+  verwendungszweck: string;
+  typ: KassenbuchungTyp;
+  isoJahr: number | null;
+  isoWoche: number | null;
+  storniert: boolean;
+  stornoGrund: string | null;
+  hatUnterschrift: boolean;
+}
+
+export interface WochenuebersichtEintragDto {
+  klientId: string;
+  klientName: string;
+  bezahlt: boolean;
+  buchungId: string | null;
+  betragCent: number | null;
+  datum: string | null;
+}
+
+export const KASSENBUCHUNG_TYP_LABEL: Record<KassenbuchungTyp, string> = {
+  hzl: "HZL",
+  einzahlung: "Einzahlung",
+  sonstiges: "Sonstiges",
+};

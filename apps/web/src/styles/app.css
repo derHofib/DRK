@@ -37,7 +37,8 @@
   margin-bottom: 5px;
 }
 
-.zv-field input {
+.zv-field input,
+.zv-field select {
   width: 100%;
   padding: 9px 11px;
   border-radius: var(--zv-radius-s);
@@ -244,4 +245,17 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.zv-signature-canvas {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: 140px;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: #fff;
+  touch-action: none;
+  cursor: crosshair;
+  margin-bottom: 4px;
 }

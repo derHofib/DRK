@@ -16,7 +16,11 @@ export function Klienten() {
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    // Formularelement vorab merken -- React setzt e.currentTarget nach dem
+    // Event-Dispatch auf null zurueck, ein Zugriff nach einem await schlaegt
+    // sonst fehl (siehe facebook/react#20544).
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
     try {
       await api.klientAnlegen({
         vorname: String(form.get("vorname")),
@@ -27,7 +31,7 @@ export function Klienten() {
         hzlRhythmus: form.get("hzlRhythmus") as HzlRhythmus,
       });
       setFormularOffen(false);
-      e.currentTarget.reset();
+      formElement.reset();
       laden();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Klient konnte nicht angelegt werden.");

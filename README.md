@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 1 (Standorte, Zimmer, Klienten, Belegung)
+## Stand: Phase 2 (Kassenbuch, HZL-Wochenübersicht, Unterschriftsbestätigung)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -47,8 +47,42 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
   die jeweilige Exclusion-Constraint testweise entfernt, Test wird rot,
   wieder hergestellt, Test wird grün — siehe Commit-Historie
 
-Noch nicht angefasst: Kassenbuch, HZL-Wochenauszahlung mit
-Unterschriftsbestätigung, Kostenübernahmen, Rechnungen, Dokumente, mobile
+**Phase 2 — Kassenbuch, HZL-Wochenübersicht, Unterschriftsbestätigung**
+- Schema für `kassenbuchung` (Beträge als `betrag_cent`, nie Fließkomma) und
+  `unterschrift` (Bild als `bytea` + SHA-256-Hash, 1:1 an eine Buchung
+  gebunden)
+- Beide Tabellen sind **auf Datenbankebene** unveränderlich (Append-only):
+  `REVOKE UPDATE, DELETE ... FROM zimmerakte_app` nach dem Anlegen der
+  Tabelle. Bei `kassenbuchung` gibt es eine einzige, spaltenscharfe
+  Ausnahme (`GRANT UPDATE (storniert, storno_grund, storniert_von,
+  storniert_am)`) — Betrag, Datum, Klient und Verwendungszweck lassen sich
+  von der App-Rolle nie ändern, nur stornieren
+- Ein partieller Unique-Index (`hzl_einmal_je_woche`, nur `WHERE typ='hzl'
+  AND NOT storniert`) verhindert eine zweite HZL-Auszahlung für
+  Klient+Kalenderwoche — ein Storno gibt die Woche wieder frei, die
+  ursprüngliche (stornierte) Buchung bleibt als Zeile erhalten
+- Die Unterschriftspflicht bei Auszahlungen (`betrag_cent < 0`) ist die
+  einzige Regel dieser Phase, die im Service-Layer statt in der Datenbank
+  sitzt — bewusst, weil sie eine Mehrzeilen-Transaktions-Invariante ist
+  (Buchung + Unterschrift zusammen oder gar nicht), siehe Kommentar in
+  `kassenbuchung.service.ts`
+- `GET /kassenbuchungen/wochenuebersicht?jahr=&kw=` liefert für alle
+  Klient:innen mit `hzl_rhythmus = 'woechentlich'`, ob für die gewählte
+  Kalenderwoche bereits bezahlt wurde
+- Web-Oberfläche: HZL-Wochenübersicht (Jahr/KW wählbar, "Jetzt auszahlen"
+  pro offenem Klienten), Kassenbuch-Liste mit Storno, Unterschriften-Ansicht
+  und einem Canvas-Unterschriftenfeld im Buchungsformular
+- Dritte e2e-Testsuite (8 Tests), ebenfalls mit Gegenprobe verifiziert: der
+  partielle Unique-Index und die spaltenscharfe Änderungssperre wurden
+  testweise entfernt, genau die zwei zugehörigen Tests wurden rot, sonst
+  nichts — wiederhergestellt, wieder grün
+- Ein echter Bug wurde beim Testen der Weboberfläche im Browser gefunden und
+  behoben: `e.currentTarget` wird von React nach einem `await` im
+  Submit-Handler auf `null` gesetzt (facebook/react#20544) — betraf sowohl
+  das neue Kassenbuch-Formular als auch das bereits bestehende
+  Klienten-Anlegeformular aus Phase 1
+
+Noch nicht angefasst: Kostenübernahmen, Rechnungen, Dokumente, mobile
 Ansicht, 2FA-Erzwingung. Das sind die nächsten Phasen.
 
 ## Was hier bewusst fehlt
@@ -111,10 +145,11 @@ pnpm test:api          # alle API-Tests
 pnpm test:mandanten    # nur der Mandantentrennungs-Test
 ```
 
-Beide Testsuiten (`mandanten-trennung.e2e-spec.ts`, `belegung.e2e-spec.ts`)
-brauchen eine erreichbare, migrierte Datenbank (`MIGRATIONS_DATABASE_URL`
-und `APP_DATABASE_URL` gesetzt) — kein Mock, weder RLS noch
-Exclusion-Constraints lassen sich sinnvoll mocken.
+Alle drei Testsuiten (`mandanten-trennung.e2e-spec.ts`,
+`belegung.e2e-spec.ts`, `kassenbuch.e2e-spec.ts`) brauchen eine erreichbare,
+migrierte Datenbank (`MIGRATIONS_DATABASE_URL` und `APP_DATABASE_URL`
+gesetzt) — kein Mock, weder RLS noch Exclusion-Constraints noch
+spaltenscharfe GRANTs lassen sich sinnvoll mocken.
 
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
@@ -143,3 +178,21 @@ Exclusion-Constraints lassen sich sinnvoll mocken.
   stattdessen als reinen `YYYY-MM-DD`-String durch — ohne das kippt ein
   Einzugsdatum je nach Server-Zeitzone auf den falschen Tag, sobald es über
   JSON läuft.
+- **Unveränderlichkeit (Append-only) gehört als Datenbankrecht durchgesetzt,
+  nicht als Konvention im Service.** `REVOKE UPDATE, DELETE ... FROM
+  zimmerakte_app` nach dem Anlegen einer Tabelle (siehe
+  `migrations/0011_kassenbuchung.sql`, `0012_unterschrift.sql`); wo eine
+  einzelne, eng begrenzte Änderung trotzdem erlaubt sein muss (der
+  Storno-Flag), ein spaltenscharfes `GRANT UPDATE (spalte, ...)` statt eines
+  vollen Tabellen-GRANTs.
+- **Was sich nicht als Constraint auf einer einzelnen Tabelle ausdrücken
+  lässt, gehört in den Service — alles andere nicht.** Die
+  Unterschriftspflicht bei Auszahlungen ist eine
+  Mehrzeilen-Transaktions-Invariante (`kassenbuchung` + `unterschrift`
+  zusammen oder gar nicht) und sitzt deshalb in
+  `kassenbuchung.service.ts`, während Eindeutigkeit, Überlappung und
+  Änderungsschutz konsequent in den Migrationen stehen.
+- **`e.currentTarget` in einem async Formular-Handler vor dem ersten
+  `await` zwischenspeichern.** React setzt es danach auf `null` zurück
+  (facebook/react#20544) — betrifft jeden `onSubmit`-Handler, der nach
+  einem await noch `.reset()` o. Ä. auf dem Formularelement aufruft.

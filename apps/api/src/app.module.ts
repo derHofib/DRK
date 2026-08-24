@@ -7,6 +7,7 @@ import { StandortModule } from "./standorte/standort.module";
 import { ZimmerModule } from "./zimmer/zimmer.module";
 import { KlientModule } from "./klienten/klient.module";
 import { BelegungModule } from "./belegungen/belegung.module";
+import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BelegungModule } from "./belegungen/belegung.module";
     ZimmerModule,
     KlientModule,
     BelegungModule,
+    KassenbuchungModule,
   ],
 })
 export class AppModule {}

@@ -4,8 +4,9 @@ import { api, clearToken } from "../api/client";
 import { Zimmer } from "./Zimmer";
 import { Klienten } from "./Klienten";
 import { Uebersicht } from "./Uebersicht";
+import { Kassenbuch } from "./Kassenbuch";
 
-type Tab = "uebersicht" | "zimmer" | "klienten";
+type Tab = "uebersicht" | "zimmer" | "klienten" | "kassenbuch";
 
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
@@ -43,14 +44,18 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         <button className={tab === "klienten" ? "active" : ""} onClick={() => setTab("klienten")}>
           Klienten
         </button>
+        <button className={tab === "kassenbuch" ? "active" : ""} onClick={() => setTab("kassenbuch")}>
+          Kassenbuch
+        </button>
         <button className={tab === "uebersicht" ? "active" : ""} onClick={() => setTab("uebersicht")}>
           Mitarbeitende
         </button>
       </div>
 
-      <div className="zv-content">
+      <div className="zv-content" style={{ maxWidth: tab === "kassenbuch" ? 900 : undefined }}>
         {tab === "zimmer" && <Zimmer />}
         {tab === "klienten" && <Klienten />}
+        {tab === "kassenbuch" && <Kassenbuch />}
         {tab === "uebersicht" && <Uebersicht />}
       </div>
     </div>
