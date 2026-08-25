@@ -1,6 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { TotpEinrichtenResponse } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import {
+  I2faAus,
+  I2faEin,
+  IBestaetigen,
+  IErfolg,
+  IFehler,
+  ISErledigt,
+  ISOffen,
+  ISicherheit,
+} from "../components/icons";
 
 export function Sicherheit() {
   const [aktiviert, setAktiviert] = useState<boolean | null>(null);
@@ -57,12 +67,23 @@ export function Sicherheit() {
   }
 
   return (
-    <div className="zv-card" style={{ maxWidth: 420, padding: 20 }}>
-      <h2 style={{ marginTop: 0, fontSize: 16 }}>Zwei-Faktor-Anmeldung (2FA)</h2>
+    <div className="zv-card zv-card-weit">
+      <section className="zv-einstellungen-abschnitt">
+        <h3>
+          <ISicherheit />
+          Zwei-Faktor-Anmeldung (2FA)
+        </h3>
+        <p className="zv-sub">Schützt dein persönliches Konto zusätzlich zum Passwort.</p>
 
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
       {erfolg && (
-        <div className="zv-field" style={{ color: "var(--zv-status-ok)", fontSize: 13.5, marginBottom: 14 }}>
+        <div className="zv-hinweis zv-hinweis-erfolg">
+          <IErfolg />
           {erfolg}
         </div>
       )}
@@ -71,8 +92,14 @@ export function Sicherheit() {
 
       {aktiviert === true && !deaktivierenOffen && (
         <div>
-          <p className="zv-sub">2FA ist für dieses Konto aktiv.</p>
+          <p className="zv-sub">
+            <span className="zv-pill zv-pill-ok">
+              <ISErledigt />
+              Aktiv
+            </span>
+          </p>
           <button className="zv-link-btn" onClick={() => setDeaktivierenOffen(true)}>
+            <I2faAus />
             2FA deaktivieren
           </button>
         </div>
@@ -84,7 +111,8 @@ export function Sicherheit() {
             <label>Code aus der Authenticator-App zur Bestätigung</label>
             <input name="code" inputMode="numeric" autoComplete="one-time-code" required />
           </div>
-          <button className="zv-btn" type="submit">
+          <button className="zv-btn zv-btn-gefahr" type="submit">
+            <I2faAus />
             Deaktivieren
           </button>
         </form>
@@ -92,8 +120,14 @@ export function Sicherheit() {
 
       {aktiviert === false && !setup && (
         <div>
-          <p className="zv-sub">2FA ist für dieses Konto nicht aktiv.</p>
-          <button className="zv-btn" style={{ width: "auto", padding: "6px 14px" }} onClick={einrichten}>
+          <p className="zv-sub">
+            <span className="zv-pill zv-pill-offen">
+              <ISOffen />
+              Nicht aktiv
+            </span>
+          </p>
+          <button className="zv-btn" onClick={einrichten}>
+            <I2faEin />
             2FA einrichten
           </button>
         </div>
@@ -114,11 +148,13 @@ export function Sicherheit() {
               <input name="code" inputMode="numeric" autoComplete="one-time-code" required />
             </div>
             <button className="zv-btn" type="submit">
+              <IBestaetigen />
               Aktivieren
             </button>
           </form>
         </div>
       )}
+      </section>
     </div>
   );
 }

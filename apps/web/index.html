@@ -3,10 +3,48 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#2c5f5a" />
+    <meta name="theme-color" content="#5ec4c0" />
     <link rel="icon" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="preload" href="/fonts/inter-variable.woff2" as="font" type="font/woff2" crossorigin />
     <title>Zimmerakte</title>
+    <script>
+      /*
+       * Muss inline und synchron sein, und muss VOR dem Stylesheet stehen:
+       * ein Modul-Import oder ein Aufruf aus dem Bundle liefe erst nach dem
+       * ersten Anstrich -- der Nutzer saehe dann kurz das falsche Theme und
+       * den falschen Akzent aufblitzen. Genau das prueft
+       * scripts/design-pruefung.mjs (Punkt 5).
+       */
+      (function () {
+        try {
+          var wurzel = document.documentElement;
+
+          var theme = localStorage.getItem("zimmerakte_theme");
+          if (theme === "hell" || theme === "dunkel") wurzel.dataset.theme = theme;
+
+          /*
+           * Der Akzent kommt eigentlich aus /mandant/me und damit
+           * zwangslaeufig asynchron. Der zuletzt bekannte, BEREITS
+           * ABGELEITETE Wert liegt deshalb als "H C" im localStorage --
+           * dadurch braucht es hier keine Farbmathematik, nur zwei
+           * setProperty-Aufrufe. Sobald die API antwortet, gleicht die
+           * Shell ab. Die Akzentfarbe ist Corporate Branding, kein
+           * Geheimnis; sie zu cachen ist unbedenklich.
+           */
+          var akzent = localStorage.getItem("zimmerakte_akzent_hc");
+          if (akzent) {
+            var teile = akzent.split(" ");
+            if (teile.length === 2) {
+              wurzel.style.setProperty("--zv-accent-h", teile[0]);
+              wurzel.style.setProperty("--zv-accent-c", teile[1]);
+            }
+          }
+        } catch (e) {
+          /* Privatmodus ohne localStorage: dann eben Standardtheme. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

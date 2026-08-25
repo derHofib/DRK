@@ -15,16 +15,27 @@ export default defineConfig({
       // fehlt" fuer die Grenzen dieser Offline-Unterstuetzung.
       workbox: {
         navigateFallbackDenylist: [/^\/api\//],
+        // woff2 muss hier ausdruecklich mit rein: die Voreinstellung von
+        // workbox ist {js,css,html,ico,png,svg} -- OHNE Schriften. Ohne
+        // diese Zeile faellt Inter offline aus, die App zeigt dann still
+        // die Systemschrift. Nachpruefbar an der Zeile "precache N entries"
+        // in der Bauausgabe: die woff2 muss mitgezaehlt werden.
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       },
       manifest: {
         name: "Zimmerakte",
         short_name: "Zimmerakte",
         description: "Verwaltung für Betreutes Wohnen",
         lang: "de",
-        // Platzhalter-Markenfarbe, siehe src/styles/tokens.css -- beide
-        // zusammen austauschen, sobald echte Werte vorliegen.
-        theme_color: "#2c5f5a",
-        background_color: "#f5f5f5",
+        // Standard-Markenfarbe (Palette "Petrol", siehe PASTELL_PALETTEN in
+        // packages/shared). Diese beiden Werte sind zwangslaeufig
+        // BAUZEITLICH und damit NICHT mandantenindividuell: das Manifest
+        // wird einmal gebaut und von allen Traegern geteilt. Der
+        // Startbildschirm und der Splash zeigen deshalb fuer alle dieselbe
+        // Farbe -- eingefaerbt ist erst die laufende Anwendung. Als bewusste
+        // Grenze in der README vermerkt.
+        theme_color: "#5ec4c0",
+        background_color: "#fbfbfc",
         display: "standalone",
         start_url: "/",
         icons: [

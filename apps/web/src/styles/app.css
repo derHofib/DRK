@@ -1,103 +1,384 @@
+/*
+ * Komponentenschicht. Greift ausschliesslich auf die Tokens aus tokens.css
+ * zu -- kein Literalwert fuer Farbe, Abstand oder Radius steht hier.
+ */
+
+/* ==================================================================
+   Grundgeruest
+   ================================================================== */
 .zv-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
+/*
+ * Pastellschimmer hinter der Anmeldekarte -- die einzige Stelle, an der die
+ * Markenfarbe grossflaechig auftritt. Bewusst nur auf .zv-shell (Login) und
+ * nicht auf .zv-shell-app: hinter Tabellen und Formularen waere das Unruhe
+ * ohne Nutzen.
+ */
+.zv-shell::before {
+  content: "";
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  background: radial-gradient(
+    ellipse 60% 60% at 50% 40%,
+    var(--zv-accent-vivid) 0%,
+    transparent 70%
+  );
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.zv-content {
+  padding: var(--zv-space-5);
+  max-width: var(--zv-content-max);
+}
+
+.zv-content-weit {
+  max-width: var(--zv-content-max-weit);
+}
+
+/* ==================================================================
+   Karten
+   ================================================================== */
 .zv-card {
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-m);
-  box-shadow: var(--zv-shadow);
-  padding: 32px;
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-2);
+  padding: var(--zv-space-6);
   width: 100%;
   max-width: 380px;
+  position: relative;
+}
+
+.zv-card-weit {
+  max-width: none;
 }
 
 .zv-card h1 {
-  font-size: 20px;
-  margin: 0 0 4px;
+  font-size: var(--zv-text-2xl);
+  line-height: var(--zv-leading-tight);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--zv-space-1);
 }
 
-.zv-card p.zv-sub {
+.zv-card p.zv-sub,
+.zv-sub {
   color: var(--zv-text-muted);
-  font-size: 13.5px;
-  margin: 0 0 24px;
+  font-size: var(--zv-text-s);
+  margin: 0 0 var(--zv-space-5);
 }
 
+/* ==================================================================
+   Formulare
+   ================================================================== */
 .zv-field {
-  margin-bottom: 14px;
+  margin-bottom: var(--zv-space-3);
 }
 
 .zv-field label {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
   color: var(--zv-text-muted);
-  margin-bottom: 5px;
+  margin-bottom: var(--zv-space-1);
 }
 
 .zv-field input,
-.zv-field select {
+.zv-field select,
+.zv-field textarea,
+.zv-field-inline {
   width: 100%;
+  min-height: 40px;
   padding: 9px 11px;
   border-radius: var(--zv-radius-s);
-  border: 1px solid var(--zv-border);
-  background: var(--zv-bg);
+  border: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface);
   color: var(--zv-text);
-  font-size: 14px;
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  /* Faerbt Auswahlkaestchen, Optionsfelder und den nativen Farbwaehler in
+     der Markenfarbe -- eine Zeile statt eigener Nachbauten. */
+  accent-color: var(--zv-accent);
+  transition: border-color var(--zv-transition-fast), box-shadow var(--zv-transition-fast);
 }
 
+.zv-field input:focus,
+.zv-field select:focus,
+.zv-field textarea:focus {
+  border-color: var(--zv-accent);
+}
+
+.zv-field input::placeholder {
+  color: var(--zv-text-faint);
+}
+
+.zv-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-3);
+}
+
+.zv-inline-form {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+
+/* ==================================================================
+   Knoepfe
+   ================================================================== */
 .zv-btn {
-  width: 100%;
-  padding: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-2);
+  padding: 10px var(--zv-space-4);
   border-radius: var(--zv-radius-s);
-  border: 1px solid var(--zv-accent);
+  border: 1px solid transparent;
   background: var(--zv-accent);
   color: var(--zv-accent-contrast);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--zv-transition-fast), transform var(--zv-transition-fast),
+    box-shadow var(--zv-transition-fast);
+}
+
+.zv-btn:hover:not(:disabled) {
+  background: var(--zv-accent-hover);
+}
+
+.zv-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
 }
 
 .zv-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-.zv-error {
-  background: var(--zv-status-danger-bg);
-  color: var(--zv-status-danger);
-  border-radius: var(--zv-radius-s);
-  padding: 9px 12px;
-  font-size: 13px;
-  margin-bottom: 14px;
+/* Volle Breite ist die Ausnahme (Anmeldeformular), nicht die Regel --
+   frueher war es andersherum und jede Verwendung ausserhalb brauchte ein
+   style={{width:"auto"}}. */
+.zv-btn-block {
+  width: 100%;
 }
 
+/* Tonal: traegt die Markenfarbe als Flaeche, ohne mit dem primaeren
+   Knopf um Aufmerksamkeit zu konkurrieren. */
+.zv-btn-sekundaer {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  border-color: transparent;
+}
+.zv-btn-sekundaer:hover:not(:disabled) {
+  background: var(--zv-accent-soft-strong);
+}
+
+.zv-btn-still {
+  background: transparent;
+  color: var(--zv-text-muted);
+  border-color: var(--zv-border-strong);
+}
+.zv-btn-still:hover:not(:disabled) {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-btn-gefahr {
+  background: var(--zv-status-danger);
+  color: var(--zv-surface);
+}
+.zv-btn-gefahr:hover:not(:disabled) {
+  filter: brightness(0.93);
+}
+
+.zv-btn-klein {
+  padding: 6px var(--zv-space-3);
+  font-size: var(--zv-text-s);
+}
+
+.zv-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  background: none;
+  border: none;
+  color: var(--zv-accent);
+  font-size: var(--zv-text-s);
+  font-family: inherit;
+  font-weight: var(--zv-weight-semibold);
+  cursor: pointer;
+  padding: 2px 0;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-link-btn:hover {
+  color: var(--zv-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Rein ikonische Knoepfe -- brauchen immer ein aria-label am Element. */
+.zv-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--zv-text-muted);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-icon-btn:hover {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+/* ==================================================================
+   Hinweise
+   ================================================================== */
+.zv-hinweis {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-hinweis svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.zv-hinweis-fehler,
+/* Alias: .zv-error war der bisherige Name und steckt noch in mehreren
+   Seiten -- beide fuehren zur selben Darstellung. */
+.zv-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-3);
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+}
+
+.zv-hinweis-erfolg {
+  background: var(--zv-status-ok-bg);
+  color: var(--zv-status-ok);
+}
+
+.zv-hinweis-info {
+  background: var(--zv-status-info-bg);
+  color: var(--zv-status-info);
+}
+
+/* ==================================================================
+   Kopfzeile
+   ================================================================== */
 .zv-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) var(--zv-space-5);
   border-bottom: 1px solid var(--zv-border);
   background: var(--zv-surface);
+  /* Nur hier, ausserhalb der Mobil-Query: dort wuerde sticky die
+     Flex-Spalten-Hoehenrechnung von .zv-shell-app stoeren. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.zv-topbar-marke {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 0;
 }
 
 .zv-topbar strong {
-  font-size: 15px;
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: -0.01em;
 }
 
 .zv-topbar span {
   color: var(--zv-text-faint);
-  font-size: 12.5px;
-  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-s);
 }
 
-.zv-content {
-  padding: 24px;
-  max-width: 720px;
+.zv-topbar-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
 }
 
+/* ==================================================================
+   Reiterleisten
+   ================================================================== */
+.zv-tabbar {
+  display: flex;
+  gap: var(--zv-space-1);
+  padding: 0 var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+}
+
+.zv-tabbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) var(--zv-space-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+  transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-tabbar button:hover {
+  color: var(--zv-text);
+}
+
+.zv-tabbar button.active {
+  color: var(--zv-accent-strong);
+  border-bottom-color: var(--zv-accent);
+}
+
+/* ==================================================================
+   Tabellen
+   ================================================================== */
 .zv-table {
   width: 100%;
   border-collapse: collapse;
@@ -108,7 +389,10 @@
      statt die ganze Seite horizontal aufzureissen -- display:block auf dem
      table-Element selbst macht das moeglich, waehrend thead/tbody/tr/td
      ihre eigenen table-*-Display-Werte behalten und intern normal als
-     Tabelle ausgerichtet bleiben. */
+     Tabelle ausgerichtet bleiben.
+     ACHTUNG: genau deshalb funktioniert position:sticky auf thead hier
+     NICHT wie erwartet (der Scrollcontainer ist die Tabelle selbst, die nur
+     horizontal ueberlaeuft). Kein Sticky-Header nachruesten. */
   display: block;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -117,36 +401,65 @@
 
 .zv-table th {
   text-align: left;
-  font-size: 11px;
+  font-size: var(--zv-text-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--zv-text-faint);
+  font-weight: var(--zv-weight-semibold);
+  /* Bewusst -muted und nicht -faint: die Koepfe stehen auf --zv-surface-2,
+     und dort war die alte Kombination nur 2,87:1. */
+  color: var(--zv-text-muted);
   background: var(--zv-surface-2);
-  padding: 10px 14px;
+  padding: 10px var(--zv-space-4);
+  white-space: nowrap;
 }
 
 .zv-table td {
-  padding: 10px 14px;
+  padding: 11px var(--zv-space-4);
   border-top: 1px solid var(--zv-border);
-  font-size: 14px;
+  font-size: var(--zv-text-m);
 }
 
+.zv-table tbody tr {
+  transition: background var(--zv-transition-fast);
+}
+
+.zv-table tbody tr:hover {
+  background: var(--zv-surface-3);
+}
+
+/* Betraege und Datumsangaben rechtsbuendig mit Tabellenziffern -- so
+   stehen die Stellen sauber untereinander. */
+.zv-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   Pills
+   ================================================================== */
 .zv-pill {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  padding: 3px 10px;
+  border-radius: var(--zv-radius-pill);
+  border: 1px solid transparent;
   background: var(--zv-accent-soft);
   color: var(--zv-accent-strong);
+  white-space: nowrap;
 }
 
 .zv-pill-vergeben {
   background: var(--zv-surface-2);
   color: var(--zv-text-muted);
+  border-color: var(--zv-border);
 }
 
-.zv-pill-zugeordnet {
+.zv-pill-zugeordnet,
+.zv-pill-ok {
   background: var(--zv-status-ok-bg);
   color: var(--zv-status-ok);
 }
@@ -156,126 +469,332 @@
   color: var(--zv-status-danger);
 }
 
-.zv-sub-inline {
-  color: var(--zv-text-faint);
-  font-size: 12px;
-  margin-left: 6px;
+.zv-pill-offen {
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-status-warn);
 }
 
-.zv-mono {
-  font-family: var(--zv-font-mono);
+.zv-pill-info {
+  background: var(--zv-status-info-bg);
+  color: var(--zv-status-info);
 }
 
-.zv-tabbar {
-  display: flex;
-  gap: 4px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--zv-border);
-  background: var(--zv-surface);
-}
-
-.zv-tabbar button {
-  padding: 12px 4px;
-  margin-right: 20px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--zv-text-muted);
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.zv-tabbar button.active {
-  color: var(--zv-accent-strong);
-  border-bottom-color: var(--zv-accent);
-}
-
+/* ==================================================================
+   Zimmerkarten
+   ================================================================== */
 .zv-room-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--zv-space-3);
 }
 
 .zv-room-card {
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-m);
-  box-shadow: var(--zv-shadow);
-  padding: 14px;
+  box-shadow: var(--zv-shadow-1);
+  padding: var(--zv-space-4);
+  /* Schmale Akzentkante links -- traegt die Markenfarbe in die Flaeche,
+     ohne Text zu ueberlagern. */
+  border-left: 3px solid var(--zv-accent-soft-strong);
+  transition: box-shadow var(--zv-transition-base), transform var(--zv-transition-base);
+}
+
+.zv-room-card:hover {
+  box-shadow: var(--zv-shadow-2);
+  transform: translateY(-1px);
 }
 
 .zv-room-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
 }
 
 .zv-room-nummer {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: -0.01em;
 }
 
 .zv-room-klient {
-  font-size: 13.5px;
-  margin-bottom: 8px;
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-2);
 }
 
-.zv-link-btn {
-  background: none;
-  border: none;
-  color: var(--zv-accent);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
+/* ==================================================================
+   Listen und Kleinteile
+   ================================================================== */
 .zv-verlauf-liste {
   list-style: none;
-  padding: 10px 0 0;
-  margin: 10px 0 0;
+  padding: var(--zv-space-2) 0 0;
+  margin: var(--zv-space-2) 0 0;
   border-top: 1px solid var(--zv-border);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--zv-space-1);
 }
 
 .zv-verlauf-liste li {
-  font-size: 12.5px;
+  font-size: var(--zv-text-s);
 }
 
-.zv-inline-form {
+.zv-sub-inline {
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-s);
+  margin-left: var(--zv-space-1);
+}
+
+.zv-mono {
+  font-family: var(--zv-font-mono);
+}
+
+/* Seitenkopf: Titel links, Aktion rechts. Loest vier gleichlautende
+   Inline-Flex-Bloecke in den Seiten ab. */
+.zv-seiten-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+.zv-seiten-kopf h2 {
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* Label/Wert-Raster (Klientenakte, Uebersicht) */
+.zv-datenliste {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--zv-space-2) var(--zv-space-5);
+  font-size: var(--zv-text-m);
+  margin: 0;
+}
+
+.zv-datenliste dt {
+  color: var(--zv-text-muted);
+}
+
+.zv-datenliste dd {
+  margin: 0;
+}
+
+/* Leerzustaende */
+.zv-leer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-6) var(--zv-space-4);
+  color: var(--zv-text-faint);
+  text-align: center;
+}
+
+.zv-leer p {
+  margin: 0;
+  font-size: var(--zv-text-m);
+}
+
+.zv-leer-zelle {
+  /* Der Rahmen der Tabelle traegt die Begrenzung schon. */
+  border-top: 1px solid var(--zv-border);
+}
+
+/* ==================================================================
+   Segmentsteuerung (Theme-Auswahl)
+   ================================================================== */
+.zv-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+}
+
+.zv-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 7px var(--zv-space-3);
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-segmented button:hover {
+  color: var(--zv-text);
+}
+
+.zv-segmented button.active {
   background: var(--zv-surface);
+  color: var(--zv-accent-strong);
+  box-shadow: var(--zv-shadow-1);
+}
+
+/* ==================================================================
+   Farbwahl (Einstellungen)
+   ================================================================== */
+.zv-swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--zv-radius-pill);
+  border: 2px solid var(--zv-border);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  padding: 0;
+  transition: transform var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-swatch:hover {
+  transform: scale(1.08);
+}
+
+.zv-swatch[aria-pressed="true"] {
+  border-color: var(--zv-text);
+}
+
+/* Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
+   Deshalb ein dunkler Haken mit heller Aura statt reinem Weiss. */
+.zv-swatch svg {
+  color: oklch(0.25 0 0);
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
+.zv-farbwahl-frei {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+.zv-farbwahl-frei input[type="color"] {
+  width: 44px;
+  height: 40px;
+  padding: 2px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  cursor: pointer;
+}
+
+.zv-farbwahl-frei input[type="text"] {
+  width: 130px;
+  font-family: var(--zv-font-mono);
+}
+
+/*
+ * Vorschaukachel. data-vorschau setzt color-scheme lokal -- dadurch loesen
+ * sich ALLE light-dark()-Tokens innerhalb dieses Teilbaums neu auf, und die
+ * Leitung sieht das jeweils andere Theme, ohne selbst umzuschalten. Ein
+ * eleganter Nebeneffekt von light-dark(), ohne eine Zeile Sonderlogik.
+ */
+.zv-vorschau {
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-m);
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: var(--zv-space-4);
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
 }
 
-.zv-field-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.zv-vorschau[data-vorschau="hell"] {
+  color-scheme: light;
 }
 
-/* Mobile: die oberste App-Navigation (zv-tabbar-app, in Shell.tsx) wandert
-   ans untere Bildschirmende (App-typisches Muster auf schmalen
-   Bildschirmen, siehe Bauplan -- "Office" bleibt Desktop-Layout, "Mobile"
-   bekommt hier sein eigenes).
+.zv-vorschau[data-vorschau="dunkel"] {
+  color-scheme: dark;
+}
+
+.zv-vorschau-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-wrap: wrap;
+}
+
+.zv-einstellungen-abschnitt {
+  margin-bottom: var(--zv-space-6);
+}
+
+.zv-einstellungen-abschnitt > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+  margin: 0 0 var(--zv-space-1);
+}
+
+/* ==================================================================
+   Unterschrift
+   ================================================================== */
+.zv-signature-canvas {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: 140px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  /*
+   * Bleibt in BEIDEN Themes weiss (siehe --zv-signature-paper). Das PNG ist
+   * ein Auszahlungsnachweis und wird archiviert -- eine themenabhaengige
+   * Leinwand liesse archivierte Belege je nach Erfassungszeitpunkt
+   * unterschiedlich aussehen. Aus demselben Grund bleibt auch die
+   * Stiftfarbe in SignaturePad.tsx fest.
+   */
+  background: var(--zv-signature-paper);
+  touch-action: none;
+  cursor: crosshair;
+  margin-bottom: var(--zv-space-1);
+}
+
+/* ==================================================================
+   Mobil
+   ==================================================================
+   Die oberste App-Navigation (.zv-tabbar-app, in Shell.tsx) wandert ans
+   untere Bildschirmende -- App-typisches Muster auf schmalen Bildschirmen.
+
    Bewusst KEIN position:fixed dafuer: das kollidiert auf echten
    Mobilbrowsern mit dem ein-/ausblendenden Adressleisten-Bereich (Layout-
    vs. visueller Viewport hat dann eine andere Hoehe als die feste
    position:fixed-Berechnung erwartet, die Leiste landet ausserhalb des
    sichtbaren Bereichs -- reproduzierbar in echten Browser-Tests
-   nachvollzogen). Stattdessen: zv-shell-app wird zur Flex-Spalte über die
-   volle (dynamische) Viewporthoehe, zv-content scrollt für sich, die
+   nachvollzogen). Stattdessen: .zv-shell-app wird zur Flex-Spalte ueber die
+   volle (dynamische) Viewporthoehe, .zv-content scrollt fuer sich, die
    Navigation bleibt ein ganz normales Flex-Kind am Ende -- robust ohne
    Sonderfaelle.
-   Bewusst nur .zv-tabbar-app, nicht .zv-tabbar allgemein -- Unterseiten
-   wie die Klientenakte haben eine eigene, zweite .zv-tabbar (Reiter
-   innerhalb der Seite), die normal oben bleiben soll. */
+
+   Bewusst nur .zv-tabbar-app, nicht .zv-tabbar allgemein -- Unterseiten wie
+   die Klientenakte und die Einstellungen haben eine eigene, zweite
+   .zv-tabbar (Reiter innerhalb der Seite), die normal oben bleiben soll. */
 @media (max-width: 640px) {
   .zv-shell-app {
     display: flex;
@@ -285,10 +804,13 @@
   }
 
   .zv-topbar {
-    padding: 12px 16px;
+    padding: var(--zv-space-3) var(--zv-space-4);
     flex-wrap: wrap;
-    row-gap: 4px;
+    row-gap: var(--zv-space-1);
     flex-shrink: 0;
+    /* Sticky wieder aufheben: in der Flex-Spalte oben braucht es das nicht
+       und es stoert die Hoehenrechnung. */
+    position: static;
   }
 
   .zv-topbar span {
@@ -299,7 +821,7 @@
   .zv-content {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 16px;
+    padding: var(--zv-space-4);
     /* Reihenfolge im DOM ist topbar/tabbar/content (siehe Shell.tsx) --
        hier visuell hinter die Navigation gestellt, ohne die Quellreihenfolge
        anzufassen. */
@@ -312,14 +834,20 @@
     justify-content: space-around;
     padding: 0;
     padding-bottom: env(safe-area-inset-bottom, 0);
-    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.08);
+    border-bottom: none;
+    border-top: 1px solid var(--zv-border);
+    box-shadow: 0 -1px 4px var(--zv-schatten-farbe-1);
   }
 
   .zv-tabbar-app button {
+    /* Icon ueber Label statt daneben -- bei fuenf Zielen auf 390px ist das
+       die einzige Anordnung, in der beides lesbar bleibt. */
+    flex-direction: column;
+    gap: 3px;
     flex: 1;
-    margin-right: 0;
-    padding: 10px 2px;
-    font-size: 11.5px;
+    padding: var(--zv-space-2) 2px;
+    font-size: var(--zv-text-xs);
+    font-weight: var(--zv-weight-medium);
     text-align: center;
     border-bottom: none;
     border-top: 2px solid transparent;
@@ -333,17 +861,14 @@
   .zv-field-row {
     grid-template-columns: 1fr;
   }
-}
 
-.zv-signature-canvas {
-  display: block;
-  width: 100%;
-  max-width: 340px;
-  height: 140px;
-  border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-s);
-  background: #fff;
-  touch-action: none;
-  cursor: crosshair;
-  margin-bottom: 4px;
+  /* Fingerfreundliche Trefferflaechen fuer rein ikonische Bedienelemente. */
+  .zv-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .zv-link-btn {
+    min-height: 32px;
+  }
 }

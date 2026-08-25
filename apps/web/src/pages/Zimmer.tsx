@@ -2,6 +2,23 @@ import { useEffect, useState } from "react";
 import type { BelegungsverlaufEintragDto, ZimmerListEintragDto } from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { Leerzustand } from "../components/Leerzustand";
+import {
+  IAufklappen,
+  IFehler,
+  ILeerVerlauf,
+  ILeerZimmer,
+  ISVergeben,
+  ISZugeordnet,
+  IStandort,
+  IVerlauf,
+  IZuklappen,
+} from "../components/icons";
+
+const STATUS_ICON = {
+  vergeben: ISVergeben,
+  zugeordnet: ISZugeordnet,
+} as const;
 
 /**
  * Zeigt bewusst nur, was die API tatsächlich zurückgibt -- "status" wird
@@ -38,17 +55,32 @@ export function Zimmer() {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
         <div key={standortName} style={{ marginBottom: 28 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 10 }}>{standortName}</h2>
+          <div className="zv-seiten-kopf">
+            <h2>
+              <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
+              {standortName}
+            </h2>
+          </div>
           <div className="zv-room-grid">
-            {raum.map((z) => (
+            {raum.map((z) => {
+              const StatusIcon = STATUS_ICON[z.status];
+              return (
               <div key={z.id} className="zv-room-card">
                 <div className="zv-room-head">
                   <span className="zv-room-nummer">{z.nummer}</span>
-                  <span className={`zv-pill zv-pill-${z.status}`}>{ZIMMERSTATUS_LABEL[z.status]}</span>
+                  <span className={`zv-pill zv-pill-${z.status}`}>
+                    <StatusIcon />
+                    {ZIMMERSTATUS_LABEL[z.status]}
+                  </span>
                 </div>
                 {z.aktuellerKlient ? (
                   <div className="zv-room-klient">
@@ -59,7 +91,9 @@ export function Zimmer() {
                   <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
                 )}
                 <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
+                  {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
                   {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
+                  {offenesZimmer !== z.id && <IAufklappen />}
                 </button>
 
                 {offenesZimmer === z.id && (
@@ -76,13 +110,14 @@ export function Zimmer() {
                   </ul>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
 
       {zimmer.length === 0 && !fehler && (
-        <p style={{ color: "var(--zv-text-faint)" }}>Noch keine Zimmer angelegt.</p>
+        <Leerzustand icon={ILeerZimmer}>Noch keine Zimmer angelegt.</Leerzustand>
       )}
     </div>
   );

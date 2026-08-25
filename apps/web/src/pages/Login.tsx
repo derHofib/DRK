@@ -1,5 +1,13 @@
 import { FormEvent, useState } from "react";
 import { api, setToken } from "../api/client";
+import {
+  IAnmelden,
+  IBestaetigen,
+  IFehler,
+  ISichtbar,
+  IVerborgen,
+  IZurueck,
+} from "../components/icons";
 
 export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [mandantSlug, setMandantSlug] = useState("");
@@ -9,6 +17,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [ladt, setLadt] = useState(false);
+  const [passwortSichtbar, setPasswortSichtbar] = useState(false);
 
   async function submitPasswort(e: FormEvent) {
     e.preventDefault();
@@ -52,7 +61,12 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           <h1>Zimmerakte</h1>
           <p className="zv-sub">Zwei-Faktor-Bestätigung</p>
 
-          {fehler && <div className="zv-error">{fehler}</div>}
+          {fehler && (
+            <div className="zv-hinweis zv-hinweis-fehler">
+              <IFehler />
+              {fehler}
+            </div>
+          )}
 
           <div className="zv-field">
             <label htmlFor="code">Code aus der Authenticator-App</label>
@@ -67,7 +81,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             />
           </div>
 
-          <button className="zv-btn" type="submit" disabled={ladt}>
+          <button className="zv-btn zv-btn-block" type="submit" disabled={ladt}>
+            <IBestaetigen />
             {ladt ? "Prüft…" : "Bestätigen"}
           </button>
           <button
@@ -80,6 +95,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               setFehler(null);
             }}
           >
+            <IZurueck />
             Zurück zur Anmeldung
           </button>
         </form>
@@ -93,7 +109,12 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <h1>Zimmerakte</h1>
         <p className="zv-sub">Anmeldung</p>
 
-        {fehler && <div className="zv-error">{fehler}</div>}
+        {fehler && (
+            <div className="zv-hinweis zv-hinweis-fehler">
+              <IFehler />
+              {fehler}
+            </div>
+          )}
 
         <div className="zv-field">
           <label htmlFor="mandantSlug">Träger-Kennung</label>
@@ -117,16 +138,31 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         </div>
         <div className="zv-field">
           <label htmlFor="passwort">Passwort</label>
-          <input
-            id="passwort"
-            type="password"
-            value={passwort}
-            onChange={(e) => setPasswort(e.target.value)}
-            required
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              id="passwort"
+              type={passwortSichtbar ? "text" : "password"}
+              value={passwort}
+              onChange={(e) => setPasswort(e.target.value)}
+              style={{ paddingRight: 44 }}
+              required
+            />
+            {/* Rein ikonisch, deshalb zwingend mit aria-label. */}
+            <button
+              type="button"
+              className="zv-icon-btn"
+              style={{ position: "absolute", right: 3, top: 3 }}
+              onClick={() => setPasswortSichtbar((s) => !s)}
+              aria-label={passwortSichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
+              title={passwortSichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
+            >
+              {passwortSichtbar ? <IVerborgen /> : <ISichtbar />}
+            </button>
+          </div>
         </div>
 
-        <button className="zv-btn" type="submit" disabled={ladt}>
+        <button className="zv-btn zv-btn-block" type="submit" disabled={ladt}>
+          <IAnmelden />
           {ladt ? "Meldet an…" : "Anmelden"}
         </button>
       </form>

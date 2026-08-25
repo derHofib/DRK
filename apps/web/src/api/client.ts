@@ -1,6 +1,7 @@
 import type {
   BelegungsverlaufEintragDto,
   BenutzerListEintragDto,
+  BenutzerRolle,
   KassenbuchungDto,
   KassenbuchungTyp,
   KlientDetailDto,
@@ -30,6 +31,33 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+/**
+ * Liest die Rolle aus der JWT-Nutzlast -- ohne Signaturpruefung, und das ist
+ * Absicht.
+ *
+ * Das hier ist ausschliesslich ein ANZEIGE-Hinweis: welche Bedienelemente
+ * ueberhaupt gezeigt werden. Die einzige Autoritaet bleibt der Server --
+ * PATCH /mandant/me prueft die Rolle selbst und antwortet mit 403, egal was
+ * hier steht. Wer die Nutzlast manipuliert, sieht hoechstens ein Formular,
+ * das ihm dann 403 gibt.
+ *
+ * Bewusst kein eigener /auth/me-Endpunkt fuer eine reine Anzeigefrage.
+ */
+export function tokenRolle(): BenutzerRolle | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const nutzlast = token.split(".")[1];
+    if (!nutzlast) return null;
+    // base64url -> base64, dann dekodieren.
+    const json = atob(nutzlast.replace(/-/g, "+").replace(/_/g, "/"));
+    const rolle = JSON.parse(json)?.rolle;
+    return typeof rolle === "string" ? (rolle as BenutzerRolle) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -82,6 +110,8 @@ export const api = {
     request<{ aktiviert: boolean }>("/auth/totp/deaktivieren", { method: "POST", body: JSON.stringify({ code }) }),
 
   eigenerMandant: () => request<MandantDto>("/mandant/me"),
+  mandantAkzentfarbeSetzen: (akzentfarbe: string) =>
+    request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ akzentfarbe }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
 
   standorteListe: () => request<StandortDto[]>("/standorte"),

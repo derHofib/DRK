@@ -1,76 +1,281 @@
 /*
- * PLATZHALTER-DESIGN-TOKENS
- * =========================
- * fieldvibe.de war aus dieser Entwicklungsumgebung nicht erreichbar
- * (Netzwerksperre). Diese Datei ist deshalb bewusst NICHT an fieldvibe
- * angelehnt, sondern ein neutrales, professionelles Platzhaltersystem --
- * austauschbar, ohne dass irgendwo sonst im Code eine Farbe oder Schriftart
- * fest verdrahtet ist.
+ * DESIGNSYSTEM ZIMMERAKTE
+ * =======================
+ * Loest das Platzhaltersystem der fruehen Phasen ab. Die Grundregel von
+ * damals gilt unveraendert weiter und ist der Grund, warum dieser Austausch
+ * ueberhaupt an einer Datei moeglich war: KEINE Komponente verdrahtet je
+ * eine Farbe fest, alles laeuft ueber die Custom Properties hier.
  *
- * Sobald echte Werte vorliegen (Hex-Codes, Schriftfamilien, Logo):
- * NUR diese Datei ersetzen. Jede Komponente greift ausschliesslich ueber
- * die Custom Properties unten zu, nie ueber Literalwerte.
+ * DIE EINE IDEE
+ * -------------
+ * Pastell ist die Flaechensprache, der Akzent ist die Handlungssprache.
+ * "Leuchtende Pastellfarben" heisst nicht, dass der Speichern-Knopf pastell
+ * wird -- bei einer Anwendung, die Geld und Klientenakten verwaltet, waere
+ * das unseriös und nicht kontrastfest. Es heisst: Flaechen, Chips, Karten,
+ * Leerzustaende und selbst die Neutraltoene tragen einen hellen Hauch der
+ * Markenfarbe; Aktionen tragen einen kraeftigen, lesbaren Ton derselben
+ * Familie. Im Dunkelmodus dreht sich das um -- dort IST die Akzentflaeche
+ * pastellig hell, mit dunkler Schrift darauf.
  *
- * Was gebraucht wird, um diese Datei korrekt zu befuellen:
- *  - Primaerfarbe (+ eine dunklere Variante fuer Hover/Aktiv-Zustaende)
- *  - Schriftfamilie(n) fuer Ueberschriften und Fliesstext
- *  - Hell- und Dunkelmodus-Werte, falls fieldvibe beide unterstuetzt
- *  - Logo/Wortmarke als SVG
+ * WIE DIE AKZENTFARBE FUNKTIONIERT (der Kern)
+ * -------------------------------------------
+ * Kontrast haengt ausschliesslich an der Helligkeit. Deshalb liefert das
+ * JavaScript NUR Farbton und Buntheit (--zv-accent-h / --zv-accent-c, siehe
+ * theme/farbe.ts), und ALLE Helligkeitswerte stehen hier -- je Theme fest
+ * verdrahtet. Damit kann Kontrast konstruktiv nicht brechen, egal welche
+ * Farbe ein Traeger einstellt. Auch Knallgelb ergibt einen lesbaren Knopf
+ * (dann eben einen goldenen).
+ *
+ * OKLCH und nicht HSL, weil HSLs "Lightness" nicht perzeptuell ist: Gelb und
+ * Blau haben dort bei gleichem L voellig verschiedene Leuchtdichte -- genau
+ * der Fehlermodus "bei Tuerkis geht's, bei Gelb ist der Knopf unlesbar".
+ *
+ * Wer die Werte hier aendert: die Kontrastmatrix in
+ * scripts/design-pruefung.mjs misst 9 Paletten x 2 Themes im echten Browser
+ * und schlaegt fehl, wenn ein Paar unter die Schwelle faellt.
+ */
+
+/*
+ * Registriert, damit (1) ein ungueltiger Wert aus JS auf initial-value
+ * zurueckfaellt statt die ganze Seite zu zerlegen, (2) es keinen Fallback an
+ * 40 Stellen braucht und (3) die Werte animierbar werden -- die Live-
+ * Vorschau in den Einstellungen blendet dadurch weich ueber, statt zu
+ * springen.
+ */
+@property --zv-accent-h {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 190;
+}
+@property --zv-accent-c {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.086;
+}
+
+/*
+ * Die Schrift selbst kommt aus @fontsource-variable/inter und wird in
+ * main.tsx importiert -- Vite buendelt die woff2-Datei mit und versieht sie
+ * mit einem Hash. Bewusst kein Google-Fonts-CDN: das ist in Deutschland
+ * abgemahnt worden (LG Muenchen I, 3 O 17493/20) und bei einer Anwendung
+ * mit Klientendaten nicht verhandelbar. Bewusst auch keine per Hand
+ * abgelegte Binaerdatei: so haengt die Schriftversion an der
+ * pnpm-lock.yaml und nicht an einem Download von irgendwann.
+ *
+ * Damit die PWA offline vollstaendig bleibt, muss woff2 in
+ * workbox.globPatterns stehen -- siehe vite.config.ts.
  */
 
 :root {
-  --zv-bg: #f5f5f5;
-  --zv-surface: #ffffff;
-  --zv-surface-2: #ededed;
-  --zv-border: #d8d8d8;
-  --zv-text: #1a1a1a;
-  --zv-text-muted: #5c5c5c;
-  --zv-text-faint: #8c8c8c;
+  /* Folgt dem Betriebssystem. Der Umschalter setzt data-theme und
+     uebersteuert damit genau diese eine Zeile -- siehe unten. */
+  color-scheme: light dark;
 
-  --zv-accent: #2c5f5a;
-  --zv-accent-strong: #1e4a46;
-  --zv-accent-soft: #dceae7;
-  --zv-accent-contrast: #ffffff;
+  /* ------------------------------------------------------------------
+     Akzent -- Farbton/Buntheit kommen aus JS, Helligkeit gehoert hierher
+     ------------------------------------------------------------------ */
+  --zv-accent: light-dark(
+    oklch(0.52 var(--zv-accent-c) var(--zv-accent-h)),
+    oklch(0.8 calc(var(--zv-accent-c) * 0.88) var(--zv-accent-h))
+  );
+  --zv-accent-hover: light-dark(
+    oklch(0.45 calc(var(--zv-accent-c) * 1.05) var(--zv-accent-h)),
+    oklch(0.86 calc(var(--zv-accent-c) * 0.78) var(--zv-accent-h))
+  );
+  /* "Akzent als TEXT auf einer Flaeche" -- nicht als Flaeche selbst. */
+  --zv-accent-strong: light-dark(
+    oklch(0.4 var(--zv-accent-c) var(--zv-accent-h)),
+    oklch(0.87 calc(var(--zv-accent-c) * 0.75) var(--zv-accent-h))
+  );
+  /* Das Pastell: Pill-Hintergrund, ausgewaehlte Zeile, Kartenkopf. */
+  --zv-accent-soft: light-dark(
+    oklch(0.955 calc(var(--zv-accent-c) * 0.38) var(--zv-accent-h)),
+    oklch(0.3 calc(var(--zv-accent-c) * 0.55) var(--zv-accent-h))
+  );
+  --zv-accent-soft-strong: light-dark(
+    oklch(0.9 calc(var(--zv-accent-c) * 0.55) var(--zv-accent-h)),
+    oklch(0.37 calc(var(--zv-accent-c) * 0.6) var(--zv-accent-h))
+  );
+  /*
+   * Kehrt sich je Theme um -- und behebt damit einen echten Fehler des
+   * alten Systems: dort stand im Dunkelmodus weisser Text auf #5fafa6,
+   * nachgerechnet 2,57:1. Jeder .zv-btn war dunkel schlecht lesbar.
+   */
+  --zv-accent-contrast: light-dark(
+    oklch(0.99 0 0),
+    oklch(0.2 calc(var(--zv-accent-c) * 0.6) var(--zv-accent-h))
+  );
+  /* Rein dekorativ (Login-Schimmer) -- nie Traeger von Text. */
+  --zv-accent-vivid: light-dark(
+    oklch(0.7 calc(var(--zv-accent-c) * 1.1) var(--zv-accent-h)),
+    oklch(0.85 calc(var(--zv-accent-c) * 0.9) var(--zv-accent-h))
+  );
+  --zv-accent-ring: light-dark(
+    oklch(0.62 calc(var(--zv-accent-c) * 0.9) var(--zv-accent-h) / 0.45),
+    oklch(0.72 calc(var(--zv-accent-c) * 0.9) var(--zv-accent-h) / 0.5)
+  );
 
-  --zv-status-ok: #2f8f5b;
-  --zv-status-ok-bg: #e3f4e9;
-  --zv-status-warn: #b87a2e;
-  --zv-status-warn-bg: #fbeedd;
-  --zv-status-danger: #c1520c;
-  --zv-status-danger-bg: #fbe8db;
+  /* ------------------------------------------------------------------
+     Neutrale -- mit einem Hauch des Markenfarbtons
+     Das ist der Trick, der eine Oberflaeche "aus einem Guss" wirken laesst,
+     ohne sie einzufaerben. Auf 0 setzen schaltet es ab; bei einem
+     achromatischen Traeger (c = 0) entfaellt es automatisch.
+     ------------------------------------------------------------------ */
+  --zv-tint-l: calc(var(--zv-accent-c) * 0.075);
+  --zv-tint-d: calc(var(--zv-accent-c) * 0.13);
 
-  --zv-radius-s: 6px;
-  --zv-radius-m: 10px;
-  --zv-shadow: 0 1px 2px rgba(0, 0, 0, 0.07), 0 6px 16px rgba(0, 0, 0, 0.06);
+  --zv-bg: light-dark(
+    oklch(0.985 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.185 var(--zv-tint-d) var(--zv-accent-h))
+  );
+  --zv-surface: light-dark(oklch(1 0 0), oklch(0.225 var(--zv-tint-d) var(--zv-accent-h)));
+  --zv-surface-2: light-dark(
+    oklch(0.968 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.265 var(--zv-tint-d) var(--zv-accent-h))
+  );
+  /* Zeilen-Hover in Tabellen. */
+  --zv-surface-3: light-dark(
+    oklch(0.935 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.315 var(--zv-tint-d) var(--zv-accent-h))
+  );
+  --zv-border: light-dark(
+    oklch(0.905 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.34 var(--zv-tint-d) var(--zv-accent-h))
+  );
+  /* Eingabefeldraender -- muessen 3:1 gegen die Flaeche halten. */
+  --zv-border-strong: light-dark(
+    oklch(0.845 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.42 var(--zv-tint-d) var(--zv-accent-h))
+  );
 
-  --zv-font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --zv-text: light-dark(
+    oklch(0.25 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.955 var(--zv-tint-l) var(--zv-accent-h))
+  );
+  --zv-text-muted: light-dark(
+    oklch(0.44 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.745 var(--zv-tint-l) var(--zv-accent-h))
+  );
+  /*
+   * Zweiter behobener Fehler des alten Systems: --zv-text-faint war #8c8c8c
+   * -- 3,36:1 auf Weiss und nur 2,87:1 auf --zv-surface-2, wo die
+   * Tabellenkoepfe stehen. Der Token traegt aber echten Inhalt (alle
+   * Leerzustaende, "Kein Klient zugeordnet", saemtliche Tabellenkoepfe).
+   * Die Werte hier sind so bemessen, dass sie AUCH auf --zv-surface-2 noch
+   * >= 4,5:1 halten -- das ist die haertere Bedingung.
+   */
+  --zv-text-faint: light-dark(
+    oklch(0.54 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.65 var(--zv-tint-l) var(--zv-accent-h))
+  );
+
+  /* ------------------------------------------------------------------
+     Status -- feste Farbtoene, gleiche Helligkeitsdisziplin
+     Semantik darf dem Akzent NICHT folgen: "gruen heisst bezahlt" muss
+     unabhaengig von der Hausfarbe gelten.
+     ------------------------------------------------------------------ */
+  --zv-status-ok: light-dark(oklch(0.5 0.11 152), oklch(0.8 0.11 152));
+  --zv-status-ok-bg: light-dark(oklch(0.955 0.038 152), oklch(0.3 0.055 152));
+  --zv-status-warn: light-dark(oklch(0.52 0.105 68), oklch(0.83 0.11 78));
+  --zv-status-warn-bg: light-dark(oklch(0.955 0.045 82), oklch(0.31 0.055 68));
+  --zv-status-danger: light-dark(oklch(0.505 0.155 27), oklch(0.76 0.13 27));
+  --zv-status-danger-bg: light-dark(oklch(0.955 0.038 27), oklch(0.31 0.06 27));
+  --zv-status-info: light-dark(oklch(0.52 0.115 250), oklch(0.79 0.1 250));
+  --zv-status-info-bg: light-dark(oklch(0.955 0.035 250), oklch(0.31 0.055 250));
+
+  /* ------------------------------------------------------------------
+     Form
+     ------------------------------------------------------------------ */
+  --zv-radius-s: 8px;
+  --zv-radius-m: 12px;
+  --zv-radius-l: 18px;
+  --zv-radius-pill: 999px;
+
+  /* Schatten sind keine Farben -- light-dark() nur auf ihre Farbanteile. */
+  --zv-schatten-farbe-1: light-dark(
+    oklch(0.25 0.02 var(--zv-accent-h) / 0.07),
+    oklch(0 0 0 / 0.45)
+  );
+  --zv-schatten-farbe-2: light-dark(
+    oklch(0.25 0.02 var(--zv-accent-h) / 0.06),
+    oklch(0 0 0 / 0.35)
+  );
+  --zv-shadow-1: 0 1px 2px var(--zv-schatten-farbe-1), 0 4px 12px var(--zv-schatten-farbe-2);
+  --zv-shadow-2: 0 2px 4px var(--zv-schatten-farbe-1), 0 8px 24px var(--zv-schatten-farbe-2);
+  --zv-shadow-3: 0 4px 8px var(--zv-schatten-farbe-1), 0 16px 48px var(--zv-schatten-farbe-2);
+  /* Alias, damit .zv-card/.zv-room-card unveraendert weiterlaufen. */
+  --zv-shadow: var(--zv-shadow-1);
+
+  --zv-ring: 0 0 0 3px var(--zv-accent-ring);
+  --zv-ring-offset: 2px;
+
+  /* ------------------------------------------------------------------
+     Abstand, Typografie, Icons, Bewegung
+     ------------------------------------------------------------------ */
+  --zv-space-1: 4px;
+  --zv-space-2: 8px;
+  --zv-space-3: 12px;
+  --zv-space-4: 16px;
+  --zv-space-5: 24px;
+  --zv-space-6: 32px;
+  --zv-space-7: 48px;
+
+  /* "Inter Variable" ist der Familienname aus @fontsource-variable/inter --
+     nicht frei gewaehlt, muss zu dessen @font-face passen. Dahinter die
+     Systemkette, damit die Oberflaeche auch waehrend des Ladens (font-display:
+     swap) und bei blockierter Schrift vollstaendig lesbar bleibt. */
+  --zv-font-body: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --zv-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --zv-text-xs: 11.5px;
+  --zv-text-s: 12.5px;
+  --zv-text-m: 14px;
+  --zv-text-l: 15px;
+  --zv-text-xl: 17px;
+  --zv-text-2xl: 21px;
+  --zv-weight-medium: 500;
+  --zv-weight-semibold: 600;
+  --zv-leading-tight: 1.3;
+  --zv-leading-normal: 1.55;
+
+  --zv-icon-s: 16px;
+  --zv-icon-m: 18px;
+  --zv-icon-l: 20px;
+  --zv-icon-stroke: 1.75;
+
+  --zv-transition-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
+  --zv-transition-base: 220ms cubic-bezier(0.2, 0, 0, 1);
+
+  /*
+   * Die Unterschriftenleinwand bleibt in BEIDEN Themes weiss, und der Stift
+   * bleibt dunkel (siehe SignaturePad.tsx). Das PNG ist ein
+   * Auszahlungsnachweis und wird archiviert -- eine themenabhaengige
+   * Leinwand liesse archivierte Belege je nach Erfassungszeitpunkt
+   * unterschiedlich aussehen.
+   */
+  --zv-signature-paper: #ffffff;
+  --zv-signature-ink: #1a1a1a;
+
+  --zv-content-max: 760px;
+  --zv-content-max-weit: 1040px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --zv-bg: #161616;
-    --zv-surface: #1f1f1f;
-    --zv-surface-2: #272727;
-    --zv-border: #3a3a3a;
-    --zv-text: #f1f1f1;
-    --zv-text-muted: #adadad;
-    --zv-text-faint: #7a7a7a;
-
-    --zv-accent: #5fafa6;
-    --zv-accent-strong: #7fc5bc;
-    --zv-accent-soft: #1f3b37;
-    --zv-accent-contrast: #ffffff;
-
-    --zv-status-ok: #5fbe84;
-    --zv-status-ok-bg: #17301f;
-    --zv-status-warn: #d99b4e;
-    --zv-status-warn-bg: #3a2c18;
-    --zv-status-danger: #e8792e;
-    --zv-status-danger-bg: #3a2412;
-
-    --zv-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
-  }
+/*
+ * Manuelle Uebersteuerung: EINE Zeile pro Theme statt eines zweiten,
+ * dreissig Zeilen langen Tokenblocks, der beim naechsten Token
+ * auseinanderlaeuft. Moeglich, weil light-dark() sich nach color-scheme
+ * richtet.
+ *
+ * Nebeneffekt und eigentlicher Gewinn: color-scheme themt die NATIVEN
+ * Steuerelemente mit -- und diese App ist voll davon (input[type=date] in
+ * Klienten, Kostenuebernahmen und Kassenbuch, input[type=file], select,
+ * die Bildlaufleisten). Die blieben im alten System dunkel alle weiss.
+ */
+:root[data-theme="hell"] {
+  color-scheme: light;
+}
+:root[data-theme="dunkel"] {
+  color-scheme: dark;
 }
 
 * {
@@ -82,6 +287,42 @@ body {
   background: var(--zv-bg);
   color: var(--zv-text);
   font-family: var(--zv-font-body);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: var(--zv-text-l);
+  line-height: var(--zv-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Sichtbarer Fokus ueberall, ohne ihn in jeder Komponentenregel zu
+ * wiederholen. :where() haelt die Spezifitaet bei 0, damit einzelne
+ * Komponenten problemlos uebersteuern koennen.
+ */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--zv-accent);
+  outline-offset: var(--zv-ring-offset);
+  box-shadow: var(--zv-ring);
+}
+
+::selection {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+}
+
+/* Zahlen in Tabellen stehen sauber untereinander -- bei einem Kassenbuch
+   mehr wert als jede huebschere Schrift. */
+.zv-num,
+.zv-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

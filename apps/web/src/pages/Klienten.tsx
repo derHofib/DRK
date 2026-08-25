@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from "react";
 import type { HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { LeerzustandZeile } from "../components/Leerzustand";
+import { IAbbrechen, IFehler, ILeerKlienten, INeu, ISpeichern } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 
 export function Klienten() {
@@ -46,16 +48,21 @@ export function Klienten() {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h2 style={{ fontSize: 16, margin: 0 }}>Klienten</h2>
+      <div className="zv-seiten-kopf">
+        <h2>Klienten</h2>
         <button
-          className="zv-btn"
-          style={{ width: "auto", padding: "6px 14px" }}
+          className={formularOffen ? "zv-btn zv-btn-still" : "zv-btn"}
           onClick={() => setFormularOffen((v) => !v)}
         >
-          {formularOffen ? "Abbrechen" : "+ Neuer Klient"}
+          {formularOffen ? <IAbbrechen /> : <INeu />}
+          {formularOffen ? "Abbrechen" : "Neuer Klient"}
         </button>
       </div>
 
@@ -95,6 +102,7 @@ export function Klienten() {
             </div>
           </div>
           <button className="zv-btn" type="submit">
+            <ISpeichern />
             Anlegen
           </button>
         </form>
@@ -131,11 +139,9 @@ export function Klienten() {
             </tr>
           ))}
           {klienten.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Keine Klienten erfasst.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerKlienten} spalten={5}>
+              Keine Klienten erfasst.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>

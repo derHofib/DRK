@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { BenutzerListEintragDto } from "@zimmerakte/shared";
 import { BENUTZER_ROLLE_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { LeerzustandZeile } from "../components/Leerzustand";
+import { IFehler, ILeerMitarbeitende } from "../components/icons";
 
 export function Uebersicht() {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
@@ -13,7 +15,12 @@ export function Uebersicht() {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
       <h2 style={{ fontSize: 16 }}>Mitarbeitende im eigenen Mandanten</h2>
       <table className="zv-table">
@@ -37,11 +44,9 @@ export function Uebersicht() {
             </tr>
           ))}
           {benutzer.length === 0 && (
-            <tr>
-              <td colSpan={4} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Keine Mitarbeitenden gefunden.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerMitarbeitende} spalten={4}>
+              Keine Mitarbeitenden gefunden.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>

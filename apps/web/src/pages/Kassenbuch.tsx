@@ -2,6 +2,21 @@ import { Fragment, FormEvent, useEffect, useState } from "react";
 import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, WochenuebersichtEintragDto } from "@zimmerakte/shared";
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { LeerzustandZeile } from "../components/Leerzustand";
+import {
+  IAbbrechen,
+  IAuszahlen,
+  IFehler,
+  ILeerKassenbuch,
+  ILeerWoche,
+  INeu,
+  ISErledigt,
+  ISOffen,
+  ISStorniert,
+  ISpeichern,
+  IStornieren,
+  IUnterschrift,
+} from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
 import { formatBetrag } from "../format";
 
@@ -132,7 +147,12 @@ export function Kassenbuch() {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -170,7 +190,8 @@ export function Kassenbuch() {
               <tr key={e.klientId}>
                 <td>{e.klientName}</td>
                 <td>
-                  <span className={`zv-pill ${e.bezahlt ? "zv-pill-zugeordnet" : "zv-pill-vergeben"}`}>
+                  <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
+                    {e.bezahlt ? <ISErledigt /> : <ISOffen />}
                     {e.bezahlt ? "Bezahlt" : "Offen"}
                   </span>
                 </td>
@@ -178,6 +199,7 @@ export function Kassenbuch() {
                 <td>
                   {!e.bezahlt && (
                     <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
+                      <IAuszahlen />
                       Jetzt auszahlen
                     </button>
                   )}
@@ -185,11 +207,9 @@ export function Kassenbuch() {
               </tr>
             ))}
             {uebersicht.length === 0 && (
-              <tr>
-                <td colSpan={4} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                  Keine Klienten mit wöchentlichem HZL-Rhythmus.
-                </td>
-              </tr>
+              <LeerzustandZeile icon={ILeerWoche} spalten={4}>
+                Keine Klienten mit wöchentlichem HZL-Rhythmus.
+              </LeerzustandZeile>
             )}
           </tbody>
         </table>
@@ -199,7 +219,6 @@ export function Kassenbuch() {
         <h2 style={{ fontSize: 16, margin: 0 }}>Kassenbuch</h2>
         <button
           className="zv-btn"
-          style={{ width: "auto", padding: "6px 14px" }}
           onClick={() => {
             if (formularOffen) {
               setFormularOffen(false);
@@ -295,6 +314,7 @@ export function Kassenbuch() {
           )}
 
           <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
+            <ISpeichern />
             {wirdGespeichert ? "Speichert…" : "Buchung speichern"}
           </button>
         </form>
@@ -328,19 +348,27 @@ export function Kassenbuch() {
                 </td>
                 <td>
                   {b.storniert ? (
-                    <span className="zv-pill zv-pill-vergeben">Storniert</span>
+                    <span className="zv-pill zv-pill-vergeben">
+                      <ISStorniert />
+                      Storniert
+                    </span>
                   ) : (
-                    <span className="zv-pill zv-pill-zugeordnet">Aktiv</span>
+                    <span className="zv-pill zv-pill-ok">
+                      <ISErledigt />
+                      Aktiv
+                    </span>
                   )}
                 </td>
                 <td style={{ display: "flex", gap: 10 }}>
                   {b.hatUnterschrift && (
                     <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
+                      <IUnterschrift />
                       Unterschrift
                     </button>
                   )}
                   {!b.storniert && (
                     <button className="zv-link-btn" onClick={() => stornieren(b)}>
+                      <IStornieren />
                       Stornieren
                     </button>
                   )}
@@ -356,11 +384,9 @@ export function Kassenbuch() {
             </Fragment>
           ))}
           {buchungen.length === 0 && (
-            <tr>
-              <td colSpan={7} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Noch keine Buchungen erfasst.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerKassenbuch} spalten={7}>
+              Noch keine Buchungen erfasst.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>

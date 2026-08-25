@@ -1,67 +1,103 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MandantDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
+import { akzentSetzen } from "../theme/theme";
+import { ThemeToggle } from "../components/ThemeToggle";
+import {
+  IAbmelden,
+  IEinstellungen,
+  IKassenbuch,
+  IKlienten,
+  IMitarbeitende,
+  ITraeger,
+  IZimmer,
+  type IconKomponente,
+} from "../components/icons";
 import { Zimmer } from "./Zimmer";
 import { Klienten } from "./Klienten";
 import { Uebersicht } from "./Uebersicht";
 import { Kassenbuch } from "./Kassenbuch";
-import { Sicherheit } from "./Sicherheit";
+import { Einstellungen } from "./Einstellungen";
 
-type Tab = "uebersicht" | "zimmer" | "klienten" | "kassenbuch" | "sicherheit";
+type Tab = "uebersicht" | "zimmer" | "klienten" | "kassenbuch" | "einstellungen";
+
+const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
+  { wert: "zimmer", label: "Zimmer", icon: IZimmer },
+  { wert: "klienten", label: "Klienten", icon: IKlienten },
+  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
+  { wert: "uebersicht", label: "Mitarbeitende", icon: IMitarbeitende },
+  { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
+];
+
+/** Diese beiden Ansichten tragen breite Tabellen und bekommen mehr Platz. */
+const BREITE_REITER = new Set<Tab>(["kassenbuch", "klienten"]);
 
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
   const [tab, setTab] = useState<Tab>("zimmer");
 
   useEffect(() => {
-    api.eigenerMandant().then(setMandant).catch(() => {});
+    api
+      .eigenerMandant()
+      .then((m) => {
+        setMandant(m);
+        // Die Traegerfarbe ist die Autoritaet -- der localStorage-Wert aus
+        // dem Inline-Skript war nur die Ueberbrueckung bis hierher. Ein
+        // Wechsel (anderer Traeger, anderswo geaenderte Farbe) korrigiert
+        // sich damit spaetestens beim naechsten Laden.
+        if (m?.akzentfarbe) akzentSetzen(m.akzentfarbe);
+      })
+      .catch(() => {});
   }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     clearToken();
     onLoggedOut();
-  }
+  }, [onLoggedOut]);
 
   return (
     <div className="zv-shell-app">
       <div className="zv-topbar">
-        <div>
-          <strong>Zimmerakte</strong>{" "}
+        <div className="zv-topbar-marke">
+          <strong>Zimmerakte</strong>
           {mandant && (
             <span>
-              {mandant.name} · {mandant.slug}
+              <ITraeger style={{ verticalAlign: "-3px", marginRight: 4 }} />
+              {mandant.name}
             </span>
           )}
         </div>
-        <button className="zv-btn" style={{ width: "auto", padding: "6px 14px" }} onClick={logout}>
-          Abmelden
-        </button>
+        <div className="zv-topbar-aktionen">
+          <ThemeToggle />
+          <button className="zv-btn zv-btn-still zv-btn-klein" onClick={logout}>
+            <IAbmelden />
+            Abmelden
+          </button>
+        </div>
       </div>
 
       <div className="zv-tabbar zv-tabbar-app">
-        <button className={tab === "zimmer" ? "active" : ""} onClick={() => setTab("zimmer")}>
-          Zimmer
-        </button>
-        <button className={tab === "klienten" ? "active" : ""} onClick={() => setTab("klienten")}>
-          Klienten
-        </button>
-        <button className={tab === "kassenbuch" ? "active" : ""} onClick={() => setTab("kassenbuch")}>
-          Kassenbuch
-        </button>
-        <button className={tab === "uebersicht" ? "active" : ""} onClick={() => setTab("uebersicht")}>
-          Mitarbeitende
-        </button>
-        <button className={tab === "sicherheit" ? "active" : ""} onClick={() => setTab("sicherheit")}>
-          Sicherheit
-        </button>
+        {REITER.map(({ wert, label, icon: Icon }) => (
+          <button
+            key={wert}
+            className={tab === wert ? "active" : ""}
+            onClick={() => setTab(wert)}
+            aria-current={tab === wert ? "page" : undefined}
+          >
+            <Icon />
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="zv-content" style={{ maxWidth: tab === "kassenbuch" || tab === "klienten" ? 900 : undefined }}>
+      <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
         {tab === "zimmer" && <Zimmer />}
         {tab === "klienten" && <Klienten />}
         {tab === "kassenbuch" && <Kassenbuch />}
         {tab === "uebersicht" && <Uebersicht />}
-        {tab === "sicherheit" && <Sicherheit />}
+        {tab === "einstellungen" && (
+          <Einstellungen mandant={mandant} onMandantAktualisiert={setMandant} />
+        )}
       </div>
     </div>
   );

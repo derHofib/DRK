@@ -25,7 +25,55 @@ export interface MandantDto {
   id: string;
   name: string;
   slug: string;
+  /** Akzentfarbe des Trägers als sRGB-Hex, z. B. "#5ec4c0". */
+  akzentfarbe: string;
 }
+
+/**
+ * Eine Regel, drei Prüforte: der CHECK in Migration 0019, das zod-Schema im
+ * Controller und die Eingabeprüfung im Einstellungsformular. Hier steht sie
+ * für die beiden letzteren -- die Datenbank hat ihre eigene Kopie, weil sie
+ * auch dann gelten muss, wenn ein künftiger Codepfad an zod vorbeigeht.
+ *
+ * Bewusst case-insensitiv: der Browser liefert je nach Plattform "#5EC4C0"
+ * oder "#5ec4c0". Kleingeschrieben wird serverseitig, nicht abgelehnt.
+ */
+export const AKZENTFARBE_MUSTER = /^#[0-9a-fA-F]{6}$/;
+
+export const AKZENTFARBE_STANDARD = "#5ec4c0";
+
+export interface PastellPalette {
+  id: string;
+  name: string;
+  hex: string;
+}
+
+/**
+ * Kuratierte Auswahl. Gespeichert wird jeweils der Pastellton selbst, damit
+ * das Farbfeld im Wähler auch pastellig aussieht -- übernommen werden davon
+ * nur Farbton und Buntheit, die Helligkeit gehört dem CSS (siehe
+ * apps/web/src/theme/farbe.ts).
+ *
+ * Bewusst kein Rot: es kollidierte visuell mit --zv-status-danger (Storno,
+ * Ablehnung, negative Beträge) und aus denselben Gründen, die im Projekt
+ * schon gegen ein Rotkreuz-Symbol sprachen. Über den freien Farbwähler
+ * bleibt Rot möglich; die Statusfarben sind davon unberührt, weil sie feste
+ * Farbtöne haben und dem Akzent nicht folgen.
+ */
+export const PASTELL_PALETTEN: readonly PastellPalette[] = [
+  { id: "salbei", name: "Salbei", hex: "#79c7a8" },
+  { id: "petrol", name: "Petrol", hex: "#5ec4c0" },
+  { id: "himmel", name: "Himmel", hex: "#7fbef0" },
+  { id: "lavendel", name: "Lavendel", hex: "#a8a4f0" },
+  { id: "flieder", name: "Flieder", hex: "#d89ce0" },
+  { id: "rose", name: "Rosé", hex: "#f2a0b5" },
+  { id: "apricot", name: "Apricot", hex: "#f5b183" },
+  { id: "honig", name: "Honig", hex: "#efce72" },
+  // Läuft in den achromatischen Pfad von akzentAbleiten() und ergibt damit
+  // ein bewusst entfärbtes, sehr sachliches System -- für Träger, deren
+  // Hausfarbe Graphit ist.
+  { id: "graphit", name: "Graphit", hex: "#8e96a3" },
+] as const;
 
 export interface BenutzerListEintragDto {
   id: string;

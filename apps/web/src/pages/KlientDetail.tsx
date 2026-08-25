@@ -8,6 +8,29 @@ import type {
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { LeerzustandZeile } from "../components/Leerzustand";
+import {
+  IAbbrechen,
+  IAblehnen,
+  IAuszahlen,
+  IBeenden,
+  IDokument,
+  IFehler,
+  IGenehmigen,
+  IKassenbuch,
+  IKostenuebernahme,
+  ILeerKassenbuch,
+  ILeerKostenuebernahmen,
+  ILeerRechnungen,
+  INeu,
+  IRechnung,
+  ISErledigt,
+  ISOffen,
+  ISStorniert,
+  ISpeichern,
+  IUebersicht,
+  IZurueck,
+} from "../components/icons";
 import { formatBetrag } from "../format";
 
 type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch";
@@ -42,13 +65,19 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   return (
     <div>
       <button className="zv-link-btn" onClick={onZurueck} style={{ marginBottom: 14 }}>
-        ← Zurück zur Liste
+        <IZurueck />
+        Zurück zur Liste
       </button>
 
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
       {klient && (
-        <div className="zv-card" style={{ maxWidth: "none", marginBottom: 20, padding: 20 }}>
+        <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
           <h2 style={{ margin: "0 0 4px", fontSize: 19 }}>
             {klient.vorname} {klient.nachname}
           </h2>
@@ -61,15 +90,19 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
 
       <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>
         <button className={tab === "uebersicht" ? "active" : ""} onClick={() => setTab("uebersicht")}>
+          <IUebersicht />
           Übersicht
         </button>
         <button className={tab === "kostenuebernahmen" ? "active" : ""} onClick={() => setTab("kostenuebernahmen")}>
+          <IKostenuebernahme />
           Kostenübernahmen
         </button>
         <button className={tab === "rechnungen" ? "active" : ""} onClick={() => setTab("rechnungen")}>
+          <IRechnung />
           Rechnungen
         </button>
         <button className={tab === "kassenbuch" ? "active" : ""} onClick={() => setTab("kassenbuch")}>
+          <IKassenbuch />
           Kassenbuch
         </button>
       </div>
@@ -94,7 +127,7 @@ function UebersichtTab({ klient }: { klient: KlientDetailDto }) {
   }, [klient.id]);
 
   return (
-    <div className="zv-card" style={{ maxWidth: "none", padding: 20 }}>
+    <div className="zv-card zv-card-weit">
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", rowGap: 12, fontSize: 14 }}>
         <div style={{ color: "var(--zv-text-muted)" }}>Zimmer</div>
         <div>
@@ -154,15 +187,20 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ margin: 0, fontSize: 15 }}>Kostenübernahme-Zeiträume</h3>
         <button
           className="zv-btn"
-          style={{ width: "auto", padding: "6px 14px" }}
           onClick={() => setFormularOffen((v) => !v)}
         >
-          {formularOffen ? "Abbrechen" : "+ Neuer Zeitraum"}
+          {formularOffen ? <IAbbrechen /> : <INeu />}
+          {formularOffen ? "Abbrechen" : "Neuer Zeitraum"}
         </button>
       </div>
 
@@ -179,6 +217,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
             </div>
           </div>
           <button className="zv-btn" type="submit">
+            <ISpeichern />
             Anlegen
           </button>
         </form>
@@ -198,7 +237,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
             <tr key={k.id}>
               <td>{k.amt}</td>
               <td>{k.von}</td>
-              <td>{k.bis ?? <span className="zv-pill zv-pill-zugeordnet">Offen</span>}</td>
+              <td>{k.bis ?? <span className="zv-pill zv-pill-offen"><ISOffen />Offen</span>}</td>
               <td>
                 {k.bis === null &&
                   (beendenId === k.id ? (
@@ -210,6 +249,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
                     </form>
                   ) : (
                     <button className="zv-link-btn" onClick={() => setBeendenId(k.id)}>
+                      <IBeenden />
                       Beenden
                     </button>
                   ))}
@@ -217,11 +257,9 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
             </tr>
           ))}
           {liste.length === 0 && (
-            <tr>
-              <td colSpan={4} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Noch keine Kostenübernahme erfasst.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerKostenuebernahmen} spalten={4}>
+              Noch keine Kostenübernahme erfasst.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>
@@ -306,15 +344,20 @@ function RechnungenTab({ klientId }: { klientId: string }) {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ margin: 0, fontSize: 15 }}>Rechnungen</h3>
         <button
           className="zv-btn"
-          style={{ width: "auto", padding: "6px 14px" }}
           onClick={() => setFormularOffen((v) => !v)}
         >
-          {formularOffen ? "Abbrechen" : "+ Neue Rechnung"}
+          {formularOffen ? <IAbbrechen /> : <INeu />}
+          {formularOffen ? "Abbrechen" : "Neue Rechnung"}
         </button>
       </div>
 
@@ -335,6 +378,7 @@ function RechnungenTab({ klientId }: { klientId: string }) {
             <input name="dokument" type="file" accept="application/pdf,image/*" />
           </div>
           <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
+            <ISpeichern />
             {wirdGespeichert ? "Speichert…" : "Rechnung anlegen"}
           </button>
         </form>
@@ -360,7 +404,7 @@ function RechnungenTab({ klientId }: { klientId: string }) {
                 <td>
                   <span
                     className={`zv-pill ${
-                      r.status === "abgelehnt" ? "zv-pill-danger" : r.status === "ausgezahlt" ? "zv-pill-zugeordnet" : ""
+                      r.status === "abgelehnt" ? "zv-pill-danger" : r.status === "ausgezahlt" ? "zv-pill-ok" : r.status === "genehmigt" ? "zv-pill-info" : "zv-pill-offen"
                     }`}
                   >
                     {RECHNUNG_STATUS_LABEL[r.status]}
@@ -370,21 +414,25 @@ function RechnungenTab({ klientId }: { klientId: string }) {
                 <td style={{ display: "flex", gap: 10 }}>
                   {r.hatDokument && (
                     <button className="zv-link-btn" onClick={() => dokumentAnzeigen(r.id)}>
+                      <IDokument />
                       Dokument
                     </button>
                   )}
                   {r.status === "beantragt" && (
                     <>
                       <button className="zv-link-btn" onClick={() => statusAendern(r, "genehmigt")}>
+                        <IGenehmigen />
                         Genehmigen
                       </button>
                       <button className="zv-link-btn" onClick={() => statusAendern(r, "abgelehnt")}>
+                        <IAblehnen />
                         Ablehnen
                       </button>
                     </>
                   )}
                   {r.status === "genehmigt" && (
                     <button className="zv-link-btn" onClick={() => statusAendern(r, "ausgezahlt")}>
+                      <IAuszahlen />
                       Auszahlen
                     </button>
                   )}
@@ -402,11 +450,9 @@ function RechnungenTab({ klientId }: { klientId: string }) {
             </Fragment>
           ))}
           {liste.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Noch keine Rechnungen erfasst.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerRechnungen} spalten={5}>
+              Noch keine Rechnungen erfasst.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>
@@ -424,7 +470,12 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
 
   return (
     <div>
-      {fehler && <div className="zv-error">{fehler}</div>}
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
       <table className="zv-table">
         <thead>
           <tr>
@@ -446,19 +497,17 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
               <td>{KASSENBUCHUNG_TYP_LABEL[b.typ]}</td>
               <td>
                 {b.storniert ? (
-                  <span className="zv-pill zv-pill-vergeben">Storniert</span>
+                  <span className="zv-pill zv-pill-vergeben"><ISStorniert />Storniert</span>
                 ) : (
-                  <span className="zv-pill zv-pill-zugeordnet">Aktiv</span>
+                  <span className="zv-pill zv-pill-ok"><ISErledigt />Aktiv</span>
                 )}
               </td>
             </tr>
           ))}
           {buchungen.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ color: "var(--zv-text-faint)", padding: 16 }}>
-                Keine Kassenbuch-Einträge für diesen Klienten.
-              </td>
-            </tr>
+            <LeerzustandZeile icon={ILeerKassenbuch} spalten={5}>
+              Keine Kassenbuch-Einträge für diesen Klienten.
+            </LeerzustandZeile>
           )}
         </tbody>
       </table>
