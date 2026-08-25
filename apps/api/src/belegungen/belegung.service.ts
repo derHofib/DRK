@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
+import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 
 // Postgres-Fehlercode fuer eine verletzte EXCLUDE-Constraint. Kein String,
 // der irgendwo geraten ist -- offizieller SQLSTATE-Code, siehe
@@ -32,6 +33,16 @@ export class BelegungService {
     const { mandantId, benutzerId } = requireTenantContext();
     try {
       return await this.db.withTenant(async (client) => {
+        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+        if (erlaubteStandorte) {
+          const { rows: zimmerRows } = await client.query("SELECT standort_id FROM zimmer WHERE id = $1", [
+            input.zimmerId,
+          ]);
+          if (zimmerRows.length === 0 || !erlaubteStandorte.includes(zimmerRows[0].standort_id)) {
+            throw new NotFoundException("Zimmer nicht gefunden.");
+          }
+        }
+
         const { rows } = await client.query(
           `INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug, gebucht_von)
            VALUES ($1, $2, $3, $4, $5)
@@ -51,7 +62,19 @@ export class BelegungService {
   }
 
   async ausziehen(id: string, auszug: string): Promise<BelegungDto> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      if (erlaubteStandorte) {
+        const { rows: bRows } = await client.query(
+          "SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
+          [id]
+        );
+        if (bRows.length === 0 || !erlaubteStandorte.includes(bRows[0].standort_id)) {
+          throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
+        }
+      }
+
       const { rows } = await client.query(
         `UPDATE belegung SET auszug = $1
          WHERE id = $2 AND auszug IS NULL

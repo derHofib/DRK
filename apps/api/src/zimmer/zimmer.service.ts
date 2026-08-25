@@ -98,15 +98,24 @@ export class ZimmerService {
     const vollerName = ROLLEN_MIT_VOLLEM_VERLAUF.has(ctx.rolle);
 
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+      const bedingungen = ["b.zimmer_id = $1"];
+      const params: unknown[] = [zimmerId];
+      if (erlaubteStandorte) {
+        params.push(erlaubteStandorte);
+        bedingungen.push(`z.standort_id = ANY($${params.length})`);
+      }
+
       const { rows } = await client.query(
         `
         SELECT b.id, b.klient_id, b.einzug, b.auszug, k.vorname, k.nachname
         FROM belegung b
         JOIN klient k ON k.id = b.klient_id
-        WHERE b.zimmer_id = $1
+        JOIN zimmer z ON z.id = b.zimmer_id
+        WHERE ${bedingungen.join(" AND ")}
         ORDER BY b.einzug DESC
         `,
-        [zimmerId]
+        params
       );
 
       return rows.map((r) => {

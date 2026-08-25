@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Patch } from "@nestjs/common";
+import { Body, Controller, Get, Patch } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { MandantService } from "./mandant.service";
@@ -31,21 +31,13 @@ export class MandantController {
    */
   @Patch("me")
   async akzentfarbeSetzen(@Body() body: unknown) {
-    // Bewusst safeParse + BadRequestException statt .parse(): ein
-    // durchgereichter ZodError ist fuer Nest keine HttpException und wuerde
-    // als 500 mit Stacktrace herauskommen. Eine ungueltige Farbe ist aber
-    // ein Eingabefehler, kein Serverfehler.
-    //
-    // Dass die uebrigen Controller hier .parse() benutzen, ist ein
-    // bestehendes, groesseres Thema (ein globaler ZodError-Filter waere die
-    // richtige Loesung) -- das gehoert nicht in diese Aenderung und wird
-    // deshalb nur hier lokal richtig gemacht.
-    const ergebnis = akzentfarbeSchema.safeParse(body);
-    if (!ergebnis.success) {
-      throw new BadRequestException(
-        ergebnis.error.issues[0]?.message ?? "Ungültige Farbangabe."
-      );
-    }
-    return this.mandant.setzeAkzentfarbe(ergebnis.data.akzentfarbe);
+    // .parse() statt safeParse(): ein durchgereichter ZodError wird global
+    // von ZodExceptionFilter (common/zod-exception.filter.ts) in ein 400
+    // uebersetzt, wie fuer jeden anderen Controller auch. Vor dessen
+    // Einfuehrung war das hier lokal mit safeParse + BadRequestException
+    // geloest -- siehe Commit-Historie, falls das Muster woanders noch
+    // gebraucht wird.
+    const { akzentfarbe } = akzentfarbeSchema.parse(body);
+    return this.mandant.setzeAkzentfarbe(akzentfarbe);
   }
 }

@@ -1,12 +1,20 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
-import { requireTenantContext } from "../common/tenant-context";
+import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
+import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
+
+// Ein Storno macht eine Auszahlung/Einzahlung rueckwirkend ungueltig -- wer
+// das darf, entscheidet ueber die Kassenbuchfuehrung, nicht ueber einzelne
+// Klientendaten. Gleiches Rollenmuster wie ROLLEN_MIT_BRANDING in
+// mandant.service.ts. bezugsbetreuung/springer legen Buchungen an, duerfen
+// sie aber nicht im Nachhinein aus der Kasse entfernen.
+const ROLLEN_MIT_STORNO = new Set<BenutzerRolle>(["leitung", "verwaltung"]);
 
 export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
 
@@ -66,6 +74,10 @@ export class KassenbuchungService {
 
     try {
       return await this.db.withTenant(async (client) => {
+        if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
+          throw new NotFoundException("Klient nicht gefunden.");
+        }
+
         const { rows } = await client.query(
           `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, iso_jahr, iso_woche, gebucht_von)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -104,8 +116,17 @@ export class KassenbuchungService {
   }
 
   async stornieren(id: string, grund: string): Promise<KassenbuchungDto> {
-    const { benutzerId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STORNO.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Leitung oder Verwaltung dürfen Buchungen stornieren.");
+    }
+    const { benutzerId } = ctx;
     return this.db.withTenant(async (client) => {
+      const { rows: buchungRows } = await client.query("SELECT klient_id FROM kassenbuchung WHERE id = $1", [id]);
+      if (buchungRows.length === 0 || !(await klientIstErlaubt(client, benutzerId, buchungRows[0].klient_id))) {
+        throw new NotFoundException("Buchung nicht gefunden oder bereits storniert.");
+      }
+
       const { rowCount } = await client.query(
         `UPDATE kassenbuchung
          SET storniert = true, storno_grund = $1, storniert_von = $2, storniert_am = now()
@@ -120,9 +141,11 @@ export class KassenbuchungService {
   }
 
   async findeAlle(filter?: { klientId?: string }): Promise<KassenbuchungDto[]> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const bedingungen = ["1=1"];
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       const params: unknown[] = [];
+      const bedingungen = [klientStandortBedingung(erlaubteStandorte, "k", params)];
       if (filter?.klientId) {
         params.push(filter.klientId);
         bedingungen.push(`b.klient_id = $${params.length}`);
@@ -145,7 +168,12 @@ export class KassenbuchungService {
   }
 
   async wochenuebersicht(isoJahr: number, isoWoche: number): Promise<WochenuebersichtEintrag[]> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      const params: unknown[] = [isoJahr, isoWoche];
+      const standortBedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+
       const { rows } = await client.query(
         `
         SELECT k.id AS klient_id, k.vorname, k.nachname,
@@ -153,10 +181,10 @@ export class KassenbuchungService {
         FROM klient k
         LEFT JOIN kassenbuchung b
           ON b.klient_id = k.id AND b.typ = 'hzl' AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
-        WHERE k.hzl_rhythmus = 'woechentlich'
+        WHERE k.hzl_rhythmus = 'woechentlich' AND ${standortBedingung}
         ORDER BY k.nachname, k.vorname
         `,
-        [isoJahr, isoWoche]
+        params
       );
       return rows.map((r) => ({
         klientId: r.klient_id,
@@ -170,12 +198,17 @@ export class KassenbuchungService {
   }
 
   async unterschriftBild(kassenbuchungId: string): Promise<{ bild: Buffer; hash: string } | null> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const { rows } = await client.query<{ bild: Buffer; bild_hash: string }>(
-        "SELECT bild, bild_hash FROM unterschrift WHERE kassenbuchung_id = $1",
+      const { rows } = await client.query<{ bild: Buffer; bild_hash: string; klient_id: string }>(
+        `SELECT u.bild, u.bild_hash, b.klient_id
+         FROM unterschrift u
+         JOIN kassenbuchung b ON b.id = u.kassenbuchung_id
+         WHERE u.kassenbuchung_id = $1`,
         [kassenbuchungId]
       );
       if (rows.length === 0) return null;
+      if (!(await klientIstErlaubt(client, benutzerId, rows[0].klient_id))) return null;
       return { bild: rows[0].bild, hash: rows[0].bild_hash };
     });
   }

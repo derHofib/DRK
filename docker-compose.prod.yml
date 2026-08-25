@@ -64,6 +64,12 @@ services:
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY muss gesetzt sein}
       PORT: "3000"
       NODE_ENV: production
+      # Ungesetzt gilt der main.ts-Standard (nur der Vite-Dev-Origin) -- der
+      # Browser ruft die API hier aber ohnehin nie direkt auf, sondern immer
+      # ueber den nginx-Proxy von web (/api/, siehe apps/web/nginx.conf) und
+      # damit vom selben Origin aus. Nur setzen, wenn Web und API bewusst
+      # unter verschiedenen Origins laufen sollen, z.B.:
+      # CORS_ORIGIN: https://zimmerakte.eure-domain.de
     depends_on:
       migrate:
         condition: service_completed_successfully

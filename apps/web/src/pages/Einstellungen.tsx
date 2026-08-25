@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AKZENTFARBE_MUSTER,
   PASTELL_PALETTEN,
@@ -99,6 +99,14 @@ function Traegerfarbe({
   const [speichert, setSpeichert] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [erfolg, setErfolg] = useState<string | null>(null);
+  // Zaehlt jeden angestossenen Speichern()-Aufruf durch. "disabled" auf dem
+  // Knopf verhindert nur einen zweiten KLICK, nicht eine zweite Anfrage --
+  // React setzt das disabled-Attribut erst beim naechsten Rendern, und
+  // zwei Antworten vom Server muessen nicht in Sendereihenfolge zurueckkommen.
+  // Ohne diesen Zaehler koennte eine spaete Antwort auf eine AELTERE Anfrage
+  // eine bereits abgeschlossene NEUERE ueberschreiben. Nur die Antwort auf
+  // die zuletzt gestellte Anfrage wird uebernommen.
+  const laufendeAnfrage = useRef(0);
 
   // Wenn der Mandant nachgeladen wird, die Auswahl nachziehen.
   useEffect(() => {
@@ -125,15 +133,20 @@ function Traegerfarbe({
   }
 
   async function speichern() {
+    if (speichert) return;
+    const angefordert = ++laufendeAnfrage.current;
+    const ziel = gewaehlt;
     setSpeichert(true);
     setFehler(null);
     setErfolg(null);
     try {
-      const aktualisiert = await api.mandantAkzentfarbeSetzen(gewaehlt);
+      const aktualisiert = await api.mandantAkzentfarbeSetzen(ziel);
+      if (laufendeAnfrage.current !== angefordert) return; // ueberholt -- eine neuere Anfrage zaehlt
       onMandantAktualisiert(aktualisiert);
       akzentUebernehmen(aktualisiert.akzentfarbe);
       setErfolg("Farbe gespeichert. Sie gilt ab sofort für alle Mitarbeitenden.");
     } catch (err) {
+      if (laufendeAnfrage.current !== angefordert) return;
       // Faengt insbesondere ein 403 ab, falls die Rolle im Token nicht der
       // Wahrheit auf dem Server entspricht.
       setFehler(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
@@ -141,7 +154,7 @@ function Traegerfarbe({
       setGewaehlt(mandant.akzentfarbe);
       setHexFeld(mandant.akzentfarbe);
     } finally {
-      setSpeichert(false);
+      if (laufendeAnfrage.current === angefordert) setSpeichert(false);
     }
   }
 

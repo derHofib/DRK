@@ -120,7 +120,19 @@ export function Klienten() {
         </thead>
         <tbody>
           {klienten.map((k) => (
-            <tr key={k.id} onClick={() => setAusgewaehlterKlientId(k.id)} style={{ cursor: "pointer" }}>
+            <tr
+              key={k.id}
+              onClick={() => setAusgewaehlterKlientId(k.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setAusgewaehlterKlientId(k.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              style={{ cursor: "pointer" }}
+            >
               <td>
                 {k.vorname} {k.nachname}
               </td>

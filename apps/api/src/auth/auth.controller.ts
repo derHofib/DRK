@@ -1,7 +1,14 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { AuthService } from "./auth.service";
+
+// Enger als die globale Schranke (100/min, app.module.ts) -- das hier sind
+// die Endpunkte, an denen ein Angreifer tatsaechlich etwas erraten koennte
+// (Passwort, TOTP-Code). 10/min laesst normales Vertippen zu, macht
+// Durchprobieren aber unwirtschaftlich langsam.
+const RATEN_SCHRANKE = { default: { limit: 10, ttl: 60_000 } };
 
 const loginSchema = z.object({
   mandantSlug: z.string().min(1),
@@ -22,12 +29,14 @@ const totpCodeSchema = z.object({
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Throttle(RATEN_SCHRANKE)
   @Post("login")
   async login(@Body() body: unknown) {
     const { mandantSlug, email, passwort } = loginSchema.parse(body);
     return this.auth.login(mandantSlug, email, passwort);
   }
 
+  @Throttle(RATEN_SCHRANKE)
   @Post("login/totp")
   async loginTotp(@Body() body: unknown) {
     const { pendingToken, code } = totpVerifizierenSchema.parse(body);
@@ -46,6 +55,7 @@ export class AuthController {
     return this.auth.einrichten();
   }
 
+  @Throttle(RATEN_SCHRANKE)
   @Post("totp/aktivieren")
   @Authenticated()
   async totpAktivieren(@Body() body: unknown) {
@@ -54,6 +64,7 @@ export class AuthController {
     return { aktiviert: true };
   }
 
+  @Throttle(RATEN_SCHRANKE)
   @Post("totp/deaktivieren")
   @Authenticated()
   async totpDeaktivieren(@Body() body: unknown) {

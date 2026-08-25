@@ -342,6 +342,19 @@ function RechnungenTab({ klientId }: { klientId: string }) {
     }
   }
 
+  // Jedes geoeffnete Dokument ist eine eigene Blob-URL (api/client.ts,
+  // blobUrl()) -- ohne ausdrueckliches revokeObjectURL haelt der Browser es
+  // im Speicher, auch nachdem es geschlossen oder durch ein anderes ersetzt
+  // wurde. Der Cleanup einer useEffect-Instanz laeuft automatisch vor der
+  // naechsten Zuweisung UND beim Unmount -- deckt "wechseln", "schliessen"
+  // und "Seite verlassen" mit derselben Zeile ab (gleiches Muster wie
+  // Kassenbuch.tsx bei den Unterschriften).
+  useEffect(() => {
+    if (!offenesDokument) return;
+    const url = offenesDokument.url;
+    return () => URL.revokeObjectURL(url);
+  }, [offenesDokument]);
+
   return (
     <div>
       {fehler && (

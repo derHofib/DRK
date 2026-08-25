@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
-import { requireTenantContext } from "../common/tenant-context";
+import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
+import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
 
 // SQLSTATE-Codes, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -30,6 +31,12 @@ export interface RechnungDetailDto extends RechnungDto {
   statusVerlauf: { status: RechnungStatus; grund: string | null; geaendertAm: string }[];
 }
 
+// Ob eine Rechnung genehmigt, abgelehnt oder ausgezahlt wird, ist eine
+// Entscheidung ueber Traegermittel -- gleiches Rollenmuster wie
+// ROLLEN_MIT_STORNO in kassenbuchung.service.ts. Wer eine Rechnung anlegt
+// (jede Rolle, siehe anlegen()), darf ihren Status nicht selbst festlegen.
+const ROLLEN_MIT_STATUSWECHSEL = new Set<BenutzerRolle>(["leitung", "verwaltung"]);
+
 const LISTEN_SELECT = `
   SELECT r.id, r.klient_id, k.vorname, k.nachname, r.betrag_cent, r.beschreibung, r.erstellt_am,
          sw.status, sw.grund,
@@ -48,9 +55,11 @@ export class RechnungService {
   constructor(private readonly db: DatabaseService) {}
 
   async findeAlle(filter?: { klientId?: string }): Promise<RechnungDto[]> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const bedingungen = ["1=1"];
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       const params: unknown[] = [];
+      const bedingungen = [klientStandortBedingung(erlaubteStandorte, "k", params)];
       if (filter?.klientId) {
         params.push(filter.klientId);
         bedingungen.push(`r.klient_id = $${params.length}`);
@@ -64,9 +73,12 @@ export class RechnungService {
   }
 
   async findeEine(id: string): Promise<RechnungDetailDto> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query(`${LISTEN_SELECT} WHERE r.id = $1`, [id]);
-      if (rows.length === 0) throw new NotFoundException("Rechnung nicht gefunden.");
+      if (rows.length === 0 || !(await klientIstErlaubt(client, benutzerId, rows[0].klient_id))) {
+        throw new NotFoundException("Rechnung nicht gefunden.");
+      }
 
       const { rows: verlaufRows } = await client.query(
         `SELECT status, grund, geaendert_am FROM rechnung_statuswechsel WHERE rechnung_id = $1 ORDER BY lfd_nr`,
@@ -90,6 +102,10 @@ export class RechnungService {
   }): Promise<RechnungDto> {
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
+        throw new NotFoundException("Klient nicht gefunden.");
+      }
+
       const { rows } = await client.query(
         `INSERT INTO rechnung (mandant_id, klient_id, betrag_cent, beschreibung, erstellt_von)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -132,9 +148,18 @@ export class RechnungService {
    * vorherige Zeile derselben rechnung_id, gehört also dorthin.
    */
   async statusAendern(id: string, status: RechnungStatus, grund?: string): Promise<RechnungDto> {
-    const { mandantId, benutzerId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STATUSWECHSEL.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Leitung oder Verwaltung dürfen den Status einer Rechnung ändern.");
+    }
+    const { mandantId, benutzerId } = ctx;
     try {
       return await this.db.withTenant(async (client) => {
+        const { rows: bestehend } = await client.query("SELECT klient_id FROM rechnung WHERE id = $1", [id]);
+        if (bestehend.length === 0 || !(await klientIstErlaubt(client, benutzerId, bestehend[0].klient_id))) {
+          throw new NotFoundException("Rechnung nicht gefunden.");
+        }
+
         await client.query(
           `INSERT INTO rechnung_statuswechsel (mandant_id, rechnung_id, status, grund, geaendert_von) VALUES ($1, $2, $3, $4, $5)`,
           [mandantId, id, status, grund ?? null, benutzerId]
@@ -153,12 +178,23 @@ export class RechnungService {
   }
 
   async dokumentBild(rechnungId: string): Promise<{ inhalt: Buffer; mimeType: string; dateiname: string; hash: string } | null> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const { rows } = await client.query<{ inhalt: Buffer; mime_type: string; dateiname: string; inhalt_hash: string }>(
-        "SELECT inhalt, mime_type, dateiname, inhalt_hash FROM rechnung_dokument WHERE rechnung_id = $1",
+      const { rows } = await client.query<{
+        inhalt: Buffer;
+        mime_type: string;
+        dateiname: string;
+        inhalt_hash: string;
+        klient_id: string;
+      }>(
+        `SELECT d.inhalt, d.mime_type, d.dateiname, d.inhalt_hash, r.klient_id
+         FROM rechnung_dokument d
+         JOIN rechnung r ON r.id = d.rechnung_id
+         WHERE d.rechnung_id = $1`,
         [rechnungId]
       );
       if (rows.length === 0) return null;
+      if (!(await klientIstErlaubt(client, benutzerId, rows[0].klient_id))) return null;
       return { inhalt: rows[0].inhalt, mimeType: rows[0].mime_type, dateiname: rows[0].dateiname, hash: rows[0].inhalt_hash };
     });
   }

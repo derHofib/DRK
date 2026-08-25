@@ -27,7 +27,7 @@ jobs:
       # angelegt (siehe migrations/0002_app_role.sql) -- kann hier nicht
       # frei gewaehlt werden, ohne die Migration zu aendern.
       APP_DATABASE_URL: postgresql://zimmerakte_app:dev_only_change_me_too@localhost:5432/zimmerakte
-      JWT_SECRET: ci_only_test_secret
+      JWT_SECRET: ci_only_test_secret_needs_32plus_chars
       # 32 zufaellige Bytes, base64 -- nur fuer CI-Testlaeufe, kein echtes
       # Geheimnis (siehe common/geheimnis.ts).
       TOTP_ENCRYPTION_KEY: dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE=
@@ -118,7 +118,7 @@ jobs:
 
           docker run -d --name api --network zimmerakte-ci -p 3000:3000 \
             -e APP_DATABASE_URL=postgresql://zimmerakte_app:dev_only_change_me_too@pg:5432/zimmerakte \
-            -e JWT_SECRET=ci_only_test_secret \
+            -e JWT_SECRET=ci_only_test_secret_needs_32plus_chars \
             -e TOTP_ENCRYPTION_KEY=dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE= \
             zimmerakte-api:ci
 

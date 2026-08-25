@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
+import { klientIstErlaubt } from "../common/standort-restriction";
 
 // SQLSTATE fuer eine verletzte EXCLUDE-Constraint, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -19,7 +20,9 @@ export class KostenuebernahmeService {
   constructor(private readonly db: DatabaseService) {}
 
   async findeAlleFuerKlient(klientId: string): Promise<KostenuebernahmeDto[]> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      if (!(await klientIstErlaubt(client, benutzerId, klientId))) return [];
       const { rows } = await client.query(
         `SELECT id, klient_id, amt, von, bis FROM kostenuebernahme WHERE klient_id = $1 ORDER BY von DESC`,
         [klientId]
@@ -38,6 +41,9 @@ export class KostenuebernahmeService {
     const { mandantId, benutzerId } = requireTenantContext();
     try {
       return await this.db.withTenant(async (client) => {
+        if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
+          throw new NotFoundException("Klient nicht gefunden.");
+        }
         const { rows } = await client.query(
           `INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, erstellt_von)
            VALUES ($1, $2, $3, $4, $5)
@@ -57,7 +63,13 @@ export class KostenuebernahmeService {
   }
 
   async beenden(id: string, bis: string): Promise<KostenuebernahmeDto> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const { rows: bestehend } = await client.query("SELECT klient_id FROM kostenuebernahme WHERE id = $1", [id]);
+      if (bestehend.length === 0 || !(await klientIstErlaubt(client, benutzerId, bestehend[0].klient_id))) {
+        throw new NotFoundException("Keine offene Kostenübernahme mit dieser ID gefunden.");
+      }
+
       const { rows } = await client.query(
         `UPDATE kostenuebernahme SET bis = $1 WHERE id = $2 AND bis IS NULL
          RETURNING id, klient_id, amt, von, bis`,

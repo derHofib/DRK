@@ -145,6 +145,18 @@ export function Kassenbuch() {
     }
   }
 
+  // Jede geoeffnete Unterschrift ist eine eigene Blob-URL (api/client.ts,
+  // blobUrl()) -- ohne ausdrueckliches revokeObjectURL haelt der Browser das
+  // Bild im Speicher, auch nachdem sie geschlossen oder durch eine andere
+  // ersetzt wurde. Der Cleanup einer useEffect-Instanz laeuft automatisch
+  // vor der naechsten Zuweisung UND beim Unmount -- deckt damit "wechseln",
+  // "schliessen" und "Seite verlassen" mit derselben Zeile ab.
+  useEffect(() => {
+    if (!offeneUnterschrift) return;
+    const url = offeneUnterschrift.url;
+    return () => URL.revokeObjectURL(url);
+  }, [offeneUnterschrift]);
+
   return (
     <div>
       {fehler && (

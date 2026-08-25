@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
+import { ermittleErlaubteStandortIds, klientStandortBedingung } from "../common/standort-restriction";
 
 export interface KlientListEintrag {
   id: string;
@@ -21,7 +22,12 @@ export class KlientService {
   constructor(private readonly db: DatabaseService) {}
 
   async findeAlle(): Promise<KlientListEintrag[]> {
+    const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+      const params: unknown[] = [];
+      const bedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+
       const { rows } = await client.query(
         `
         SELECT
@@ -31,8 +37,10 @@ export class KlientService {
         LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
         LEFT JOIN standort s ON s.id = z.standort_id
+        WHERE ${bedingung}
         ORDER BY k.nachname, k.vorname
-        `
+        `,
+        params
       );
       return rows.map(zuListEintrag);
     });
@@ -59,7 +67,12 @@ export class KlientService {
   }
 
   async findeEinen(id: string): Promise<KlientDetail> {
+    const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+      const params: unknown[] = [id];
+      const bedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+
       const { rows } = await client.query(
         `
         SELECT
@@ -69,9 +82,9 @@ export class KlientService {
         LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
         LEFT JOIN standort s ON s.id = z.standort_id
-        WHERE k.id = $1
+        WHERE k.id = $1 AND ${bedingung}
         `,
-        [id]
+        params
       );
       if (rows.length === 0) throw new NotFoundException("Klient nicht gefunden.");
       return { ...zuListEintrag(rows[0]), geburtsdatum: rows[0].geburtsdatum };
