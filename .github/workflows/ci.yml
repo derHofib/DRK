@@ -71,6 +71,22 @@ jobs:
       - run: pnpm --filter @zimmerakte/shared build
       - run: pnpm --filter @zimmerakte/web build
 
+      # Der eigentliche Regressionsschutz des Farbsystems: 9 Paletten x 2
+      # Themes x 19 Farbpaare, gemessen an echten Elementen im echten
+      # Chromium. Braucht bewusst keine Datenbank -- deshalb laeuft das
+      # hier und nicht im api-tests-Job.
+      - name: Chromium fuer die Designpruefung
+        run: pnpm --filter @zimmerakte/web exec playwright install --with-deps chromium
+      - name: Kontrastmatrix (hell und dunkel, alle Paletten)
+        working-directory: apps/web
+        run: |
+          pnpm exec vite preview --port 4173 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:4173/ && break
+            sleep 1
+          done
+          node scripts/design-pruefung.mjs
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

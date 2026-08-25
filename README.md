@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 6 (Produktions-Deployment)
+## Stand: Phase 7 (Designsystem)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -259,13 +259,75 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 Damit ist der ursprüngliche Phasenplan durch. Was jetzt noch fehlt, ist in
 "Was hier bewusst fehlt" unten aufgeführt.
 
+**Phase 7 — Designsystem (einstellbare Akzentfarbe, Hell/Dunkel, Icons)**
+- **Akzentfarbe je Träger**, gesetzt von der Leitung, gilt für alle
+  Mitarbeitenden. 9 kuratierte Pastellpaletten plus freier Farbwähler, mit
+  Live-Vorschau, die sofort die ganze Anwendung umfärbt.
+- **Die tragende Idee:** Kontrast hängt ausschließlich an der Helligkeit.
+  Deshalb liefert das Frontend nur **Farbton und Buntheit**
+  (`--zv-accent-h`/`-c`, abgeleitet über sRGB→OKLCH in
+  `apps/web/src/theme/farbe.ts`), während sämtliche Helligkeitswerte fest
+  je Theme in `tokens.css` stehen. Kontrast kann damit **konstruktiv nicht
+  brechen** — auch Knallgelb ergibt einen lesbaren (goldenen) Knopf.
+  OKLCH statt HSL, weil HSLs „Lightness" nicht perzeptuell ist: dort haben
+  Gelb und Blau bei gleichem L völlig verschiedene Leuchtdichte, genau der
+  Fehlermodus „bei Türkis geht's, bei Gelb ist der Knopf unlesbar".
+- **Hell und Dunkel** über `color-scheme` + `light-dark()`: jeder Token wird
+  genau einmal geschrieben. Wichtiger Nebeneffekt — `color-scheme` themt die
+  **nativen Steuerelemente** mit: `input[type=date]` (Klienten,
+  Kostenübernahmen, Kassenbuch), `input[type=file]`, `select` und die
+  Bildlaufleisten blieben im alten Dunkelmodus alle weiß. Ein Inline-Skript
+  im `<head>` verhindert das Aufblitzen des falschen Themes beim Laden.
+  Die Theme-Wahl ist eine persönliche Anzeigepräferenz und liegt bewusst im
+  `localStorage`, nicht in der Datenbank (TTDSG §25 Abs. 2: vom Nutzer
+  gewünschte Einstellung, einwilligungsfrei, kein Personenbezug).
+- **Migration 0019** nutzt die Gelegenheit für einen eigenständigen
+  Sicherheitsgewinn: bis dahin durfte die App-Rolle über
+  `ALTER DEFAULT PRIVILEGES` **jede** Spalte von `mandant` ändern — auch
+  `slug`, also den Login-Pfad. Jetzt spaltenscharf wie bei `kassenbuchung`
+  (0011): `REVOKE UPDATE`, dann `GRANT UPDATE (akzentfarbe)`.
+- **Icons:** lucide-react, ~50 Stück über ein Zentralmodul
+  (`components/icons.tsx`) mit einheitlicher Größe, Strichstärke und
+  `aria-hidden`-Voreinstellung. Ausschließlich namentliche Importe — kein
+  `import * as`, kein `DynamicIcon`, sonst landet das ganze Set (>1 MB) im
+  Bundle. Gemessener Zuwachs: **+7,4 kB gzip**.
+- **Schrift:** Inter, selbst ausgeliefert, nur das Latin-Subset. Kein
+  Google-Fonts-CDN (in Deutschland abgemahnt, LG München I, 3 O 17493/20)
+  und keine per Hand abgelegte Binärdatei — die Version hängt an der
+  `pnpm-lock.yaml`.
+- **Navigation:** „Sicherheit" wurde zu „Einstellungen" und nimmt 2FA als
+  Unterbereich auf. Damit bleibt die Hauptnavigation bei fünf Einträgen —
+  ein sechster wäre auf 390 px nur 65 px breit, und „Kassenbuch" passt dort
+  nicht mehr hinein.
+
+**Zwei echte Fehler, die dabei nebenbei behoben wurden** (nachgerechnet,
+nicht geschätzt):
+- Im Dunkelmodus stand weißer Text auf `--zv-accent` (`#5fafa6`) —
+  **2,57:1**. Jeder `.zv-btn` war dunkel unter der Lesbarkeitsschwelle.
+- `--zv-text-faint` (`#8c8c8c`) war **3,36:1** auf Weiß und nur **2,87:1**
+  auf `--zv-surface-2`, wo die Tabellenköpfe stehen — und der Token trägt
+  echten Inhalt (alle Leerzustände, „Kein Klient zugeordnet").
+- Ein dritter Fehler fiel erst der neuen Kontrastmatrix auf: die
+  Eingabefeldränder lagen bei **1,60:1** (hell) und **2,02:1** (dunkel),
+  obwohl WCAG 1.4.11 für Umrisse, die ein Bedienelement identifizieren,
+  3:1 verlangt — und weil die Felder dieselbe Flächenfarbe haben wie die
+  Karte darunter, ist dieser Rand ihr einziges Erkennungsmerkmal.
+
+
 ## Was hier bewusst fehlt
 
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
-  Entwicklungsumgebung nicht erreichbar. `apps/web/src/styles/tokens.css`
-  enthält ein neutrales Platzhaltersystem — austauschbar, ohne dass
-  irgendwo sonst im Code eine Farbe oder Schriftart fest verdrahtet ist.
-  Sobald echte Werte vorliegen: nur diese eine Datei ersetzen.
+  Entwicklungsumgebung nicht erreichbar. Das System in
+  `apps/web/src/styles/tokens.css` ist deshalb ein eigenständiges,
+  durchgerechnetes Designsystem und keine Annäherung an fieldvibe. Es
+  bleibt austauschbar: die Trägerfarbe ist ohnehin einstellbar, und für
+  eine andere Grundanmutung genügt weiterhin diese eine Datei.
+- **Die App-Icons und `manifest.theme_color` sind bauzeitlich und damit
+  nicht mandantenindividuell.** Das Manifest wird einmal gebaut und von
+  allen Trägern geteilt — Startbildschirm und Splash zeigen für alle
+  dieselbe Standardfarbe (Petrol). Eingefärbt ist erst die laufende
+  Anwendung. Pro Träger eigene Icons bräuchte einen Build je Mandant oder
+  ein serverseitig erzeugtes Manifest.
 - **Die Dockerfiles wurden nie in dieser Entwicklungsumgebung selbst
   gebaut.** Kein Docker-Daemon hier verfügbar (`dockerd` startet nicht,
   fehlende Berechtigung für `ulimit` in dieser Sandbox). Der zugrunde
@@ -347,6 +409,45 @@ gesetzt) — kein Mock, weder RLS noch Exclusion-Constraints noch Trigger
 noch spaltenscharfe GRANTs lassen sich sinnvoll mocken.
 `totp.e2e-spec.ts` braucht wegen zweier echter 30-Sekunden-Wartezeiten
 (siehe Phase 4 oben) knapp eine Minute — das ist kein Hänger.
+
+### Designprüfung (Browser)
+
+Zwei eigenständige Skripte, beide gegen einen echten Chromium:
+
+```bash
+# Kontrastmatrix -- braucht nur einen Vorschauserver, keine Datenbank.
+cd apps/web && pnpm build && pnpm exec vite preview --port 4173 &
+node scripts/design-pruefung.mjs
+```
+
+Misst für **jede der 9 Paletten × beide Themes** plus vier Extremfälle
+(Knallgelb, Fast-Weiß, Fast-Schwarz, Sattblau) 19 Farbpaare an echten
+Elementen — 494 Messungen. Wichtig dabei: gemessen werden die
+**tatsächlich gerenderten sRGB-Bytes** über eine 1×1-Leinwand, nicht die
+geschriebenen Tokenwerte. Das hat zwei Gründe. Erstens liefert
+`getComputedStyle` in Chromium für `oklch()` die rohe Zeichenkette zurück
+statt eines aufgelösten `rgb()` — ein naiver Parser misst dadurch still
+gar nichts. Zweitens geht so das Gamut-Mapping des Browsers mit ein, das
+bei Werten außerhalb von sRGB greift.
+
+Das Skript bricht deshalb ausdrücklich ab, wenn es **weniger Paare als
+erwartet** misst: „kein Paar unter der Schwelle" ist bei null Messungen
+trivialerweise wahr, und genau so hat die erste Fassung fälschlich Erfolg
+gemeldet.
+
+```bash
+# Funktionsprüfung -- braucht laufende API + Dev-Server und Dev-Konten.
+node scripts/funktions-pruefung.mjs
+```
+
+Prüft Navigation und Icons, dass der Theme-Umschalter messbar etwas kippt,
+dass beim Laden nichts aufblitzt, dass kein horizontaler Überlauf bei
+390 px auftritt und die mobile Navigation unverändert funktioniert — und
+die vollständige Kette der Akzentfarbe: live umfärben, speichern,
+Neuladen überstehen, bei einem **anderen Mitarbeitenden desselben Trägers**
+ankommen, und für eine Rolle ohne Branding-Recht weder angeboten werden
+noch per direktem `PATCH` durchgehen (403).
+
 
 ### Deployment (Docker)
 

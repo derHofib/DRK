@@ -142,10 +142,22 @@
     oklch(0.905 var(--zv-tint-l) var(--zv-accent-h)),
     oklch(0.34 var(--zv-tint-d) var(--zv-accent-h))
   );
-  /* Eingabefeldraender -- muessen 3:1 gegen die Flaeche halten. */
+  /*
+   * Raender, die ein BEDIENELEMENT abgrenzen (Eingabefelder). Die Werte
+   * sind gemessen, nicht geschaetzt: WCAG 1.4.11 verlangt 3:1 fuer
+   * Umrisse, die ein Bedienelement identifizieren, und weil die
+   * Eingabefelder dieselbe Flaechenfarbe haben wie die Karte darunter,
+   * ist dieser Rand das EINZIGE Merkmal, das sie erkennbar macht.
+   * Die erste Fassung (0.845 / 0.42) lag bei 1,60:1 hell und 2,02:1 dunkel
+   * -- aufgefallen in der Kontrastmatrix, nicht am Auge.
+   *
+   * Bewusst getrennt von --zv-border: rein dekorative Trennlinien
+   * (Kartenumrisse, Tabellenzeilen) faellt SC 1.4.11 nicht, sie duerfen
+   * und sollen leiser bleiben.
+   */
   --zv-border-strong: light-dark(
-    oklch(0.845 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.42 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.66 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.54 var(--zv-tint-d) var(--zv-accent-h))
   );
 
   --zv-text: light-dark(
