@@ -13,6 +13,7 @@ import { BelegungModule } from "./belegungen/belegung.module";
 import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
 import { KostenuebernahmeModule } from "./kostenuebernahmen/kostenuebernahme.module";
 import { RechnungModule } from "./rechnungen/rechnung.module";
+import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { RechnungModule } from "./rechnungen/rechnung.module";
     KassenbuchungModule,
     KostenuebernahmeModule,
     RechnungModule,
+    TagesberichtModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

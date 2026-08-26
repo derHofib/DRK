@@ -104,6 +104,7 @@ export interface StandortDto {
 export interface ZimmerListEintragDto {
   id: string;
   nummer: string;
+  etage: string;
   standortId: string;
   standortName: string;
   status: Zimmerstatus;
@@ -207,3 +208,18 @@ export const RECHNUNG_STATUS_LABEL: Record<RechnungStatus, string> = {
   ausgezahlt: "Ausgezahlt",
   abgelehnt: "Abgelehnt",
 };
+
+export interface TagDto {
+  id: string;
+  name: string;
+}
+
+export interface TagesberichtDto {
+  id: string;
+  klientId: string;
+  klientName: string;
+  autorName: string | null;
+  datum: string;
+  text: string;
+  tags: TagDto[];
+}

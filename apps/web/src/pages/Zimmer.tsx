@@ -102,6 +102,7 @@ export function Zimmer() {
     const formElement = e.currentTarget;
     const form = new FormData(formElement);
     const nummer = String(form.get("nummer") ?? "").trim();
+    const etage = String(form.get("etage") ?? "").trim();
     setFormFehler(null);
     setWirdGespeichert(true);
     try {
@@ -112,7 +113,7 @@ export function Zimmer() {
         const neuerStandort = await api.standortAnlegen({ name, adresse });
         standortId = neuerStandort.id;
       }
-      await api.zimmerAnlegen({ standortId, nummer });
+      await api.zimmerAnlegen({ standortId, nummer, etage: etage || undefined });
       setFormularOffen(false);
       ladeZimmer();
       ladeStandorte();
@@ -131,8 +132,10 @@ export function Zimmer() {
     setBearbeitenFehler(null);
     setWirdGespeichert(true);
     try {
+      const etage = String(form.get("etage") ?? "").trim();
       await api.zimmerAktualisieren(bearbeitetesZimmer.id, {
         nummer: String(form.get("nummer") ?? "").trim(),
+        etage: etage || undefined,
       });
       setBearbeitetesZimmer(null);
       ladeZimmer();
@@ -210,6 +213,42 @@ export function Zimmer() {
     return acc;
   }, {});
 
+  /**
+   * Etage ist Freitext (bewusste Entscheidung, da Gebaeude Stockwerke nicht
+   * einheitlich benennen) -- eine alphabetische Sortierung stellt
+   * "Dachgeschoss" faelschlich vor "EG". Bekannte Bezeichnungen (UG/EG/OG/
+   * Etage/Dachgeschoss, je mit optionaler Nummer) werden deshalb erkannt
+   * und in Gebaeude-Reihenfolge gebracht; alles andere faellt auf eine
+   * gemeinsame Zwischenposition zurueck und wird dort alphabetisch
+   * sortiert, damit unbekannte Bezeichnungen wenigstens untereinander
+   * stabil bleiben.
+   */
+  function etagenSortierschluessel(etage: string): [number, string] {
+    const e = etage.trim().toLowerCase();
+    const ug = e.match(/^(\d+)\.?\s*(ug|untergeschoss|keller)\b/);
+    if (ug) return [-Number(ug[1]), e];
+    if (/^(ug|untergeschoss|keller)\b/.test(e)) return [-1, e];
+    if (/^(eg|erdgeschoss|parterre)\b/.test(e)) return [0, e];
+    const og = e.match(/^(\d+)\.?\s*(og|obergeschoss|etage|stock)?\b/);
+    if (og) return [Number(og[1]), e];
+    if (/^(dg|dachgeschoss|mansarde|spitzboden)\b/.test(e)) return [900, e];
+    return [500, e];
+  }
+
+  function nachEtageGruppieren(raum: ZimmerListEintragDto[]): [string, ZimmerListEintragDto[]][] {
+    const gruppiert = raum.reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
+      (acc[z.etage] ??= []).push(z);
+      return acc;
+    }, {});
+    return Object.entries(gruppiert).sort(([a], [b]) => {
+      const [na, sa] = etagenSortierschluessel(a);
+      const [nb, sb] = etagenSortierschluessel(b);
+      return na - nb || sa.localeCompare(sb);
+    });
+  }
+
+  const etagenVorschlaege = Array.from(new Set(zimmer.map((z) => z.etage)));
+
   return (
     <div>
       {fehler && (
@@ -235,95 +274,106 @@ export function Zimmer() {
               {standortName}
             </h2>
           </div>
-          <div className="zv-room-grid">
-            {raum.map((z) => {
-              const StatusIcon = STATUS_ICON[z.status];
-              return (
-              <div key={z.id} className="zv-room-card">
-                <div className="zv-room-head">
-                  <span className="zv-room-nummer">{z.nummer}</span>
-                  <span className={`zv-pill zv-pill-${z.status}`}>
-                    <StatusIcon />
-                    {ZIMMERSTATUS_LABEL[z.status]}
-                  </span>
-                </div>
-                {z.aktuellerKlient ? (
-                  <div className="zv-room-klient">
-                    {z.aktuellerKlient.name}
-                    <span className="zv-sub-inline">seit {z.aktuellerKlient.einzug}</span>
-                  </div>
-                ) : (
-                  <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
-                )}
-                <div className="zv-vorschau-zeile">
-                  <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
-                    {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
-                    {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
-                    {offenesZimmer !== z.id && <IAufklappen />}
-                  </button>
-                  <button
-                    className="zv-link-btn"
-                    onClick={() => {
-                      setBearbeitenFehler(null);
-                      setBearbeitetesZimmer(z);
-                    }}
-                  >
-                    <IBearbeiten />
-                    Bearbeiten
-                  </button>
-                  {z.status === "zugeordnet" ? (
-                    <>
+          {nachEtageGruppieren(raum).map(([etage, raumInEtage]) => (
+            <div key={etage} style={{ marginBottom: 20 }}>
+              <h3 className="zv-etagen-kopf">{etage}</h3>
+              <div className="zv-room-grid">
+                {raumInEtage.map((z) => {
+                  const StatusIcon = STATUS_ICON[z.status];
+                  return (
+                  <div key={z.id} className="zv-room-card">
+                    <div className="zv-room-head">
+                      <span className="zv-room-nummer">{z.nummer}</span>
+                      <span className={`zv-pill zv-pill-${z.status}`}>
+                        <StatusIcon />
+                        {ZIMMERSTATUS_LABEL[z.status]}
+                      </span>
+                    </div>
+                    {z.aktuellerKlient ? (
+                      <div className="zv-room-klient">
+                        {z.aktuellerKlient.name}
+                        <span className="zv-sub-inline">seit {z.aktuellerKlient.einzug}</span>
+                      </div>
+                    ) : (
+                      <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
+                    )}
+                    <div className="zv-vorschau-zeile">
+                      <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
+                        {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
+                        {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
+                        {offenesZimmer !== z.id && <IAufklappen />}
+                      </button>
                       <button
                         className="zv-link-btn"
                         onClick={() => {
-                          setZuweisungFehler(null);
-                          setZuweisungsZimmer(z);
+                          setBearbeitenFehler(null);
+                          setBearbeitetesZimmer(z);
                         }}
                       >
-                        <IEinziehen />
-                        Klient zuweisen
+                        <IBearbeiten />
+                        Bearbeiten
                       </button>
-                      <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
-                        Deaktivieren
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      className="zv-link-btn"
-                      onClick={() => {
-                        setAuszugFehler(null);
-                        setAuszugZimmer(z);
-                      }}
-                    >
-                      <IAuszug />
-                      Auszug eintragen
-                    </button>
-                  )}
-                </div>
+                      {z.status === "zugeordnet" ? (
+                        <>
+                          <button
+                            className="zv-link-btn"
+                            onClick={() => {
+                              setZuweisungFehler(null);
+                              setZuweisungsZimmer(z);
+                            }}
+                          >
+                            <IEinziehen />
+                            Klient zuweisen
+                          </button>
+                          <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                            Deaktivieren
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="zv-link-btn"
+                          onClick={() => {
+                            setAuszugFehler(null);
+                            setAuszugZimmer(z);
+                          }}
+                        >
+                          <IAuszug />
+                          Auszug eintragen
+                        </button>
+                      )}
+                    </div>
 
-                {offenesZimmer === z.id && (
-                  <ul className="zv-verlauf-liste">
-                    {verlauf.map((v) => (
-                      <li key={v.id}>
-                        <strong>{v.name}</strong>
-                        <span className="zv-sub-inline">
-                          {v.einzug} – {v.auszug ?? "heute"}
-                        </span>
-                      </li>
-                    ))}
-                    {verlauf.length === 0 && <li className="zv-sub-inline">Noch keine Belegung erfasst.</li>}
-                  </ul>
-                )}
+                    {offenesZimmer === z.id && (
+                      <ul className="zv-verlauf-liste">
+                        {verlauf.map((v) => (
+                          <li key={v.id}>
+                            <strong>{v.name}</strong>
+                            <span className="zv-sub-inline">
+                              {v.einzug} – {v.auszug ?? "heute"}
+                            </span>
+                          </li>
+                        ))}
+                        {verlauf.length === 0 && <li className="zv-sub-inline">Noch keine Belegung erfasst.</li>}
+                      </ul>
+                    )}
+                  </div>
+                  );
+                })}
               </div>
-              );
-            })}
-          </div>
+            </div>
+          ))}
         </div>
       ))}
 
       {zimmer.length === 0 && !fehler && (
         <Leerzustand icon={ILeerZimmer}>Noch keine Zimmer angelegt.</Leerzustand>
       )}
+
+      <datalist id="zv-etagen-vorschlaege">
+        {etagenVorschlaege.map((e) => (
+          <option key={e} value={e} />
+        ))}
+      </datalist>
 
       {formularOffen && (
         <Modal titel="Neues Zimmer" onClose={() => setFormularOffen(false)}>
@@ -366,15 +416,21 @@ export function Zimmer() {
               </div>
             )}
 
-            <div className="zv-field">
-              <label htmlFor="zimmer-nummer">Zimmernummer</label>
-              <input
-                id="zimmer-nummer"
-                name="nummer"
-                placeholder="z. B. 101"
-                required
-                autoFocus={standortAuswahl !== NEUER_STANDORT}
-              />
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="zimmer-nummer">Zimmernummer</label>
+                <input
+                  id="zimmer-nummer"
+                  name="nummer"
+                  placeholder="z. B. 101"
+                  required
+                  autoFocus={standortAuswahl !== NEUER_STANDORT}
+                />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="zimmer-etage">Etage</label>
+                <input id="zimmer-etage" name="etage" list="zv-etagen-vorschlaege" placeholder="z. B. EG" defaultValue="EG" />
+              </div>
             </div>
 
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
@@ -394,15 +450,26 @@ export function Zimmer() {
                 {bearbeitenFehler}
               </div>
             )}
-            <div className="zv-field">
-              <label htmlFor="zimmer-bearbeiten-nummer">Zimmernummer</label>
-              <input
-                id="zimmer-bearbeiten-nummer"
-                name="nummer"
-                defaultValue={bearbeitetesZimmer.nummer}
-                required
-                autoFocus
-              />
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="zimmer-bearbeiten-nummer">Zimmernummer</label>
+                <input
+                  id="zimmer-bearbeiten-nummer"
+                  name="nummer"
+                  defaultValue={bearbeitetesZimmer.nummer}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="zimmer-bearbeiten-etage">Etage</label>
+                <input
+                  id="zimmer-bearbeiten-etage"
+                  name="etage"
+                  list="zv-etagen-vorschlaege"
+                  defaultValue={bearbeitetesZimmer.etage}
+                />
+              </div>
             </div>
             <div className="zv-vorschau-zeile">
               <button className="zv-btn" type="submit" disabled={wirdGespeichert}>

@@ -6,10 +6,12 @@ import { ZimmerService } from "./zimmer.service";
 const anlegenSchema = z.object({
   standortId: z.string().uuid(),
   nummer: z.string().min(1),
+  etage: z.string().min(1).optional(),
 });
 
 const aktualisierenSchema = z.object({
   nummer: z.string().min(1),
+  etage: z.string().min(1).optional(),
 });
 
 @Controller("zimmer")

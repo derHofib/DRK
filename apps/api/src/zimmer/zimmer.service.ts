@@ -18,6 +18,7 @@ export type Zimmerstatus = "vergeben" | "zugeordnet";
 export interface ZimmerListEintrag {
   id: string;
   nummer: string;
+  etage: string;
   standortId: string;
   standortName: string;
   status: Zimmerstatus;
@@ -68,7 +69,7 @@ export class ZimmerService {
       const { rows } = await client.query(
         `
         SELECT
-          z.id, z.nummer, z.standort_id, s.name AS standort_name,
+          z.id, z.nummer, z.etage, z.standort_id, s.name AS standort_name,
           b.id AS belegung_id, b.klient_id, b.einzug, k.vorname, k.nachname
         FROM zimmer z
         JOIN standort s ON s.id = z.standort_id
@@ -76,7 +77,7 @@ export class ZimmerService {
           ON b.zimmer_id = z.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN klient k ON k.id = b.klient_id
         WHERE ${bedingungen.join(" AND ")}
-        ORDER BY s.name, z.nummer
+        ORDER BY s.name, z.etage, z.nummer
         `,
         params
       );
@@ -84,6 +85,7 @@ export class ZimmerService {
       return rows.map((r) => ({
         id: r.id,
         nummer: r.nummer,
+        etage: r.etage,
         standortId: r.standort_id,
         standortName: r.standort_name,
         status: (r.belegung_id ? "vergeben" : "zugeordnet") as Zimmerstatus,
@@ -94,13 +96,15 @@ export class ZimmerService {
     });
   }
 
-  async anlegen(input: { standortId: string; nummer: string }) {
+  async anlegen(input: { standortId: string; nummer: string; etage?: string }) {
     const { mandantId } = requireTenantContext();
     try {
       return await this.db.withTenant(async (client) => {
         const { rows } = await client.query(
-          "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, $3) RETURNING id, nummer, standort_id",
-          [mandantId, input.standortId, input.nummer]
+          `INSERT INTO zimmer (mandant_id, standort_id, nummer, etage)
+           VALUES ($1, $2, $3, COALESCE($4, 'EG'))
+           RETURNING id, nummer, etage, standort_id`,
+          [mandantId, input.standortId, input.nummer, input.etage ?? null]
         );
         return rows[0];
       });
@@ -132,7 +136,7 @@ export class ZimmerService {
     return rows[0].standort_id;
   }
 
-  async aktualisieren(id: string, input: { nummer: string }) {
+  async aktualisieren(id: string, input: { nummer: string; etage?: string }) {
     const { benutzerId } = requireTenantContext();
     try {
       return await this.db.withTenant(async (client) => {
@@ -140,8 +144,9 @@ export class ZimmerService {
           throw new NotFoundException("Zimmer nicht gefunden.");
         }
         const { rows } = await client.query(
-          "UPDATE zimmer SET nummer = $1 WHERE id = $2 RETURNING id, nummer, standort_id",
-          [input.nummer, id]
+          `UPDATE zimmer SET nummer = $1, etage = COALESCE($2, etage) WHERE id = $3
+           RETURNING id, nummer, etage, standort_id`,
+          [input.nummer, input.etage ?? null, id]
         );
         return rows[0];
       });

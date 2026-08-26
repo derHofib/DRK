@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Ban,
   Banknote,
+  BookX,
   Building2,
   CalendarCheck,
   CalendarX2,
@@ -49,6 +50,7 @@ import {
   MapPinOff,
   Monitor,
   Moon,
+  NotebookPen,
   Palette,
   PenLine,
   Pencil,
@@ -61,6 +63,7 @@ import {
   ShieldCheck,
   ShieldOff,
   Sun,
+  Tag,
   TriangleAlert,
   UserRound,
   UserRoundMinus,
@@ -103,6 +106,7 @@ export const IZimmer = baue(DoorOpen);
 export const IKlienten = baue(Users);
 export const IKassenbuch = baue(Wallet);
 export const IMitarbeitende = baue(IdCard);
+export const ITagesberichte = baue(NotebookPen);
 export const IEinstellungen = baue(Settings);
 
 /* Unterreiter */
@@ -183,7 +187,9 @@ export const ILeerRechnungen = baueLeer(Receipt);
 export const ILeerKostenuebernahmen = baueLeer(FileClock);
 export const ILeerVerlauf = baueLeer(History);
 export const ILeerStandorte = baueLeer(MapPinOff);
+export const ILeerTagesberichte = baueLeer(BookX);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);
 export const IStandort = baue(MapPin);
+export const ITag = baue(Tag);

@@ -14,6 +14,8 @@ import type {
   RechnungDto,
   RechnungStatus,
   StandortDto,
+  TagDto,
+  TagesberichtDto,
   TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
   ZimmerListEintragDto,
@@ -123,9 +125,9 @@ export const api = {
     request<StandortDto>(`/standorte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   zimmerListe: () => request<ZimmerListEintragDto[]>("/zimmer"),
-  zimmerAnlegen: (payload: { standortId: string; nummer: string }) =>
+  zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string }) =>
     request<ZimmerListEintragDto>("/zimmer", { method: "POST", body: JSON.stringify(payload) }),
-  zimmerAktualisieren: (id: string, payload: { nummer: string }) =>
+  zimmerAktualisieren: (id: string, payload: { nummer: string; etage?: string }) =>
     request<ZimmerListEintragDto>(`/zimmer/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   zimmerDeaktivieren: (id: string) => request<ZimmerListEintragDto>(`/zimmer/${id}/deaktivieren`, { method: "PATCH" }),
   belegungsverlauf: (zimmerId: string) =>
@@ -193,4 +195,17 @@ export const api = {
   rechnungStatusAendern: (id: string, status: RechnungStatus, grund?: string) =>
     request<RechnungDto>(`/rechnungen/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, grund }) }),
   rechnungDokumentUrl: (rechnungId: string) => blobUrl(`/rechnungen/${rechnungId}/dokument`),
+
+  tagesberichteListe: (klientId?: string) =>
+    request<TagesberichtDto[]>(`/tagesberichte${klientId ? `?klientId=${klientId}` : ""}`),
+  tagesberichtAnlegen: (payload: { klientId: string; datum: string; text: string; tagNamen?: string[] }) =>
+    request<TagesberichtDto>("/tagesberichte", { method: "POST", body: JSON.stringify(payload) }),
+  tagesberichtTagHinzufuegen: (tagesberichtId: string, name: string) =>
+    request<TagesberichtDto>(`/tagesberichte/${tagesberichtId}/tags`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  tagesberichtTagEntfernen: (tagesberichtId: string, tagId: string) =>
+    request<{ ok: true }>(`/tagesberichte/${tagesberichtId}/tags/${tagId}`, { method: "DELETE" }),
+  tagsListe: () => request<TagDto[]>("/tags"),
 };

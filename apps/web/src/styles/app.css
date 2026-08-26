@@ -932,6 +932,18 @@
   margin: 0;
 }
 
+/* Etagen-Block innerhalb eines Standorts (Zimmer.tsx) -- bewusst leiser als
+   .zv-seiten-kopf h2: der Standort ist die Ueberschrift, die Etage nur eine
+   Unterteilung innerhalb davon. */
+.zv-etagen-kopf {
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
 /* Label/Wert-Raster (Klientenakte, Uebersicht) */
 .zv-datenliste {
   display: grid;

@@ -1,15 +1,17 @@
-import { Fragment, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, Fragment, FormEvent, useEffect, useState } from "react";
 import type {
   KassenbuchungDto,
   KlientDetailDto,
   KostenuebernahmeDto,
   RechnungDto,
   RechnungStatus,
+  TagDto,
+  TagesberichtDto,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
-import { LeerzustandZeile } from "../components/Leerzustand";
+import { Leerzustand, LeerzustandZeile } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
@@ -26,18 +28,21 @@ import {
   ILeerKassenbuch,
   ILeerKostenuebernahmen,
   ILeerRechnungen,
+  ILeerTagesberichte,
   INeu,
   IRechnung,
   ISErledigt,
   ISOffen,
   ISStorniert,
   ISpeichern,
+  ITagesberichte,
   IUebersicht,
   IZurueck,
 } from "../components/icons";
 import { formatBetrag } from "../format";
+import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
-type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch";
+type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch" | "tagesberichte";
 
 const eingabeFeldStil = {
   padding: "6px 8px",
@@ -111,12 +116,17 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           <IKassenbuch />
           Kassenbuch
         </button>
+        <button className={tab === "tagesberichte" ? "active" : ""} onClick={() => setTab("tagesberichte")}>
+          <ITagesberichte />
+          Tagesberichte
+        </button>
       </div>
 
       {tab === "uebersicht" && klient && <UebersichtTab klient={klient} onGeaendert={laden} />}
       {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
       {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
       {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
+      {tab === "tagesberichte" && <TagesberichteTab klientId={klientId} />}
     </div>
   );
 }
@@ -674,6 +684,141 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function TagesberichteTab({ klientId }: { klientId: string }) {
+  const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
+  const [tagVorschlaege, setTagVorschlaege] = useState<TagDto[]>([]);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [formularOffen, setFormularOffen] = useState(false);
+  const [formFehler, setFormFehler] = useState<string | null>(null);
+
+  function laden() {
+    api.tagesberichteListe(klientId).then(setBerichte).catch((err) => setFehler(err.message));
+    api.tagsListe().then(setTagVorschlaege).catch(() => {});
+  }
+
+  useEffect(laden, [klientId]);
+
+  async function anlegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const tagsText = String(form.get("tags") ?? "");
+    setFormFehler(null);
+    try {
+      await api.tagesberichtAnlegen({
+        klientId,
+        datum: String(form.get("datum")),
+        text: String(form.get("text")),
+        tagNamen: tagsText
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+      });
+      setFormularOffen(false);
+      laden();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht angelegt werden.");
+    }
+  }
+
+  async function tagEntfernen(berichtId: string, tagId: string) {
+    try {
+      await api.tagesberichtTagEntfernen(berichtId, tagId);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Tag konnte nicht entfernt werden.");
+    }
+  }
+
+  async function tagHinzufuegen(berichtId: string, name: string) {
+    if (!name.trim()) return;
+    try {
+      await api.tagesberichtTagHinzufuegen(berichtId, name.trim());
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Tag konnte nicht hinzugefügt werden.");
+    }
+  }
+
+  const heute = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div>
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Tagesberichte</h3>
+        <button
+          className="zv-btn"
+          onClick={() => {
+            setFormFehler(null);
+            setFormularOffen(true);
+          }}
+        >
+          <INeu />
+          Neuer Bericht
+        </button>
+      </div>
+
+      {formularOffen && (
+        <Modal titel="Neuer Tagesbericht" onClose={() => setFormularOffen(false)}>
+          <form onSubmit={anlegen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label>Datum</label>
+              <input name="datum" type="date" required autoFocus defaultValue={heute} />
+            </div>
+            <div className="zv-field">
+              <label>Bericht</label>
+              <textarea name="text" required rows={5} />
+            </div>
+            <div className="zv-field">
+              <label>Tags (optional, durch Komma getrennt)</label>
+              <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit">
+              <ISpeichern />
+              Anlegen
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      <TagVorschlaegeDatalist tags={tagVorschlaege} />
+
+      {berichte.length === 0 ? (
+        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diesen Klienten erfasst.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1fr 3fr 1.8fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Datum</span>
+            <span>Bericht</span>
+            <span>Tags</span>
+          </div>
+          {berichte.map((b) => (
+            <TagesberichtZeile
+              key={b.id}
+              bericht={b}
+              zeigeKlient={false}
+              onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
+              onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

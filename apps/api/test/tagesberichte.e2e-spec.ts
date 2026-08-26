@@ -1,0 +1,248 @@
+/**
+ * Tagesberichte: Anlegen, die zwei Listen-Sichten (alle Klienten vs. ein
+ * einzelner Klient -- dieselbe Methode, klientId? entscheidet), Tags
+ * (frei vergeben, mandantweit wiederverwendbar, nachtraeglich
+ * hinzufuegbar/entfernbar), Standort-Einschraenkung und Mandantentrennung.
+ */
+import "reflect-metadata";
+import { randomUUID } from "node:crypto";
+import { INestApplication } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
+import * as bcrypt from "bcryptjs";
+import { Client } from "pg";
+import request from "supertest";
+import { AppModule } from "../src/app.module";
+
+describe("Tagesberichte", () => {
+  let app: INestApplication;
+  let admin: Client;
+
+  let mandantId: string;
+  let mandantSlug: string;
+  let mandantBId: string;
+  let mandantBSlug: string;
+
+  let tokenLeitung: string;
+  let tokenVerwaltungS1: string;
+  let tokenLeitungB: string;
+
+  let klient1: string; // Standort 1
+  let klient2: string; // Standort 2
+
+  const passwort = "correct horse battery staple";
+  const suffix = randomUUID().slice(0, 8);
+
+  beforeAll(async () => {
+    admin = new Client({ connectionString: process.env.MIGRATIONS_DATABASE_URL });
+    await admin.connect();
+
+    mandantSlug = `test-tagesbericht-${suffix}`;
+    mandantBSlug = `test-tagesbericht-b-${suffix}`;
+    const passwortHash = await bcrypt.hash(passwort, 4);
+
+    const { rows: mandantRows } = await admin.query<{ id: string }>(
+      "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
+      [`Testmandant Tagesbericht ${suffix}`, mandantSlug]
+    );
+    mandantId = mandantRows[0].id;
+    const { rows: mandantBRows } = await admin.query<{ id: string }>(
+      "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
+      [`Testmandant Tagesbericht B ${suffix}`, mandantBSlug]
+    );
+    mandantBId = mandantBRows[0].id;
+
+    const { rows: leitungRows } = await admin.query<{ id: string }>(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Leitung Test', $3, 'leitung') RETURNING id`,
+      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+    );
+    const { rows: verwaltungRows } = await admin.query<{ id: string }>(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Verwaltung S1 Test', $3, 'verwaltung') RETURNING id`,
+      [mandantId, `verwaltung-s1-${suffix}@beispiel.test`, passwortHash]
+    );
+    const verwaltungS1Id = verwaltungRows[0].id;
+    await admin.query(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Leitung B Test', $3, 'leitung')`,
+      [mandantBId, `leitung-b-${suffix}@beispiel.test`, passwortHash]
+    );
+
+    const { rows: standort1Rows } = await admin.query<{ id: string }>(
+      "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
+      [mandantId]
+    );
+    const standort1 = standort1Rows[0].id;
+    const { rows: standort2Rows } = await admin.query<{ id: string }>(
+      "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 2', 'Str. 2') RETURNING id",
+      [mandantId]
+    );
+    const standort2 = standort2Rows[0].id;
+
+    await admin.query(
+      "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
+      [mandantId, verwaltungS1Id, standort1]
+    );
+
+    const { rows: zimmer1Rows } = await admin.query<{ id: string }>(
+      "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, '101') RETURNING id",
+      [mandantId, standort1]
+    );
+    const { rows: zimmer2Rows } = await admin.query<{ id: string }>(
+      "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, '201') RETURNING id",
+      [mandantId, standort2]
+    );
+
+    const { rows: klient1Rows } = await admin.query<{ id: string }>(
+      `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
+       VALUES ($1, 'Eins', 'S1', '1990-01-01', $2, 'Testamt') RETURNING id`,
+      [mandantId, `AZ-S1-${suffix}`]
+    );
+    klient1 = klient1Rows[0].id;
+    const { rows: klient2Rows } = await admin.query<{ id: string }>(
+      `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
+       VALUES ($1, 'Zwei', 'S2', '1990-01-01', $2, 'Testamt') RETURNING id`,
+      [mandantId, `AZ-S2-${suffix}`]
+    );
+    klient2 = klient2Rows[0].id;
+
+    await admin.query(
+      "INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug) VALUES ($1, $2, $3, '2024-01-01')",
+      [mandantId, zimmer1Rows[0].id, klient1]
+    );
+    await admin.query(
+      "INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug) VALUES ($1, $2, $3, '2024-01-01')",
+      [mandantId, zimmer2Rows[0].id, klient2]
+    );
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+
+    async function login(slug: string, email: string) {
+      const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug: slug, email, passwort });
+      return res.body.accessToken as string;
+    }
+    tokenLeitung = await login(mandantSlug, `leitung-${suffix}@beispiel.test`);
+    tokenVerwaltungS1 = await login(mandantSlug, `verwaltung-s1-${suffix}@beispiel.test`);
+    tokenLeitungB = await login(mandantBSlug, `leitung-b-${suffix}@beispiel.test`);
+  });
+
+  afterAll(async () => {
+    await admin.query(
+      "DELETE FROM tagesbericht_tag WHERE mandant_id = ANY($1)",
+      [[mandantId, mandantBId]]
+    );
+    await admin.query("DELETE FROM tagesbericht WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
+    await admin.query("DELETE FROM tag WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
+    await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
+    await admin.query("DELETE FROM mandant WHERE id = ANY($1)", [[mandantId, mandantBId]]);
+    await admin.end();
+    await app.close();
+  });
+
+  function als(token: string) {
+    const http = app.getHttpServer();
+    return {
+      get: (path: string) => request(http).get(path).set("Authorization", `Bearer ${token}`),
+      post: (path: string, body: Record<string, unknown>) =>
+        request(http).post(path).set("Authorization", `Bearer ${token}`).send(body),
+      delete: (path: string) => request(http).delete(path).set("Authorization", `Bearer ${token}`),
+    };
+  }
+
+  it("legt einen Tagesbericht mit initialen Tags an", async () => {
+    const res = await als(tokenLeitung).post("/tagesberichte", {
+      klientId: klient1,
+      datum: "2026-08-26",
+      text: "Ruhiger Tag, an der Gruppenaktivitaet teilgenommen.",
+      tagNamen: ["Beobachtung", "Freizeit"],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.klientId).toBe(klient1);
+    expect(res.body.text).toContain("Ruhiger Tag");
+    expect(res.body.tags.map((t: { name: string }) => t.name).sort()).toEqual(["Beobachtung", "Freizeit"]);
+  });
+
+  it("ohne klientId: zeigt Berichte ALLER Klienten (allgemeiner Menuepunkt)", async () => {
+    await als(tokenLeitung).post("/tagesberichte", { klientId: klient2, datum: "2026-08-25", text: "Bericht zu Klient 2." });
+
+    const alle = await als(tokenLeitung).get("/tagesberichte");
+    expect(alle.status).toBe(200);
+    const klientIds = alle.body.map((t: { klientId: string }) => t.klientId);
+    expect(klientIds).toEqual(expect.arrayContaining([klient1, klient2]));
+  });
+
+  it("mit klientId: nur Berichte dieses einen Klienten (Tab in der Klientenakte)", async () => {
+    const res = await als(tokenLeitung).get(`/tagesberichte?klientId=${klient1}`);
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every((t: { klientId: string }) => t.klientId === klient1)).toBe(true);
+  });
+
+  it("wiederverwendet einen bestehenden Tag mit demselben Namen statt einen Duplikat-Tag anzulegen", async () => {
+    const erster = await als(tokenLeitung).post("/tagesberichte", {
+      klientId: klient1,
+      datum: "2026-08-24",
+      text: "Zweiter Bericht.",
+      tagNamen: ["Beobachtung"],
+    });
+    const tagsListe = await als(tokenLeitung).get("/tags");
+    const beobachtungTags = tagsListe.body.filter((t: { name: string }) => t.name === "Beobachtung");
+    expect(beobachtungTags.length).toBe(1);
+    expect(erster.body.tags[0].id).toBe(beobachtungTags[0].id);
+  });
+
+  it("Tag laesst sich nachtraeglich hinzufuegen und wieder entfernen", async () => {
+    const angelegt = await als(tokenLeitung).post("/tagesberichte", {
+      klientId: klient1,
+      datum: "2026-08-23",
+      text: "Bericht ohne Tags.",
+    });
+    expect(angelegt.body.tags).toEqual([]);
+
+    const hinzugefuegt = await als(tokenLeitung).post(`/tagesberichte/${angelegt.body.id}/tags`, { name: "Vorfall" });
+    expect(hinzugefuegt.status).toBe(201);
+    expect(hinzugefuegt.body.tags.map((t: { name: string }) => t.name)).toContain("Vorfall");
+    const tagId = hinzugefuegt.body.tags.find((t: { name: string }) => t.name === "Vorfall").id;
+
+    const entfernt = await als(tokenLeitung).delete(`/tagesberichte/${angelegt.body.id}/tags/${tagId}`);
+    expect(entfernt.status).toBe(200);
+
+    const nachher = await als(tokenLeitung).get(`/tagesberichte?klientId=${klient1}`);
+    const bericht = nachher.body.find((t: { id: string }) => t.id === angelegt.body.id);
+    expect(bericht.tags.map((t: { name: string }) => t.name)).not.toContain("Vorfall");
+  });
+
+  it("Standort-Einschraenkung: verwaltung-s1 sieht auch im allgemeinen Menuepunkt nur Berichte ihres Standorts", async () => {
+    const alle = await als(tokenVerwaltungS1).get("/tagesberichte");
+    expect(alle.status).toBe(200);
+    expect(alle.body.every((t: { klientId: string }) => t.klientId === klient1)).toBe(true);
+    expect(alle.body.some((t: { klientId: string }) => t.klientId === klient2)).toBe(false);
+  });
+
+  it("Standort-Einschraenkung: verwaltung-s1 kann keinen Bericht fuer einen Klienten in Standort 2 anlegen", async () => {
+    const res = await als(tokenVerwaltungS1).post("/tagesberichte", {
+      klientId: klient2,
+      datum: "2026-08-26",
+      text: "Sollte scheitern.",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("Mandantentrennung: Leitung eines anderen Mandanten sieht keine fremden Tagesberichte", async () => {
+    const res = await als(tokenLeitungB).get("/tagesberichte");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("lehnt ungueltige Eingaben mit 400 ab", async () => {
+    const res = await als(tokenLeitung).post("/tagesberichte", { klientId: klient1, datum: "26.08.2026", text: "" });
+    expect(res.status).toBe(400);
+  });
+});
