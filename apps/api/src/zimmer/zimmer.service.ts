@@ -1,8 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { initialen } from "../common/anonymisierung";
+
+// SQLSTATE fuer eine verletzte UNIQUE-Constraint (zimmer_standort_id_nummer_key,
+// siehe migrations/0009_zimmer.sql), kein geratener String -- siehe
+// https://www.postgresql.org/docs/current/errcodes-appendix.html
+const UNIQUE_VIOLATION = "23505";
+
+function isPgError(err: unknown): err is { code: string } {
+  return typeof err === "object" && err !== null && "code" in err;
+}
 
 export type Zimmerstatus = "vergeben" | "zugeordnet";
 
@@ -46,7 +55,10 @@ export class ZimmerService {
     return this.db.withTenant(async (client) => {
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
 
-      const bedingungen = ["1=1"];
+      // Deaktivierte Zimmer verschwinden aus der Liste -- "deaktivieren" waere
+      // sonst folgenlos. Ihre Belegungshistorie bleibt in der Datenbank
+      // unangetastet, nur dieser eine Blick darauf zeigt sie nicht mehr.
+      const bedingungen = ["z.aktiv"];
       const params: unknown[] = [];
       if (erlaubteStandorte) {
         params.push(erlaubteStandorte);
@@ -84,10 +96,90 @@ export class ZimmerService {
 
   async anlegen(input: { standortId: string; nummer: string }) {
     const { mandantId } = requireTenantContext();
+    try {
+      return await this.db.withTenant(async (client) => {
+        const { rows } = await client.query(
+          "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, $3) RETURNING id, nummer, standort_id",
+          [mandantId, input.standortId, input.nummer]
+        );
+        return rows[0];
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === UNIQUE_VIOLATION) {
+        throw new ConflictException("Diese Zimmernummer gibt es in diesem Standort bereits.");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Standort-Einschraenkung hier von Hand statt ueber
+   * klientStandortBedingung(): ein Zimmer haengt direkt an standort_id, es
+   * braucht keinen Umweg ueber eine aktuelle Belegung wie bei klient.
+   */
+  private async standortDesZimmersErlaubt(
+    client: import("pg").PoolClient,
+    benutzerId: string,
+    zimmerId: string
+  ): Promise<string | null> {
+    const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+    const { rows } = await client.query<{ standort_id: string }>(
+      "SELECT standort_id FROM zimmer WHERE id = $1",
+      [zimmerId]
+    );
+    if (rows.length === 0) return null;
+    if (erlaubteStandorte && !erlaubteStandorte.includes(rows[0].standort_id)) return null;
+    return rows[0].standort_id;
+  }
+
+  async aktualisieren(id: string, input: { nummer: string }) {
+    const { benutzerId } = requireTenantContext();
+    try {
+      return await this.db.withTenant(async (client) => {
+        if (!(await this.standortDesZimmersErlaubt(client, benutzerId, id))) {
+          throw new NotFoundException("Zimmer nicht gefunden.");
+        }
+        const { rows } = await client.query(
+          "UPDATE zimmer SET nummer = $1 WHERE id = $2 RETURNING id, nummer, standort_id",
+          [input.nummer, id]
+        );
+        return rows[0];
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === UNIQUE_VIOLATION) {
+        throw new ConflictException("Diese Zimmernummer gibt es in diesem Standort bereits.");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Bewusst kein DELETE: belegung.zimmer_id verweist ohne ON DELETE CASCADE
+   * auf zimmer (siehe migrations/0010), ein geloeschtes Zimmer risse damit
+   * entweder die Belegungshistorie mit oder scheiterte an der
+   * Fremdschluessel-Constraint -- beides falsch fuer Daten, die fuer
+   * Amtsnachfragen erhalten bleiben muessen. "Entfernen" heisst hier
+   * deshalb wie bei mandant/standort: aktiv = false, die Historie bleibt.
+   */
+  async deaktivieren(id: string) {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const standortId = await this.standortDesZimmersErlaubt(client, benutzerId, id);
+      if (!standortId) throw new NotFoundException("Zimmer nicht gefunden.");
+
+      const { rows: offene } = await client.query(
+        "SELECT 1 FROM belegung WHERE zimmer_id = $1 AND auszug IS NULL",
+        [id]
+      );
+      if (offene.length > 0) {
+        throw new ConflictException(
+          "Dieses Zimmer ist aktuell belegt und kann nicht deaktiviert werden. Erst den Auszug eintragen."
+        );
+      }
+
       const { rows } = await client.query(
-        "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, $3) RETURNING id, nummer, standort_id",
-        [mandantId, input.standortId, input.nummer]
+        "UPDATE zimmer SET aktiv = false WHERE id = $1 RETURNING id, nummer, standort_id",
+        [id]
       );
       return rows[0];
     });

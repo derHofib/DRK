@@ -3,8 +3,8 @@ import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, Wochenue
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { LeerzustandZeile } from "../components/Leerzustand";
+import { Modal } from "../components/Modal";
 import {
-  IAbbrechen,
   IAuszahlen,
   IFehler,
   ILeerKassenbuch,
@@ -45,6 +45,7 @@ export function Kassenbuch() {
   const [uebersicht, setUebersicht] = useState<WochenuebersichtEintragDto[]>([]);
 
   const [formularOffen, setFormularOffen] = useState(false);
+  const [formFehler, setFormFehler] = useState<string | null>(null);
   const [vorbelegung, setVorbelegung] = useState<{ klientId: string; isoJahr: number; isoWoche: number } | null>(null);
   const [richtung, setRichtung] = useState<Richtung>("einzahlung");
   const [typ, setTyp] = useState<KassenbuchungTyp>("hzl");
@@ -76,6 +77,7 @@ export function Kassenbuch() {
     setTyp("hzl");
     setRichtung("auszahlung");
     setUnterschrift(null);
+    setFormFehler(null);
     setFormularOffen(true);
   }
 
@@ -90,8 +92,9 @@ export function Kassenbuch() {
     const betragCentAbs = Math.round(betragEuro * 100);
     const betragCent = richtung === "auszahlung" ? -betragCentAbs : betragCentAbs;
 
+    setFormFehler(null);
     if (richtung === "auszahlung" && !unterschrift) {
-      setFehler("Für eine Auszahlung wird eine Unterschrift benötigt.");
+      setFormFehler("Für eine Auszahlung wird eine Unterschrift benötigt.");
       return;
     }
 
@@ -110,11 +113,10 @@ export function Kassenbuch() {
       setFormularOffen(false);
       setVorbelegung(null);
       setUnterschrift(null);
-      formElement.reset();
       ladeBuchungen();
       ladeUebersicht(uebersichtJahr, uebersichtWoche);
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
+      setFormFehler(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -232,104 +234,110 @@ export function Kassenbuch() {
         <button
           className="zv-btn"
           onClick={() => {
-            if (formularOffen) {
-              setFormularOffen(false);
-            } else {
-              setVorbelegung(null);
-              setTyp("hzl");
-              setRichtung("einzahlung");
-              setUnterschrift(null);
-              setFormularOffen(true);
-            }
+            setVorbelegung(null);
+            setTyp("hzl");
+            setRichtung("einzahlung");
+            setUnterschrift(null);
+            setFormFehler(null);
+            setFormularOffen(true);
           }}
         >
-          {formularOffen ? "Abbrechen" : "+ Neue Buchung"}
+          <INeu />
+          Neue Buchung
         </button>
       </div>
 
       {formularOffen && (
-        <form className="zv-inline-form" onSubmit={anlegen} key={vorbelegung?.klientId ?? "leer"}>
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Klient</label>
-              <select name="klientId" required defaultValue={vorbelegung?.klientId ?? ""}>
-                <option value="" disabled>
-                  Bitte wählen
-                </option>
-                {klienten.map((k) => (
-                  <option key={k.id} value={k.id}>
-                    {k.vorname} {k.nachname}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="zv-field">
-              <label>Datum</label>
-              <input name="datum" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
-            </div>
-          </div>
-
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Typ</label>
-              <select name="typ" value={typ} onChange={(e) => setTyp(e.target.value as KassenbuchungTyp)}>
-                <option value="hzl">HZL</option>
-                <option value="einzahlung">Einzahlung</option>
-                <option value="sonstiges">Sonstiges</option>
-              </select>
-            </div>
-            <div className="zv-field">
-              <label>Richtung</label>
-              <select name="richtung" value={richtung} onChange={(e) => setRichtung(e.target.value as Richtung)}>
-                <option value="einzahlung">Einzahlung (+)</option>
-                <option value="auszahlung">Auszahlung (–)</option>
-              </select>
-            </div>
-          </div>
-
-          {typ === "hzl" && (
+        <Modal titel="Neue Buchung" onClose={() => setFormularOffen(false)}>
+          <form onSubmit={anlegen} key={vorbelegung?.klientId ?? "leer"}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>ISO-Jahr</label>
-                <input name="isoJahr" type="number" required defaultValue={vorbelegung?.isoJahr ?? uebersichtJahr} />
+                <label>Klient</label>
+                <select name="klientId" required defaultValue={vorbelegung?.klientId ?? ""} autoFocus>
+                  <option value="" disabled>
+                    Bitte wählen
+                  </option>
+                  {klienten.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.vorname} {k.nachname}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="zv-field">
-                <label>Kalenderwoche</label>
-                <input
-                  name="isoWoche"
-                  type="number"
-                  min={1}
-                  max={53}
-                  required
-                  defaultValue={vorbelegung?.isoWoche ?? uebersichtWoche}
-                />
+                <label>Datum</label>
+                <input name="datum" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
               </div>
             </div>
-          )}
 
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Betrag (€)</label>
-              <input name="betrag" type="text" inputMode="decimal" placeholder="20,00" required />
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label>Typ</label>
+                <select name="typ" value={typ} onChange={(e) => setTyp(e.target.value as KassenbuchungTyp)}>
+                  <option value="hzl">HZL</option>
+                  <option value="einzahlung">Einzahlung</option>
+                  <option value="sonstiges">Sonstiges</option>
+                </select>
+              </div>
+              <div className="zv-field">
+                <label>Richtung</label>
+                <select name="richtung" value={richtung} onChange={(e) => setRichtung(e.target.value as Richtung)}>
+                  <option value="einzahlung">Einzahlung (+)</option>
+                  <option value="auszahlung">Auszahlung (–)</option>
+                </select>
+              </div>
             </div>
-            <div className="zv-field">
-              <label>Verwendungszweck</label>
-              <input name="verwendungszweck" required />
-            </div>
-          </div>
 
-          {richtung === "auszahlung" && (
-            <div className="zv-field">
-              <label>Unterschrift zur Bestätigung der Auszahlung</label>
-              <SignaturePad onChange={setUnterschrift} />
-            </div>
-          )}
+            {typ === "hzl" && (
+              <div className="zv-field-row">
+                <div className="zv-field">
+                  <label>ISO-Jahr</label>
+                  <input name="isoJahr" type="number" required defaultValue={vorbelegung?.isoJahr ?? uebersichtJahr} />
+                </div>
+                <div className="zv-field">
+                  <label>Kalenderwoche</label>
+                  <input
+                    name="isoWoche"
+                    type="number"
+                    min={1}
+                    max={53}
+                    required
+                    defaultValue={vorbelegung?.isoWoche ?? uebersichtWoche}
+                  />
+                </div>
+              </div>
+            )}
 
-          <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
-            <ISpeichern />
-            {wirdGespeichert ? "Speichert…" : "Buchung speichern"}
-          </button>
-        </form>
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label>Betrag (€)</label>
+                <input name="betrag" type="text" inputMode="decimal" placeholder="20,00" required />
+              </div>
+              <div className="zv-field">
+                <label>Verwendungszweck</label>
+                <input name="verwendungszweck" required />
+              </div>
+            </div>
+
+            {richtung === "auszahlung" && (
+              <div className="zv-field">
+                <label>Unterschrift zur Bestätigung der Auszahlung</label>
+                <SignaturePad onChange={setUnterschrift} />
+              </div>
+            )}
+
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Buchung speichern"}
+            </button>
+          </form>
+        </Modal>
       )}
 
       <table className="zv-table">

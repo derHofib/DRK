@@ -117,10 +117,15 @@ export const api = {
   standorteListe: () => request<StandortDto[]>("/standorte"),
   standortAnlegen: (payload: { name: string; adresse: string }) =>
     request<StandortDto>("/standorte", { method: "POST", body: JSON.stringify(payload) }),
+  standortAktualisieren: (id: string, payload: { name?: string; adresse?: string; aktiv?: boolean }) =>
+    request<StandortDto>(`/standorte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   zimmerListe: () => request<ZimmerListEintragDto[]>("/zimmer"),
   zimmerAnlegen: (payload: { standortId: string; nummer: string }) =>
     request<ZimmerListEintragDto>("/zimmer", { method: "POST", body: JSON.stringify(payload) }),
+  zimmerAktualisieren: (id: string, payload: { nummer: string }) =>
+    request<ZimmerListEintragDto>(`/zimmer/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  zimmerDeaktivieren: (id: string) => request<ZimmerListEintragDto>(`/zimmer/${id}/deaktivieren`, { method: "PATCH" }),
   belegungsverlauf: (zimmerId: string) =>
     request<BelegungsverlaufEintragDto[]>(`/zimmer/${zimmerId}/belegungsverlauf`),
 

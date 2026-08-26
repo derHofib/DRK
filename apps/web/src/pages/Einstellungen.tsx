@@ -8,6 +8,7 @@ import { api, tokenRolle } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { Sicherheit } from "./Sicherheit";
+import { Standorte } from "./Standorte";
 import {
   IBestaetigen,
   IDarstellung,
@@ -15,10 +16,11 @@ import {
   IFehler,
   ISicherheit,
   ISpeichern,
+  IStandort,
   IZuruecksetzen,
 } from "../components/icons";
 
-type Bereich = "darstellung" | "sicherheit";
+type Bereich = "darstellung" | "standorte" | "sicherheit";
 
 export function Einstellungen({
   mandant,
@@ -40,6 +42,13 @@ export function Einstellungen({
           Darstellung
         </button>
         <button
+          className={bereich === "standorte" ? "active" : ""}
+          onClick={() => setBereich("standorte")}
+        >
+          <IStandort />
+          Standorte
+        </button>
+        <button
           className={bereich === "sicherheit" ? "active" : ""}
           onClick={() => setBereich("sicherheit")}
         >
@@ -51,6 +60,7 @@ export function Einstellungen({
       {bereich === "darstellung" && (
         <Darstellung mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
       )}
+      {bereich === "standorte" && <Standorte />}
       {bereich === "sicherheit" && <Sicherheit />}
     </div>
   );

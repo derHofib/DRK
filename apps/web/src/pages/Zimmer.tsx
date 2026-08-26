@@ -5,7 +5,9 @@ import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
+  IAbbrechen,
   IAufklappen,
+  IBearbeiten,
   IFehler,
   ILeerVerlauf,
   ILeerZimmer,
@@ -43,6 +45,9 @@ export function Zimmer() {
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
+  const [bearbeitetesZimmer, setBearbeitetesZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [bearbeitenFehler, setBearbeitenFehler] = useState<string | null>(null);
+
   function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
   }
@@ -52,10 +57,14 @@ export function Zimmer() {
       .standorteListe()
       .then((liste) => {
         setStandorte(liste);
-        // Gibt es schon mindestens einen Standort, ist er beim Oeffnen des
-        // Formulars vorausgewaehlt -- "neuen Standort anlegen" bleibt ueber
-        // das Select trotzdem erreichbar, ist nur nicht mehr die Vorgabe.
-        if (liste.length > 0) setStandortAuswahl(liste[0].id);
+        // Gibt es schon mindestens einen AKTIVEN Standort, ist er beim
+        // Oeffnen des Formulars vorausgewaehlt -- "neuen Standort anlegen"
+        // bleibt ueber das Select trotzdem erreichbar, ist nur nicht mehr
+        // die Vorgabe. Ein deaktivierter Standort taucht im Select gar
+        // nicht erst auf (siehe unten), darf also auch nicht vorausgewaehlt
+        // werden.
+        const ersterAktiver = liste.find((s) => s.aktiv);
+        if (ersterAktiver) setStandortAuswahl(ersterAktiver.id);
       })
       .catch((err) => setFehler(err.message));
   }
@@ -93,6 +102,35 @@ export function Zimmer() {
       setFormFehler(err instanceof Error ? err.message : "Zimmer konnte nicht angelegt werden.");
     } finally {
       setWirdGespeichert(false);
+    }
+  }
+
+  async function zimmerBearbeiten(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!bearbeitetesZimmer) return;
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    setBearbeitenFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.zimmerAktualisieren(bearbeitetesZimmer.id, {
+        nummer: String(form.get("nummer") ?? "").trim(),
+      });
+      setBearbeitetesZimmer(null);
+      ladeZimmer();
+    } catch (err) {
+      setBearbeitenFehler(err instanceof Error ? err.message : "Zimmer konnte nicht gespeichert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function zimmerDeaktivieren(zimmerId: string) {
+    try {
+      await api.zimmerDeaktivieren(zimmerId);
+      ladeZimmer();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Zimmer konnte nicht deaktiviert werden.");
     }
   }
 
@@ -159,11 +197,28 @@ export function Zimmer() {
                 ) : (
                   <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
                 )}
-                <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
-                  {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
-                  {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
-                  {offenesZimmer !== z.id && <IAufklappen />}
-                </button>
+                <div className="zv-vorschau-zeile">
+                  <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
+                    {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
+                    {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
+                    {offenesZimmer !== z.id && <IAufklappen />}
+                  </button>
+                  <button
+                    className="zv-link-btn"
+                    onClick={() => {
+                      setBearbeitenFehler(null);
+                      setBearbeitetesZimmer(z);
+                    }}
+                  >
+                    <IBearbeiten />
+                    Bearbeiten
+                  </button>
+                  {z.status === "zugeordnet" && (
+                    <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                      Deaktivieren
+                    </button>
+                  )}
+                </div>
 
                 {offenesZimmer === z.id && (
                   <ul className="zv-verlauf-liste">
@@ -206,11 +261,13 @@ export function Zimmer() {
                 value={standortAuswahl}
                 onChange={(e) => setStandortAuswahl(e.target.value)}
               >
-                {standorte.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                {standorte
+                  .filter((s) => s.aktiv)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
                 <option value={NEUER_STANDORT}>+ Neuen Standort anlegen…</option>
               </select>
             </div>
@@ -243,6 +300,43 @@ export function Zimmer() {
               <ISpeichern />
               {wirdGespeichert ? "Speichert…" : "Zimmer anlegen"}
             </button>
+          </form>
+        </Modal>
+      )}
+
+      {bearbeitetesZimmer && (
+        <Modal titel="Zimmer bearbeiten" onClose={() => setBearbeitetesZimmer(null)}>
+          <form onSubmit={zimmerBearbeiten}>
+            {bearbeitenFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {bearbeitenFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="zimmer-bearbeiten-nummer">Zimmernummer</label>
+              <input
+                id="zimmer-bearbeiten-nummer"
+                name="nummer"
+                defaultValue={bearbeitetesZimmer.nummer}
+                required
+                autoFocus
+              />
+            </div>
+            <div className="zv-vorschau-zeile">
+              <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
+                <ISpeichern />
+                {wirdGespeichert ? "Speichert…" : "Speichern"}
+              </button>
+              <button
+                className="zv-btn zv-btn-still"
+                type="button"
+                onClick={() => setBearbeitetesZimmer(null)}
+              >
+                <IAbbrechen />
+                Abbrechen
+              </button>
+            </div>
           </form>
         </Modal>
       )}

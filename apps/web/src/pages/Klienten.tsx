@@ -3,13 +3,15 @@ import type { HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { LeerzustandZeile } from "../components/Leerzustand";
-import { IAbbrechen, IFehler, ILeerKlienten, INeu, ISpeichern } from "../components/icons";
+import { Modal } from "../components/Modal";
+import { IFehler, ILeerKlienten, INeu, ISpeichern } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 
 export function Klienten() {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);
+  const [formFehler, setFormFehler] = useState<string | null>(null);
   const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(null);
 
   function laden() {
@@ -29,6 +31,7 @@ export function Klienten() {
     // sonst fehl (siehe facebook/react#20544).
     const formElement = e.currentTarget;
     const form = new FormData(formElement);
+    setFormFehler(null);
     try {
       await api.klientAnlegen({
         vorname: String(form.get("vorname")),
@@ -39,10 +42,9 @@ export function Klienten() {
         hzlRhythmus: form.get("hzlRhythmus") as HzlRhythmus,
       });
       setFormularOffen(false);
-      formElement.reset();
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht angelegt werden.");
+      setFormFehler(err instanceof Error ? err.message : "Klient konnte nicht angelegt werden.");
     }
   }
 
@@ -58,54 +60,65 @@ export function Klienten() {
       <div className="zv-seiten-kopf">
         <h2>Klienten</h2>
         <button
-          className={formularOffen ? "zv-btn zv-btn-still" : "zv-btn"}
-          onClick={() => setFormularOffen((v) => !v)}
+          className="zv-btn"
+          onClick={() => {
+            setFormFehler(null);
+            setFormularOffen(true);
+          }}
         >
-          {formularOffen ? <IAbbrechen /> : <INeu />}
-          {formularOffen ? "Abbrechen" : "Neuer Klient"}
+          <INeu />
+          Neuer Klient
         </button>
       </div>
 
       {formularOffen && (
-        <form className="zv-inline-form" onSubmit={anlegen}>
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Vorname</label>
-              <input name="vorname" required />
+        <Modal titel="Neuer Klient" onClose={() => setFormularOffen(false)}>
+          <form onSubmit={anlegen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label>Vorname</label>
+                <input name="vorname" required autoFocus />
+              </div>
+              <div className="zv-field">
+                <label>Nachname</label>
+                <input name="nachname" required />
+              </div>
             </div>
-            <div className="zv-field">
-              <label>Nachname</label>
-              <input name="nachname" required />
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label>Geburtsdatum</label>
+                <input name="geburtsdatum" type="date" required />
+              </div>
+              <div className="zv-field">
+                <label>Aktenzeichen</label>
+                <input name="aktenzeichen" required />
+              </div>
             </div>
-          </div>
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Geburtsdatum</label>
-              <input name="geburtsdatum" type="date" required />
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label>Amtszuordnung</label>
+                <input name="amt" required />
+              </div>
+              <div className="zv-field">
+                <label>HZL-Rhythmus</label>
+                <select name="hzlRhythmus" defaultValue="monatlich">
+                  <option value="monatlich">Monatlich</option>
+                  <option value="woechentlich">Wöchentlich</option>
+                </select>
+              </div>
             </div>
-            <div className="zv-field">
-              <label>Aktenzeichen</label>
-              <input name="aktenzeichen" required />
-            </div>
-          </div>
-          <div className="zv-field-row">
-            <div className="zv-field">
-              <label>Amtszuordnung</label>
-              <input name="amt" required />
-            </div>
-            <div className="zv-field">
-              <label>HZL-Rhythmus</label>
-              <select name="hzlRhythmus" defaultValue="monatlich">
-                <option value="monatlich">Monatlich</option>
-                <option value="woechentlich">Wöchentlich</option>
-              </select>
-            </div>
-          </div>
-          <button className="zv-btn" type="submit">
-            <ISpeichern />
-            Anlegen
-          </button>
-        </form>
+            <button className="zv-btn zv-btn-block" type="submit">
+              <ISpeichern />
+              Anlegen
+            </button>
+          </form>
+        </Modal>
       )}
 
       <table className="zv-table">

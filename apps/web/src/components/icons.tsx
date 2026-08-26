@@ -46,10 +46,12 @@ import {
   LogIn,
   LogOut,
   MapPin,
+  MapPinOff,
   Monitor,
   Moon,
   Palette,
   PenLine,
+  Pencil,
   Plus,
   Receipt,
   ReceiptText,
@@ -127,6 +129,7 @@ export const IVerlauf = baue(History);
 export const IZurueck = baue(ArrowLeft);
 export const IKopieren = baue(Copy);
 export const IZuruecksetzen = baue(RotateCcw);
+export const IBearbeiten = baue(Pencil);
 export const I2faEin = baue(ShieldCheck);
 export const I2faAus = baue(ShieldOff);
 
@@ -175,6 +178,7 @@ export const ILeerWoche = baueLeer(CalendarX2);
 export const ILeerRechnungen = baueLeer(Receipt);
 export const ILeerKostenuebernahmen = baueLeer(FileClock);
 export const ILeerVerlauf = baueLeer(History);
+export const ILeerStandorte = baueLeer(MapPinOff);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);
