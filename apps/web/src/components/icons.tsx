@@ -63,6 +63,8 @@ import {
   Sun,
   TriangleAlert,
   UserRound,
+  UserRoundMinus,
+  UserRoundPlus,
   UserRoundSearch,
   UserRoundX,
   Users,
@@ -130,6 +132,8 @@ export const IZurueck = baue(ArrowLeft);
 export const IKopieren = baue(Copy);
 export const IZuruecksetzen = baue(RotateCcw);
 export const IBearbeiten = baue(Pencil);
+export const IEinziehen = baue(UserRoundPlus);
+export const IAuszug = baue(UserRoundMinus);
 export const I2faEin = baue(ShieldCheck);
 export const I2faAus = baue(ShieldOff);
 

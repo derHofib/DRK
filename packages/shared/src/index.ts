@@ -107,7 +107,7 @@ export interface ZimmerListEintragDto {
   standortId: string;
   standortName: string;
   status: Zimmerstatus;
-  aktuellerKlient: { id: string; name: string; einzug: string } | null;
+  aktuellerKlient: { id: string; name: string; einzug: string; belegungId: string } | null;
 }
 
 export interface BelegungsverlaufEintragDto {
@@ -126,7 +126,7 @@ export interface KlientListEintragDto {
   aktenzeichen: string;
   amt: string;
   hzlRhythmus: HzlRhythmus;
-  aktuellesZimmer: { id: string; nummer: string; standortName: string } | null;
+  aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
 }
 
 export interface KlientDetailDto extends KlientListEintragDto {

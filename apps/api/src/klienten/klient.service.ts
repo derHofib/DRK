@@ -10,7 +10,7 @@ export interface KlientListEintrag {
   aktenzeichen: string;
   amt: string;
   hzlRhythmus: "monatlich" | "woechentlich";
-  aktuellesZimmer: { id: string; nummer: string; standortName: string } | null;
+  aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
 }
 
 export interface KlientDetail extends KlientListEintrag {
@@ -32,7 +32,7 @@ export class KlientService {
         `
         SELECT
           k.id, k.vorname, k.nachname, k.aktenzeichen, k.amt, k.hzl_rhythmus,
-          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name
+          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
         FROM klient k
         LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
@@ -77,7 +77,7 @@ export class KlientService {
         `
         SELECT
           k.id, k.vorname, k.nachname, k.geburtsdatum, k.aktenzeichen, k.amt, k.hzl_rhythmus,
-          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name
+          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
         FROM klient k
         LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
@@ -101,7 +101,7 @@ function zuListEintrag(r: any): KlientListEintrag {
     amt: r.amt,
     hzlRhythmus: r.hzl_rhythmus,
     aktuellesZimmer: r.zimmer_id
-      ? { id: r.zimmer_id, nummer: r.zimmer_nummer, standortName: r.standort_name }
+      ? { id: r.zimmer_id, nummer: r.zimmer_nummer, standortName: r.standort_name, belegungId: r.belegung_id }
       : null,
   };
 }

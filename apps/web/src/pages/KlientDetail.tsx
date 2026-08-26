@@ -5,16 +5,20 @@ import type {
   KostenuebernahmeDto,
   RechnungDto,
   RechnungStatus,
+  ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { LeerzustandZeile } from "../components/Leerzustand";
+import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
   IAblehnen,
   IAuszahlen,
+  IAuszug,
   IBeenden,
   IDokument,
+  IEinziehen,
   IFehler,
   IGenehmigen,
   IKassenbuch,
@@ -58,9 +62,11 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   const [tab, setTab] = useState<Tab>("uebersicht");
   const [fehler, setFehler] = useState<string | null>(null);
 
-  useEffect(() => {
+  function laden() {
     api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
-  }, [klientId]);
+  }
+
+  useEffect(laden, [klientId]);
 
   return (
     <div>
@@ -107,7 +113,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </button>
       </div>
 
-      {tab === "uebersicht" && klient && <UebersichtTab klient={klient} />}
+      {tab === "uebersicht" && klient && <UebersichtTab klient={klient} onGeaendert={laden} />}
       {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
       {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
       {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
@@ -115,10 +121,15 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   );
 }
 
-function UebersichtTab({ klient }: { klient: KlientDetailDto }) {
+function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGeaendert: () => void }) {
   const [aktuelleKostenuebernahme, setAktuelleKostenuebernahme] = useState<KostenuebernahmeDto | null | undefined>(
     undefined
   );
+  const [freieZimmer, setFreieZimmer] = useState<ZimmerListEintragDto[]>([]);
+  const [zuweisungOffen, setZuweisungOffen] = useState(false);
+  const [auszugOffen, setAuszugOffen] = useState(false);
+  const [formFehler, setFormFehler] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
   useEffect(() => {
     api.kostenuebernahmenListe(klient.id).then((liste) => {
@@ -126,14 +137,82 @@ function UebersichtTab({ klient }: { klient: KlientDetailDto }) {
     });
   }, [klient.id]);
 
+  useEffect(() => {
+    if (klient.aktuellesZimmer) return;
+    api.zimmerListe().then((liste) => setFreieZimmer(liste.filter((z) => z.status === "zugeordnet")));
+  }, [klient.id, klient.aktuellesZimmer]);
+
+  async function zimmerZuweisen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setFormFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.belegungEinziehen({
+        zimmerId: String(form.get("zimmerId")),
+        klientId: klient.id,
+        einzug: String(form.get("einzug")),
+      });
+      setZuweisungOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Zimmer konnte nicht zugewiesen werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function auszugEintragen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!klient.aktuellesZimmer) return;
+    const form = new FormData(e.currentTarget);
+    setFormFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.belegungAusziehen(klient.aktuellesZimmer.belegungId, String(form.get("auszug")));
+      setAuszugOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Auszug konnte nicht eingetragen werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
   return (
     <div className="zv-card zv-card-weit">
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", rowGap: 12, fontSize: 14 }}>
         <div style={{ color: "var(--zv-text-muted)" }}>Zimmer</div>
         <div>
-          {klient.aktuellesZimmer
-            ? `${klient.aktuellesZimmer.nummer} · ${klient.aktuellesZimmer.standortName}`
-            : "Kein Zimmer zugeordnet"}
+          {klient.aktuellesZimmer ? (
+            <>
+              {klient.aktuellesZimmer.nummer} · {klient.aktuellesZimmer.standortName}{" "}
+              <button
+                className="zv-link-btn"
+                onClick={() => {
+                  setFormFehler(null);
+                  setAuszugOffen(true);
+                }}
+              >
+                <IAuszug />
+                Auszug eintragen
+              </button>
+            </>
+          ) : (
+            <>
+              Kein Zimmer zugeordnet{" "}
+              <button
+                className="zv-link-btn"
+                onClick={() => {
+                  setFormFehler(null);
+                  setZuweisungOffen(true);
+                }}
+              >
+                <IEinziehen />
+                Zimmer zuweisen
+              </button>
+            </>
+          )}
         </div>
         <div style={{ color: "var(--zv-text-muted)" }}>Aktuelle Kostenübernahme</div>
         <div>
@@ -144,6 +223,77 @@ function UebersichtTab({ klient }: { klient: KlientDetailDto }) {
               : "Kein offener Zeitraum"}
         </div>
       </div>
+
+      {zuweisungOffen && (
+        <Modal titel="Zimmer zuweisen" onClose={() => setZuweisungOffen(false)}>
+          <form onSubmit={zimmerZuweisen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="klient-zimmer-select">Zimmer</label>
+              <select id="klient-zimmer-select" name="zimmerId" required autoFocus defaultValue="">
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
+                {freieZimmer.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.nummer} · {z.standortName}
+                  </option>
+                ))}
+              </select>
+              {freieZimmer.length === 0 && (
+                <span className="zv-sub-inline">Kein freies Zimmer verfügbar.</span>
+              )}
+            </div>
+            <div className="zv-field">
+              <label htmlFor="klient-einzug">Einzugsdatum</label>
+              <input
+                id="klient-einzug"
+                name="einzug"
+                type="date"
+                required
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IEinziehen />
+              {wirdGespeichert ? "Speichert…" : "Einziehen"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {auszugOffen && (
+        <Modal titel="Auszug eintragen" onClose={() => setAuszugOffen(false)}>
+          <form onSubmit={auszugEintragen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="klient-auszug">Auszugsdatum</label>
+              <input
+                id="klient-auszug"
+                name="auszug"
+                type="date"
+                required
+                autoFocus
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IAuszug />
+              {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

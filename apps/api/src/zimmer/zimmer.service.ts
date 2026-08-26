@@ -21,7 +21,7 @@ export interface ZimmerListEintrag {
   standortId: string;
   standortName: string;
   status: Zimmerstatus;
-  aktuellerKlient: { id: string; name: string; einzug: string } | null;
+  aktuellerKlient: { id: string; name: string; einzug: string; belegungId: string } | null;
 }
 
 export interface BelegungsverlaufEintrag {
@@ -88,7 +88,7 @@ export class ZimmerService {
         standortName: r.standort_name,
         status: (r.belegung_id ? "vergeben" : "zugeordnet") as Zimmerstatus,
         aktuellerKlient: r.belegung_id
-          ? { id: r.klient_id, name: `${r.vorname} ${r.nachname}`, einzug: r.einzug }
+          ? { id: r.klient_id, name: `${r.vorname} ${r.nachname}`, einzug: r.einzug, belegungId: r.belegung_id }
           : null,
       }));
     });

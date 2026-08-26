@@ -515,6 +515,13 @@
   padding: 0 var(--zv-space-5);
   border-bottom: 1px solid var(--zv-border);
   background: var(--zv-surface);
+  /* Reicht die Reiterbreite (Icon+Text je Reiter, z.B. in KlientDetail.tsx)
+     auf einem schmalen Bildschirm nicht, soll SIE sich scrollen lassen --
+     nicht die ganze Seite in die Breite ziehen. Dasselbe Prinzip wie bei
+     .zv-table (siehe dort): der Container mit dem zu breiten Inhalt
+     bekommt den Scroll, nicht die Seite drumherum. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .zv-tabbar button {
@@ -530,6 +537,8 @@
   font-family: inherit;
   font-weight: var(--zv-weight-medium);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast);
 }
 

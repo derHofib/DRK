@@ -1,5 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
-import type { BelegungsverlaufEintragDto, StandortDto, ZimmerListEintragDto } from "@zimmerakte/shared";
+import type {
+  BelegungsverlaufEintragDto,
+  KlientListEintragDto,
+  StandortDto,
+  ZimmerListEintragDto,
+} from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
@@ -7,7 +12,9 @@ import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
   IAufklappen,
+  IAuszug,
   IBearbeiten,
+  IEinziehen,
   IFehler,
   ILeerVerlauf,
   ILeerZimmer,
@@ -36,6 +43,7 @@ const STATUS_ICON = {
 export function Zimmer() {
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [offenesZimmer, setOffenesZimmer] = useState<string | null>(null);
   const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
@@ -48,8 +56,17 @@ export function Zimmer() {
   const [bearbeitetesZimmer, setBearbeitetesZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [bearbeitenFehler, setBearbeitenFehler] = useState<string | null>(null);
 
+  const [zuweisungsZimmer, setZuweisungsZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
+  const [auszugZimmer, setAuszugZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [auszugFehler, setAuszugFehler] = useState<string | null>(null);
+
   function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
+  }
+
+  function ladeKlienten() {
+    api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
   }
 
   function ladeStandorte() {
@@ -72,6 +89,7 @@ export function Zimmer() {
   useEffect(() => {
     ladeZimmer();
     ladeStandorte();
+    ladeKlienten();
   }, []);
 
   function formularOeffnen() {
@@ -131,6 +149,46 @@ export function Zimmer() {
       ladeZimmer();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Zimmer konnte nicht deaktiviert werden.");
+    }
+  }
+
+  async function klientZuweisen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!zuweisungsZimmer) return;
+    const form = new FormData(e.currentTarget);
+    setZuweisungFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.belegungEinziehen({
+        zimmerId: zuweisungsZimmer.id,
+        klientId: String(form.get("klientId")),
+        einzug: String(form.get("einzug")),
+      });
+      setZuweisungsZimmer(null);
+      ladeZimmer();
+      ladeKlienten();
+    } catch (err) {
+      setZuweisungFehler(err instanceof Error ? err.message : "Klient konnte nicht zugewiesen werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function auszugEintragen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!auszugZimmer?.aktuellerKlient) return;
+    const form = new FormData(e.currentTarget);
+    setAuszugFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.belegungAusziehen(auszugZimmer.aktuellerKlient.belegungId, String(form.get("auszug")));
+      setAuszugZimmer(null);
+      ladeZimmer();
+      ladeKlienten();
+    } catch (err) {
+      setAuszugFehler(err instanceof Error ? err.message : "Auszug konnte nicht eingetragen werden.");
+    } finally {
+      setWirdGespeichert(false);
     }
   }
 
@@ -213,9 +271,32 @@ export function Zimmer() {
                     <IBearbeiten />
                     Bearbeiten
                   </button>
-                  {z.status === "zugeordnet" && (
-                    <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
-                      Deaktivieren
+                  {z.status === "zugeordnet" ? (
+                    <>
+                      <button
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setZuweisungFehler(null);
+                          setZuweisungsZimmer(z);
+                        }}
+                      >
+                        <IEinziehen />
+                        Klient zuweisen
+                      </button>
+                      <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                        Deaktivieren
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="zv-link-btn"
+                      onClick={() => {
+                        setAuszugFehler(null);
+                        setAuszugZimmer(z);
+                      }}
+                    >
+                      <IAuszug />
+                      Auszug eintragen
                     </button>
                   )}
                 </div>
@@ -337,6 +418,82 @@ export function Zimmer() {
                 Abbrechen
               </button>
             </div>
+          </form>
+        </Modal>
+      )}
+
+      {zuweisungsZimmer && (
+        <Modal titel={`Klient zuweisen — Zimmer ${zuweisungsZimmer.nummer}`} onClose={() => setZuweisungsZimmer(null)}>
+          <form onSubmit={klientZuweisen}>
+            {zuweisungFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {zuweisungFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="zuweisung-klient">Klient</label>
+              <select id="zuweisung-klient" name="klientId" required autoFocus defaultValue="">
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
+                {klienten
+                  .filter((k) => k.aktuellesZimmer === null)
+                  .map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.vorname} {k.nachname}
+                    </option>
+                  ))}
+              </select>
+              {klienten.filter((k) => k.aktuellesZimmer === null).length === 0 && (
+                <span className="zv-sub-inline">Alle Klienten haben bereits ein Zimmer.</span>
+              )}
+            </div>
+            <div className="zv-field">
+              <label htmlFor="zuweisung-einzug">Einzugsdatum</label>
+              <input
+                id="zuweisung-einzug"
+                name="einzug"
+                type="date"
+                required
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IEinziehen />
+              {wirdGespeichert ? "Speichert…" : "Einziehen"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {auszugZimmer && (
+        <Modal titel={`Auszug eintragen — Zimmer ${auszugZimmer.nummer}`} onClose={() => setAuszugZimmer(null)}>
+          <form onSubmit={auszugEintragen}>
+            {auszugFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {auszugFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ margin: "0 0 12px" }}>
+              {auszugZimmer.aktuellerKlient?.name} zieht aus diesem Zimmer aus.
+            </p>
+            <div className="zv-field">
+              <label htmlFor="auszug-datum">Auszugsdatum</label>
+              <input
+                id="auszug-datum"
+                name="auszug"
+                type="date"
+                required
+                autoFocus
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IAuszug />
+              {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
           </form>
         </Modal>
       )}
