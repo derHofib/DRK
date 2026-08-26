@@ -113,6 +113,8 @@ export const api = {
   mandantAkzentfarbeSetzen: (akzentfarbe: string) =>
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ akzentfarbe }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
+  benutzerAnlegen: (payload: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) =>
+    request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
 
   standorteListe: () => request<StandortDto[]>("/standorte"),
   standortAnlegen: (payload: { name: string; adresse: string }) =>

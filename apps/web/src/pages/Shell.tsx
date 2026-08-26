@@ -15,22 +15,22 @@ import {
 } from "../components/icons";
 import { Zimmer } from "./Zimmer";
 import { Klienten } from "./Klienten";
-import { Uebersicht } from "./Uebersicht";
+import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import { Einstellungen } from "./Einstellungen";
 
-type Tab = "uebersicht" | "zimmer" | "klienten" | "kassenbuch" | "einstellungen";
+type Tab = "mitarbeitende" | "zimmer" | "klienten" | "kassenbuch" | "einstellungen";
 
 const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
-  { wert: "uebersicht", label: "Mitarbeitende", icon: IMitarbeitende },
+  { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
 
-/** Diese beiden Ansichten tragen breite Tabellen und bekommen mehr Platz. */
-const BREITE_REITER = new Set<Tab>(["kassenbuch", "klienten"]);
+/** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
+const BREITE_REITER = new Set<Tab>(["kassenbuch", "klienten", "mitarbeitende"]);
 
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
@@ -130,7 +130,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten />}
           {tab === "kassenbuch" && <Kassenbuch />}
-          {tab === "uebersicht" && <Uebersicht />}
+          {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "einstellungen" && (
             <Einstellungen mandant={mandant} onMandantAktualisiert={setMandant} />
           )}
