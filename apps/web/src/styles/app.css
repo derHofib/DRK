@@ -45,6 +45,43 @@
   max-width: var(--zv-content-max-weit);
 }
 
+/*
+ * Master-Detail (Office-Ansicht): am Desktop stehen Liste und Detail
+ * nebeneinander -- ein Klick wechselt nur den rechten Bereich, die Liste
+ * bleibt sichtbar. Auf dem Handy (Mobil-Query weiter unten) bleibt es beim
+ * heutigen Verhalten: Liste ODER Detail, nie beides gleichzeitig, weil dafuer
+ * schlicht die Breite fehlt.
+ */
+.zv-master-detail {
+  display: block;
+}
+
+.zv-master-liste {
+  min-width: 0;
+}
+
+.zv-master-panel {
+  min-width: 0;
+}
+
+@media (min-width: 641px) {
+  .zv-master-detail {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--zv-space-5);
+  }
+
+  .zv-master-liste {
+    flex: 0 0 340px;
+  }
+
+  .zv-master-panel {
+    flex: 1 1 auto;
+    border-left: 1px solid var(--zv-border);
+    padding-left: var(--zv-space-5);
+  }
+}
+
 /* ==================================================================
    App-Rahmen: Sidebar (Desktop) + .zv-shell-app (Rest)
    ==================================================================
@@ -241,6 +278,42 @@
 
 .zv-modal-inhalt {
   padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-4);
+}
+
+/*
+ * Ab hier "Office-Ansicht": am Desktop ist genug Platz, um das Formular als
+ * Seitenpanel neben der Liste zu fuehren, statt sie mit einem zentrierten
+ * Fenster zu verdecken -- die Liste bleibt sichtbar, waehrend man ausfuellt.
+ * Auf dem Handy (<=640px, siehe Mobil-Query weiter unten) bleibt es bewusst
+ * beim zentrierten Fenster: fuer ein rechtsbuendiges Panel ist der Bildschirm
+ * dort schlicht zu schmal.
+ */
+@media (min-width: 641px) {
+  .zv-modal-scrim {
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  .zv-modal {
+    width: 440px;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top: none;
+    border-bottom: none;
+    border-right: none;
+    animation: zv-panel-einschieben var(--zv-transition-base);
+  }
+}
+
+@keyframes zv-panel-einschieben {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 /* ==================================================================
@@ -700,6 +773,84 @@
 }
 
 /* ==================================================================
+   Infokarten -- ersetzen .zv-table dort, wo Zeilen zu viele Spalten fuer
+   ein schmales Handydisplay haben (Klienten, Kassenbuch). Bewusst auf
+   BEIDEN Geraetegroessen gleich (siehe .zv-room-card oben: dasselbe
+   Vorbild), nicht nur mobil -- eine Karte pro Datensatz liest sich auch am
+   Desktop leichter als eine breite Tabelle mit vielen Spalten.
+   ================================================================== */
+.zv-karten-liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-info-karte {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-1);
+  padding: var(--zv-space-4);
+  border-left: 3px solid var(--zv-accent-soft-strong);
+  transition: box-shadow var(--zv-transition-base), transform var(--zv-transition-base);
+}
+
+.zv-info-karte-klickbar {
+  cursor: pointer;
+}
+
+.zv-info-karte-klickbar:hover {
+  box-shadow: var(--zv-shadow-2);
+  transform: translateY(-1px);
+}
+
+/* Hebt am Desktop die gerade im Panel daneben geoeffnete Karte hervor --
+   ohne das waere in der Master-Detail-Ansicht nicht erkennbar, welche Zeile
+   der Liste zum offenen Detail gehoert. */
+.zv-info-karte-aktiv {
+  border-color: var(--zv-accent);
+  border-left-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-info-karte-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-info-karte-titel {
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-info-karte-felder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1) var(--zv-space-5);
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-info-karte-felder strong {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-info-karte-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  margin-top: var(--zv-space-3);
+  padding-top: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+
+/* ==================================================================
    Listen und Kleinteile
    ================================================================== */
 .zv-verlauf-liste {
@@ -1057,5 +1208,12 @@
 
   .zv-link-btn {
     min-height: 32px;
+  }
+
+  /* Master-Detail bleibt mobil beim heutigen Verhalten: sobald ein Detail
+     ausgewaehlt ist, weicht die Liste komplett dem Panel -- volle Seite,
+     "Zurueck"-Knopf im Panel fuehrt wieder zur Liste. */
+  .zv-master-detail.zv-detail-aktiv .zv-master-liste {
+    display: none;
   }
 }

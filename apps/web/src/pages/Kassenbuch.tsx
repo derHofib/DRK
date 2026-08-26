@@ -1,8 +1,8 @@
-import { Fragment, FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, WochenuebersichtEintragDto } from "@zimmerakte/shared";
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
-import { LeerzustandZeile } from "../components/Leerzustand";
+import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
   IAuszahlen,
@@ -256,43 +256,36 @@ export function Kassenbuch() {
           </div>
         </div>
 
-        <table className="zv-table">
-          <thead>
-            <tr>
-              <th>Klient</th>
-              <th>Status</th>
-              <th>Betrag</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        {uebersicht.length === 0 ? (
+          <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
+        ) : (
+          <div className="zv-karten-liste">
             {uebersicht.map((e) => (
-              <tr key={e.klientId}>
-                <td>{e.klientName}</td>
-                <td>
+              <div key={e.klientId} className="zv-info-karte">
+                <div className="zv-info-karte-kopf">
+                  <span className="zv-info-karte-titel">{e.klientName}</span>
                   <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
                     {e.bezahlt ? <ISErledigt /> : <ISOffen />}
                     {e.bezahlt ? "Bezahlt" : "Offen"}
                   </span>
-                </td>
-                <td>{e.betragCent !== null ? formatBetrag(e.betragCent) : "–"}</td>
-                <td>
-                  {!e.bezahlt && (
+                </div>
+                <div className="zv-info-karte-felder">
+                  <span>
+                    Betrag <strong className="zv-mono">{e.betragCent !== null ? formatBetrag(e.betragCent) : "–"}</strong>
+                  </span>
+                </div>
+                {!e.bezahlt && (
+                  <div className="zv-info-karte-fuss">
                     <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
                       <IAuszahlen />
                       Jetzt auszahlen
                     </button>
-                  )}
-                </td>
-              </tr>
+                  </div>
+                )}
+              </div>
             ))}
-            {uebersicht.length === 0 && (
-              <LeerzustandZeile icon={ILeerWoche} spalten={4}>
-                Keine Klienten mit wöchentlichem HZL-Rhythmus.
-              </LeerzustandZeile>
-            )}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -406,33 +399,39 @@ export function Kassenbuch() {
         </Modal>
       )}
 
-      <table className="zv-table">
-        <thead>
-          <tr>
-            <th>Datum</th>
-            <th>Klient</th>
-            <th>Betrag</th>
-            <th>Zweck</th>
-            <th>Typ</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
+      {buchungen.length === 0 ? (
+        <Leerzustand icon={ILeerKassenbuch}>Noch keine Buchungen erfasst.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste">
           {buchungen.map((b) => (
-            <Fragment key={b.id}>
-              <tr>
-                <td>{b.datum}</td>
-                <td>{b.klientName}</td>
-                <td style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}>
+            <div key={b.id} className="zv-info-karte">
+              <div className="zv-info-karte-kopf">
+                <span className="zv-info-karte-titel">{b.klientName}</span>
+                <span
+                  className="zv-mono"
+                  style={{
+                    fontWeight: "var(--zv-weight-semibold)",
+                    color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)",
+                  }}
+                >
                   {formatBetrag(b.betragCent)}
-                </td>
-                <td>{b.verwendungszweck}</td>
-                <td>
-                  {KASSENBUCHUNG_TYP_LABEL[b.typ]}
-                  {b.isoJahr && b.isoWoche ? <span className="zv-sub-inline">KW {b.isoWoche}</span> : null}
-                </td>
-                <td>
+                </span>
+              </div>
+              <div className="zv-info-karte-felder">
+                <span>
+                  Datum <strong>{b.datum}</strong>
+                </span>
+                <span>
+                  Zweck <strong>{b.verwendungszweck}</strong>
+                </span>
+                <span>
+                  Typ{" "}
+                  <strong>
+                    {KASSENBUCHUNG_TYP_LABEL[b.typ]}
+                    {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
+                  </strong>
+                </span>
+                <span>
                   {b.storniert ? (
                     <span className="zv-pill zv-pill-vergeben">
                       <ISStorniert />
@@ -444,8 +443,15 @@ export function Kassenbuch() {
                       Aktiv
                     </span>
                   )}
-                </td>
-                <td style={{ display: "flex", gap: 10 }}>
+                </span>
+              </div>
+              {offeneUnterschrift?.buchungId === b.id && (
+                <div style={{ marginTop: "var(--zv-space-2)" }}>
+                  <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
+                </div>
+              )}
+              {(b.hatUnterschrift || !b.storniert) && (
+                <div className="zv-info-karte-fuss">
                   {b.hatUnterschrift && (
                     <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
                       <IUnterschrift />
@@ -458,24 +464,12 @@ export function Kassenbuch() {
                       Stornieren
                     </button>
                   )}
-                </td>
-              </tr>
-              {offeneUnterschrift?.buchungId === b.id && (
-                <tr>
-                  <td colSpan={7} style={{ background: "var(--zv-surface-2)" }}>
-                    <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
-                  </td>
-                </tr>
+                </div>
               )}
-            </Fragment>
+            </div>
           ))}
-          {buchungen.length === 0 && (
-            <LeerzustandZeile icon={ILeerKassenbuch} spalten={7}>
-              Noch keine Buchungen erfasst.
-            </LeerzustandZeile>
-          )}
-        </tbody>
-      </table>
+        </div>
+      )}
     </div>
   );
 }
