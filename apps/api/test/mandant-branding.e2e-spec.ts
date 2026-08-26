@@ -21,7 +21,8 @@ import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 
-const STANDARDFARBE = "#5ec4c0";
+// Seit Migration 0021: DRK Rot statt Petrol.
+const STANDARDFARBE = "#e3000f";
 
 interface Testbenutzer {
   benutzerId: string;

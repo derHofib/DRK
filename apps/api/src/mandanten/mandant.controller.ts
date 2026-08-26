@@ -10,7 +10,7 @@ const akzentfarbeSchema = z.object({
   // Farbe soll nicht an der Schreibweise scheitern.
   akzentfarbe: z
     .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Bitte eine Farbe als Hex-Wert angeben, z. B. #5ec4c0.")
+    .regex(/^#[0-9a-fA-F]{6}$/, "Bitte eine Farbe als Hex-Wert angeben, z. B. #e3000f.")
     .transform((wert) => wert.toLowerCase()),
 });
 

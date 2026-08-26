@@ -83,6 +83,7 @@ const ERWARTETE_PAARE = 19;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
+  ["DRK Rot", "#e3000f"],
   ["Salbei", "#79c7a8"],
   ["Petrol", "#5ec4c0"],
   ["Himmel", "#7fbef0"],

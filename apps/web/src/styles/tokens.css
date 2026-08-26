@@ -45,12 +45,13 @@
 @property --zv-accent-h {
   syntax: "<number>";
   inherits: true;
-  initial-value: 190;
+  /* DRK-Rot (#e3000f), siehe PASTELL_PALETTEN in packages/shared. */
+  initial-value: 28.1;
 }
 @property --zv-accent-c {
   syntax: "<number>";
   inherits: true;
-  initial-value: 0.086;
+  initial-value: 0.125;
 }
 
 /*
@@ -198,9 +199,9 @@
   /* ------------------------------------------------------------------
      Form
      ------------------------------------------------------------------ */
-  --zv-radius-s: 8px;
-  --zv-radius-m: 12px;
-  --zv-radius-l: 18px;
+  --zv-radius-s: 6px;
+  --zv-radius-m: 10px;
+  --zv-radius-l: 16px;
   --zv-radius-pill: 999px;
 
   /* Schatten sind keine Farben -- light-dark() nur auf ihre Farbanteile. */
@@ -232,12 +233,14 @@
   --zv-space-6: 32px;
   --zv-space-7: 48px;
 
-  /* "Inter Variable" ist der Familienname aus @fontsource-variable/inter --
-     nicht frei gewaehlt, muss zu dessen @font-face passen. Dahinter die
-     Systemkette, damit die Oberflaeche auch waehrend des Ladens (font-display:
-     swap) und bei blockierter Schrift vollstaendig lesbar bleibt. */
-  --zv-font-body: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --zv-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* Die Familiennamen sind nicht frei gewaehlt -- sie muessen zu den
+     @font-face-Regeln in schrift.css passen (@fontsource-variable/
+     source-sans-3 bzw. @fontsource/ibm-plex-mono). Dahinter die
+     Systemkette, damit die Oberflaeche auch waehrend des Ladens
+     (font-display: swap) und bei blockierter Schrift vollstaendig lesbar
+     bleibt. */
+  --zv-font-body: "Source Sans 3 Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --zv-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   --zv-text-xs: 11.5px;
   --zv-text-s: 12.5px;

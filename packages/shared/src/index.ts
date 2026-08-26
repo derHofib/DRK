@@ -40,7 +40,7 @@ export interface MandantDto {
  */
 export const AKZENTFARBE_MUSTER = /^#[0-9a-fA-F]{6}$/;
 
-export const AKZENTFARBE_STANDARD = "#5ec4c0";
+export const AKZENTFARBE_STANDARD = "#e3000f";
 
 export interface PastellPalette {
   id: string;
@@ -54,13 +54,17 @@ export interface PastellPalette {
  * nur Farbton und Buntheit, die Helligkeit gehört dem CSS (siehe
  * apps/web/src/theme/farbe.ts).
  *
- * Bewusst kein Rot: es kollidierte visuell mit --zv-status-danger (Storno,
- * Ablehnung, negative Beträge) und aus denselben Gründen, die im Projekt
- * schon gegen ein Rotkreuz-Symbol sprachen. Über den freien Farbwähler
- * bleibt Rot möglich; die Statusfarben sind davon unberührt, weil sie feste
- * Farbtöne haben und dem Akzent nicht folgen.
+ * "DRK Rot" steht bewusst an erster Stelle und ist der Standardwert neuer
+ * Mandanten (siehe migrations/0021 und AKZENTFARBE_STANDARD oben) -- das ist
+ * die tatsächliche Hausfarbe des Trägers, keine beliebige Wahl. Die übrigen
+ * acht Paletten bleiben bewusst nicht-rot: für Träger, die sich für eine
+ * andere Farbe entscheiden, kollidierte ein zufälliges Rot visuell mit
+ * --zv-status-danger (Storno, Ablehnung, negative Beträge). Über den freien
+ * Farbwähler bleibt jede Farbe möglich; die Statusfarben sind davon
+ * unberührt, weil sie feste Farbtöne haben und dem Akzent nicht folgen.
  */
 export const PASTELL_PALETTEN: readonly PastellPalette[] = [
+  { id: "drk-rot", name: "DRK Rot", hex: "#e3000f" },
   { id: "salbei", name: "Salbei", hex: "#79c7a8" },
   { id: "petrol", name: "Petrol", hex: "#5ec4c0" },
   { id: "himmel", name: "Himmel", hex: "#7fbef0" },

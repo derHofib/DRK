@@ -56,48 +56,85 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   }, [onLoggedOut]);
 
   return (
-    <div className="zv-shell-app">
-      <div className="zv-topbar">
-        <div className="zv-topbar-marke">
-          <strong>Zimmerakte</strong>
-          {mandant && (
-            <span>
-              <ITraeger style={{ verticalAlign: "-3px", marginRight: 4 }} />
-              {mandant.name}
-            </span>
-          )}
+    <div className="zv-app-layout">
+      {/* Nur ab einer bestimmten Breite sichtbar (app.css) -- auf dem Handy
+          uebernimmt weiterhin .zv-tabbar-app ganz unten, siehe dort fuer die
+          Begruendung (kein position:fixed, echte Mobilbrowser-Tests). */}
+      <aside className="zv-sidebar">
+        <div className="zv-sidebar-brand">
+          <span className="zv-brand-mark">ZA</span>
+          <div className="zv-brand-text">
+            <strong>Zimmerakte</strong>
+            {mandant && <span>{mandant.name}</span>}
+          </div>
         </div>
-        <div className="zv-topbar-aktionen">
+
+        <nav className="zv-sidebar-nav">
+          {REITER.map(({ wert, label, icon: Icon }) => (
+            <button
+              key={wert}
+              className={tab === wert ? "active" : ""}
+              onClick={() => setTab(wert)}
+              aria-current={tab === wert ? "page" : undefined}
+            >
+              <Icon />
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="zv-sidebar-foot">
           <ThemeToggle />
-          <button className="zv-btn zv-btn-still zv-btn-klein" onClick={logout}>
+          <button className="zv-btn zv-btn-still zv-btn-klein zv-btn-block" onClick={logout}>
             <IAbmelden />
             Abmelden
           </button>
         </div>
-      </div>
+      </aside>
 
-      <div className="zv-tabbar zv-tabbar-app">
-        {REITER.map(({ wert, label, icon: Icon }) => (
-          <button
-            key={wert}
-            className={tab === wert ? "active" : ""}
-            onClick={() => setTab(wert)}
-            aria-current={tab === wert ? "page" : undefined}
-          >
-            <Icon />
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className="zv-shell-app">
+        <div className="zv-topbar">
+          <div className="zv-topbar-marke">
+            <strong>Zimmerakte</strong>
+            {mandant && (
+              <span>
+                <ITraeger style={{ verticalAlign: "-3px", marginRight: 4 }} />
+                {mandant.name}
+              </span>
+            )}
+          </div>
+          <div className="zv-topbar-aktionen">
+            <ThemeToggle />
+            <button className="zv-btn zv-btn-still zv-btn-klein" onClick={logout}>
+              <IAbmelden />
+              Abmelden
+            </button>
+          </div>
+        </div>
 
-      <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
-        {tab === "zimmer" && <Zimmer />}
-        {tab === "klienten" && <Klienten />}
-        {tab === "kassenbuch" && <Kassenbuch />}
-        {tab === "uebersicht" && <Uebersicht />}
-        {tab === "einstellungen" && (
-          <Einstellungen mandant={mandant} onMandantAktualisiert={setMandant} />
-        )}
+        <div className="zv-tabbar zv-tabbar-app">
+          {REITER.map(({ wert, label, icon: Icon }) => (
+            <button
+              key={wert}
+              className={tab === wert ? "active" : ""}
+              onClick={() => setTab(wert)}
+              aria-current={tab === wert ? "page" : undefined}
+            >
+              <Icon />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
+          {tab === "zimmer" && <Zimmer />}
+          {tab === "klienten" && <Klienten />}
+          {tab === "kassenbuch" && <Kassenbuch />}
+          {tab === "uebersicht" && <Uebersicht />}
+          {tab === "einstellungen" && (
+            <Einstellungen mandant={mandant} onMandantAktualisiert={setMandant} />
+          )}
+        </div>
       </div>
     </div>
   );

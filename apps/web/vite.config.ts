@@ -27,14 +27,14 @@ export default defineConfig({
         short_name: "Zimmerakte",
         description: "Verwaltung für Betreutes Wohnen",
         lang: "de",
-        // Standard-Markenfarbe (Palette "Petrol", siehe PASTELL_PALETTEN in
+        // Standard-Markenfarbe (Palette "DRK Rot", siehe PASTELL_PALETTEN in
         // packages/shared). Diese beiden Werte sind zwangslaeufig
         // BAUZEITLICH und damit NICHT mandantenindividuell: das Manifest
         // wird einmal gebaut und von allen Traegern geteilt. Der
         // Startbildschirm und der Splash zeigen deshalb fuer alle dieselbe
         // Farbe -- eingefaerbt ist erst die laufende Anwendung. Als bewusste
         // Grenze in der README vermerkt.
-        theme_color: "#5ec4c0",
+        theme_color: "#e3000f",
         background_color: "#fbfbfc",
         display: "standalone",
         start_url: "/",

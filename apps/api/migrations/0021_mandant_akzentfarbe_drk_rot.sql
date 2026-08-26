@@ -1,0 +1,11 @@
+-- Designanpassung: die Vorgabefarbe fuer neu angelegte Mandanten wechselt
+-- von "Petrol" (#5ec4c0, Platzhalter aus Phase 7) auf "DRK Rot" (#e3000f)
+-- -- die tatsaechliche Hausfarbe des Traegers, nicht mehr ein Platzhalter.
+-- Siehe PASTELL_PALETTEN in packages/shared fuer die dazugehoerige
+-- Aenderung im Farbwaehler.
+--
+-- Bewusst NUR der Spaltendefault, keine Aktualisierung bestehender Zeilen:
+-- ein Traeger, der bereits eine eigene Farbe gewaehlt (oder den alten
+-- Standard behalten) hat, soll dadurch nicht unbemerkt umgefaerbt werden.
+-- Der CHECK aus Migration 0019 gilt unveraendert weiter.
+ALTER TABLE mandant ALTER COLUMN akzentfarbe SET DEFAULT '#e3000f';

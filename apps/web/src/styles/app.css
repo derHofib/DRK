@@ -46,6 +46,129 @@
 }
 
 /* ==================================================================
+   App-Rahmen: Sidebar (Desktop) + .zv-shell-app (Rest)
+   ==================================================================
+   .zv-app-layout ist ab hier die eigentliche Fensteraufteilung: Sidebar
+   links, .zv-shell-app (Kopfzeile/Reiterleiste/Inhalt aus Shell.tsx) nimmt
+   den Rest. Auf dem Handy verschwindet die Sidebar komplett (display:none
+   in der Mobil-Query unten) -- dort uebernimmt .zv-tabbar-app unveraendert,
+   siehe deren Kommentar weiter unten fuer den Grund (kein position:fixed).
+   .zv-topbar und .zv-tabbar-app werden deshalb hier per Default (Desktop)
+   ausgeblendet und erst in der Mobil-Query wieder eingeblendet -- ihre
+   eigentlichen Regeln bleiben dabei unangetastet. */
+.zv-app-layout {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.zv-shell-app {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-shell-app > .zv-topbar,
+.zv-shell-app > .zv-tabbar.zv-tabbar-app {
+  display: none;
+}
+
+.zv-sidebar {
+  width: 240px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+  padding: var(--zv-space-5) var(--zv-space-4);
+  background: var(--zv-surface);
+  border-right: 1px solid var(--zv-border);
+}
+
+.zv-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0 var(--zv-space-1);
+}
+
+.zv-brand-mark {
+  flex: none;
+  height: 34px;
+  padding: 0 var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent);
+  color: var(--zv-accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--zv-weight-semibold);
+  font-size: var(--zv-text-s);
+  letter-spacing: 0.02em;
+}
+
+.zv-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.zv-brand-text strong {
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.zv-brand-text span {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-sidebar-nav button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-s);
+  border: none;
+  background: none;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-sidebar-nav button:hover {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-sidebar-nav button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+}
+
+.zv-sidebar-foot {
+  margin-top: auto;
+  padding-top: var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+/* ==================================================================
    Karten
    ================================================================== */
 .zv-card {
@@ -796,6 +919,18 @@
    die Klientenakte und die Einstellungen haben eine eigene, zweite
    .zv-tabbar (Reiter innerhalb der Seite), die normal oben bleiben soll. */
 @media (max-width: 640px) {
+  /* Die Desktop-Sidebar verschwindet komplett -- .zv-topbar und
+     .zv-tabbar-app (per Default oben ausgeblendet, siehe
+     "App-Rahmen: Sidebar (Desktop)") uebernehmen wieder wie eh und je. */
+  .zv-sidebar {
+    display: none;
+  }
+
+  .zv-shell-app > .zv-topbar,
+  .zv-shell-app > .zv-tabbar.zv-tabbar-app {
+    display: flex;
+  }
+
   .zv-shell-app {
     display: flex;
     flex-direction: column;

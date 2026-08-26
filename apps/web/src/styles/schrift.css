@@ -1,29 +1,41 @@
 /*
- * Inter, selbst ausgeliefert -- nur das Latin-Subset.
+ * Source Sans 3 (Fliesstext/Ueberschriften) + IBM Plex Mono (Zahlen,
+ * Aktenzeichen), beide selbst ausgeliefert -- nur das Latin-Subset.
  *
  * Bewusst kein Google-Fonts-CDN: das ist in Deutschland abgemahnt worden
  * (LG Muenchen I, 3 O 17493/20), und bei einer Anwendung mit Klientendaten
  * ist ein Drittanbieter-Abruf beim Seitenaufbau nicht verhandelbar. Bewusst
- * auch keine per Hand abgelegte Binaerdatei: so haengt die Schriftversion
- * an der pnpm-lock.yaml statt an einem Download von irgendwann.
+ * auch keine per Hand abgelegte Binaerdatei: so haengt die Schriftversion an
+ * der pnpm-lock.yaml statt an einem Download von irgendwann (siehe
+ * @fontsource-variable/source-sans-3, @fontsource/ibm-plex-mono).
  *
- * Bewusst diese eine Regel von Hand statt eines Imports von
- * "@fontsource-variable/inter": dessen index.css bringt zusaetzlich
- * Kyrillisch, Griechisch und Vietnamesisch mit. Deren Dateien wuerde zwar
- * kein deutschsprachiger Browser laden (jede @font-face-Regel hat ihre
- * unicode-range), aber sie landeten alle im Bundle und damit im
- * PWA-Precache -- rund 300 kB, die offline mitgeschleppt wuerden, ohne je
- * gebraucht zu werden. Ein per-Subset-CSS liefert das Paket in 5.3.0 nicht.
+ * Bewusst diese Regeln von Hand statt der Paket-eigenen index.css: die
+ * bringt zusaetzlich Kyrillisch, Griechisch und Vietnamesisch mit. Deren
+ * Dateien wuerde zwar kein deutschsprachiger Browser laden (jede
+ * @font-face-Regel hat ihre unicode-range), aber sie landeten alle im
+ * Bundle und damit im PWA-Precache, ohne je gebraucht zu werden.
  *
- * unicode-range woertlich aus dem Paket uebernommen (wght.css), damit der
- * Browser dieselben Zeichen abdeckt wie dort vorgesehen.
+ * unicode-range woertlich aus den Paketen uebernommen (wght.css / 400.css),
+ * damit der Browser dieselben Zeichen abdeckt wie dort vorgesehen -- deckt
+ * insbesondere die deutschen Umlaute und ß ab (U+0000-00FF).
  */
 @font-face {
-  font-family: "Inter Variable";
+  font-family: "Source Sans 3 Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 200 900;
+  src: url("@fontsource-variable/source-sans-3/files/source-sans-3-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
     U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }

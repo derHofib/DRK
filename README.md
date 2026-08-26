@@ -325,7 +325,7 @@ nicht geschätzt):
 - **Die App-Icons und `manifest.theme_color` sind bauzeitlich und damit
   nicht mandantenindividuell.** Das Manifest wird einmal gebaut und von
   allen Trägern geteilt — Startbildschirm und Splash zeigen für alle
-  dieselbe Standardfarbe (Petrol). Eingefärbt ist erst die laufende
+  dieselbe Standardfarbe (DRK Rot). Eingefärbt ist erst die laufende
   Anwendung. Pro Träger eigene Icons bräuchte einen Build je Mandant oder
   ein serverseitig erzeugtes Manifest.
 - **Die Dockerfiles wurden nie in dieser Entwicklungsumgebung selbst
