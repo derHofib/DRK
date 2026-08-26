@@ -125,8 +125,15 @@
   --zv-tint-l: calc(var(--zv-accent-c) * 0.075);
   --zv-tint-d: calc(var(--zv-accent-c) * 0.13);
 
+  /*
+   * Hell bewusst OHNE Tint, anders als die uebrigen Neutraltoene hier:
+   * bei kraeftiger Buntheit (z.B. DRK-Rot) faerbte der Seitenhintergrund
+   * sonst spuerbar rosa ein -- Karten grenzen sich ueber Rand/Schatten ab
+   * (siehe .zv-card), nicht ueber einen Helligkeitsunterschied zum
+   * Hintergrund, daher kostet reines Weiss hier nichts an Kontur.
+   */
   --zv-bg: light-dark(
-    oklch(0.985 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(1 0 0),
     oklch(0.185 var(--zv-tint-d) var(--zv-accent-h))
   );
   --zv-surface: light-dark(oklch(1 0 0), oklch(0.225 var(--zv-tint-d) var(--zv-accent-h)));
