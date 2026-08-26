@@ -13,8 +13,7 @@
  * Erwartet einen laufenden Vorschauserver auf $BASIS_URL (Standard 4173).
  */
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
-import { globSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 
 /*
@@ -45,6 +44,24 @@ function ladePlaywright() {
 const { chromium } = ladePlaywright();
 
 /**
+ * Sucht die Chromium-Ordner unter /opt/pw-browsers von Hand statt ueber
+ * fs.globSync: das gibt es im "node:fs"-Modul erst seit Node 22, die CI
+ * (siehe ci.yml) laeuft aber bewusst auf Node 20 (CLAUDE.md: "Node >= 20").
+ * Ein statischer Import einer fehlenden Named-Export bricht den ganzen
+ * Skriptstart mit einem SyntaxError ab, noch bevor starteBrowser() ueberhaupt
+ * laeuft -- deshalb faellt das nicht erst beim Aufruf auf, sondern sofort.
+ */
+function chromiumOrdnerKandidaten(basisPfad) {
+  try {
+    return readdirSync(basisPfad)
+      .filter((name) => name.startsWith("chromium-"))
+      .map((name) => `${basisPfad}/${name}/chrome-linux/chrome`);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Startet Chromium und kommt dabei mit beiden Faellen zurecht:
  *  - CI: `playwright install chromium` hat den passenden Build geladen,
  *    der Normalweg funktioniert.
@@ -59,7 +76,7 @@ async function starteBrowser() {
   } catch (fehler) {
     const kandidaten = [
       process.env.CHROMIUM_PFAD,
-      ...globSync("/opt/pw-browsers/chromium-*/chrome-linux/chrome"),
+      ...chromiumOrdnerKandidaten("/opt/pw-browsers"),
       "/opt/pw-browsers/chromium/chrome-linux/chrome",
     ].filter(Boolean);
     for (const executablePath of kandidaten) {

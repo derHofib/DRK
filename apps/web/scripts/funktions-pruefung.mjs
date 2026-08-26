@@ -18,8 +18,7 @@
  *   node scripts/funktions-pruefung.mjs
  */
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
-import { globSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 const require = createRequire(import.meta.url);
 function ladePlaywright() {
   for (const pfad of [process.env.PLAYWRIGHT_PFAD, "playwright",
@@ -29,6 +28,23 @@ function ladePlaywright() {
   throw new Error("Playwright nicht gefunden -- global installieren oder PLAYWRIGHT_PFAD setzen.");
 }
 const { chromium } = ladePlaywright();
+
+/**
+ * Sucht die Chromium-Ordner unter /opt/pw-browsers von Hand statt ueber
+ * fs.globSync: das gibt es im "node:fs"-Modul erst seit Node 22. Zwar
+ * laeuft dieses Skript nicht in der CI, aber lokal reicht schon ein aelterer
+ * Node darunter, um denselben SyntaxError beim Skriptstart auszuloesen wie
+ * bei design-pruefung.mjs -- dieselbe Loesung.
+ */
+function chromiumOrdnerKandidaten(basisPfad) {
+  try {
+    return readdirSync(basisPfad)
+      .filter((name) => name.startsWith("chromium-"))
+      .map((name) => `${basisPfad}/${name}/chrome-linux/chrome`);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Startet Chromium und kommt dabei mit beiden Faellen zurecht:
@@ -45,7 +61,7 @@ async function starteBrowser() {
   } catch (fehler) {
     const kandidaten = [
       process.env.CHROMIUM_PFAD,
-      ...globSync("/opt/pw-browsers/chromium-*/chrome-linux/chrome"),
+      ...chromiumOrdnerKandidaten("/opt/pw-browsers"),
       "/opt/pw-browsers/chromium/chrome-linux/chrome",
     ].filter(Boolean);
     for (const executablePath of kandidaten) {
