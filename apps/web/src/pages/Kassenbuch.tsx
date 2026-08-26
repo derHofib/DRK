@@ -16,15 +16,16 @@ import {
   ISpeichern,
   IStornieren,
   IUnterschrift,
+  IVor,
+  IZurueckPfeil,
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
 import { formatBetrag } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
 
-function aktuelleIsoWoche(): { jahr: number; woche: number } {
-  const heute = new Date();
-  const d = new Date(Date.UTC(heute.getFullYear(), heute.getMonth(), heute.getDate()));
+function isoWocheVon(datum: Date): { jahr: number; woche: number } {
+  const d = new Date(Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()));
   const tagNr = (d.getUTCDay() + 6) % 7;
   d.setUTCDate(d.getUTCDate() - tagNr + 3);
   const ersterDonnerstag = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
@@ -32,6 +33,29 @@ function aktuelleIsoWoche(): { jahr: number; woche: number } {
   ersterDonnerstag.setUTCDate(ersterDonnerstag.getUTCDate() - ersterTagNr + 3);
   const woche = 1 + Math.round((d.getTime() - ersterDonnerstag.getTime()) / (7 * 24 * 3600 * 1000));
   return { jahr: d.getUTCFullYear(), woche };
+}
+
+function aktuelleIsoWoche(): { jahr: number; woche: number } {
+  return isoWocheVon(new Date());
+}
+
+// Der 28. Dezember liegt kalendarisch immer in der letzten ISO-Kalenderwoche
+// des Jahres (Definition der ISO-8601-Woche) -- daran laesst sich ablesen, ob
+// ein Jahr 52 oder 53 Wochen hat, ohne das selbst nachzurechnen.
+function isoWochenImJahr(jahr: number): number {
+  return isoWocheVon(new Date(jahr, 11, 28)).woche;
+}
+
+// Montag der gegebenen ISO-Woche, um darauf 7 Tage auf-/abzurechnen und ueber
+// isoWocheVon() das Jahr korrekt mitzuverschieben (Jahreswechsel bei KW 1/52/53).
+function montagDerIsoWoche(jahr: number, woche: number): Date {
+  const jan4 = new Date(Date.UTC(jahr, 0, 4));
+  const jan4TagNr = (jan4.getUTCDay() + 6) % 7;
+  const montagWoche1 = new Date(jan4);
+  montagWoche1.setUTCDate(jan4.getUTCDate() - jan4TagNr);
+  const montag = new Date(montagWoche1);
+  montag.setUTCDate(montagWoche1.getUTCDate() + (woche - 1) * 7);
+  return montag;
 }
 
 export function Kassenbuch() {
@@ -71,6 +95,20 @@ export function Kassenbuch() {
     ladeUebersicht(uebersichtJahr, uebersichtWoche);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uebersichtJahr, uebersichtWoche]);
+
+  function wocheVerschieben(deltaWochen: number) {
+    const montag = montagDerIsoWoche(uebersichtJahr, uebersichtWoche);
+    montag.setUTCDate(montag.getUTCDate() + deltaWochen * 7);
+    const naechste = isoWocheVon(montag);
+    setUebersichtJahr(naechste.jahr);
+    setUebersichtWoche(naechste.woche);
+  }
+
+  // Das Jahr-Select zeigt immer das aktuell gewaehlte Jahr plus je zwei
+  // Nachbarjahre -- so bleibt der gewaehlte Wert nach dem Verschieben ueber
+  // eine Jahresgrenze hinweg immer eine gueltige Option in der Liste.
+  const jahrOptionen = [-2, -1, 0, 1, 2].map((delta) => uebersichtJahr + delta);
+  const wochenOptionen = Array.from({ length: isoWochenImJahr(uebersichtJahr) }, (_, i) => i + 1);
 
   function formularOeffnenFuer(klientId: string) {
     setVorbelegung({ klientId, isoJahr: uebersichtJahr, isoWoche: uebersichtWoche });
@@ -171,22 +209,50 @@ export function Kassenbuch() {
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h2 style={{ fontSize: 15, margin: 0 }}>HZL-Wochenübersicht</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              type="number"
-              value={uebersichtJahr}
-              onChange={(e) => setUebersichtJahr(Number(e.target.value))}
-              style={{ width: 70 }}
-            />
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <button
+              type="button"
+              className="zv-icon-btn"
+              aria-label="Vorherige Kalenderwoche"
+              onClick={() => wocheVerschieben(-1)}
+            >
+              <IZurueckPfeil />
+            </button>
             <span className="zv-sub-inline">KW</span>
-            <input
-              type="number"
-              min={1}
-              max={53}
+            <select
+              aria-label="Kalenderwoche"
               value={uebersichtWoche}
               onChange={(e) => setUebersichtWoche(Number(e.target.value))}
-              style={{ width: 55 }}
-            />
+            >
+              {wochenOptionen.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Jahr"
+              value={uebersichtJahr}
+              onChange={(e) => {
+                const neuesJahr = Number(e.target.value);
+                setUebersichtJahr(neuesJahr);
+                setUebersichtWoche((w) => Math.min(w, isoWochenImJahr(neuesJahr)));
+              }}
+            >
+              {jahrOptionen.map((j) => (
+                <option key={j} value={j}>
+                  {j}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="zv-icon-btn"
+              aria-label="Naechste Kalenderwoche"
+              onClick={() => wocheVerschieben(1)}
+            >
+              <IVor />
+            </button>
           </div>
         </div>
 
