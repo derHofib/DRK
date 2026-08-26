@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, WochenuebersichtEintragDto } from "@zimmerakte/shared";
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -259,29 +259,33 @@ export function Kassenbuch() {
         {uebersicht.length === 0 ? (
           <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
         ) : (
-          <div className="zv-karten-liste">
+          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1.3fr" } as CSSProperties}>
+            <div className="zv-liste-kopf">
+              <span>Klient</span>
+              <span>Status</span>
+              <span>Betrag</span>
+              <span></span>
+            </div>
             {uebersicht.map((e) => (
               <div key={e.klientId} className="zv-info-karte">
-                <div className="zv-info-karte-kopf">
-                  <span className="zv-info-karte-titel">{e.klientName}</span>
+                <span className="zv-liste-zelle-titel">{e.klientName}</span>
+                <span className="zv-liste-zelle" data-label="Status">
                   <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
                     {e.bezahlt ? <ISErledigt /> : <ISOffen />}
                     {e.bezahlt ? "Bezahlt" : "Offen"}
                   </span>
-                </div>
-                <div className="zv-info-karte-felder">
-                  <span>
-                    Betrag <strong className="zv-mono">{e.betragCent !== null ? formatBetrag(e.betragCent) : "–"}</strong>
-                  </span>
-                </div>
-                {!e.bezahlt && (
-                  <div className="zv-info-karte-fuss">
+                </span>
+                <span className="zv-liste-zelle" data-label="Betrag">
+                  <strong className="zv-mono">{e.betragCent !== null ? formatBetrag(e.betragCent) : "–"}</strong>
+                </span>
+                <span className={`zv-liste-zelle-aktionen${e.bezahlt ? " zv-liste-zelle-aktionen-leer" : ""}`}>
+                  {!e.bezahlt && (
                     <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
                       <IAuszahlen />
                       Jetzt auszahlen
                     </button>
-                  </div>
-                )}
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -402,68 +406,74 @@ export function Kassenbuch() {
       {buchungen.length === 0 ? (
         <Leerzustand icon={ILeerKassenbuch}>Noch keine Buchungen erfasst.</Leerzustand>
       ) : (
-        <div className="zv-karten-liste">
+        <div
+          className="zv-karten-liste"
+          style={{ "--zv-liste-spalten": "1.3fr 1fr 1fr 1.6fr 1.3fr 1fr 1.6fr" } as CSSProperties}
+        >
+          <div className="zv-liste-kopf">
+            <span>Klient</span>
+            <span>Datum</span>
+            <span>Betrag</span>
+            <span>Zweck</span>
+            <span>Typ</span>
+            <span>Status</span>
+            <span></span>
+          </div>
           {buchungen.map((b) => (
             <div key={b.id} className="zv-info-karte">
-              <div className="zv-info-karte-kopf">
-                <span className="zv-info-karte-titel">{b.klientName}</span>
-                <span
+              <span className="zv-liste-zelle-titel">{b.klientName}</span>
+              <span className="zv-liste-zelle" data-label="Datum">
+                <strong>{b.datum}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Betrag">
+                <strong
                   className="zv-mono"
-                  style={{
-                    fontWeight: "var(--zv-weight-semibold)",
-                    color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)",
-                  }}
+                  style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}
                 >
                   {formatBetrag(b.betragCent)}
-                </span>
-              </div>
-              <div className="zv-info-karte-felder">
-                <span>
-                  Datum <strong>{b.datum}</strong>
-                </span>
-                <span>
-                  Zweck <strong>{b.verwendungszweck}</strong>
-                </span>
-                <span>
-                  Typ{" "}
-                  <strong>
-                    {KASSENBUCHUNG_TYP_LABEL[b.typ]}
-                    {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
-                  </strong>
-                </span>
-                <span>
-                  {b.storniert ? (
-                    <span className="zv-pill zv-pill-vergeben">
-                      <ISStorniert />
-                      Storniert
-                    </span>
-                  ) : (
-                    <span className="zv-pill zv-pill-ok">
-                      <ISErledigt />
-                      Aktiv
-                    </span>
-                  )}
-                </span>
-              </div>
+                </strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Zweck">
+                <strong>{b.verwendungszweck}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Typ">
+                <strong>
+                  {KASSENBUCHUNG_TYP_LABEL[b.typ]}
+                  {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
+                </strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
+                {b.storniert ? (
+                  <span className="zv-pill zv-pill-vergeben">
+                    <ISStorniert />
+                    Storniert
+                  </span>
+                ) : (
+                  <span className="zv-pill zv-pill-ok">
+                    <ISErledigt />
+                    Aktiv
+                  </span>
+                )}
+              </span>
+              <span
+                className={`zv-liste-zelle-aktionen${!b.hatUnterschrift && b.storniert ? " zv-liste-zelle-aktionen-leer" : ""}`}
+              >
+                {b.hatUnterschrift && (
+                  <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
+                    <IUnterschrift />
+                    Unterschrift
+                  </button>
+                )}
+                {!b.storniert && (
+                  <button className="zv-link-btn" onClick={() => stornieren(b)}>
+                    <IStornieren />
+                    Stornieren
+                  </button>
+                )}
+              </span>
               {offeneUnterschrift?.buchungId === b.id && (
-                <div style={{ marginTop: "var(--zv-space-2)" }}>
+                <div style={{ gridColumn: "1 / -1", marginTop: "var(--zv-space-2)" }}>
                   <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
-                </div>
-              )}
-              {(b.hatUnterschrift || !b.storniert) && (
-                <div className="zv-info-karte-fuss">
-                  {b.hatUnterschrift && (
-                    <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
-                      <IUnterschrift />
-                      Unterschrift
-                    </button>
-                  )}
-                  {!b.storniert && (
-                    <button className="zv-link-btn" onClick={() => stornieren(b)}>
-                      <IStornieren />
-                      Stornieren
-                    </button>
-                  )}
                 </div>
               )}
             </div>

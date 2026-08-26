@@ -71,7 +71,15 @@
     gap: var(--zv-space-5);
   }
 
+  /* Volle Breite, solange kein Detail offen ist -- schmal wird sie erst,
+     sobald tatsaechlich ein Panel danebensteht (zv-detail-aktiv, siehe
+     Klienten.tsx). Sonst quetscht sich die Liste dauerhaft auf 340px, auch
+     wenn der ganze restliche Platz ungenutzt bleibt. */
   .zv-master-liste {
+    flex: 1 1 auto;
+  }
+
+  .zv-master-detail.zv-detail-aktiv .zv-master-liste {
     flex: 0 0 340px;
   }
 
@@ -773,26 +781,68 @@
 }
 
 /* ==================================================================
-   Infokarten -- ersetzen .zv-table dort, wo Zeilen zu viele Spalten fuer
-   ein schmales Handydisplay haben (Klienten, Kassenbuch). Bewusst auf
-   BEIDEN Geraetegroessen gleich (siehe .zv-room-card oben: dasselbe
-   Vorbild), nicht nur mobil -- eine Karte pro Datensatz liest sich auch am
-   Desktop leichter als eine breite Tabelle mit vielen Spalten.
+   Moderne Liste (Office-Ansicht) -- ersetzt .zv-table dort, wo eine Zeile
+   zu viele Spalten fuer eine schmale Tabelle haette (Klienten, Kassenbuch,
+   Mitarbeitende). Das hier ist bewusst die DESKTOP-Grundform: EIN
+   umrandeter Container mit Kopfzeile, echte ausgerichtete Spalten
+   (CSS-Grid, --zv-liste-spalten wird je Seite inline gesetzt) statt
+   umbrechender Fliesstext-Felder -- so stehen "Amt", "HZL" etc. bei jedem
+   Datensatz exakt untereinander, wie man es von einer Tabelle erwartet.
+   Auf dem Handy (Mobil-Query weiter unten) wird pro Zeile wieder eine
+   einzelne Karte daraus: Spalten nebeneinander ergeben auf einem schmalen
+   Bildschirm keinen Sinn, dort traegt jede Zelle ihr Label ueber
+   "data-label" und steht gestapelt untereinander. App-Ansicht und
+   Office-Ansicht duerfen hier bewusst auseinanderlaufen.
    ================================================================== */
 .zv-karten-liste {
-  display: flex;
-  flex-direction: column;
-  gap: var(--zv-space-3);
-}
-
-.zv-info-karte {
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-m);
   box-shadow: var(--zv-shadow-1);
-  padding: var(--zv-space-4);
-  border-left: 3px solid var(--zv-accent-soft-strong);
-  transition: box-shadow var(--zv-transition-base), transform var(--zv-transition-base);
+  overflow: hidden;
+}
+
+.zv-liste-kopf {
+  display: grid;
+  grid-template-columns: var(--zv-liste-spalten);
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  background: var(--zv-surface-2);
+  border-bottom: 1px solid var(--zv-border);
+  /* Unsichtbarer, aber gleich breiter linker Rand wie .zv-info-karte (dort
+     als Akzentkante) -- sonst haben Kopf- und Datenzeile bei box-sizing:
+     border-box unterschiedlich breite Innenflaechen und die Spalten
+     verschieben sich um ein paar Pixel gegeneinander. */
+  border-left: 3px solid transparent;
+}
+
+.zv-liste-kopf span {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--zv-text-muted);
+  /* Ohne das erzwingt laengerer Kopfzeilentext (z.B. "Aktenzeichen") eine
+     Mindestbreite nach Inhalt und sprengt die fr-Aufteilung der Spalte --
+     ein bekannter CSS-Grid-Stolperstein (Grid-Items haben standardmaessig
+     min-width:auto statt 0). Dieselbe Zeile steht deshalb auch bei
+     .zv-liste-zelle-titel und .zv-liste-zelle weiter unten. */
+  min-width: 0;
+}
+
+.zv-info-karte {
+  display: grid;
+  grid-template-columns: var(--zv-liste-spalten);
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border-bottom: 1px solid var(--zv-border);
+  border-left: 3px solid transparent;
+  transition: background var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-info-karte:last-child {
+  border-bottom: none;
 }
 
 .zv-info-karte-klickbar {
@@ -800,54 +850,41 @@
 }
 
 .zv-info-karte-klickbar:hover {
-  box-shadow: var(--zv-shadow-2);
-  transform: translateY(-1px);
+  background: var(--zv-surface-3);
 }
 
-/* Hebt am Desktop die gerade im Panel daneben geoeffnete Karte hervor --
+/* Hebt am Desktop die gerade im Panel daneben geoeffnete Zeile hervor --
    ohne das waere in der Master-Detail-Ansicht nicht erkennbar, welche Zeile
    der Liste zum offenen Detail gehoert. */
 .zv-info-karte-aktiv {
-  border-color: var(--zv-accent);
-  border-left-color: var(--zv-accent);
   background: var(--zv-accent-soft);
+  border-left-color: var(--zv-accent);
 }
 
-.zv-info-karte-kopf {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: var(--zv-space-2);
-  margin-bottom: var(--zv-space-2);
-}
-
-.zv-info-karte-titel {
+.zv-liste-zelle-titel {
   font-size: var(--zv-text-l);
   font-weight: var(--zv-weight-semibold);
+  min-width: 0;
 }
 
-.zv-info-karte-felder {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zv-space-1) var(--zv-space-5);
+.zv-liste-zelle {
   font-size: var(--zv-text-s);
   color: var(--zv-text-muted);
+  min-width: 0;
 }
 
-.zv-info-karte-felder strong {
+.zv-liste-zelle strong {
   color: var(--zv-text);
   font-weight: var(--zv-weight-medium);
 }
 
-.zv-info-karte-fuss {
+.zv-liste-zelle-aktionen {
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--zv-space-2) var(--zv-space-4);
-  margin-top: var(--zv-space-3);
-  padding-top: var(--zv-space-3);
-  border-top: 1px solid var(--zv-border);
+  align-items: center;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 /* ==================================================================
@@ -1214,6 +1251,74 @@
      ausgewaehlt ist, weicht die Liste komplett dem Panel -- volle Seite,
      "Zurueck"-Knopf im Panel fuehrt wieder zur Liste. */
   .zv-master-detail.zv-detail-aktiv .zv-master-liste {
+    display: none;
+  }
+
+  /* App-Ansicht: aus der durchgehenden Desktop-Liste mit ausgerichteten
+     Spalten werden wieder einzelne Karten -- Spalten nebeneinander ergeben
+     auf einem schmalen Bildschirm keinen Sinn. Jede Zelle traegt ihr Label
+     ueber "data-label" (siehe Klienten.tsx etc.) und steht gestapelt
+     untereinander, siehe Begruendung beim Basis-.zv-karten-liste weiter oben. */
+  .zv-karten-liste {
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    gap: var(--zv-space-3);
+  }
+
+  .zv-liste-kopf {
+    display: none;
+  }
+
+  .zv-info-karte {
+    display: block;
+    background: var(--zv-surface);
+    border: 1px solid var(--zv-border);
+    border-radius: var(--zv-radius-m);
+    box-shadow: var(--zv-shadow-1);
+    padding: var(--zv-space-4);
+    border-left: 3px solid var(--zv-accent-soft-strong);
+  }
+
+  .zv-info-karte-aktiv {
+    border-color: var(--zv-accent);
+  }
+
+  .zv-liste-zelle-titel {
+    display: block;
+    margin-bottom: var(--zv-space-2);
+  }
+
+  .zv-liste-zelle {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--zv-space-3);
+    padding: 3px 0;
+  }
+
+  .zv-liste-zelle[data-label]::before {
+    content: attr(data-label);
+    font-weight: var(--zv-weight-medium);
+    color: var(--zv-text-muted);
+    flex-shrink: 0;
+  }
+
+  .zv-liste-zelle-aktionen {
+    justify-content: flex-end;
+    gap: var(--zv-space-2) var(--zv-space-4);
+    margin-top: var(--zv-space-3);
+    padding-top: var(--zv-space-3);
+    border-top: 1px solid var(--zv-border);
+  }
+
+  /* Zeile ohne jede Aktion (z.B. bereits bezahlt) -- keine leere
+     Trennlinie ohne Inhalt darunter anzeigen. */
+  .zv-liste-zelle-aktionen-leer {
     display: none;
   }
 }

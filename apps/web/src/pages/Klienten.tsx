@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -121,7 +121,14 @@ export function Klienten() {
         {klienten.length === 0 ? (
           <Leerzustand icon={ILeerKlienten}>Keine Klienten erfasst.</Leerzustand>
         ) : (
-          <div className="zv-karten-liste">
+          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.3fr" } as CSSProperties}>
+            <div className="zv-liste-kopf">
+              <span>Name</span>
+              <span>Aktenzeichen</span>
+              <span>Amt</span>
+              <span>HZL</span>
+              <span>Zimmer</span>
+            </div>
             {klienten.map((k) => (
               <div
                 key={k.id}
@@ -136,10 +143,19 @@ export function Klienten() {
                 role="button"
                 tabIndex={0}
               >
-                <div className="zv-info-karte-kopf">
-                  <span className="zv-info-karte-titel">
-                    {k.vorname} {k.nachname}
-                  </span>
+                <span className="zv-liste-zelle-titel">
+                  {k.vorname} {k.nachname}
+                </span>
+                <span className="zv-liste-zelle" data-label="Aktenzeichen">
+                  <strong className="zv-mono">{k.aktenzeichen}</strong>
+                </span>
+                <span className="zv-liste-zelle" data-label="Amt">
+                  <strong>{k.amt}</strong>
+                </span>
+                <span className="zv-liste-zelle" data-label="HZL">
+                  <strong>{HZL_RHYTHMUS_LABEL[k.hzlRhythmus]}</strong>
+                </span>
+                <span className="zv-liste-zelle" data-label="Zimmer">
                   {k.aktuellesZimmer ? (
                     <span className="zv-pill zv-pill-vergeben">
                       {k.aktuellesZimmer.nummer} · {k.aktuellesZimmer.standortName}
@@ -147,18 +163,7 @@ export function Klienten() {
                   ) : (
                     <span className="zv-sub-inline">Kein Zimmer</span>
                   )}
-                </div>
-                <div className="zv-info-karte-felder">
-                  <span>
-                    Aktenzeichen <strong className="zv-mono">{k.aktenzeichen}</strong>
-                  </span>
-                  <span>
-                    Amt <strong>{k.amt}</strong>
-                  </span>
-                  <span>
-                    HZL <strong>{HZL_RHYTHMUS_LABEL[k.hzlRhythmus]}</strong>
-                  </span>
-                </div>
+                </span>
               </div>
             ))}
           </div>

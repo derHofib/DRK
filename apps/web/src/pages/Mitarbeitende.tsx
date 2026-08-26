@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { BenutzerListEintragDto, BenutzerRolle } from "@zimmerakte/shared";
 import { BENUTZER_ROLLE_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
@@ -110,21 +110,25 @@ export function Mitarbeitende() {
       {benutzer.length === 0 ? (
         <Leerzustand icon={ILeerMitarbeitende}>Keine Mitarbeitenden gefunden.</Leerzustand>
       ) : (
-        <div className="zv-karten-liste">
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.3fr 1.6fr 1fr 1fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Name</span>
+            <span>E-Mail</span>
+            <span>Rolle</span>
+            <span>Status</span>
+          </div>
           {benutzer.map((b) => (
             <div key={b.id} className="zv-info-karte">
-              <div className="zv-info-karte-kopf">
-                <span className="zv-info-karte-titel">{b.name}</span>
+              <span className="zv-liste-zelle-titel">{b.name}</span>
+              <span className="zv-liste-zelle" data-label="E-Mail">
+                <strong>{b.email}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Rolle">
                 <span className="zv-pill">{BENUTZER_ROLLE_LABEL[b.rolle]}</span>
-              </div>
-              <div className="zv-info-karte-felder">
-                <span>
-                  E-Mail <strong>{b.email}</strong>
-                </span>
-                <span>
-                  Status <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
-                </span>
-              </div>
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
+                <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
+              </span>
             </div>
           ))}
         </div>
