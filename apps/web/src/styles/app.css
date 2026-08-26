@@ -201,6 +201,49 @@
 }
 
 /* ==================================================================
+   Modal (kleines Fenster fuer Anlegen-Formulare, siehe components/Modal.tsx)
+   ================================================================== */
+.zv-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--zv-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--zv-space-4);
+  z-index: 50;
+}
+
+.zv-modal {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-3);
+  width: 440px;
+  max-width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.zv-modal-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-4) var(--zv-space-4) 0;
+}
+
+.zv-modal-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-modal-inhalt {
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-4);
+}
+
+/* ==================================================================
    Formulare
    ================================================================== */
 .zv-field {

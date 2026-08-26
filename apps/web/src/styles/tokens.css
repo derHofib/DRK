@@ -222,6 +222,10 @@
   --zv-ring: 0 0 0 3px var(--zv-accent-ring);
   --zv-ring-offset: 2px;
 
+  /* Abdunklung hinter einem Modal -- in beiden Themes gleich dunkel, damit
+     der Kontrast zur (hellen oder dunklen) Karte davor immer stimmt. */
+  --zv-scrim: oklch(0.15 0.02 var(--zv-accent-h) / 0.5);
+
   /* ------------------------------------------------------------------
      Abstand, Typografie, Icons, Bewegung
      ------------------------------------------------------------------ */

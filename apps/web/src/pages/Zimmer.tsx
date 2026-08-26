@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
-import type { BelegungsverlaufEintragDto, ZimmerListEintragDto } from "@zimmerakte/shared";
+import { FormEvent, useEffect, useState } from "react";
+import type { BelegungsverlaufEintragDto, StandortDto, ZimmerListEintragDto } from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
+import { Modal } from "../components/Modal";
 import {
   IAufklappen,
   IFehler,
   ILeerVerlauf,
   ILeerZimmer,
+  INeu,
+  ISpeichern,
   ISVergeben,
   ISZugeordnet,
   IStandort,
   IVerlauf,
   IZuklappen,
 } from "../components/icons";
+
+/** Sentinel-Wert im Standort-Select fuer "einen neuen Standort anlegen". */
+const NEUER_STANDORT = "__neu__";
 
 const STATUS_ICON = {
   vergeben: ISVergeben,
@@ -27,13 +33,68 @@ const STATUS_ICON = {
  */
 export function Zimmer() {
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [offenesZimmer, setOffenesZimmer] = useState<string | null>(null);
   const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
 
-  useEffect(() => {
+  const [formularOffen, setFormularOffen] = useState(false);
+  const [standortAuswahl, setStandortAuswahl] = useState<string>(NEUER_STANDORT);
+  const [formFehler, setFormFehler] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
+  }
+
+  function ladeStandorte() {
+    api
+      .standorteListe()
+      .then((liste) => {
+        setStandorte(liste);
+        // Gibt es schon mindestens einen Standort, ist er beim Oeffnen des
+        // Formulars vorausgewaehlt -- "neuen Standort anlegen" bleibt ueber
+        // das Select trotzdem erreichbar, ist nur nicht mehr die Vorgabe.
+        if (liste.length > 0) setStandortAuswahl(liste[0].id);
+      })
+      .catch((err) => setFehler(err.message));
+  }
+
+  useEffect(() => {
+    ladeZimmer();
+    ladeStandorte();
   }, []);
+
+  function formularOeffnen() {
+    setFormFehler(null);
+    setFormularOffen(true);
+  }
+
+  async function zimmerAnlegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    const nummer = String(form.get("nummer") ?? "").trim();
+    setFormFehler(null);
+    setWirdGespeichert(true);
+    try {
+      let standortId = standortAuswahl;
+      if (standortId === NEUER_STANDORT) {
+        const name = String(form.get("standortName") ?? "").trim();
+        const adresse = String(form.get("standortAdresse") ?? "").trim();
+        const neuerStandort = await api.standortAnlegen({ name, adresse });
+        standortId = neuerStandort.id;
+      }
+      await api.zimmerAnlegen({ standortId, nummer });
+      setFormularOffen(false);
+      ladeZimmer();
+      ladeStandorte();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Zimmer konnte nicht angelegt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
 
   async function verlaufAnzeigen(zimmerId: string) {
     if (offenesZimmer === zimmerId) {
@@ -61,6 +122,14 @@ export function Zimmer() {
           {fehler}
         </div>
       )}
+
+      <div className="zv-seiten-kopf">
+        <h2>Zimmer</h2>
+        <button className="zv-btn" onClick={formularOeffnen}>
+          <INeu />
+          Neues Zimmer
+        </button>
+      </div>
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
         <div key={standortName} style={{ marginBottom: 28 }}>
@@ -118,6 +187,64 @@ export function Zimmer() {
 
       {zimmer.length === 0 && !fehler && (
         <Leerzustand icon={ILeerZimmer}>Noch keine Zimmer angelegt.</Leerzustand>
+      )}
+
+      {formularOffen && (
+        <Modal titel="Neues Zimmer" onClose={() => setFormularOffen(false)}>
+          <form onSubmit={zimmerAnlegen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+
+            <div className="zv-field">
+              <label htmlFor="zimmer-standort">Standort</label>
+              <select
+                id="zimmer-standort"
+                value={standortAuswahl}
+                onChange={(e) => setStandortAuswahl(e.target.value)}
+              >
+                {standorte.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+                <option value={NEUER_STANDORT}>+ Neuen Standort anlegen…</option>
+              </select>
+            </div>
+
+            {standortAuswahl === NEUER_STANDORT && (
+              <div className="zv-field-row">
+                <div className="zv-field">
+                  <label htmlFor="zimmer-standort-name">Name des Standorts</label>
+                  <input id="zimmer-standort-name" name="standortName" placeholder="z. B. Wohnheim Nordstraße" required autoFocus />
+                </div>
+                <div className="zv-field">
+                  <label htmlFor="zimmer-standort-adresse">Adresse</label>
+                  <input id="zimmer-standort-adresse" name="standortAdresse" placeholder="Straße, PLZ Ort" required />
+                </div>
+              </div>
+            )}
+
+            <div className="zv-field">
+              <label htmlFor="zimmer-nummer">Zimmernummer</label>
+              <input
+                id="zimmer-nummer"
+                name="nummer"
+                placeholder="z. B. 101"
+                required
+                autoFocus={standortAuswahl !== NEUER_STANDORT}
+              />
+            </div>
+
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Zimmer anlegen"}
+            </button>
+          </form>
+        </Modal>
       )}
     </div>
   );
