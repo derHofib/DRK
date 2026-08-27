@@ -6,6 +6,7 @@ import * as QRCode from "qrcode";
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { entschluesseln, verschluesseln } from "../common/geheimnis";
+import { resetTokenHash } from "../common/reset-token";
 
 // +-1 Zeitschritt (30s) Toleranz fuer Uhrendrift zwischen Server und
 // Authenticator-App -- Standardempfehlung, kein beliebig gewaehlter Wert.
@@ -269,5 +270,52 @@ export class AuthService {
         [benutzerId]
       );
     });
+  }
+
+  /**
+   * Passwort selbst aendern, waehrend man eingeloggt ist. Verlangt das
+   * aktuelle Passwort -- ein gestohlenes, aber noch nicht abgelaufenes
+   * Zugriffstoken allein soll nicht reichen, um jemanden dauerhaft
+   * auszusperren. Betrifft ausschliesslich die eigene Zeile
+   * (requireTenantContext().benutzerId kommt nie aus dem Request-Body).
+   */
+  async passwortAendern(aktuellesPasswort: string, neuesPasswort: string): Promise<void> {
+    const { benutzerId } = requireTenantContext();
+    await this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{ passwort_hash: string }>(
+        "SELECT passwort_hash FROM benutzer WHERE id = $1",
+        [benutzerId]
+      );
+      const passwortOk = await bcrypt.compare(aktuellesPasswort, rows[0].passwort_hash);
+      if (!passwortOk) {
+        throw new UnauthorizedException("Aktuelles Passwort ist falsch.");
+      }
+      const neuerHash = await bcrypt.hash(neuesPasswort, 10);
+      await client.query("UPDATE benutzer SET passwort_hash = $1 WHERE id = $2", [neuerHash, benutzerId]);
+    });
+  }
+
+  /**
+   * Zweite Haelfte des "Leitung stoesst Reset an, sieht aber nur einen
+   * Link"-Flusses (siehe benutzer.service.ts::passwortResetErstellen).
+   * Laeuft bewusst OHNE Tenant-Kontext -- wer diesen Endpunkt aufruft, ist
+   * per Definition ausgesperrt, kann sich also nicht erst einloggen. Die
+   * eigentliche Pruefung (gueltig? nicht abgelaufen? noch nicht benutzt?)
+   * plus das Setzen des neuen Passworts laufen atomar in der SECURITY
+   * DEFINER-Funktion passwort_reset_einloesen (Migration 0025) -- hier wird
+   * nur gehasht und die Funktion aufgerufen.
+   */
+  async passwortZuruecksetzenEinloesen(token: string, neuesPasswort: string): Promise<void> {
+    const neuerHash = await bcrypt.hash(neuesPasswort, 10);
+    const erfolgreich = await this.db.withoutTenant(async (client) => {
+      const { rows } = await client.query<{ passwort_reset_einloesen: boolean }>(
+        "SELECT passwort_reset_einloesen($1, $2) AS passwort_reset_einloesen",
+        [resetTokenHash(token), neuerHash]
+      );
+      return rows[0].passwort_reset_einloesen;
+    });
+    if (!erfolgreich) {
+      throw new UnauthorizedException("Link ungültig oder abgelaufen.");
+    }
   }
 }

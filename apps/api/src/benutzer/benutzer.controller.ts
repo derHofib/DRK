@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { BenutzerService } from "./benutzer.service";
@@ -25,5 +25,10 @@ export class BenutzerController {
   @Post()
   async anlegen(@Body() body: unknown) {
     return this.benutzer.anlegen(anlegenSchema.parse(body));
+  }
+
+  @Post(":id/passwort-reset")
+  async passwortResetErstellen(@Param("id") id: string) {
+    return this.benutzer.passwortResetErstellen(id);
   }
 }

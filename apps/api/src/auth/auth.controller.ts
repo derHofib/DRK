@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
@@ -23,6 +23,16 @@ const totpVerifizierenSchema = z.object({
 
 const totpCodeSchema = z.object({
   code: z.string().min(6).max(8),
+});
+
+const passwortAendernSchema = z.object({
+  aktuellesPasswort: z.string().min(1),
+  neuesPasswort: z.string().min(8),
+});
+
+const passwortResetEinloesenSchema = z.object({
+  token: z.string().min(1),
+  neuesPasswort: z.string().min(8),
 });
 
 @Controller("auth")
@@ -71,5 +81,26 @@ export class AuthController {
     const { code } = totpCodeSchema.parse(body);
     await this.auth.deaktivieren(code);
     return { aktiviert: false };
+  }
+
+  @Throttle(RATEN_SCHRANKE)
+  @Patch("passwort")
+  @Authenticated()
+  async passwortAendern(@Body() body: unknown) {
+    const { aktuellesPasswort, neuesPasswort } = passwortAendernSchema.parse(body);
+    await this.auth.passwortAendern(aktuellesPasswort, neuesPasswort);
+    return { ok: true };
+  }
+
+  // Bewusst OHNE @Authenticated(): wer diesen Endpunkt aufruft, ist per
+  // Definition ausgesperrt und kann sich nicht erst einloggen. Der Schutz
+  // liegt im Token selbst (256 Bit, siehe common/reset-token.ts) und in der
+  // engen Raten-Schranke -- derselbe Grundsatz wie beim Login.
+  @Throttle(RATEN_SCHRANKE)
+  @Post("passwort-reset/einloesen")
+  async passwortResetEinloesen(@Body() body: unknown) {
+    const { token, neuesPasswort } = passwortResetEinloesenSchema.parse(body);
+    await this.auth.passwortZuruecksetzenEinloesen(token, neuesPasswort);
+    return { ok: true };
   }
 }

@@ -43,7 +43,9 @@ import {
   History,
   IdCard,
   Info,
+  KeyRound,
   LayoutList,
+  Link2,
   LogIn,
   LogOut,
   MapPin,
@@ -128,6 +130,8 @@ export const IStornieren = baue(Ban);
 export const IGenehmigen = baue(CircleCheck);
 export const IAblehnen = baue(CircleX);
 export const IAuszahlen = baue(HandCoins);
+export const IPasswort = baue(KeyRound);
+export const IResetLink = baue(Link2);
 export const IDokument = baue(FileText);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);

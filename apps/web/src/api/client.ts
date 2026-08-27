@@ -111,12 +111,25 @@ export const api = {
   totpDeaktivieren: (code: string) =>
     request<{ aktiviert: boolean }>("/auth/totp/deaktivieren", { method: "POST", body: JSON.stringify({ code }) }),
 
+  passwortAendern: (aktuellesPasswort: string, neuesPasswort: string) =>
+    request<{ ok: true }>("/auth/passwort", {
+      method: "PATCH",
+      body: JSON.stringify({ aktuellesPasswort, neuesPasswort }),
+    }),
+  passwortResetEinloesen: (token: string, neuesPasswort: string) =>
+    request<{ ok: true }>("/auth/passwort-reset/einloesen", {
+      method: "POST",
+      body: JSON.stringify({ token, neuesPasswort }),
+    }),
+
   eigenerMandant: () => request<MandantDto>("/mandant/me"),
   mandantAkzentfarbeSetzen: (akzentfarbe: string) =>
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ akzentfarbe }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   benutzerAnlegen: (payload: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
+  passwortResetErstellen: (benutzerId: string) =>
+    request<{ token: string; laeuftAbAm: string }>(`/benutzer/${benutzerId}/passwort-reset`, { method: "POST" }),
 
   standorteListe: () => request<StandortDto[]>("/standorte"),
   standortAnlegen: (payload: { name: string; adresse: string }) =>

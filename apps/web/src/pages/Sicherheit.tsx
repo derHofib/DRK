@@ -7,10 +7,74 @@ import {
   IBestaetigen,
   IErfolg,
   IFehler,
+  IPasswort,
   ISErledigt,
   ISOffen,
   ISicherheit,
+  ISpeichern,
 } from "../components/icons";
+
+function PasswortAendern() {
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [erfolg, setErfolg] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  async function aendern(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    setFehler(null);
+    setErfolg(null);
+    setWirdGespeichert(true);
+    try {
+      await api.passwortAendern(String(form.get("aktuellesPasswort")), String(form.get("neuesPasswort")));
+      formElement.reset();
+      setErfolg("Passwort geändert.");
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Passwort konnte nicht geändert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>
+        <IPasswort />
+        Passwort ändern
+      </h3>
+      <p className="zv-sub">Gilt nur für dein eigenes Konto.</p>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      {erfolg && (
+        <div className="zv-hinweis zv-hinweis-erfolg">
+          <IErfolg />
+          {erfolg}
+        </div>
+      )}
+
+      <form onSubmit={aendern}>
+        <div className="zv-field">
+          <label>Aktuelles Passwort</label>
+          <input name="aktuellesPasswort" type="password" autoComplete="current-password" required />
+        </div>
+        <div className="zv-field">
+          <label>Neues Passwort</label>
+          <input name="neuesPasswort" type="password" autoComplete="new-password" minLength={8} required />
+        </div>
+        <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
+          <ISpeichern />
+          {wirdGespeichert ? "Speichert…" : "Passwort ändern"}
+        </button>
+      </form>
+    </section>
+  );
+}
 
 export function Sicherheit() {
   const [aktiviert, setAktiviert] = useState<boolean | null>(null);
@@ -68,6 +132,8 @@ export function Sicherheit() {
 
   return (
     <div className="zv-card zv-card-weit">
+      <PasswortAendern />
+
       <section className="zv-einstellungen-abschnitt">
         <h3>
           <ISicherheit />

@@ -1,7 +1,13 @@
-import { ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { neuerResetToken, resetTokenHash } from "../common/reset-token";
+
+// 30 Minuten: lang genug, um den Link auf einem beliebigen Weg (Teams,
+// muendlich, ...) weiterzugeben, kurz genug, dass ein liegengelassener,
+// nicht eingeloester Link kein dauerhaftes Risiko bleibt.
+const RESET_GUELTIGKEIT_MINUTEN = 30;
 
 export interface BenutzerListEintrag {
   id: string;
@@ -71,5 +77,49 @@ export class BenutzerService {
       }
       throw err;
     }
+  }
+
+  /**
+   * "Passwort vergessen" ohne E-Mail-Versand: die Leitung stoesst das hier
+   * an, bekommt aber nur den ROHEN, einmaligen Link zurueck -- der wird
+   * nirgends gespeichert oder geloggt, nur dieser eine Rueckgabewert traegt
+   * ihn. Die betroffene Person oeffnet den Link und vergibt ihr Passwort
+   * SELBST (siehe auth.service.ts::passwortZuruecksetzenEinloesen); die
+   * Leitung erfaehrt es zu keinem Zeitpunkt.
+   */
+  async passwortResetErstellen(zielBenutzerId: string): Promise<{ token: string; laeuftAbAm: string }> {
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_BENUTZER_ANLEGEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur die Leitung darf Passwort-Reset-Links erzeugen.");
+    }
+
+    const token = neuerResetToken();
+    return this.db.withTenant(async (client) => {
+      const { rows: zielRows } = await client.query("SELECT id FROM benutzer WHERE id = $1", [zielBenutzerId]);
+      if (zielRows.length === 0) {
+        // RLS liefert hier bereits null Zeilen fuer einen fremden Mandanten
+        // -- "nicht gefunden" ist in beiden Faellen (existiert nicht /
+        // gehoert zu einem anderen Mandanten) die richtige, nichts
+        // preisgebende Antwort.
+        throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
+      }
+
+      // Ein vorheriger, noch offener Link fuer dieselbe Person wird
+      // entwertet -- sonst koennten mehrere gleichzeitig gueltige Links im
+      // Umlauf sein, und niemand wüsste mehr, welcher der aktuelle ist.
+      await client.query(
+        "UPDATE benutzer_reset_token SET eingeloest_am = now() WHERE benutzer_id = $1 AND eingeloest_am IS NULL",
+        [zielBenutzerId]
+      );
+
+      const { rows } = await client.query<{ laeuft_ab_am: string }>(
+        `INSERT INTO benutzer_reset_token (mandant_id, benutzer_id, token_hash, erstellt_von, laeuft_ab_am)
+         VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5))
+         RETURNING laeuft_ab_am`,
+        [ctx.mandantId, zielBenutzerId, resetTokenHash(token), ctx.benutzerId, RESET_GUELTIGKEIT_MINUTEN]
+      );
+
+      return { token, laeuftAbAm: rows[0].laeuft_ab_am };
+    });
   }
 }
