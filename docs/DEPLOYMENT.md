@@ -50,10 +50,18 @@ echten Umgebung stehen bleiben:
 
 | Variable | Bedeutung | Erzeugen mit |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Passwort des Postgres-Superusers `zimmerakte_admin` | `openssl rand -base64 24` |
-| `APP_DB_PASSWORD` | Passwort der eingeschränkten App-Rolle `zimmerakte_app` (die RLS tatsächlich durchsetzt) | `openssl rand -base64 24` |
+| `POSTGRES_PASSWORD` | Passwort des Postgres-Superusers `zimmerakte_admin` | `openssl rand -hex 24` |
+| `APP_DB_PASSWORD` | Passwort der eingeschränkten App-Rolle `zimmerakte_app` (die RLS tatsächlich durchsetzt) | `openssl rand -hex 24` |
 | `JWT_SECRET` | Signiert die Login-Tokens | `openssl rand -base64 32` |
 | `TOTP_ENCRYPTION_KEY` | AES-256-Schlüssel (32 Bytes, base64) zum Verschlüsseln der 2FA-Secrets in der Datenbank | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+
+Wichtig: `POSTGRES_PASSWORD` und `APP_DB_PASSWORD` landen unverändert in
+einer `postgresql://user:passwort@host/db`-Verbindungs-URL
+(`docker-compose.prod.yml`) -- **unbedingt `-hex`, nicht `-base64`**
+verwenden. Ein `/` oder `+` aus Base64 macht die URL ungültig und die
+`api` kann sich dann gar nicht mehr verbinden (`TypeError: Invalid URL`,
+bereits einmal live aufgetreten). `JWT_SECRET` und `TOTP_ENCRYPTION_KEY`
+werden nirgends in eine URL eingebettet, dort ist Base64 unproblematisch.
 
 Dazu noch ein fünfter Wert, kein Geheimnis, aber Pflicht für den
 `caddy`-Dienst (siehe Abschnitt 7):
@@ -127,6 +135,24 @@ Ohne diesen Schritt kann sich die API nicht einloggen (`api`-Container
 läuft dann in einer Restart-Schleife mit Authentifizierungsfehlern in den
 Logs). Diesen Schritt nach jedem kompletten Neuaufsetzen der Datenbank
 (z.B. nach Löschen des `zimmerakte_prod_db_data`-Volumes) wiederholen.
+
+## 5.1 Ersten Account anlegen
+
+Es gibt bewusst keinen öffentlichen Registrierungs-Endpunkt (siehe
+README, Abschnitt "Architekturentscheidungen") -- der allererste Account
+(Rolle `leitung`) für einen neuen Mandanten muss einmalig über das
+Terminal angelegt werden:
+
+```bash
+./scripts/account-anlegen.sh
+```
+
+Fragt interaktiv nach Mandant (neu oder vorhanden), E-Mail, Anzeigename,
+Rolle und Passwort (per verdeckter Eingabe, landet nirgends im
+Kommandozeilenverlauf). Für **weitere** Accounts eines Mandanten, der
+schon eine `leitung` hat, ist stattdessen die "Mitarbeitende"-Seite in
+der App der richtige Weg -- das Script ist nur für die Ersteinrichtung
+bzw. einen Notfallzugang ohne funktionierenden Login gedacht.
 
 ## 6. Prüfen, dass alles läuft
 
