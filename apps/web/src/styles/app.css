@@ -944,6 +944,43 @@
   margin: 0 0 var(--zv-space-2);
 }
 
+/* Kennzahl-Kacheln (Kassenbuch: Gesamtsaldo/Summe gefiltert) */
+.zv-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-stat-karte {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-1);
+  padding: var(--zv-space-4);
+}
+
+.zv-stat-label {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-stat-wert {
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-semibold);
+  margin: 0;
+}
+
+.zv-stat-sub {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-faint);
+  margin: var(--zv-space-1) 0 0;
+}
+
 /* Label/Wert-Raster (Klientenakte, Uebersicht) */
 .zv-datenliste {
   display: grid;

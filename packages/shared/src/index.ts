@@ -159,6 +159,7 @@ export interface KassenbuchungDto {
   storniert: boolean;
   stornoGrund: string | null;
   hatUnterschrift: boolean;
+  gebuchtVonName: string | null;
 }
 
 export interface WochenuebersichtEintragDto {

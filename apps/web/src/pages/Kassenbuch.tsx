@@ -20,7 +20,7 @@ import {
   IZurueckPfeil,
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
-import { formatBetrag } from "../format";
+import { formatBetrag, formatDatum } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
 
@@ -58,9 +58,37 @@ function montagDerIsoWoche(jahr: number, woche: number): Date {
   return montag;
 }
 
+function formatTagMonat(d: Date): string {
+  const tag = String(d.getUTCDate()).padStart(2, "0");
+  const monat = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${tag}.${monat}.`;
+}
+
+// Zeigt Wochennummer, Datumsspanne und Jahr in einem -- ersetzt zwei getrennte
+// Angaben (Zahl im Select, Jahr daneben) durch die vollstaendige, sofort
+// lesbare Spanne wie "KW 34 - 17.08.-23.08.2026".
+function formatKwSpanne(jahr: number, woche: number): string {
+  const montag = montagDerIsoWoche(jahr, woche);
+  const sonntag = new Date(montag);
+  sonntag.setUTCDate(montag.getUTCDate() + 6);
+  return `KW ${woche} - ${formatTagMonat(montag)}-${formatTagMonat(sonntag)}${sonntag.getUTCFullYear()}`;
+}
+
+// Aktiv = nicht storniert. Ein stornierter Eintrag zaehlt weder in den
+// Saldo noch in die Buchungsanzahl -- er ist rueckwirkend ungueltig, bleibt
+// aber (Bauplan Punkt 03) als Zeile in der Historie sichtbar.
+function aktive(buchungen: KassenbuchungDto[]): KassenbuchungDto[] {
+  return buchungen.filter((b) => !b.storniert);
+}
+
+function summeCent(buchungen: KassenbuchungDto[]): number {
+  return buchungen.reduce((summe, b) => summe + b.betragCent, 0);
+}
+
 export function Kassenbuch() {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
+  const [filterKlientId, setFilterKlientId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
   const initialeWoche = aktuelleIsoWoche();
@@ -197,6 +225,14 @@ export function Kassenbuch() {
     return () => URL.revokeObjectURL(url);
   }, [offeneUnterschrift]);
 
+  const bezahltAnzahl = uebersicht.filter((e) => e.bezahlt).length;
+
+  const gefilterteBuchungen = filterKlientId ? buchungen.filter((b) => b.klientId === filterKlientId) : buchungen;
+  const aktiveGesamt = aktive(buchungen);
+  const aktiveGefiltert = aktive(gefilterteBuchungen);
+  const gesamtsaldo = summeCent(aktiveGesamt);
+  const summeFilter = summeCent(aktiveGefiltert);
+
   return (
     <div>
       {fehler && (
@@ -206,94 +242,13 @@ export function Kassenbuch() {
         </div>
       )}
 
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <h2 style={{ fontSize: 15, margin: 0 }}>HZL-Wochenübersicht</h2>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <button
-              type="button"
-              className="zv-icon-btn"
-              aria-label="Vorherige Kalenderwoche"
-              onClick={() => wocheVerschieben(-1)}
-            >
-              <IZurueckPfeil />
-            </button>
-            <span className="zv-sub-inline">KW</span>
-            <select
-              aria-label="Kalenderwoche"
-              value={uebersichtWoche}
-              onChange={(e) => setUebersichtWoche(Number(e.target.value))}
-            >
-              {wochenOptionen.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Jahr"
-              value={uebersichtJahr}
-              onChange={(e) => {
-                const neuesJahr = Number(e.target.value);
-                setUebersichtJahr(neuesJahr);
-                setUebersichtWoche((w) => Math.min(w, isoWochenImJahr(neuesJahr)));
-              }}
-            >
-              {jahrOptionen.map((j) => (
-                <option key={j} value={j}>
-                  {j}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="zv-icon-btn"
-              aria-label="Naechste Kalenderwoche"
-              onClick={() => wocheVerschieben(1)}
-            >
-              <IVor />
-            </button>
-          </div>
+      <div className="zv-seiten-kopf">
+        <div>
+          <h2>Kassenbuch</h2>
+          <p className="zv-sub" style={{ margin: "2px 0 0" }}>
+            Alle Buchungen aller Klienten
+          </p>
         </div>
-
-        {uebersicht.length === 0 ? (
-          <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
-        ) : (
-          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1.3fr" } as CSSProperties}>
-            <div className="zv-liste-kopf">
-              <span>Klient</span>
-              <span>Status</span>
-              <span>Betrag</span>
-              <span></span>
-            </div>
-            {uebersicht.map((e) => (
-              <div key={e.klientId} className="zv-info-karte">
-                <span className="zv-liste-zelle-titel">{e.klientName}</span>
-                <span className="zv-liste-zelle" data-label="Status">
-                  <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
-                    {e.bezahlt ? <ISErledigt /> : <ISOffen />}
-                    {e.bezahlt ? "Bezahlt" : "Offen"}
-                  </span>
-                </span>
-                <span className="zv-liste-zelle" data-label="Betrag">
-                  <strong className="zv-mono">{e.betragCent !== null ? formatBetrag(e.betragCent) : "–"}</strong>
-                </span>
-                <span className={`zv-liste-zelle-aktionen${e.bezahlt ? " zv-liste-zelle-aktionen-leer" : ""}`}>
-                  {!e.bezahlt && (
-                    <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
-                      <IAuszahlen />
-                      Jetzt auszahlen
-                    </button>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h2 style={{ fontSize: 16, margin: 0 }}>Kassenbuch</h2>
         <button
           className="zv-btn"
           onClick={() => {
@@ -403,12 +358,131 @@ export function Kassenbuch() {
         </Modal>
       )}
 
-      {buchungen.length === 0 ? (
+      <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div>
+            <h3 style={{ fontSize: 15, margin: 0 }}>HZL-Wochenübersicht</h3>
+            {uebersicht.length > 0 && (
+              <p className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                {bezahltAnzahl} von {uebersicht.length} wöchentlichen Klient*innen für diese Woche ausgezahlt.
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <button
+              type="button"
+              className="zv-icon-btn"
+              aria-label="Vorherige Kalenderwoche"
+              onClick={() => wocheVerschieben(-1)}
+            >
+              <IZurueckPfeil />
+            </button>
+            <select
+              aria-label="Kalenderwoche"
+              value={uebersichtWoche}
+              onChange={(e) => setUebersichtWoche(Number(e.target.value))}
+            >
+              {wochenOptionen.map((w) => (
+                <option key={w} value={w}>
+                  {formatKwSpanne(uebersichtJahr, w)}
+                  {w === initialeWoche.woche && uebersichtJahr === initialeWoche.jahr ? " (aktuell)" : ""}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Jahr"
+              value={uebersichtJahr}
+              onChange={(e) => {
+                const neuesJahr = Number(e.target.value);
+                setUebersichtJahr(neuesJahr);
+                setUebersichtWoche((w) => Math.min(w, isoWochenImJahr(neuesJahr)));
+              }}
+            >
+              {jahrOptionen.map((j) => (
+                <option key={j} value={j}>
+                  {j}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="zv-icon-btn"
+              aria-label="Naechste Kalenderwoche"
+              onClick={() => wocheVerschieben(1)}
+            >
+              <IVor />
+            </button>
+          </div>
+        </div>
+
+        {uebersicht.length === 0 ? (
+          <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
+        ) : (
+          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1.6fr" } as CSSProperties}>
+            <div className="zv-liste-kopf">
+              <span>Klient</span>
+              <span>Status</span>
+              <span>Auszahlung</span>
+            </div>
+            {uebersicht.map((e) => (
+              <div key={e.klientId} className="zv-info-karte">
+                <span className="zv-liste-zelle-titel">{e.klientName}</span>
+                <span className="zv-liste-zelle" data-label="Status">
+                  <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
+                    {e.bezahlt ? <ISErledigt /> : <ISOffen />}
+                    {e.bezahlt ? "Bezahlt" : "Offen"}
+                  </span>
+                </span>
+                <span className="zv-liste-zelle" data-label="Auszahlung">
+                  {e.bezahlt ? (
+                    e.betragCent !== null && e.datum && (
+                      <span className="zv-mono">
+                        {formatBetrag(e.betragCent)} am {formatDatum(e.datum)}
+                      </span>
+                    )
+                  ) : (
+                    <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
+                      <IAuszahlen />
+                      Jetzt auszahlen
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="zv-stat-grid">
+        <div className="zv-stat-karte">
+          <p className="zv-stat-label">Gesamtsaldo alle Klienten</p>
+          <p className="zv-stat-wert">{formatBetrag(gesamtsaldo)}</p>
+          <p className="zv-stat-sub">{aktiveGesamt.length} Buchungen gesamt</p>
+        </div>
+        <div className="zv-stat-karte">
+          <p className="zv-stat-label">Summe (Filter)</p>
+          <p className="zv-stat-wert">{formatBetrag(summeFilter)}</p>
+          <p className="zv-stat-sub">{aktiveGefiltert.length} Buchungen</p>
+        </div>
+      </div>
+
+      <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
+        <select aria-label="Nach Klient filtern" value={filterKlientId} onChange={(e) => setFilterKlientId(e.target.value)}>
+          <option value="">Alle Klienten</option>
+          {klienten.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.vorname} {k.nachname}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {gefilterteBuchungen.length === 0 ? (
         <Leerzustand icon={ILeerKassenbuch}>Noch keine Buchungen erfasst.</Leerzustand>
       ) : (
         <div
           className="zv-karten-liste"
-          style={{ "--zv-liste-spalten": "1.3fr 1fr 1fr 1.6fr 1.3fr 1fr 1.6fr" } as CSSProperties}
+          style={{ "--zv-liste-spalten": "1.3fr 1fr 1fr 1.6fr 1.3fr 1.3fr 1fr 1.6fr" } as CSSProperties}
         >
           <div className="zv-liste-kopf">
             <span>Klient</span>
@@ -416,14 +490,15 @@ export function Kassenbuch() {
             <span>Betrag</span>
             <span>Zweck</span>
             <span>Typ</span>
+            <span>Mitarbeiter</span>
             <span>Status</span>
             <span></span>
           </div>
-          {buchungen.map((b) => (
+          {gefilterteBuchungen.map((b) => (
             <div key={b.id} className="zv-info-karte">
               <span className="zv-liste-zelle-titel">{b.klientName}</span>
               <span className="zv-liste-zelle" data-label="Datum">
-                <strong>{b.datum}</strong>
+                <strong>{formatDatum(b.datum)}</strong>
               </span>
               <span className="zv-liste-zelle" data-label="Betrag">
                 <strong
@@ -441,6 +516,9 @@ export function Kassenbuch() {
                   {KASSENBUCHUNG_TYP_LABEL[b.typ]}
                   {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
                 </strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Mitarbeiter">
+                {b.gebuchtVonName ?? "–"}
               </span>
               <span className="zv-liste-zelle" data-label="Status">
                 {b.storniert ? (

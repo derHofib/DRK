@@ -31,6 +31,7 @@ export interface KassenbuchungDto {
   storniert: boolean;
   stornoGrund: string | null;
   hatUnterschrift: boolean;
+  gebuchtVonName: string | null;
 }
 
 export interface WochenuebersichtEintrag {
@@ -154,10 +155,11 @@ export class KassenbuchungService {
         `
         SELECT b.id, b.klient_id, k.vorname, k.nachname, b.datum, b.betrag_cent, b.verwendungszweck,
                b.typ, b.iso_jahr, b.iso_woche, b.storniert, b.storno_grund,
-               (u.id IS NOT NULL) AS hat_unterschrift
+               (u.id IS NOT NULL) AS hat_unterschrift, mb.name AS gebucht_von_name
         FROM kassenbuchung b
         JOIN klient k ON k.id = b.klient_id
         LEFT JOIN unterschrift u ON u.kassenbuchung_id = b.id
+        LEFT JOIN benutzer mb ON mb.id = b.gebucht_von
         WHERE ${bedingungen.join(" AND ")}
         ORDER BY b.datum DESC, b.erstellt_am DESC
         `,
@@ -218,10 +220,11 @@ export class KassenbuchungService {
       `
       SELECT b.id, b.klient_id, k.vorname, k.nachname, b.datum, b.betrag_cent, b.verwendungszweck,
              b.typ, b.iso_jahr, b.iso_woche, b.storniert, b.storno_grund,
-             (u.id IS NOT NULL) AS hat_unterschrift
+             (u.id IS NOT NULL) AS hat_unterschrift, mb.name AS gebucht_von_name
       FROM kassenbuchung b
       JOIN klient k ON k.id = b.klient_id
       LEFT JOIN unterschrift u ON u.kassenbuchung_id = b.id
+      LEFT JOIN benutzer mb ON mb.id = b.gebucht_von
       WHERE b.id = $1
       `,
       [id]
@@ -244,6 +247,7 @@ function zuDto(r: any): KassenbuchungDto {
     storniert: r.storniert,
     stornoGrund: r.storno_grund,
     hatUnterschrift: r.hat_unterschrift,
+    gebuchtVonName: r.gebucht_von_name,
   };
 }
 
