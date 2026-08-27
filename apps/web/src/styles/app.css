@@ -368,6 +368,23 @@
   color: var(--zv-text-faint);
 }
 
+/* iOS Safari rendert input[type=date] (und =time) standardmaessig als
+   natives Steuerelement mit eigener Breitenberechnung, die die deklarierte
+   width:100% ignoriert -- das Feld wird dadurch breiter als sein
+   Elterncontainer und ragt ueber dessen Innenabstand hinaus (im Modal
+   "Auszug eintragen" live auf einem iPhone reproduziert: der rechte
+   Feldrand lief bis an den Bildschirmrand, waehrend der Button darunter
+   korrekt innerhalb der Modal-Polsterung blieb). "appearance: none" schaltet
+   die native Aufmachung ab und erzwingt das normale Boxmodell -- Kalender-
+   Icon und Bedienbarkeit bleiben erhalten, nur die kaputte Breitenrechnung
+   verschwindet. Chromium ist von diesem Fehler nicht betroffen, deshalb liess
+   er sich dort auch nicht nachstellen. */
+.zv-field input[type="date"],
+.zv-field input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .zv-field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
