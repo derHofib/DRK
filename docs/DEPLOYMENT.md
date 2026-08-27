@@ -136,24 +136,35 @@ läuft dann in einer Restart-Schleife mit Authentifizierungsfehlern in den
 Logs). Diesen Schritt nach jedem kompletten Neuaufsetzen der Datenbank
 (z.B. nach Löschen des `zimmerakte_prod_db_data`-Volumes) wiederholen.
 
-## 5.1 Ersten Account anlegen
+## 5.1 Mitarbeiter-Accounts über das Terminal verwalten
 
 Es gibt bewusst keinen öffentlichen Registrierungs-Endpunkt (siehe
 README, Abschnitt "Architekturentscheidungen") -- der allererste Account
 (Rolle `bereichsleitung`) für einen neuen Mandanten muss einmalig über das
-Terminal angelegt werden:
+Terminal angelegt werden. Zusätzlich deckt das Script ab, was die
+Oberfläche (noch) nicht kann: Passwort direkt setzen, 2FA im Notfall
+zurücksetzen.
 
 ```bash
 ./scripts/account-anlegen.sh
 ```
 
-Fragt interaktiv nach Mandant (neu oder vorhanden), E-Mail, Anzeigename,
-Rolle (`bereichsleitung`/`einrichtungsleitung`/`betreuer`) und Passwort
-(per verdeckter Eingabe, landet nirgends im Kommandozeilenverlauf). Für
-**weitere** Accounts eines Mandanten, der schon eine Leitung hat, ist
-stattdessen die "Mitarbeitende"-Seite in der App der richtige Weg -- das
-Script ist nur für die Ersteinrichtung bzw. einen Notfallzugang ohne
-funktionierenden Login gedacht.
+Zeigt ein Menü mit drei Punkten:
+
+- **Neuen Account anlegen** -- Mandant (neu oder vorhanden), E-Mail,
+  Anzeigename, Rolle (`bereichsleitung`/`einrichtungsleitung`/`betreuer`)
+  und Passwort (per verdeckter Eingabe, landet nirgends im
+  Kommandozeilenverlauf).
+- **Account bearbeiten** -- Mandant und Mitarbeiter aus einer Liste
+  wählen, danach: Name, E-Mail, Rolle, Aktiv/Inaktiv umschalten, Passwort
+  zurücksetzen, oder 2FA zurücksetzen (Notfall, z.B. verlorenes Handy).
+- **Accounts anzeigen** -- Übersicht aller Mitarbeitenden eines Mandanten
+  (E-Mail, Name, Rolle, Aktiv-Status, ob 2FA eingerichtet ist).
+
+Für den **täglichen Betrieb** (weitere Accounts anlegen, Rollen ändern)
+ist die "Mitarbeitende"-Seite in der App meist der bequemere Weg -- das
+Script ist vor allem für die Ersteinrichtung und für Fälle gedacht, in
+denen kein funktionierender Login mehr existiert.
 
 ## 6. Prüfen, dass alles läuft
 
