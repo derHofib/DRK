@@ -55,6 +55,13 @@ echten Umgebung stehen bleiben:
 | `JWT_SECRET` | Signiert die Login-Tokens | `openssl rand -base64 32` |
 | `TOTP_ENCRYPTION_KEY` | AES-256-Schlüssel (32 Bytes, base64) zum Verschlüsseln der 2FA-Secrets in der Datenbank | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
 
+Dazu noch ein fünfter Wert, kein Geheimnis, aber Pflicht für den
+`caddy`-Dienst (siehe Abschnitt 7):
+
+| Variable | Bedeutung |
+|---|---|
+| `ACME_EMAIL` | Kontaktadresse, die Let's Encrypt bei Problemen mit einem Zertifikat benachrichtigt |
+
 `.env.prod` sollte danach z.B. so aussehen (Werte natürlich durch eure
 eigenen ersetzen):
 
@@ -63,6 +70,7 @@ POSTGRES_PASSWORD=<zufälliger Wert>
 APP_DB_PASSWORD=<zufälliger Wert>
 JWT_SECRET=<zufälliger Wert>
 TOTP_ENCRYPTION_KEY=<zufälliger Wert, 32 Bytes base64>
+ACME_EMAIL=admin@hecaso.de
 ```
 
 Wichtig: `APP_DB_PASSWORD` ist an dieser Stelle erstmal nur der Wert, den
@@ -84,12 +92,13 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
 Das baut beide Images (`apps/api/Dockerfile`, `apps/web/Dockerfile`) lokal
-auf dem Server und startet vier Container:
+auf dem Server und startet fünf Container:
 
 - `db` -- PostgreSQL 16, Daten liegen im Docker-Volume `zimmerakte_prod_db_data`
 - `migrate` -- läuft einmalig, wendet alle Migrationen an, beendet sich dann
 - `api` -- die NestJS-API, startet erst nachdem `migrate` erfolgreich durchgelaufen ist
 - `web` -- nginx, liefert die gebaute Web-App aus und leitet `/api/*` intern an `api` weiter
+- `caddy` -- terminiert TLS für `app.hecaso.de`/`office.hecaso.de` und reicht an `web` weiter (Details in Abschnitt 7)
 
 Fortschritt verfolgen:
 
@@ -125,8 +134,9 @@ Logs). Diesen Schritt nach jedem kompletten Neuaufsetzen der Datenbank
 docker compose -f docker-compose.prod.yml ps
 ```
 
-Alle vier Container sollten `running` bzw. (bei `migrate`) `exited (0)`
-zeigen. Direkter Funktionstest ohne Reverse Proxy:
+Alle fünf Container sollten `running` bzw. (bei `migrate`) `exited (0)`
+zeigen. Direkter Funktionstest ohne Domain/TLS (funktioniert schon vor
+Schritt 7):
 
 ```bash
 curl -i http://localhost:8080/          # sollte 200 liefern (Web-App)
@@ -135,42 +145,80 @@ curl -i http://localhost:3000/mandant/me  # sollte 401 liefern (API läuft, verl
 
 Im Browser: `http://<Server-IP>:8080` aufrufen.
 
-## 7. Reverse Proxy + HTTPS (für den echten Betrieb empfohlen)
+## 7. Domain + HTTPS: app.hecaso.de und office.hecaso.de
 
-`docker-compose.prod.yml` exponiert `web` auf Port 8080 und `api` auf Port
-3000 direkt am Host, ohne TLS. Für einen öffentlich erreichbaren Server
-sollte davor ein Reverse Proxy mit HTTPS stehen; die App selbst braucht
-dafür keine Anpassung, da das Frontend die API ausschließlich relativ über
-`/api/...` anspricht (von `web`/nginx intern an `api` weitergereicht) --
-nach außen muss also nur Port 8080 (bzw. der Reverse Proxy davor)
-erreichbar sein. Port 3000 kann serverseitig per Firewall gesperrt bleiben,
-wenn kein direkter API-Zugriff von außen gewünscht ist.
+Der Stack enthält bereits einen `caddy`-Dienst, der TLS für beide Domains
+automatisch über Let's Encrypt bezieht -- dafür sind nur zwei Dinge nötig,
+beide **außerhalb** von Docker.
 
-Einfachste Variante mit [Caddy](https://caddyserver.com/) (automatisches
-Let's-Encrypt-Zertifikat, ein Zweizeiler):
+### 7.1 DNS bei IONOS setzen
+
+Im IONOS-Kundencenter unter **Domains & SSL** → `hecaso.de` → **DNS** je
+einen A-Record anlegen:
+
+| Hostname | Typ | Wert |
+|---|---|---|
+| `app` | A | `<IP dieses Servers>` |
+| `office` | A | `<IP dieses Servers>` |
+
+Beide zeigen bewusst auf dieselbe IP -- es ist (noch) derselbe Server und
+dieselbe Anwendung, siehe Hinweis in der `Caddyfile`. Propagation prüfen:
 
 ```bash
-# Caddy auf dem Server installieren, dann /etc/caddy/Caddyfile:
-zimmerakte.eure-domain.de {
-    reverse_proxy localhost:8080
-}
-# danach:
-sudo systemctl reload caddy
+nslookup app.hecaso.de
+nslookup office.hecaso.de
 ```
 
-Alternativ nginx + certbot oder Traefik, falls das schon im Einsatz ist --
-das Prinzip ist immer dasselbe: TLS terminieren, dann an `localhost:8080`
-weiterreichen.
+Beide müssen die Server-IP zurückgeben, bevor Schritt 7.2 funktionieren
+kann -- Let's Encrypt prüft die Kontrolle über die Domain per HTTP-01, das
+scheitert, solange DNS noch auf etwas anderes (oder gar nichts) zeigt.
+
+### 7.2 Stack (neu) starten
+
+`ACME_EMAIL` muss in `.env.prod` gesetzt sein (siehe Abschnitt 3), dann:
+
+```bash
+./scripts/aktualisieren.sh
+```
+
+Das Script zieht den neuesten Stand aus git und startet den kompletten
+Stack inklusive `caddy` neu (dasselbe wie
+`docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`,
+nur mit ein paar Komfort-Ausgaben davor/danach). Zertifikate erscheinen
+in den Logs, sobald sie ausgestellt sind:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f caddy
+```
+
+Danach sind `https://app.hecaso.de` und `https://office.hecaso.de` beide
+erreichbar. Ports 80/443 müssen dafür am Server (bzw. in der
+IONOS-Firewall/dem Sicherheitsgruppen-Regelwerk des VPS) offen sein; Port
+8080 bleibt zusätzlich für den direkten Test aus Schritt 6 erreichbar,
+Port 3000 kann weiterhin per Firewall gesperrt bleiben, wenn kein direkter
+API-Zugriff von außen gewünscht ist.
+
+### Andere Domain oder ein zusätzlicher Reverse Proxy
+
+Wer eine andere Domain als `hecaso.de` einträgt, passt einfach die
+`Caddyfile` in der Repo-Wurzel an (zwei Hostnamen im Site-Block ersetzen)
+und committet die Änderung, bevor `./scripts/aktualisieren.sh` läuft.
+Wird stattdessen schon ein anderer Reverse Proxy betrieben (nginx +
+certbot, Traefik, ein vorgelagerter Load Balancer), lässt sich der
+`caddy`-Dienst aus `docker-compose.prod.yml` streichen und stattdessen an
+`localhost:8080` weiterleiten -- das Prinzip bleibt: TLS terminieren, dann
+an Port 8080 reichen.
 
 ## 8. Updates einspielen
 
 ```bash
 cd zimmerakte
-git pull
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+./scripts/aktualisieren.sh
 ```
 
-Neue Migrationen laufen dabei automatisch über den `migrate`-Dienst, bevor
+Entspricht `git pull` + `docker compose -f docker-compose.prod.yml
+--env-file .env.prod up -d --build`, nur mit Statusausgabe danach. Neue
+Migrationen laufen dabei automatisch über den `migrate`-Dienst, bevor
 `api` neu gestartet wird (`depends_on: migrate: condition:
 service_completed_successfully`).
 
@@ -208,6 +256,13 @@ cat backup-2026-08-24.sql | docker compose -f docker-compose.prod.yml exec -T db
   dem Moment des Commits als kompromittiert.
 - **Nach `docker compose down -v` (Volume gelöscht)**: das ist ein
   kompletter Neuanfang, Schritt 5 muss erneut ausgeführt werden.
+- **`caddy` stellt kein Zertifikat aus** (`https://app.hecaso.de` bleibt
+  unerreichbar): fast immer DNS -- mit `nslookup app.hecaso.de` bzw.
+  `nslookup office.hecaso.de` prüfen, ob beide wirklich auf die Server-IP
+  zeigen (Abschnitt 7.1), und `docker compose -f docker-compose.prod.yml
+  logs caddy` auf die genaue Fehlermeldung. Zweithäufigste Ursache: Port 80
+  oder 443 ist am Server/in der IONOS-Firewall nicht offen -- Let's
+  Encrypts HTTP-01-Challenge braucht Port 80 von außen erreichbar.
 
 ## 11. Bekannte, bewusste Lücken
 

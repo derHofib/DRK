@@ -84,7 +84,34 @@ services:
     depends_on:
       - api
     ports:
+      # Bleibt fuer direkte Tests ohne DNS/TLS erreichbar (siehe
+      # docs/DEPLOYMENT.md, Abschnitt 6) -- der oeffentliche Zugriff laeuft
+      # ab jetzt aber ueber caddy (Port 80/443), nicht mehr direkt hierueber.
       - "8080:80"
+
+  # Terminiert TLS fuer app.hecaso.de und office.hecaso.de und holt dafuer
+  # automatisch Let's-Encrypt-Zertifikate (Konfiguration in ./Caddyfile).
+  # Erst wenn DNS fuer beide Domains auf diesen Server zeigt, kann das
+  # gelingen -- siehe docs/DEPLOYMENT.md, Abschnitt 7.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL muss gesetzt sein (fuer Let's-Encrypt-Benachrichtigungen, z.B. bei Ablauf)}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Zertifikate/Schluessel -- ohne dieses Volume wuerde jeder Neustart
+      # ein frisches Zertifikat anfordern und Let's Encrypts Rate-Limit
+      # (5 gleiche Zertifikate pro Woche) irgendwann treffen.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
 
 volumes:
   zimmerakte_prod_db_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,21 @@
+# Reverse Proxy + automatisches Let's-Encrypt-TLS fuer beide Subdomains.
+#
+# app.hecaso.de und office.hecaso.de zeigen aktuell BEIDE auf dieselbe
+# Web-Anwendung -- die geplante Trennung (App-Ansicht auf Mobilgeraeten
+# vs. eine eigene Office-Oberflaeche fuer Desktop, siehe CLAUDE.md-Notiz
+# zum fieldvibe-Vorbild) ist noch keine eigene Anwendung, deshalb hier
+# bewusst EIN Site-Block fuer beide Hostnamen statt zwei getrennter.
+# Caddy stellt trotzdem fuer jeden Hostnamen sein eigenes Zertifikat aus.
+#
+# Voraussetzung, bevor das hier greift: DNS fuer beide Domains muss schon
+# auf die IP dieses Servers zeigen (siehe docs/DEPLOYMENT.md, Abschnitt 7)
+# -- sonst kann Let's Encrypt die HTTP-01-Challenge nicht durchfuehren und
+# das Zertifikat bleibt aus (kein Absturz, Caddy versucht es automatisch
+# regelmaessig erneut).
+{
+	email {$ACME_EMAIL}
+}
+
+app.hecaso.de, office.hecaso.de {
+	reverse_proxy web:80
+}
