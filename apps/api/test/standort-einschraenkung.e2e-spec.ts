@@ -8,8 +8,9 @@
  * mandantsweit alles sehen, unabhaengig von der Standort-Zuordnung.
  *
  * Aufbau: zwei Standorte S1/S2, je ein Zimmer und ein aktuell dort
- * wohnender Klient. "verwaltung" ist auf S1 eingeschraenkt (benutzer_standort
- * hat eine Zeile). "leitung" bleibt unrestricted (keine Zeile) und dient
+ * wohnender Klient. "einrichtungsleitung" ist auf S1 eingeschraenkt
+ * (benutzer_standort hat eine Zeile). "bereichsleitung" bleibt unrestricted
+ * (keine Zeile) und dient
  * als eingebaute Gegenprobe: dieselben Endpunkte, dieselben Daten, aber
  * alles sichtbar -- ohne diesen Vergleich koennte ein Test, der immer 404
  * liefert (z.B. wegen eines Tippfehlers in der ID), unbemerkt gruen bleiben.
@@ -32,8 +33,8 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
 
   let mandantId: string;
   let mandantSlug: string;
-  let tokenLeitung: string;
-  let tokenVerwaltungS1: string;
+  let tokenBereichsleitung: string;
+  let tokenEinrichtungsleitungS1: string;
 
   let klient1: string; // wohnt in Standort 1
   let klient2: string; // wohnt in Standort 2
@@ -62,17 +63,17 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: leitungRows } = await admin.query<{ id: string }>(
+    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung Test', $3, 'leitung') RETURNING id`,
-      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
+      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
-    const { rows: verwaltungRows } = await admin.query<{ id: string }>(
+    const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Verwaltung S1 Test', $3, 'verwaltung') RETURNING id`,
-      [mandantId, `verwaltung-s1-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
+      [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
     );
-    const verwaltungS1Id = verwaltungRows[0].id;
+    const einrichtungsleitungS1Id = einrichtungsleitungRows[0].id;
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
@@ -85,10 +86,10 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     );
     const standort2 = standort2Rows[0].id;
 
-    // verwaltung-s1 ist NUR auf Standort 1 eingeschraenkt.
+    // einrichtungsleitung-s1 ist NUR auf Standort 1 eingeschraenkt.
     await admin.query(
       "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
-      [mandantId, verwaltungS1Id, standort1]
+      [mandantId, einrichtungsleitungS1Id, standort1]
     );
 
     const { rows: zimmer1Rows } = await admin.query<{ id: string }>(
@@ -132,16 +133,16 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort });
       return res.body.accessToken as string;
     }
-    tokenLeitung = await login(`leitung-${suffix}@beispiel.test`);
-    tokenVerwaltungS1 = await login(`verwaltung-s1-${suffix}@beispiel.test`);
+    tokenBereichsleitung = await login(`bereichsleitung-${suffix}@beispiel.test`);
+    tokenEinrichtungsleitungS1 = await login(`einrichtungsleitung-s1-${suffix}@beispiel.test`);
 
-    // Alles Fachliche als (unrestricted) Leitung anlegen -- so haengt die
+    // Alles Fachliche als (unrestricted) Bereichsleitung anlegen -- so haengt die
     // Vorbereitung nicht bereits von der zu pruefenden Einschraenkung ab.
     function postAls(token: string, path: string, body: Record<string, unknown>) {
       return request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${token}`).send(body);
     }
 
-    const b1 = await postAls(tokenLeitung, "/kassenbuchungen", {
+    const b1 = await postAls(tokenBereichsleitung, "/kassenbuchungen", {
       klientId: klient1,
       datum: "2026-01-01",
       betragCent: 5000,
@@ -150,7 +151,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
     buchung1 = b1.body.id;
 
-    const b2 = await postAls(tokenLeitung, "/kassenbuchungen", {
+    const b2 = await postAls(tokenBereichsleitung, "/kassenbuchungen", {
       klientId: klient2,
       datum: "2026-01-01",
       betragCent: 5000,
@@ -159,7 +160,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
     buchung2 = b2.body.id;
 
-    const a2 = await postAls(tokenLeitung, "/kassenbuchungen", {
+    const a2 = await postAls(tokenBereichsleitung, "/kassenbuchungen", {
       klientId: klient2,
       datum: "2026-01-02",
       betragCent: -1000,
@@ -169,14 +170,14 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
     auszahlung2 = a2.body.id;
 
-    const ko2 = await postAls(tokenLeitung, "/kostenuebernahmen", {
+    const ko2 = await postAls(tokenBereichsleitung, "/kostenuebernahmen", {
       klientId: klient2,
       amt: "Testamt",
       von: "2026-01-01",
     });
     kostenuebernahme2 = ko2.body.id;
 
-    const r2 = await postAls(tokenLeitung, "/rechnungen", {
+    const r2 = await postAls(tokenBereichsleitung, "/rechnungen", {
       klientId: klient2,
       betragCent: 1234,
       beschreibung: "Testrechnung S2",
@@ -219,21 +220,21 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     };
   }
 
-  describe("verwaltung-s1 (auf Standort 1 eingeschraenkt)", () => {
+  describe("einrichtungsleitung-s1 (auf Standort 1 eingeschraenkt)", () => {
     it("sieht in /klienten nur Klient 1, nicht Klient 2", async () => {
-      const res = await als(tokenVerwaltungS1).get("/klienten");
+      const res = await als(tokenEinrichtungsleitungS1).get("/klienten");
       const ids = res.body.map((k: { id: string }) => k.id);
       expect(ids).toContain(klient1);
       expect(ids).not.toContain(klient2);
     });
 
     it("bekommt fuer Klient 2 per Detailabruf 404", async () => {
-      const res = await als(tokenVerwaltungS1).get(`/klienten/${klient2}`);
+      const res = await als(tokenEinrichtungsleitungS1).get(`/klienten/${klient2}`);
       expect(res.status).toBe(404);
     });
 
     it("sieht in /kassenbuchungen nur die Buchung von Klient 1", async () => {
-      const res = await als(tokenVerwaltungS1).get("/kassenbuchungen");
+      const res = await als(tokenEinrichtungsleitungS1).get("/kassenbuchungen");
       const ids = res.body.map((b: { id: string }) => b.id);
       expect(ids).toContain(buchung1);
       expect(ids).not.toContain(buchung2);
@@ -241,7 +242,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann fuer Klient 2 keine Buchung anlegen (404 statt still durchgereicht)", async () => {
-      const res = await als(tokenVerwaltungS1).post("/kassenbuchungen", {
+      const res = await als(tokenEinrichtungsleitungS1).post("/kassenbuchungen", {
         klientId: klient2,
         datum: "2026-01-03",
         betragCent: 100,
@@ -252,30 +253,30 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann die Buchung von Klient 1 stornieren, die von Klient 2 nicht", async () => {
-      const eigene = await als(tokenVerwaltungS1).patch(`/kassenbuchungen/${buchung1}/stornieren`, {
+      const eigene = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${buchung1}/stornieren`, {
         grund: "Testkorrektur",
       });
       expect(eigene.status).toBe(200);
 
-      const fremde = await als(tokenVerwaltungS1).patch(`/kassenbuchungen/${buchung2}/stornieren`, {
+      const fremde = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${buchung2}/stornieren`, {
         grund: "sollte scheitern",
       });
       expect(fremde.status).toBe(404);
     });
 
     it("bekommt fuer die Unterschrift von Klient 2 404", async () => {
-      const res = await als(tokenVerwaltungS1).get(`/kassenbuchungen/${auszahlung2}/unterschrift`);
+      const res = await als(tokenEinrichtungsleitungS1).get(`/kassenbuchungen/${auszahlung2}/unterschrift`);
       expect(res.status).toBe(404);
     });
 
     it("sieht fuer Klient 2 eine leere Kostenuebernahme-Liste statt der echten Daten", async () => {
-      const res = await als(tokenVerwaltungS1).get(`/kostenuebernahmen?klientId=${klient2}`);
+      const res = await als(tokenEinrichtungsleitungS1).get(`/kostenuebernahmen?klientId=${klient2}`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
 
     it("kann fuer Klient 2 keine Kostenuebernahme anlegen", async () => {
-      const res = await als(tokenVerwaltungS1).post("/kostenuebernahmen", {
+      const res = await als(tokenEinrichtungsleitungS1).post("/kostenuebernahmen", {
         klientId: klient2,
         amt: "Testamt",
         von: "2026-02-01",
@@ -284,23 +285,23 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann die Kostenuebernahme von Klient 2 nicht beenden", async () => {
-      const res = await als(tokenVerwaltungS1).patch(`/kostenuebernahmen/${kostenuebernahme2}/beenden`, {
+      const res = await als(tokenEinrichtungsleitungS1).patch(`/kostenuebernahmen/${kostenuebernahme2}/beenden`, {
         bis: "2026-03-01",
       });
       expect(res.status).toBe(404);
     });
 
     it("sieht die Rechnung von Klient 2 weder in der Liste noch im Detailabruf", async () => {
-      const liste = await als(tokenVerwaltungS1).get(`/rechnungen?klientId=${klient2}`);
+      const liste = await als(tokenEinrichtungsleitungS1).get(`/rechnungen?klientId=${klient2}`);
       expect(liste.status).toBe(200);
       expect(liste.body).toEqual([]);
 
-      const detail = await als(tokenVerwaltungS1).get(`/rechnungen/${rechnung2}`);
+      const detail = await als(tokenEinrichtungsleitungS1).get(`/rechnungen/${rechnung2}`);
       expect(detail.status).toBe(404);
     });
 
     it("kann fuer Klient 2 keine Rechnung anlegen", async () => {
-      const res = await als(tokenVerwaltungS1).post("/rechnungen", {
+      const res = await als(tokenEinrichtungsleitungS1).post("/rechnungen", {
         klientId: klient2,
         betragCent: 100,
         beschreibung: "sollte scheitern",
@@ -309,38 +310,38 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann den Status der Rechnung von Klient 2 nicht aendern", async () => {
-      const res = await als(tokenVerwaltungS1).patch(`/rechnungen/${rechnung2}/status`, { status: "genehmigt" });
+      const res = await als(tokenEinrichtungsleitungS1).patch(`/rechnungen/${rechnung2}/status`, { status: "genehmigt" });
       expect(res.status).toBe(404);
     });
 
     it("bekommt fuer das Dokument der Rechnung von Klient 2 404", async () => {
-      const res = await als(tokenVerwaltungS1).get(`/rechnungen/${rechnung2}/dokument`);
+      const res = await als(tokenEinrichtungsleitungS1).get(`/rechnungen/${rechnung2}/dokument`);
       expect(res.status).toBe(404);
     });
   });
 
-  describe("leitung (unrestricted) -- eingebaute Gegenprobe", () => {
+  describe("bereichsleitung (unrestricted) -- eingebaute Gegenprobe", () => {
     it("sieht in /klienten beide Klienten", async () => {
-      const res = await als(tokenLeitung).get("/klienten");
+      const res = await als(tokenBereichsleitung).get("/klienten");
       const ids = res.body.map((k: { id: string }) => k.id);
       expect(ids).toContain(klient1);
       expect(ids).toContain(klient2);
     });
 
     it("bekommt fuer Klient 2 einen echten Detailabruf", async () => {
-      const res = await als(tokenLeitung).get(`/klienten/${klient2}`);
+      const res = await als(tokenBereichsleitung).get(`/klienten/${klient2}`);
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(klient2);
     });
 
     it("sieht die Rechnung von Klient 2 in Liste und Detailabruf und kann ihren Status aendern", async () => {
-      const liste = await als(tokenLeitung).get(`/rechnungen?klientId=${klient2}`);
+      const liste = await als(tokenBereichsleitung).get(`/rechnungen?klientId=${klient2}`);
       expect(liste.body.map((r: { id: string }) => r.id)).toContain(rechnung2);
 
-      const detail = await als(tokenLeitung).get(`/rechnungen/${rechnung2}`);
+      const detail = await als(tokenBereichsleitung).get(`/rechnungen/${rechnung2}`);
       expect(detail.status).toBe(200);
 
-      const statusRes = await als(tokenLeitung).patch(`/rechnungen/${rechnung2}/status`, { status: "genehmigt" });
+      const statusRes = await als(tokenBereichsleitung).patch(`/rechnungen/${rechnung2}/status`, { status: "genehmigt" });
       expect(statusRes.status).toBe(200);
     });
   });

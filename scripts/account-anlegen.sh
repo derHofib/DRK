@@ -3,10 +3,11 @@
 # Account eines frischen Mandanten gibt es dafuer keinen anderen Weg: es
 # existiert bewusst kein oeffentlicher Registrierungs-Endpunkt (siehe
 # auth.controller.ts) und POST /benutzer setzt schon einen eingeloggten
-# "leitung"-Account voraus. Fuer WEITERE Accounts eines Mandanten, der
-# schon eine Leitung hat, ist die "Mitarbeitende"-Seite in der App der
-# richtige Weg -- dieses Script ist nur fuer den Terminal-Zugriff auf dem
-# Server gedacht (Ersteinrichtung, Notfall-Zugang).
+# "bereichsleitung"- oder "einrichtungsleitung"-Account voraus. Fuer
+# WEITERE Accounts eines Mandanten, der schon eine Leitung hat, ist die
+# "Mitarbeitende"-Seite in der App der richtige Weg -- dieses Script ist
+# nur fuer den Terminal-Zugriff auf dem Server gedacht (Ersteinrichtung,
+# Notfall-Zugang).
 #
 # Das Passwort wird bewusst NIE als Kommandozeilen-Argument uebergeben,
 # sondern per "read -s" eingelesen und dem Container nur als Umgebungs-
@@ -82,7 +83,7 @@ read -rp "Anzeigename: " NAME
 
 echo "Rolle waehlen:"
 PS3="Nummer eingeben: "
-select ROLLE in leitung verwaltung bezugsbetreuung springer; do
+select ROLLE in bereichsleitung einrichtungsleitung betreuer; do
   [ -n "$ROLLE" ] && break
 done
 

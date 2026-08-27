@@ -8,7 +8,7 @@ import { RechnungService } from "./rechnung.service";
  * Allowlist statt freiem String: ein hochgeladenes "Dokument" landet
  * unveraendert in der Antwort auf GET :id/dokument, mit genau diesem Wert
  * als Content-Type-Header. Ohne Einschraenkung koennte jede Rolle (auch
- * springer) eine "Rechnung" mit dokumentMimeType "text/html" und einem
+ * betreuer) eine "Rechnung" mit dokumentMimeType "text/html" und einem
  * <script>-Inhalt anlegen -- oeffnet eine andere Person (z.B. die Leitung
  * beim Genehmigen) dieses Dokument, fuehrt der Browser das Skript im
  * Origin der Anwendung aus und kann das JWT aus localStorage lesen.

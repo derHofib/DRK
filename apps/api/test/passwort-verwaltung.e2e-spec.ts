@@ -1,12 +1,13 @@
 /**
  * Zwei zusammenhaengende Faehigkeiten, beide aus derselben Anforderung:
  * "Passwort vergessen"/"Passwort aendern" muessen moeglich sein, OHNE dass
- * die Leitung je das tatsaechlich verwendete Passwort erfaehrt.
+ * die Leitung (Bereichs- oder Einrichtungsleitung) je das tatsaechlich
+ * verwendete Passwort erfaehrt.
  *
  * Kernaussagen:
  *   1. PATCH /auth/passwort (eingeloggt): verlangt das aktuelle Passwort,
  *      danach funktioniert nur noch das neue.
- *   2. POST /benutzer/:id/passwort-reset (nur Leitung) liefert einen
+ *   2. POST /benutzer/:id/passwort-reset (nur Bereichs-/Einrichtungsleitung) liefert einen
  *      einmaligen Link-Token -- niemals ein Passwort in der Antwort.
  *   3. POST /auth/passwort-reset/einloesen (oeffentlich, kein Login) setzt
  *      damit ein neues Passwort, das NUR die betroffene Person waehlt.
@@ -30,8 +31,8 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
   let mandantASlug: string;
   let mandantBId: string;
   let mandantBSlug: string;
-  let tokenLeitungA: string;
-  let tokenLeitungB: string;
+  let tokenBereichsleitungA: string;
+  let tokenBereichsleitungB: string;
 
   const passwort = "correct horse battery staple";
   const suffix = randomUUID().slice(0, 8);
@@ -57,13 +58,13 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung A', $3, 'leitung')`,
-      [mandantAId, `leitung-a-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung A', $3, 'bereichsleitung')`,
+      [mandantAId, `bereichsleitung-a-${suffix}@beispiel.test`, passwortHash]
     );
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung B', $3, 'leitung')`,
-      [mandantBId, `leitung-b-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung B', $3, 'bereichsleitung')`,
+      [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
     );
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -74,8 +75,8 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort: pw });
       return res.body.accessToken as string;
     }
-    tokenLeitungA = await login(mandantASlug, `leitung-a-${suffix}@beispiel.test`);
-    tokenLeitungB = await login(mandantBSlug, `leitung-b-${suffix}@beispiel.test`);
+    tokenBereichsleitungA = await login(mandantASlug, `bereichsleitung-a-${suffix}@beispiel.test`);
+    tokenBereichsleitungB = await login(mandantBSlug, `bereichsleitung-b-${suffix}@beispiel.test`);
   });
 
   afterAll(async () => {
@@ -103,7 +104,7 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
   describe("PATCH /auth/passwort -- eingeloggt selbst aendern", () => {
     it("aendert das Passwort bei korrektem aktuellen Passwort; danach funktioniert nur noch das neue", async () => {
       const email = `aendern-erfolg-${suffix}@beispiel.test`;
-      await als(tokenLeitungA).post("/benutzer", { name: "Aendert Passwort", email, rolle: "springer", passwort });
+      await als(tokenBereichsleitungA).post("/benutzer", { name: "Aendert Passwort", email, rolle: "betreuer", passwort });
       const eigenerToken = await request(app.getHttpServer())
         .post("/auth/login")
         .send({ mandantSlug: mandantASlug, email, passwort })
@@ -125,7 +126,7 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     it("lehnt ein falsches aktuelles Passwort mit 401 ab und aendert nichts", async () => {
       const email = `aendern-falsch-${suffix}@beispiel.test`;
-      await als(tokenLeitungA).post("/benutzer", { name: "Falsches Altes", email, rolle: "springer", passwort });
+      await als(tokenBereichsleitungA).post("/benutzer", { name: "Falsches Altes", email, rolle: "betreuer", passwort });
       const eigenerToken = await request(app.getHttpServer())
         .post("/auth/login")
         .send({ mandantSlug: mandantASlug, email, passwort })
@@ -142,7 +143,7 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
     });
 
     it("lehnt ein zu kurzes neues Passwort mit 400 ab", async () => {
-      const res = await als(tokenLeitungA).patch("/auth/passwort", {
+      const res = await als(tokenBereichsleitungA).patch("/auth/passwort", {
         aktuellesPasswort: passwort,
         neuesPasswort: "kurz",
       });
@@ -150,18 +151,18 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
     });
   });
 
-  describe("POST /benutzer/:id/passwort-reset -- nur Leitung, liefert nie ein Passwort", () => {
-    it("liefert als Leitung einen Token samt Ablaufzeit, aber kein Passwort in der Antwort", async () => {
+  describe("POST /benutzer/:id/passwort-reset -- nur Bereichs-/Einrichtungsleitung, liefert nie ein Passwort", () => {
+    it("liefert als Bereichsleitung einen Token samt Ablaufzeit, aber kein Passwort in der Antwort", async () => {
       const email = `reset-ziel-1-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", {
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
         name: "Reset-Ziel",
         email,
-        rolle: "springer",
+        rolle: "betreuer",
         passwort,
       });
       const zielId = angelegt.body.id as string;
 
-      const res = await als(tokenLeitungA).post(`/benutzer/${zielId}/passwort-reset`);
+      const res = await als(tokenBereichsleitungA).post(`/benutzer/${zielId}/passwort-reset`);
       expect(res.status).toBe(201);
       expect(typeof res.body.token).toBe("string");
       expect(res.body.token.length).toBeGreaterThanOrEqual(32);
@@ -170,28 +171,28 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
       expect(JSON.stringify(res.body)).not.toContain(passwort);
     });
 
-    it("lehnt den Aufruf durch eine Nicht-Leitung-Rolle mit 403 ab", async () => {
-      const email = `springer-darf-nicht-${suffix}@beispiel.test`;
-      const angelegterSpringer = await als(tokenLeitungA).post("/benutzer", {
-        name: "Springer",
+    it("lehnt den Aufruf durch Betreuer mit 403 ab", async () => {
+      const email = `betreuer-darf-nicht-${suffix}@beispiel.test`;
+      const angelegterBetreuer = await als(tokenBereichsleitungA).post("/benutzer", {
+        name: "Betreuer",
         email,
-        rolle: "springer",
+        rolle: "betreuer",
         passwort,
       });
-      const tokenSpringer = await request(app.getHttpServer())
+      const tokenBetreuer = await request(app.getHttpServer())
         .post("/auth/login")
         .send({ mandantSlug: mandantASlug, email, passwort })
         .then((r) => r.body.accessToken as string);
 
-      const res = await als(tokenSpringer).post(`/benutzer/${angelegterSpringer.body.id}/passwort-reset`);
+      const res = await als(tokenBetreuer).post(`/benutzer/${angelegterBetreuer.body.id}/passwort-reset`);
       expect(res.status).toBe(403);
     });
 
-    it("Mandantentrennung: Leitung B kann keinen Reset fuer einen Benutzer aus Mandant A ausloesen", async () => {
+    it("Mandantentrennung: Bereichsleitung B kann keinen Reset fuer einen Benutzer aus Mandant A ausloesen", async () => {
       const email = `nur-in-a-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", { name: "Nur A", email, rolle: "springer", passwort });
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", { name: "Nur A", email, rolle: "betreuer", passwort });
 
-      const res = await als(tokenLeitungB).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const res = await als(tokenBereichsleitungB).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       expect(res.status).toBe(404);
     });
   });
@@ -199,13 +200,13 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
   describe("POST /auth/passwort-reset/einloesen -- oeffentlich, kein Login noetig", () => {
     it("setzt mit gueltigem Token ein neues Passwort, das dann funktioniert", async () => {
       const email = `reset-einloesen-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", {
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
         name: "Loest Reset ein",
         email,
-        rolle: "springer",
+        rolle: "betreuer",
         passwort,
       });
-      const erstellt = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const erstellt = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       const token = erstellt.body.token as string;
 
       const neuesPasswort = "selbst gewaehltes neues passwort";
@@ -222,8 +223,8 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     it("ist einmalig: eine zweite Einloesung desselben Tokens schlaegt fehl", async () => {
       const email = `reset-einmalig-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", { name: "Einmalig", email, rolle: "springer", passwort });
-      const erstellt = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", { name: "Einmalig", email, rolle: "betreuer", passwort });
+      const erstellt = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       const token = erstellt.body.token as string;
 
       const ersteEinloesung = await request(app.getHttpServer())
@@ -251,13 +252,13 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     it("lehnt einen abgelaufenen Token ab", async () => {
       const email = `reset-abgelaufen-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", {
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
         name: "Abgelaufen",
         email,
-        rolle: "springer",
+        rolle: "betreuer",
         passwort,
       });
-      const erstellt = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const erstellt = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       const token = erstellt.body.token as string;
 
       await admin.query(
@@ -273,16 +274,16 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     it("ein neuer Reset entwertet einen vorherigen, noch offenen Link derselben Person", async () => {
       const email = `reset-ueberschrieben-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", {
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
         name: "Zwei Links",
         email,
-        rolle: "springer",
+        rolle: "betreuer",
         passwort,
       });
-      const ersterReset = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const ersterReset = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       const ersterToken = ersterReset.body.token as string;
 
-      const zweiterReset = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const zweiterReset = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
       const zweiterToken = zweiterReset.body.token as string;
 
       const alterLinkSchlaegtFehl = await request(app.getHttpServer())
@@ -298,8 +299,8 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
     it("lehnt ein zu kurzes neues Passwort mit 400 ab", async () => {
       const email = `reset-kurz-${suffix}@beispiel.test`;
-      const angelegt = await als(tokenLeitungA).post("/benutzer", { name: "Kurz", email, rolle: "springer", passwort });
-      const erstellt = await als(tokenLeitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
+      const angelegt = await als(tokenBereichsleitungA).post("/benutzer", { name: "Kurz", email, rolle: "betreuer", passwort });
+      const erstellt = await als(tokenBereichsleitungA).post(`/benutzer/${angelegt.body.id}/passwort-reset`);
 
       const res = await request(app.getHttpServer())
         .post("/auth/passwort-reset/einloesen")

@@ -44,7 +44,7 @@ export class TagesberichtService {
    * bei kassenbuchungenListe(klientId?) etabliert.
    *
    * Standort-Einschraenkung greift in BEIDEN Faellen ueber
-   * klientStandortBedingung: eine standortbeschraenkte Bezugsbetreuung sieht
+   * klientStandortBedingung: ein standortbeschraenkter Betreuer sieht
    * auch im allgemeinen Menuepunkt nur Berichte "ihrer" Klient:innen.
    */
   async findeAlle(klientId?: string): Promise<TagesberichtDto[]> {

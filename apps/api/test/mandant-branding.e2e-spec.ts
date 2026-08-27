@@ -1,6 +1,6 @@
 /**
  * Die Akzentfarbe ist Corporate Branding je Traeger: sie gilt fuer alle
- * Mitarbeitenden gleichzeitig, darf aber nur von der Leitung gesetzt werden
+ * Mitarbeitenden gleichzeitig, darf aber nur von der Bereichsleitung gesetzt werden
  * -- und sie darf unter keinen Umstaenden ueber die Mandantengrenze
  * hinweg sichtbar oder aenderbar sein.
  *
@@ -33,8 +33,8 @@ interface Testbenutzer {
 interface Testmandant {
   mandantId: string;
   slug: string;
-  leitung: Testbenutzer;
-  verwaltung: Testbenutzer;
+  bereichsleitung: Testbenutzer;
+  einrichtungsleitung: Testbenutzer;
 }
 
 const PASSWORT = "correct horse battery staple";
@@ -66,8 +66,8 @@ async function seedMandant(admin: Client, label: string): Promise<Testmandant> {
   return {
     mandantId,
     slug,
-    leitung: await legeBenutzerAn(admin, mandantId, `leitung-${label}`, "leitung"),
-    verwaltung: await legeBenutzerAn(admin, mandantId, `verwaltung-${label}`, "verwaltung"),
+    bereichsleitung: await legeBenutzerAn(admin, mandantId, `bereichsleitung-${label}`, "bereichsleitung"),
+    einrichtungsleitung: await legeBenutzerAn(admin, mandantId, `einrichtungsleitung-${label}`, "einrichtungsleitung"),
   };
 }
 
@@ -125,13 +125,13 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
       .send({ akzentfarbe });
 
   it("legt neue Mandanten mit der Standardfarbe an", async () => {
-    const res = await hole(await login(mandantA, mandantA.leitung));
+    const res = await hole(await login(mandantA, mandantA.bereichsleitung));
     expect(res.status).toBe(200);
     expect(res.body.akzentfarbe).toBe(STANDARDFARBE);
   });
 
-  it("uebernimmt eine von der Leitung gesetzte Farbe dauerhaft", async () => {
-    const token = await login(mandantA, mandantA.leitung);
+  it("uebernimmt eine von der Bereichsleitung gesetzte Farbe dauerhaft", async () => {
+    const token = await login(mandantA, mandantA.bereichsleitung);
 
     const gesetzt = await setze(token, "#a8a4f0");
     expect(gesetzt.status).toBe(200);
@@ -143,8 +143,8 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
   });
 
   it("haelt die Farben zweier Mandanten strikt getrennt", async () => {
-    const tokenA = await login(mandantA, mandantA.leitung);
-    const tokenB = await login(mandantB, mandantB.leitung);
+    const tokenA = await login(mandantA, mandantA.bereichsleitung);
+    const tokenB = await login(mandantB, mandantB.bereichsleitung);
 
     expect((await setze(tokenA, "#79c7a8")).status).toBe(200);
     expect((await setze(tokenB, "#f2a0b5")).status).toBe(200);
@@ -159,15 +159,15 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
   });
 
   it("weist eine Rolle ohne Branding-Recht mit 403 ab und aendert nichts", async () => {
-    const leitung = await login(mandantA, mandantA.leitung);
-    await setze(leitung, "#5ec4c0");
+    const bereichsleitung = await login(mandantA, mandantA.bereichsleitung);
+    await setze(bereichsleitung, "#5ec4c0");
 
-    const verwaltung = await login(mandantA, mandantA.verwaltung);
-    const abgewiesen = await setze(verwaltung, "#efce72");
+    const einrichtungsleitung = await login(mandantA, mandantA.einrichtungsleitung);
+    const abgewiesen = await setze(einrichtungsleitung, "#efce72");
     expect(abgewiesen.status).toBe(403);
 
     // Der Statuscode allein genuegt nicht -- der Wert muss unveraendert sein.
-    const danach = await hole(leitung);
+    const danach = await hole(bereichsleitung);
     expect(danach.body.akzentfarbe).toBe("#5ec4c0");
   });
 
@@ -183,7 +183,7 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
     ];
 
     it.each(ungueltig)("lehnt %s mit 400 ab", async (_label, wert) => {
-      const token = await login(mandantA, mandantA.leitung);
+      const token = await login(mandantA, mandantA.bereichsleitung);
       await setze(token, "#5ec4c0");
 
       const res = await setze(token, wert);
@@ -194,7 +194,7 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
     });
 
     it("nimmt Grossschreibung an und speichert klein", async () => {
-      const token = await login(mandantA, mandantA.leitung);
+      const token = await login(mandantA, mandantA.bereichsleitung);
       const res = await setze(token, "#5EC4C0");
       expect(res.status).toBe(200);
       // Die CHECK-Bedingung laesst nur Kleinbuchstaben zu -- ohne

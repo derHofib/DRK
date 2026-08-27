@@ -45,7 +45,7 @@ describe("Raten-Schranke auf /auth/login", () => {
     mandantId = mandantRows[0].id;
 
     await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'Ratenschranke Test', $3, 'leitung')`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'Ratenschranke Test', $3, 'bereichsleitung')`,
       [mandantId, email, passwortHash]
     );
 

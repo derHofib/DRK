@@ -6,7 +6,7 @@ import { BenutzerService } from "./benutzer.service";
 const anlegenSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  rolle: z.enum(["leitung", "verwaltung", "bezugsbetreuung", "springer"]),
+  rolle: z.enum(["bereichsleitung", "einrichtungsleitung", "betreuer"]),
   // Mindestlaenge wie bei jedem neu vergebenen Passwort -- die eigentliche
   // Staerkepruefung bleibt der Person ueberlassen, die es einrichtet.
   passwort: z.string().min(8),

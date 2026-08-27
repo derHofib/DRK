@@ -43,8 +43,8 @@ async function seedMandantMitBenutzer(admin: Client, label: string): Promise<Tes
 
   const { rows: benutzerRows } = await admin.query<{ id: string }>(
     `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-     VALUES ($1, $2, $3, $4, 'leitung') RETURNING id`,
-    [mandantId, email, `Testleitung ${label}`, passwortHash]
+     VALUES ($1, $2, $3, $4, 'bereichsleitung') RETURNING id`,
+    [mandantId, email, `Testbereichsleitung ${label}`, passwortHash]
   );
   const benutzerId = benutzerRows[0].id;
 

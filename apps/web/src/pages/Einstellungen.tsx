@@ -74,7 +74,7 @@ function Darstellung({
   onMandantAktualisiert: (m: MandantDto) => void;
 }) {
   // Nur ein Anzeige-Hinweis -- der Server entscheidet (siehe tokenRolle()).
-  const darfBranding = tokenRolle() === "leitung";
+  const darfBranding = tokenRolle() === "bereichsleitung";
 
   return (
     <div className="zv-card zv-card-weit">

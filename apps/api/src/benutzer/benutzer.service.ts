@@ -26,14 +26,13 @@ function isPgError(err: unknown): err is { code: string } {
   return typeof err === "object" && err !== null && "code" in err;
 }
 
-// Mitarbeiter anlegen ist bislang ausschliesslich der Leitung vorbehalten --
-// dieselbe Rolle, die auch das Traegerbranding aendern darf (siehe
-// ROLLEN_MIT_BRANDING in mandant.service.ts). Sobald die geplante
-// Fuehrungshierarchie (Mitarbeiter/Leiter/Bereichsleiter) steht, wird das
-// hier um Leiter/Bereichsleiter erweitert -- bis dahin bewusst die engste
-// Fassung, damit niemand ueber diesen Weg sich selbst oder andere zur
-// Leitung machen kann.
-const ROLLEN_MIT_BENUTZER_ANLEGEN = new Set<BenutzerRolle>(["leitung"]);
+// Bereichsleitung darf traegerweit Mitarbeiter anlegen, Einrichtungsleitung
+// fuer die eigene Einrichtung (siehe Standort-Einschraenkung ueber
+// benutzer_standort -- diese Methode selbst kennt "eigene Einrichtung"
+// nicht extra, RLS plus die optionale Standort-Zuordnung reichen). Betreuer
+// bewusst aussen vor, sonst koennte sich jede Mitarbeiterin selbst oder
+// andere hochstufen.
+const ROLLEN_MIT_BENUTZER_ANLEGEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 @Injectable()
 export class BenutzerService {
@@ -57,7 +56,13 @@ export class BenutzerService {
   async anlegen(input: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_BENUTZER_ANLEGEN.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur die Leitung darf neue Mitarbeitende anlegen.");
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen neue Mitarbeitende anlegen.");
+    }
+    // Sonst koennte eine Einrichtungsleitung ueber diesen Weg jemanden (oder
+    // sich selbst mit einem Zweitaccount) zur Bereichsleitung befoerdern --
+    // genau die Eskalation, vor der die Rollenpruefung oben schuetzen soll.
+    if (ctx.rolle === "einrichtungsleitung" && input.rolle === "bereichsleitung") {
+      throw new ForbiddenException("Einrichtungsleitung darf niemanden zur Bereichsleitung machen.");
     }
 
     const passwortHash = await bcrypt.hash(input.passwort, 10);
@@ -80,17 +85,18 @@ export class BenutzerService {
   }
 
   /**
-   * "Passwort vergessen" ohne E-Mail-Versand: die Leitung stoesst das hier
-   * an, bekommt aber nur den ROHEN, einmaligen Link zurueck -- der wird
-   * nirgends gespeichert oder geloggt, nur dieser eine Rueckgabewert traegt
-   * ihn. Die betroffene Person oeffnet den Link und vergibt ihr Passwort
-   * SELBST (siehe auth.service.ts::passwortZuruecksetzenEinloesen); die
-   * Leitung erfaehrt es zu keinem Zeitpunkt.
+   * "Passwort vergessen" ohne E-Mail-Versand: Bereichs- oder
+   * Einrichtungsleitung stoesst das hier an, bekommt aber nur den ROHEN,
+   * einmaligen Link zurueck -- der wird nirgends gespeichert oder geloggt,
+   * nur dieser eine Rueckgabewert traegt ihn. Die betroffene Person oeffnet
+   * den Link und vergibt ihr Passwort SELBST (siehe
+   * auth.service.ts::passwortZuruecksetzenEinloesen); die Leitung erfaehrt
+   * es zu keinem Zeitpunkt.
    */
   async passwortResetErstellen(zielBenutzerId: string): Promise<{ token: string; laeuftAbAm: string }> {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_BENUTZER_ANLEGEN.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur die Leitung darf Passwort-Reset-Links erzeugen.");
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Passwort-Reset-Links erzeugen.");
     }
 
     const token = neuerResetToken();

@@ -68,7 +68,7 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
     mandantId = mandantRows[0].id;
 
     await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'TOTP Test', $3, 'leitung')`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'TOTP Test', $3, 'bereichsleitung')`,
       [mandantId, email, passwortHash]
     );
 

@@ -3,7 +3,7 @@
  * hier steht nur, was in der jeweiligen Migration auch tatsächlich existiert.
  */
 
-export type BenutzerRolle = "leitung" | "verwaltung" | "bezugsbetreuung" | "springer";
+export type BenutzerRolle = "bereichsleitung" | "einrichtungsleitung" | "betreuer";
 export type HzlRhythmus = "monatlich" | "woechentlich";
 export type Zimmerstatus = "vergeben" | "zugeordnet";
 
@@ -88,10 +88,9 @@ export interface BenutzerListEintragDto {
 }
 
 export const BENUTZER_ROLLE_LABEL: Record<BenutzerRolle, string> = {
-  leitung: "Leitung",
-  verwaltung: "Verwaltung",
-  bezugsbetreuung: "Bezugsbetreuung",
-  springer: "Springer",
+  bereichsleitung: "Bereichsleitung",
+  einrichtungsleitung: "Einrichtungsleitung",
+  betreuer: "Betreuer",
 };
 
 export interface StandortDto {

@@ -10,15 +10,16 @@ interface MandantZeile {
 }
 
 /**
- * Das Erscheinungsbild des Trägers ist eine Trägerentscheidung, keine
- * Nutzereinstellung -- sie gilt für alle Mitarbeitenden gleichzeitig.
- * Deshalb nur die Leitung, nach demselben Muster wie
- * ROLLEN_MIT_VOLLEM_VERLAUF in zimmer.service.ts.
+ * Das Erscheinungsbild des Trägers ist eine trägerweite Entscheidung, keine
+ * Nutzereinstellung und auch keine einzelner Einrichtung -- sie gilt für
+ * alle Mitarbeitenden und alle Einrichtungen gleichzeitig. Deshalb nur die
+ * Bereichsleitung, nicht die Einrichtungsleitung (anders als z.B. beim
+ * Mitarbeiter-Anlegen in benutzer.service.ts).
  *
  * Die persönliche Anzeigepräferenz hell/dunkel ist bewusst NICHT hier --
  * die liegt im localStorage des Browsers und geht die Datenbank nichts an.
  */
-const ROLLEN_MIT_BRANDING = new Set<BenutzerRolle>(["leitung"]);
+const ROLLEN_MIT_BRANDING = new Set<BenutzerRolle>(["bereichsleitung"]);
 
 @Injectable()
 export class MandantService {
@@ -42,7 +43,7 @@ export class MandantService {
   async setzeAkzentfarbe(akzentfarbe: string) {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_BRANDING.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur die Leitung darf das Erscheinungsbild des Trägers ändern.");
+      throw new ForbiddenException("Nur die Bereichsleitung darf das Erscheinungsbild des Trägers ändern.");
     }
 
     return this.db.withTenant(async (client) => {

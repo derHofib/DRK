@@ -22,7 +22,7 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
 
   let mandantId: string;
   let mandantSlug: string;
-  let tokenLeitung: string;
+  let tokenBereichsleitung: string;
   let klientId: string;
 
   const passwort = "correct horse battery staple";
@@ -43,8 +43,8 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
 
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung Test', $3, 'leitung')`,
-      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
+      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
 
     const { rows: klientRows } = await admin.query<{ id: string }>(
@@ -60,8 +60,8 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
 
     const res = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ mandantSlug, email: `leitung-${suffix}@beispiel.test`, passwort });
-    tokenLeitung = res.body.accessToken;
+      .send({ mandantSlug, email: `bereichsleitung-${suffix}@beispiel.test`, passwort });
+    tokenBereichsleitung = res.body.accessToken;
   });
 
   afterAll(async () => {
@@ -83,13 +83,13 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
   });
 
   function post(path: string, body: Record<string, unknown>) {
-    return request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${tokenLeitung}`).send(body);
+    return request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${tokenBereichsleitung}`).send(body);
   }
   function patch(path: string, body: Record<string, unknown>) {
-    return request(app.getHttpServer()).patch(path).set("Authorization", `Bearer ${tokenLeitung}`).send(body);
+    return request(app.getHttpServer()).patch(path).set("Authorization", `Bearer ${tokenBereichsleitung}`).send(body);
   }
   function get(path: string) {
-    return request(app.getHttpServer()).get(path).set("Authorization", `Bearer ${tokenLeitung}`);
+    return request(app.getHttpServer()).get(path).set("Authorization", `Bearer ${tokenBereichsleitung}`);
   }
 
   describe("Kostenübernahme-Zeiträume", () => {

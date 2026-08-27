@@ -1,6 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { requireTenantContext } from "../common/tenant-context";
+import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { initialen } from "../common/anonymisierung";
 
@@ -39,7 +39,14 @@ export interface BelegungsverlaufEintrag {
 // API entscheidet anhand der Rolle". Der aktuelle Bewohner wird immer mit
 // vollem Namen angezeigt, unabhängig von der Rolle -- operativ braucht das
 // jede Mitarbeiterin, die vor der Tür steht.
-const ROLLEN_MIT_VOLLEM_VERLAUF = new Set(["leitung", "verwaltung"]);
+const ROLLEN_MIT_VOLLEM_VERLAUF = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
+
+// Zimmer-/Standort-Stammdaten sind eine strukturelle Entscheidung über die
+// Einrichtung, kein operatives Tagesgeschäft -- Klient zuweisen/Auszug
+// eintragen (belegung.service.ts) bleibt bewusst für alle Rollen offen,
+// das hier nicht. Gleiches Rollenmuster wie ROLLEN_MIT_STORNO in
+// kassenbuchung.service.ts.
+const ROLLEN_MIT_ZIMMER_STAMMDATEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 @Injectable()
 export class ZimmerService {
@@ -97,14 +104,21 @@ export class ZimmerService {
   }
 
   async anlegen(input: { standortId: string; nummer: string; etage?: string }) {
-    const { mandantId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer anlegen.");
+    }
     try {
       return await this.db.withTenant(async (client) => {
+        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+        if (erlaubteStandorte && !erlaubteStandorte.includes(input.standortId)) {
+          throw new NotFoundException("Standort nicht gefunden.");
+        }
         const { rows } = await client.query(
           `INSERT INTO zimmer (mandant_id, standort_id, nummer, etage)
            VALUES ($1, $2, $3, COALESCE($4, 'EG'))
            RETURNING id, nummer, etage, standort_id`,
-          [mandantId, input.standortId, input.nummer, input.etage ?? null]
+          [ctx.mandantId, input.standortId, input.nummer, input.etage ?? null]
         );
         return rows[0];
       });
@@ -137,10 +151,13 @@ export class ZimmerService {
   }
 
   async aktualisieren(id: string, input: { nummer: string; etage?: string }) {
-    const { benutzerId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer bearbeiten.");
+    }
     try {
       return await this.db.withTenant(async (client) => {
-        if (!(await this.standortDesZimmersErlaubt(client, benutzerId, id))) {
+        if (!(await this.standortDesZimmersErlaubt(client, ctx.benutzerId, id))) {
           throw new NotFoundException("Zimmer nicht gefunden.");
         }
         const { rows } = await client.query(
@@ -167,9 +184,12 @@ export class ZimmerService {
    * deshalb wie bei mandant/standort: aktiv = false, die Historie bleibt.
    */
   async deaktivieren(id: string) {
-    const { benutzerId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer deaktivieren.");
+    }
     return this.db.withTenant(async (client) => {
-      const standortId = await this.standortDesZimmersErlaubt(client, benutzerId, id);
+      const standortId = await this.standortDesZimmersErlaubt(client, ctx.benutzerId, id);
       if (!standortId) throw new NotFoundException("Zimmer nicht gefunden.");
 
       const { rows: offene } = await client.query(

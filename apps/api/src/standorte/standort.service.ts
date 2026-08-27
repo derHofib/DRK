@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { requireTenantContext } from "../common/tenant-context";
+import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 
 export interface StandortDto {
   id: string;
@@ -8,6 +8,16 @@ export interface StandortDto {
   adresse: string;
   aktiv: boolean;
 }
+
+// Eine neue Einrichtung zu eroeffnen ist eine traegerweite Entscheidung
+// (mehr Personal, mehr Budget) -- deshalb nur Bereichsleitung, anders als
+// beim Bearbeiten einer bestehenden Einrichtung (siehe unten).
+const ROLLEN_MIT_STANDORT_ANLEGEN = new Set<BenutzerRolle>(["bereichsleitung"]);
+
+// Eine bestehende Einrichtung pflegen (Name/Adresse korrigieren, aktivieren/
+// deaktivieren) darf zusaetzlich die Einrichtungsleitung -- gleiches Muster
+// wie ROLLEN_MIT_ZIMMER_STAMMDATEN in zimmer.service.ts.
+const ROLLEN_MIT_STANDORT_BEARBEITEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 @Injectable()
 export class StandortService {
@@ -29,11 +39,14 @@ export class StandortService {
   }
 
   async anlegen(input: { name: string; adresse: string }): Promise<StandortDto> {
-    const { mandantId } = requireTenantContext();
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STANDORT_ANLEGEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur die Bereichsleitung darf eine neue Einrichtung anlegen.");
+    }
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<StandortDto>(
         "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, $2, $3) RETURNING id, name, adresse, aktiv",
-        [mandantId, input.name, input.adresse]
+        [ctx.mandantId, input.name, input.adresse]
       );
       return rows[0];
     });
@@ -49,6 +62,10 @@ export class StandortService {
     id: string,
     input: { name?: string; adresse?: string; aktiv?: boolean }
   ): Promise<StandortDto> {
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STANDORT_BEARBEITEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen eine Einrichtung bearbeiten.");
+    }
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<StandortDto>(
         `UPDATE standort

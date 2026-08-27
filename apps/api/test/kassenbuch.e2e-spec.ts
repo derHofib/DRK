@@ -23,7 +23,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
   let mandantId: string;
   let mandantSlug: string;
-  let tokenLeitung: string;
+  let tokenBereichsleitung: string;
   let klientWoechentlich: string;
   let klientMonatlich: string;
 
@@ -43,10 +43,10 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: leitungRows } = await admin.query<{ id: string }>(
+    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung Test', $3, 'leitung') RETURNING id`,
-      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
+      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
 
     const { rows: klientWoRows } = await admin.query<{ id: string }>(
@@ -69,8 +69,8 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
     const res = await request(app.getHttpServer())
       .post("/auth/login")
-      .send({ mandantSlug, email: `leitung-${suffix}@beispiel.test`, passwort });
-    tokenLeitung = res.body.accessToken;
+      .send({ mandantSlug, email: `bereichsleitung-${suffix}@beispiel.test`, passwort });
+    tokenBereichsleitung = res.body.accessToken;
   });
 
   afterAll(async () => {
@@ -87,10 +87,10 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
   });
 
   function post(path: string, body: Record<string, unknown>) {
-    return request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${tokenLeitung}`).send(body);
+    return request(app.getHttpServer()).post(path).set("Authorization", `Bearer ${tokenBereichsleitung}`).send(body);
   }
   function get(path: string) {
-    return request(app.getHttpServer()).get(path).set("Authorization", `Bearer ${tokenLeitung}`);
+    return request(app.getHttpServer()).get(path).set("Authorization", `Bearer ${tokenBereichsleitung}`);
   }
 
   it("lehnt eine Auszahlung ohne Unterschrift ab", async () => {
@@ -167,7 +167,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
     const stornoRes = await request(app.getHttpServer())
       .patch(`/kassenbuchungen/${offeneHzl.id}/stornieren`)
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Falscher Betrag eingegeben" });
     expect(stornoRes.status).toBe(200);
     expect(stornoRes.body.storniert).toBe(true);
@@ -197,7 +197,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
     const res = await request(app.getHttpServer())
       .patch(`/kassenbuchungen/${bereitsStorniert.id}/stornieren`)
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Nochmal" });
     expect(res.status).toBe(404);
   });

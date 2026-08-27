@@ -27,8 +27,8 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
   let zimmerId: string;
   let klientEhemalig: { id: string; vorname: string; nachname: string };
   let klientAktuell: { id: string; vorname: string; nachname: string };
-  let tokenLeitung: string;
-  let tokenBezugsbetreuung: string;
+  let tokenBereichsleitung: string;
+  let tokenBetreuer: string;
 
   const passwort = "correct horse battery staple";
 
@@ -46,15 +46,15 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: leitungRows } = await admin.query<{ id: string }>(
+    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung Test', $3, 'leitung') RETURNING id`,
-      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
+      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
-    const { rows: betreuungRows } = await admin.query<{ id: string }>(
+    const { rows: betreuerRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuung Test', $3, 'bezugsbetreuung') RETURNING id`,
-      [mandantId, `betreuung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Betreuer Test', $3, 'betreuer') RETURNING id`,
+      [mandantId, `betreuer-${suffix}@beispiel.test`, passwortHash]
     );
 
     const { rows: standortRows } = await admin.query<{ id: string }>(
@@ -102,8 +102,8 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort });
       return res.body.accessToken as string;
     }
-    tokenLeitung = await login(`leitung-${suffix}@beispiel.test`);
-    tokenBezugsbetreuung = await login(`betreuung-${suffix}@beispiel.test`);
+    tokenBereichsleitung = await login(`bereichsleitung-${suffix}@beispiel.test`);
+    tokenBetreuer = await login(`betreuer-${suffix}@beispiel.test`);
   });
 
   afterAll(async () => {
@@ -118,17 +118,17 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
   });
 
   it("leitet den Zimmerstatus aus der Belegung ab, ohne ein Statusfeld zu speichern", async () => {
-    const res = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenLeitung}`);
+    const res = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenBereichsleitung}`);
     const zimmer = res.body.find((z: { id: string }) => z.id === zimmerId);
 
     expect(zimmer.status).toBe("vergeben");
     expect(zimmer.aktuellerKlient.name).toBe(`${klientAktuell.vorname} ${klientAktuell.nachname}`);
   });
 
-  it("liefert im Belegungsverlauf für Bezugsbetreuung nur Initialen der ehemaligen Person, aber den vollen Namen der aktuellen", async () => {
+  it("liefert im Belegungsverlauf für Betreuer nur Initialen der ehemaligen Person, aber den vollen Namen der aktuellen", async () => {
     const res = await request(app.getHttpServer())
       .get(`/zimmer/${zimmerId}/belegungsverlauf`)
-      .set("Authorization", `Bearer ${tokenBezugsbetreuung}`);
+      .set("Authorization", `Bearer ${tokenBetreuer}`);
 
     const ehemalig = res.body.find((e: { istAktuell: boolean }) => !e.istAktuell);
     const aktuell = res.body.find((e: { istAktuell: boolean }) => e.istAktuell);
@@ -140,10 +140,10 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
     expect(aktuell.name).toBe(`${klientAktuell.vorname} ${klientAktuell.nachname}`);
   });
 
-  it("liefert im Belegungsverlauf für Leitung den vollen Namen, auch für ehemalige Bewohner:innen", async () => {
+  it("liefert im Belegungsverlauf für Bereichsleitung den vollen Namen, auch für ehemalige Bewohner:innen", async () => {
     const res = await request(app.getHttpServer())
       .get(`/zimmer/${zimmerId}/belegungsverlauf`)
-      .set("Authorization", `Bearer ${tokenLeitung}`);
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`);
 
     const ehemalig = res.body.find((e: { istAktuell: boolean }) => !e.istAktuell);
     expect(ehemalig.name).toBe(`${klientEhemalig.vorname} ${klientEhemalig.nachname}`);
@@ -166,7 +166,7 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
 
     const res = await request(app.getHttpServer())
       .post("/belegungen")
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ zimmerId, klientId: unbeteiligterKlient, einzug: "2024-01-01" }); // liegt mitten in der bestehenden Belegung
 
     expect(res.status).toBe(409);
@@ -181,7 +181,7 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
 
     const res = await request(app.getHttpServer())
       .post("/belegungen")
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ zimmerId: zweitesZimmer, klientId: klientAktuell.id, einzug: "2025-01-01" });
 
     expect(res.status).toBe(409);
@@ -208,20 +208,20 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
 
     const einzugRes = await request(app.getHttpServer())
       .post("/belegungen")
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ zimmerId: auszugZimmer, klientId: auszugKlient, einzug: "2025-01-01" });
     expect(einzugRes.status).toBe(201);
 
-    let zimmerListe = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenLeitung}`);
+    let zimmerListe = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenBereichsleitung}`);
     expect(zimmerListe.body.find((z: { id: string }) => z.id === auszugZimmer).status).toBe("vergeben");
 
     const auszugRes = await request(app.getHttpServer())
       .patch(`/belegungen/${einzugRes.body.id}`)
-      .set("Authorization", `Bearer ${tokenLeitung}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ auszug: "2025-06-01" });
     expect(auszugRes.status).toBe(200);
 
-    zimmerListe = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenLeitung}`);
+    zimmerListe = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenBereichsleitung}`);
     expect(zimmerListe.body.find((z: { id: string }) => z.id === auszugZimmer).status).toBe("zugeordnet");
   });
 });

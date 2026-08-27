@@ -153,7 +153,7 @@ verwenden (Vorbild: `mandant.controller.ts`).
 **Rollenprüfungen** gehören in den Service, neben das SQL, das sie schützt —
 nicht in den Controller. Muster:
 ```ts
-const ROLLEN_MIT_X = new Set<BenutzerRolle>(["leitung", "verwaltung"]);
+const ROLLEN_MIT_X = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 // ...
 const ctx = requireTenantContext();
 if (!ROLLEN_MIT_X.has(ctx.rolle)) throw new ForbiddenException("…");

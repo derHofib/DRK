@@ -22,9 +22,9 @@ describe("Tagesberichte", () => {
   let mandantBId: string;
   let mandantBSlug: string;
 
-  let tokenLeitung: string;
-  let tokenVerwaltungS1: string;
-  let tokenLeitungB: string;
+  let tokenBereichsleitung: string;
+  let tokenEinrichtungsleitungS1: string;
+  let tokenBereichsleitungB: string;
 
   let klient1: string; // Standort 1
   let klient2: string; // Standort 2
@@ -51,21 +51,21 @@ describe("Tagesberichte", () => {
     );
     mandantBId = mandantBRows[0].id;
 
-    const { rows: leitungRows } = await admin.query<{ id: string }>(
+    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung Test', $3, 'leitung') RETURNING id`,
-      [mandantId, `leitung-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
+      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
-    const { rows: verwaltungRows } = await admin.query<{ id: string }>(
+    const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Verwaltung S1 Test', $3, 'verwaltung') RETURNING id`,
-      [mandantId, `verwaltung-s1-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
+      [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
     );
-    const verwaltungS1Id = verwaltungRows[0].id;
+    const einrichtungsleitungS1Id = einrichtungsleitungRows[0].id;
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung B Test', $3, 'leitung')`,
-      [mandantBId, `leitung-b-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung B Test', $3, 'bereichsleitung')`,
+      [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
     );
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
@@ -81,7 +81,7 @@ describe("Tagesberichte", () => {
 
     await admin.query(
       "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
-      [mandantId, verwaltungS1Id, standort1]
+      [mandantId, einrichtungsleitungS1Id, standort1]
     );
 
     const { rows: zimmer1Rows } = await admin.query<{ id: string }>(
@@ -123,9 +123,9 @@ describe("Tagesberichte", () => {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug: slug, email, passwort });
       return res.body.accessToken as string;
     }
-    tokenLeitung = await login(mandantSlug, `leitung-${suffix}@beispiel.test`);
-    tokenVerwaltungS1 = await login(mandantSlug, `verwaltung-s1-${suffix}@beispiel.test`);
-    tokenLeitungB = await login(mandantBSlug, `leitung-b-${suffix}@beispiel.test`);
+    tokenBereichsleitung = await login(mandantSlug, `bereichsleitung-${suffix}@beispiel.test`);
+    tokenEinrichtungsleitungS1 = await login(mandantSlug, `einrichtungsleitung-s1-${suffix}@beispiel.test`);
+    tokenBereichsleitungB = await login(mandantBSlug, `bereichsleitung-b-${suffix}@beispiel.test`);
   });
 
   afterAll(async () => {
@@ -157,7 +157,7 @@ describe("Tagesberichte", () => {
   }
 
   it("legt einen Tagesbericht mit initialen Tags an", async () => {
-    const res = await als(tokenLeitung).post("/tagesberichte", {
+    const res = await als(tokenBereichsleitung).post("/tagesberichte", {
       klientId: klient1,
       datum: "2026-08-26",
       text: "Ruhiger Tag, an der Gruppenaktivitaet teilgenommen.",
@@ -170,64 +170,64 @@ describe("Tagesberichte", () => {
   });
 
   it("ohne klientId: zeigt Berichte ALLER Klienten (allgemeiner Menuepunkt)", async () => {
-    await als(tokenLeitung).post("/tagesberichte", { klientId: klient2, datum: "2026-08-25", text: "Bericht zu Klient 2." });
+    await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient2, datum: "2026-08-25", text: "Bericht zu Klient 2." });
 
-    const alle = await als(tokenLeitung).get("/tagesberichte");
+    const alle = await als(tokenBereichsleitung).get("/tagesberichte");
     expect(alle.status).toBe(200);
     const klientIds = alle.body.map((t: { klientId: string }) => t.klientId);
     expect(klientIds).toEqual(expect.arrayContaining([klient1, klient2]));
   });
 
   it("mit klientId: nur Berichte dieses einen Klienten (Tab in der Klientenakte)", async () => {
-    const res = await als(tokenLeitung).get(`/tagesberichte?klientId=${klient1}`);
+    const res = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThan(0);
     expect(res.body.every((t: { klientId: string }) => t.klientId === klient1)).toBe(true);
   });
 
   it("wiederverwendet einen bestehenden Tag mit demselben Namen statt einen Duplikat-Tag anzulegen", async () => {
-    const erster = await als(tokenLeitung).post("/tagesberichte", {
+    const erster = await als(tokenBereichsleitung).post("/tagesberichte", {
       klientId: klient1,
       datum: "2026-08-24",
       text: "Zweiter Bericht.",
       tagNamen: ["Beobachtung"],
     });
-    const tagsListe = await als(tokenLeitung).get("/tags");
+    const tagsListe = await als(tokenBereichsleitung).get("/tags");
     const beobachtungTags = tagsListe.body.filter((t: { name: string }) => t.name === "Beobachtung");
     expect(beobachtungTags.length).toBe(1);
     expect(erster.body.tags[0].id).toBe(beobachtungTags[0].id);
   });
 
   it("Tag laesst sich nachtraeglich hinzufuegen und wieder entfernen", async () => {
-    const angelegt = await als(tokenLeitung).post("/tagesberichte", {
+    const angelegt = await als(tokenBereichsleitung).post("/tagesberichte", {
       klientId: klient1,
       datum: "2026-08-23",
       text: "Bericht ohne Tags.",
     });
     expect(angelegt.body.tags).toEqual([]);
 
-    const hinzugefuegt = await als(tokenLeitung).post(`/tagesberichte/${angelegt.body.id}/tags`, { name: "Vorfall" });
+    const hinzugefuegt = await als(tokenBereichsleitung).post(`/tagesberichte/${angelegt.body.id}/tags`, { name: "Vorfall" });
     expect(hinzugefuegt.status).toBe(201);
     expect(hinzugefuegt.body.tags.map((t: { name: string }) => t.name)).toContain("Vorfall");
     const tagId = hinzugefuegt.body.tags.find((t: { name: string }) => t.name === "Vorfall").id;
 
-    const entfernt = await als(tokenLeitung).delete(`/tagesberichte/${angelegt.body.id}/tags/${tagId}`);
+    const entfernt = await als(tokenBereichsleitung).delete(`/tagesberichte/${angelegt.body.id}/tags/${tagId}`);
     expect(entfernt.status).toBe(200);
 
-    const nachher = await als(tokenLeitung).get(`/tagesberichte?klientId=${klient1}`);
+    const nachher = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}`);
     const bericht = nachher.body.find((t: { id: string }) => t.id === angelegt.body.id);
     expect(bericht.tags.map((t: { name: string }) => t.name)).not.toContain("Vorfall");
   });
 
-  it("Standort-Einschraenkung: verwaltung-s1 sieht auch im allgemeinen Menuepunkt nur Berichte ihres Standorts", async () => {
-    const alle = await als(tokenVerwaltungS1).get("/tagesberichte");
+  it("Standort-Einschraenkung: einrichtungsleitung-s1 sieht auch im allgemeinen Menuepunkt nur Berichte ihres Standorts", async () => {
+    const alle = await als(tokenEinrichtungsleitungS1).get("/tagesberichte");
     expect(alle.status).toBe(200);
     expect(alle.body.every((t: { klientId: string }) => t.klientId === klient1)).toBe(true);
     expect(alle.body.some((t: { klientId: string }) => t.klientId === klient2)).toBe(false);
   });
 
-  it("Standort-Einschraenkung: verwaltung-s1 kann keinen Bericht fuer einen Klienten in Standort 2 anlegen", async () => {
-    const res = await als(tokenVerwaltungS1).post("/tagesberichte", {
+  it("Standort-Einschraenkung: einrichtungsleitung-s1 kann keinen Bericht fuer einen Klienten in Standort 2 anlegen", async () => {
+    const res = await als(tokenEinrichtungsleitungS1).post("/tagesberichte", {
       klientId: klient2,
       datum: "2026-08-26",
       text: "Sollte scheitern.",
@@ -235,14 +235,14 @@ describe("Tagesberichte", () => {
     expect(res.status).toBe(404);
   });
 
-  it("Mandantentrennung: Leitung eines anderen Mandanten sieht keine fremden Tagesberichte", async () => {
-    const res = await als(tokenLeitungB).get("/tagesberichte");
+  it("Mandantentrennung: Bereichsleitung eines anderen Mandanten sieht keine fremden Tagesberichte", async () => {
+    const res = await als(tokenBereichsleitungB).get("/tagesberichte");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 
   it("lehnt ungueltige Eingaben mit 400 ab", async () => {
-    const res = await als(tokenLeitung).post("/tagesberichte", { klientId: klient1, datum: "26.08.2026", text: "" });
+    const res = await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient1, datum: "26.08.2026", text: "" });
     expect(res.status).toBe(400);
   });
 });

@@ -1195,7 +1195,7 @@
 /*
  * Vorschaukachel. data-vorschau setzt color-scheme lokal -- dadurch loesen
  * sich ALLE light-dark()-Tokens innerhalb dieses Teilbaums neu auf, und die
- * Leitung sieht das jeweils andere Theme, ohne selbst umzuschalten. Ein
+ * Bereichsleitung sieht das jeweils andere Theme, ohne selbst umzuschalten. Ein
  * eleganter Nebeneffekt von light-dark(), ohne eine Zeile Sonderlogik.
  */
 .zv-vorschau {

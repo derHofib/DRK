@@ -37,7 +37,7 @@ Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 - `GET /zimmer` leitet den Status ausschließlich per `LEFT JOIN` auf offene
   Belegungen ab; kein gespeichertes Statusfeld existiert
 - `GET /zimmer/:id/belegungsverlauf` liefert frühere Bewohner:innen nur mit
-  Initialen, außer für die Rollen `leitung`/`verwaltung` — Anonymisierung
+  Initialen, außer für die Rollen `bereichsleitung`/`einrichtungsleitung` — Anonymisierung
   passiert beim Lesen, gespeichert wird immer der volle Name
 - `POST /belegungen` übersetzt eine verletzte Exclusion-Constraint
   (SQLSTATE `23P01`) in ein `409 Conflict`
@@ -260,7 +260,7 @@ Damit ist der ursprüngliche Phasenplan durch. Was jetzt noch fehlt, ist in
 "Was hier bewusst fehlt" unten aufgeführt.
 
 **Phase 7 — Designsystem (einstellbare Akzentfarbe, Hell/Dunkel, Icons)**
-- **Akzentfarbe je Träger**, gesetzt von der Leitung, gilt für alle
+- **Akzentfarbe je Träger**, gesetzt von der Bereichsleitung, gilt für alle
   Mitarbeitenden. 9 kuratierte Pastellpaletten plus freier Farbwähler, mit
   Live-Vorschau, die sofort die ganze Anwendung umfärbt.
 - **Die tragende Idee:** Kontrast hängt ausschließlich an der Helligkeit.
@@ -380,15 +380,17 @@ eingeschränkte `zimmerakte_app`-Rolle danach selbst an.
 
 ### Einen ersten Mandanten anlegen
 
-Es gibt noch keine Weboberfläche fürs Onboarding (kommt mit Phase 5, siehe
-Bauplan). Für die lokale Entwicklung von Hand:
+Es gibt bewusst keinen öffentlichen Registrierungs-Endpunkt (siehe
+"Architekturentscheidungen" unten) -- auf einem echten Server übernimmt das
+`scripts/account-anlegen.sh` (siehe `docs/DEPLOYMENT.md`, Abschnitt 5.1).
+Für die lokale Entwicklung geht es genauso schnell von Hand:
 
 ```sql
 INSERT INTO mandant (name, slug) VALUES ('Mein Träger', 'mein-traeger');
 
 -- Passwort-Hash erzeugen: node -e "console.log(require('bcryptjs').hashSync('DEIN_PASSWORT', 10))"
 INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-SELECT id, 'du@beispiel.de', 'Dein Name', '<bcrypt-hash>', 'leitung'
+SELECT id, 'du@beispiel.de', 'Dein Name', '<bcrypt-hash>', 'bereichsleitung'
 FROM mandant WHERE slug = 'mein-traeger';
 ```
 

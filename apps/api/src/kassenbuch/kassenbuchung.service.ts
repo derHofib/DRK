@@ -11,10 +11,9 @@ const UNIQUE_VIOLATION = "23505";
 
 // Ein Storno macht eine Auszahlung/Einzahlung rueckwirkend ungueltig -- wer
 // das darf, entscheidet ueber die Kassenbuchfuehrung, nicht ueber einzelne
-// Klientendaten. Gleiches Rollenmuster wie ROLLEN_MIT_BRANDING in
-// mandant.service.ts. bezugsbetreuung/springer legen Buchungen an, duerfen
-// sie aber nicht im Nachhinein aus der Kasse entfernen.
-const ROLLEN_MIT_STORNO = new Set<BenutzerRolle>(["leitung", "verwaltung"]);
+// Klientendaten. Betreuer legen Buchungen an, duerfen sie aber nicht im
+// Nachhinein aus der Kasse entfernen.
+const ROLLEN_MIT_STORNO = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
 
@@ -119,7 +118,7 @@ export class KassenbuchungService {
   async stornieren(id: string, grund: string): Promise<KassenbuchungDto> {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_STORNO.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur Leitung oder Verwaltung dürfen Buchungen stornieren.");
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Buchungen stornieren.");
     }
     const { benutzerId } = ctx;
     return this.db.withTenant(async (client) => {

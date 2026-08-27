@@ -6,7 +6,7 @@ import type {
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
-import { api } from "../api/client";
+import { api, tokenRolle } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -41,6 +41,13 @@ const STATUS_ICON = {
  * (siehe zimmer.service.ts), das Frontend ist hier absichtlich dumm.
  */
 export function Zimmer() {
+  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
+  // (siehe ROLLEN_MIT_ZIMMER_STAMMDATEN in zimmer.service.ts). Klient
+  // zuweisen/Auszug eintragen/Belegungsverlauf bleiben davon unberuehrt --
+  // das ist Tagesgeschaeft, keine Stammdatenpflege.
+  const rolleZimmer = tokenRolle();
+  const darfStammdatenBearbeiten = rolleZimmer === "bereichsleitung" || rolleZimmer === "einrichtungsleitung";
+
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
@@ -260,10 +267,12 @@ export function Zimmer() {
 
       <div className="zv-seiten-kopf">
         <h2>Zimmer</h2>
-        <button className="zv-btn" onClick={formularOeffnen}>
-          <INeu />
-          Neues Zimmer
-        </button>
+        {darfStammdatenBearbeiten && (
+          <button className="zv-btn" onClick={formularOeffnen}>
+            <INeu />
+            Neues Zimmer
+          </button>
+        )}
       </div>
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
@@ -303,16 +312,18 @@ export function Zimmer() {
                         {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
                         {offenesZimmer !== z.id && <IAufklappen />}
                       </button>
-                      <button
-                        className="zv-link-btn"
-                        onClick={() => {
-                          setBearbeitenFehler(null);
-                          setBearbeitetesZimmer(z);
-                        }}
-                      >
-                        <IBearbeiten />
-                        Bearbeiten
-                      </button>
+                      {darfStammdatenBearbeiten && (
+                        <button
+                          className="zv-link-btn"
+                          onClick={() => {
+                            setBearbeitenFehler(null);
+                            setBearbeitetesZimmer(z);
+                          }}
+                        >
+                          <IBearbeiten />
+                          Bearbeiten
+                        </button>
+                      )}
                       {z.status === "zugeordnet" ? (
                         <>
                           <button
@@ -325,9 +336,11 @@ export function Zimmer() {
                             <IEinziehen />
                             Klient zuweisen
                           </button>
-                          <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
-                            Deaktivieren
-                          </button>
+                          {darfStammdatenBearbeiten && (
+                            <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                              Deaktivieren
+                            </button>
+                          )}
                         </>
                       ) : (
                         <button

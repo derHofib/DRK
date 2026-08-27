@@ -3,16 +3,17 @@
  * nur per manuellem SQL-Insert (siehe README "Ersten Benutzer anlegen").
  *
  * Kernaussagen:
- *   1. Nur die Rolle "leitung" darf das (ROLLEN_MIT_BENUTZER_ANLEGEN in
- *      benutzer.service.ts) -- bewusst die engste Fassung, bis die geplante
- *      Fuehrungshierarchie (Mitarbeiter/Leiter/Bereichsleiter) steht.
- *   2. Eine doppelte E-Mail IM SELBEN Mandanten wird mit 409 abgelehnt
+ *   1. Bereichsleitung und Einrichtungsleitung duerfen das
+ *      (ROLLEN_MIT_BENUTZER_ANLEGEN in benutzer.service.ts), Betreuer nicht.
+ *   2. Einrichtungsleitung darf dabei niemanden zur Bereichsleitung machen --
+ *      sonst waere die Fuehrungshierarchie ueber diesen Weg aushebelbar.
+ *   3. Eine doppelte E-Mail IM SELBEN Mandanten wird mit 409 abgelehnt
  *      (UNIQUE(mandant_id, email), migrations/0004_benutzer.sql), dieselbe
  *      E-Mail in einem ANDEREN Mandanten ist erlaubt.
- *   3. Das gesetzte Passwort funktioniert wirklich -- der neu angelegte
+ *   4. Das gesetzte Passwort funktioniert wirklich -- der neu angelegte
  *      Benutzer kann sich damit einloggen (Ende-zu-Ende-Beweis fuer den
  *      bcrypt-Hash, nicht nur einen 201-Status).
- *   4. Mandantentrennung: ein in Mandant A angelegter Benutzer taucht nicht
+ *   5. Mandantentrennung: ein in Mandant A angelegter Benutzer taucht nicht
  *      in Mandant B's Liste auf.
  */
 import "reflect-metadata";
@@ -32,9 +33,10 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
   let mandantASlug: string;
   let mandantBId: string;
   let mandantBSlug: string;
-  let tokenLeitungA: string;
-  let tokenVerwaltungA: string;
-  let tokenLeitungB: string;
+  let tokenBereichsleitungA: string;
+  let tokenEinrichtungsleitungA: string;
+  let tokenBetreuerA: string;
+  let tokenBereichsleitungB: string;
 
   const passwort = "correct horse battery staple";
   const suffix = randomUUID().slice(0, 8);
@@ -60,18 +62,23 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
 
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung A', $3, 'leitung')`,
-      [mandantAId, `leitung-a-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Bereichsleitung A', $3, 'bereichsleitung')`,
+      [mandantAId, `bereichsleitung-a-${suffix}@beispiel.test`, passwortHash]
     );
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Verwaltung A', $3, 'verwaltung')`,
-      [mandantAId, `verwaltung-a-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Einrichtungsleitung A', $3, 'einrichtungsleitung')`,
+      [mandantAId, `einrichtungsleitung-a-${suffix}@beispiel.test`, passwortHash]
     );
     await admin.query(
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Leitung B', $3, 'leitung')`,
-      [mandantBId, `leitung-b-${suffix}@beispiel.test`, passwortHash]
+       VALUES ($1, $2, 'Betreuer A', $3, 'betreuer')`,
+      [mandantAId, `betreuer-a-${suffix}@beispiel.test`, passwortHash]
+    );
+    await admin.query(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Bereichsleitung B', $3, 'bereichsleitung')`,
+      [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
     );
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -82,9 +89,10 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort });
       return res.body.accessToken as string;
     }
-    tokenLeitungA = await login(mandantASlug, `leitung-a-${suffix}@beispiel.test`);
-    tokenVerwaltungA = await login(mandantASlug, `verwaltung-a-${suffix}@beispiel.test`);
-    tokenLeitungB = await login(mandantBSlug, `leitung-b-${suffix}@beispiel.test`);
+    tokenBereichsleitungA = await login(mandantASlug, `bereichsleitung-a-${suffix}@beispiel.test`);
+    tokenEinrichtungsleitungA = await login(mandantASlug, `einrichtungsleitung-a-${suffix}@beispiel.test`);
+    tokenBetreuerA = await login(mandantASlug, `betreuer-a-${suffix}@beispiel.test`);
+    tokenBereichsleitungB = await login(mandantBSlug, `bereichsleitung-b-${suffix}@beispiel.test`);
   });
 
   afterAll(async () => {
@@ -103,80 +111,104 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     };
   }
 
-  it("legt als Leitung einen neuen Mitarbeiter an", async () => {
-    const res = await als(tokenLeitungA).post("/benutzer", {
-      name: "Neue Bezugsbetreuung",
+  it("legt als Bereichsleitung einen neuen Mitarbeiter an", async () => {
+    const res = await als(tokenBereichsleitungA).post("/benutzer", {
+      name: "Neuer Betreuer",
       email: `neu-1-${suffix}@beispiel.test`,
-      rolle: "bezugsbetreuung",
+      rolle: "betreuer",
       passwort,
     });
     expect(res.status).toBe(201);
-    expect(res.body.name).toBe("Neue Bezugsbetreuung");
-    expect(res.body.rolle).toBe("bezugsbetreuung");
+    expect(res.body.name).toBe("Neuer Betreuer");
+    expect(res.body.rolle).toBe("betreuer");
     expect(res.body.aktiv).toBe(true);
     expect(res.body.passwort_hash).toBeUndefined();
     expect(res.body.passwortHash).toBeUndefined();
 
-    const liste = await als(tokenLeitungA).get("/benutzer");
+    const liste = await als(tokenBereichsleitungA).get("/benutzer");
     expect(liste.body.some((b: { email: string }) => b.email === `neu-1-${suffix}@beispiel.test`)).toBe(true);
   });
 
-  it("lehnt das Anlegen durch eine Nicht-Leitung-Rolle mit 403 ab", async () => {
-    const res = await als(tokenVerwaltungA).post("/benutzer", {
+  it("legt auch als Einrichtungsleitung einen neuen Mitarbeiter an", async () => {
+    const res = await als(tokenEinrichtungsleitungA).post("/benutzer", {
+      name: "Von Einrichtungsleitung angelegt",
+      email: `neu-el-${suffix}@beispiel.test`,
+      rolle: "betreuer",
+      passwort,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.rolle).toBe("betreuer");
+  });
+
+  it("Einrichtungsleitung darf niemanden zur Bereichsleitung befoerdern (403)", async () => {
+    const res = await als(tokenEinrichtungsleitungA).post("/benutzer", {
       name: "Sollte nicht klappen",
-      email: `neu-2-${suffix}@beispiel.test`,
-      rolle: "springer",
+      email: `eskalation-${suffix}@beispiel.test`,
+      rolle: "bereichsleitung",
       passwort,
     });
     expect(res.status).toBe(403);
 
-    const liste = await als(tokenLeitungA).get("/benutzer");
+    const liste = await als(tokenBereichsleitungA).get("/benutzer");
+    expect(liste.body.some((b: { email: string }) => b.email === `eskalation-${suffix}@beispiel.test`)).toBe(false);
+  });
+
+  it("lehnt das Anlegen durch Betreuer mit 403 ab", async () => {
+    const res = await als(tokenBetreuerA).post("/benutzer", {
+      name: "Sollte nicht klappen",
+      email: `neu-2-${suffix}@beispiel.test`,
+      rolle: "betreuer",
+      passwort,
+    });
+    expect(res.status).toBe(403);
+
+    const liste = await als(tokenBereichsleitungA).get("/benutzer");
     expect(liste.body.some((b: { email: string }) => b.email === `neu-2-${suffix}@beispiel.test`)).toBe(false);
   });
 
   it("lehnt eine doppelte E-Mail im selben Mandanten mit 409 ab, erlaubt sie aber in einem ANDEREN Mandanten", async () => {
     const email = `doppelt-${suffix}@beispiel.test`;
-    const erstes = await als(tokenLeitungA).post("/benutzer", {
+    const erstes = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Erster",
       email,
-      rolle: "springer",
+      rolle: "betreuer",
       passwort,
     });
     expect(erstes.status).toBe(201);
 
-    const doppelt = await als(tokenLeitungA).post("/benutzer", {
+    const doppelt = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Zweiter",
       email,
-      rolle: "springer",
+      rolle: "betreuer",
       passwort,
     });
     expect(doppelt.status).toBe(409);
 
-    const andererMandant = await als(tokenLeitungB).post("/benutzer", {
+    const andererMandant = await als(tokenBereichsleitungB).post("/benutzer", {
       name: "Auch erlaubt",
       email,
-      rolle: "springer",
+      rolle: "betreuer",
       passwort,
     });
     expect(andererMandant.status).toBe(201);
   });
 
   it("lehnt ungueltige Eingaben mit 400 ab (fehlende Felder, unbekannte Rolle, zu kurzes Passwort)", async () => {
-    const fehlend = await als(tokenLeitungA).post("/benutzer", { name: "Ohne Rest" });
+    const fehlend = await als(tokenBereichsleitungA).post("/benutzer", { name: "Ohne Rest" });
     expect(fehlend.status).toBe(400);
 
-    const unbekannteRolle = await als(tokenLeitungA).post("/benutzer", {
+    const unbekannteRolle = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "X",
       email: `x-${suffix}@beispiel.test`,
-      rolle: "bereichsleiter",
+      rolle: "springer",
       passwort,
     });
     expect(unbekannteRolle.status).toBe(400);
 
-    const kurzesPasswort = await als(tokenLeitungA).post("/benutzer", {
+    const kurzesPasswort = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "X",
       email: `y-${suffix}@beispiel.test`,
-      rolle: "springer",
+      rolle: "betreuer",
       passwort: "zu-kurz",
     });
     expect(kurzesPasswort.status).toBe(400);
@@ -185,10 +217,10 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
   it("das gesetzte Passwort funktioniert wirklich -- der neue Benutzer kann sich einloggen", async () => {
     const email = `einlogg-${suffix}@beispiel.test`;
     const eigenesPasswort = "ein ganz eigenes passwort";
-    const angelegt = await als(tokenLeitungA).post("/benutzer", {
+    const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Kann sich einloggen",
       email,
-      rolle: "bezugsbetreuung",
+      rolle: "betreuer",
       passwort: eigenesPasswort,
     });
     expect(angelegt.status).toBe(201);
@@ -202,14 +234,14 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
 
   it("Mandantentrennung: ein in Mandant A angelegter Benutzer erscheint nicht in Mandant B", async () => {
     const email = `mandanten-trennung-${suffix}@beispiel.test`;
-    await als(tokenLeitungA).post("/benutzer", {
+    await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Nur in A",
       email,
-      rolle: "springer",
+      rolle: "betreuer",
       passwort,
     });
 
-    const listeB = await als(tokenLeitungB).get("/benutzer");
+    const listeB = await als(tokenBereichsleitungB).get("/benutzer");
     expect(listeB.body.some((b: { email: string }) => b.email === email)).toBe(false);
   });
 });

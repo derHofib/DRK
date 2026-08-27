@@ -35,7 +35,7 @@ export interface RechnungDetailDto extends RechnungDto {
 // Entscheidung ueber Traegermittel -- gleiches Rollenmuster wie
 // ROLLEN_MIT_STORNO in kassenbuchung.service.ts. Wer eine Rechnung anlegt
 // (jede Rolle, siehe anlegen()), darf ihren Status nicht selbst festlegen.
-const ROLLEN_MIT_STATUSWECHSEL = new Set<BenutzerRolle>(["leitung", "verwaltung"]);
+const ROLLEN_MIT_STATUSWECHSEL = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 const LISTEN_SELECT = `
   SELECT r.id, r.klient_id, k.vorname, k.nachname, r.betrag_cent, r.beschreibung, r.erstellt_am,
@@ -150,7 +150,7 @@ export class RechnungService {
   async statusAendern(id: string, status: RechnungStatus, grund?: string): Promise<RechnungDto> {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_STATUSWECHSEL.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur Leitung oder Verwaltung dürfen den Status einer Rechnung ändern.");
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen den Status einer Rechnung ändern.");
     }
     const { mandantId, benutzerId } = ctx;
     try {

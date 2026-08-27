@@ -16,7 +16,8 @@ export function Mitarbeitende() {
 
   // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
   // (siehe ROLLEN_MIT_BENUTZER_ANLEGEN in benutzer.service.ts).
-  const darfAnlegen = tokenRolle() === "leitung";
+  const rolle = tokenRolle();
+  const darfAnlegen = rolle === "bereichsleitung" || rolle === "einrichtungsleitung";
 
   function laden() {
     api.benutzerListe().then(setBenutzer).catch((err) => setFehler(err.message));
@@ -107,11 +108,13 @@ export function Mitarbeitende() {
             <div className="zv-field-row">
               <div className="zv-field">
                 <label>Rolle</label>
-                <select name="rolle" defaultValue="bezugsbetreuung">
-                  <option value="bezugsbetreuung">Bezugsbetreuung</option>
-                  <option value="springer">Springer</option>
-                  <option value="verwaltung">Verwaltung</option>
-                  <option value="leitung">Leitung</option>
+                <select name="rolle" defaultValue="betreuer">
+                  <option value="betreuer">Betreuer</option>
+                  <option value="einrichtungsleitung">Einrichtungsleitung</option>
+                  {/* Server lehnt das bei Einrichtungsleitung ohnehin ab (siehe
+                      benutzer.service.ts) -- hier zusaetzlich ausgeblendet,
+                      damit es gar nicht erst zur Fehlermeldung kommt. */}
+                  {rolle === "bereichsleitung" && <option value="bereichsleitung">Bereichsleitung</option>}
                 </select>
               </div>
               <div className="zv-field">

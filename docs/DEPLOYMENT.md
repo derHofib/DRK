@@ -140,7 +140,7 @@ Logs). Diesen Schritt nach jedem kompletten Neuaufsetzen der Datenbank
 
 Es gibt bewusst keinen öffentlichen Registrierungs-Endpunkt (siehe
 README, Abschnitt "Architekturentscheidungen") -- der allererste Account
-(Rolle `leitung`) für einen neuen Mandanten muss einmalig über das
+(Rolle `bereichsleitung`) für einen neuen Mandanten muss einmalig über das
 Terminal angelegt werden:
 
 ```bash
@@ -148,11 +148,12 @@ Terminal angelegt werden:
 ```
 
 Fragt interaktiv nach Mandant (neu oder vorhanden), E-Mail, Anzeigename,
-Rolle und Passwort (per verdeckter Eingabe, landet nirgends im
-Kommandozeilenverlauf). Für **weitere** Accounts eines Mandanten, der
-schon eine `leitung` hat, ist stattdessen die "Mitarbeitende"-Seite in
-der App der richtige Weg -- das Script ist nur für die Ersteinrichtung
-bzw. einen Notfallzugang ohne funktionierenden Login gedacht.
+Rolle (`bereichsleitung`/`einrichtungsleitung`/`betreuer`) und Passwort
+(per verdeckter Eingabe, landet nirgends im Kommandozeilenverlauf). Für
+**weitere** Accounts eines Mandanten, der schon eine Leitung hat, ist
+stattdessen die "Mitarbeitende"-Seite in der App der richtige Weg -- das
+Script ist nur für die Ersteinrichtung bzw. einen Notfallzugang ohne
+funktionierenden Login gedacht.
 
 ## 6. Prüfen, dass alles läuft
 
