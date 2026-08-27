@@ -108,6 +108,13 @@ services:
       # (5 gleiche Zertifikate pro Woche) irgendwann treffen.
       - caddy_data:/data
       - caddy_config:/config
+    # Ohne das hier erbt der Container den Host-DNS aus /etc/resolv.conf --
+    # zeigt der auf den systemd-resolved-Stub (127.0.0.53), ist der aus dem
+    # Container heraus nicht erreichbar ("connection refused") und Caddy
+    # kann Let's Encrypt nicht auflösen. Oeffentliche Resolver umgehen das.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       - web
 
