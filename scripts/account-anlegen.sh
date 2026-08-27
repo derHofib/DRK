@@ -70,45 +70,69 @@ passwort_abfragen() {
   done
 }
 
-# Fuellt die globale Variable SLUG -- entweder durch Neuanlage eines
-# Mandanten oder durch Auswahl eines vorhandenen. $1 = "j", wenn eine
-# Neuanlage angeboten werden soll (nur beim Anlegen-Flow sinnvoll).
-mandant_waehlen() {
-  local neu_anbieten="${1:-n}"
-  echo "Bestehende Mandanten:"
-  psql_admin -c "SELECT slug, name FROM mandant ORDER BY name;"
-  echo
-
-  if [ "$neu_anbieten" = "j" ]; then
-    read -rp "Neuen Mandanten anlegen? (j/N) " NEU
-    if [[ "$NEU" =~ ^[jJ]$ ]]; then
-      read -rp "Traegername (z.B. \"DRK Kreisverband XY\"): " TRAEGERNAME
-      read -rp "Kennung/Slug fuer den Login (nur a-z, 0-9, Bindestrich, z.B. \"drk\"): " SLUG
-      if [[ ! "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
-        echo "Fehler: Slug darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten." >&2
-        return 1
-      fi
-      if ! psql_admin -v ON_ERROR_STOP=1 -v name="$TRAEGERNAME" -v slug="$SLUG" <<'SQL'
+# Neuen Mandanten interaktiv anlegen und die globale Variable SLUG damit
+# fuellen. Eigene Funktion, weil sowohl mandant_waehlen (Option "Neuen
+# Mandanten anlegen") als auch ein direkter Aufruf denselben Ablauf
+# brauchen.
+mandant_neu_anlegen() {
+  read -rp "Traegername (z.B. \"DRK Kreisverband XY\"): " TRAEGERNAME
+  read -rp "Kennung/Slug fuer den Login (nur a-z, 0-9, Bindestrich, z.B. \"drk\"): " SLUG
+  if [[ ! "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
+    echo "Fehler: Slug darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten." >&2
+    return 1
+  fi
+  if ! psql_admin -v ON_ERROR_STOP=1 -v name="$TRAEGERNAME" -v slug="$SLUG" <<'SQL'
 INSERT INTO mandant (name, slug) VALUES (:'name', :'slug');
 SQL
-      then
-        echo "Fehler: Mandant konnte nicht angelegt werden (Slug evtl. schon vergeben)." >&2
-        return 1
-      fi
-      echo "Mandant \"$TRAEGERNAME\" ($SLUG) angelegt."
-      return 0
-    fi
+  then
+    echo "Fehler: Mandant konnte nicht angelegt werden (Slug evtl. schon vergeben)." >&2
+    return 1
   fi
+  echo "Mandant \"$TRAEGERNAME\" ($SLUG) angelegt."
+}
 
-  read -rp "Slug des Mandanten: " SLUG
-  local gefunden
-  gefunden=$(psql_admin -tAq -v slug="$SLUG" <<'SQL'
-SELECT 1 FROM mandant WHERE slug = :'slug';
+# Fuellt die globale Variable SLUG -- per Auswahl aus einer nummerierten
+# Liste statt durch Abtippen des Slugs (das war fehleranfaellig). $1 = "j",
+# wenn zusaetzlich "Neuen Mandanten anlegen" als Option angeboten werden
+# soll (nur beim Anlegen-Flow sinnvoll, nicht beim Bearbeiten/Anzeigen).
+mandant_waehlen() {
+  local neu_anbieten="${1:-n}"
+  local zeilen
+  zeilen=$(psql_admin -tAq -F'|' <<'SQL'
+SELECT slug, name FROM mandant ORDER BY name;
 SQL
   )
-  if [ -z "$gefunden" ]; then
-    echo "Fehler: kein Mandant mit Slug \"$SLUG\" gefunden." >&2
+
+  local anzeige=() slugs=()
+  if [ "$neu_anbieten" = "j" ]; then
+    anzeige+=("Neuen Mandanten anlegen")
+    slugs+=("__neu__")
+  fi
+  if [ -n "$zeilen" ]; then
+    while IFS='|' read -r slug name; do
+      anzeige+=("$name ($slug)")
+      slugs+=("$slug")
+    done <<< "$zeilen"
+  fi
+
+  if [ "${#anzeige[@]}" -eq 0 ]; then
+    echo "Fehler: es gibt noch keine Mandanten." >&2
     return 1
+  fi
+
+  echo "Mandant waehlen:"
+  PS3="Nummer eingeben: "
+  local auswahl
+  select auswahl in "${anzeige[@]}"; do
+    if [ -n "$auswahl" ]; then
+      SLUG="${slugs[$((REPLY - 1))]}"
+      break
+    fi
+    echo "Ungueltige Nummer, nochmal."
+  done
+
+  if [ "$SLUG" = "__neu__" ]; then
+    mandant_neu_anlegen
   fi
 }
 
