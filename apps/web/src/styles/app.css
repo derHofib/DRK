@@ -1286,6 +1286,21 @@
     grid-template-columns: 1fr;
   }
 
+  /* iOS Safari zoomt beim Fokussieren eines Eingabefelds automatisch hinein,
+     sobald dessen Schriftgroesse unter 16px liegt (Standardverhalten, nicht
+     abschaltbar) -- und zoomt nach dem Schliessen eines Modals (z. B. "Neues
+     Zimmer") oft nicht zuverlaessig wieder heraus, die Ansicht bleibt dann
+     sichtbar "abgeschnitten". --zv-text-m ist mit 14px kleiner als dieser
+     Schwellwert. Bewusst als literaler Wert (16px = der von iOS geprüfte
+     Schwellwert selbst, kein Design-Token) und nur hier in der mobilen
+     Media Query -- am Desktop soll die normale, kleinere Feldschrift
+     bestehen bleiben. */
+  .zv-field input,
+  .zv-field select,
+  .zv-field textarea {
+    font-size: 16px;
+  }
+
   /* Fingerfreundliche Trefferflaechen fuer rein ikonische Bedienelemente. */
   .zv-icon-btn {
     min-width: 44px;
