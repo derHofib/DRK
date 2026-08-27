@@ -41,52 +41,107 @@
   max-width: var(--zv-content-max);
 }
 
+/* Kein Deckel mehr auf der Breite -- Kartenlisten (Klienten, Kassenbuch,
+   Mitarbeitende, Tagesberichte) nutzen den gesamten Platz neben der
+   Sidebar, statt bei 1040px stehenzubleiben und rechts Leerflaeche zu
+   lassen. */
 .zv-content-weit {
-  max-width: var(--zv-content-max-weit);
+  max-width: none;
 }
 
 /*
- * Master-Detail (Office-Ansicht): am Desktop stehen Liste und Detail
- * nebeneinander -- ein Klick wechselt nur den rechten Bereich, die Liste
- * bleibt sichtbar. Auf dem Handy (Mobil-Query weiter unten) bleibt es beim
- * heutigen Verhalten: Liste ODER Detail, nie beides gleichzeitig, weil dafuer
- * schlicht die Breite fehlt.
+ * Seitenpanel (ersetzt das fruehere Master-Detail-Quetsch-Layout): ein
+ * Klick auf einen Klienten schiebt ein Panel von rechts ueber den Inhalt,
+ * statt die Liste zu verschmaelern -- die Liste bleibt exakt so breit wie
+ * sie ist. position:fixed macht das unabhaengig vom Seiteninhalt; die
+ * Sidebar bleibt sichtbar (deshalb "left" nur ab 641px auf ihre Breite
+ * gesetzt, siehe .zv-sidebar { width: 240px }). Auf dem Handy (Sidebar
+ * ohnehin ausgeblendet) deckt das Panel automatisch den ganzen Bildschirm
+ * ab -- entspricht dem bisherigen "Liste ODER Detail"-Verhalten, nur ohne
+ * eigene Sonderregel dafuer.
  */
-.zv-master-detail {
-  display: block;
+.zv-seitenpanel-hintergrund {
+  position: fixed;
+  inset: 0;
+  background: var(--zv-scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--zv-transition-base);
+  z-index: 40;
 }
 
-.zv-master-liste {
-  min-width: 0;
+.zv-seitenpanel-hintergrund.zv-offen {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.zv-master-panel {
-  min-width: 0;
+.zv-seitenpanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--zv-surface);
+  box-shadow: var(--zv-shadow-3);
+  transform: translateX(100%);
+  transition: transform var(--zv-transition-base), left var(--zv-transition-base), width var(--zv-transition-base);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-seitenpanel.zv-offen {
+  transform: translateX(0);
+}
+
+.zv-seitenpanel-kopf {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  flex: none;
+}
+
+.zv-seitenpanel-inhalt {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--zv-space-5);
 }
 
 @media (min-width: 641px) {
-  .zv-master-detail {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--zv-space-5);
+  .zv-seitenpanel-hintergrund {
+    left: 240px;
   }
 
-  /* Volle Breite, solange kein Detail offen ist -- schmal wird sie erst,
-     sobald tatsaechlich ein Panel danebensteht (zv-detail-aktiv, siehe
-     Klienten.tsx). Sonst quetscht sich die Liste dauerhaft auf 340px, auch
-     wenn der ganze restliche Platz ungenutzt bleibt. */
-  .zv-master-liste {
-    flex: 1 1 auto;
+  .zv-seitenpanel {
+    left: auto;
+    border-left: 1px solid var(--zv-border-strong);
+    /* 720px ist genug fuer die Klientenakte samt Tabs; auf schmalen
+       Fenstern (knapp ueber 641px) bleibt trotzdem ein Streifen der
+       abgedunkelten Liste sichtbar, statt das Fenster zu sprengen. */
+    width: min(720px, calc(100vw - 240px - var(--zv-space-6)));
   }
 
-  .zv-master-detail.zv-detail-aktiv .zv-master-liste {
-    flex: 0 0 340px;
+  .zv-seitenpanel.zv-seitenpanel-vollbild {
+    left: 240px;
+    width: auto;
   }
+}
 
-  .zv-master-panel {
-    flex: 1 1 auto;
-    border-left: 1px solid var(--zv-border);
-    padding-left: var(--zv-space-5);
+/* Vollbild ergibt auf dem Handy keinen zusaetzlichen Platz (das Panel deckt
+   dort ohnehin schon alles ab) -- der Knopf verschwindet, statt einen
+   wirkungslosen Zustand anzubieten. */
+@media (max-width: 640px) {
+  /* Zwei Klassen statt einer -- sonst zieht die spaeter im Stylesheet
+     stehende, unbedingte .zv-icon-btn-Regel (gleiche Spezifitaet, aber
+     nach dieser Media Query im Quelltext) bei gleicher Spezifitaet den
+     Kuerzeren und macht den Knopf trotz "display: none" wieder sichtbar. */
+  .zv-icon-btn.zv-seitenpanel-vollbild-knopf {
+    display: none;
   }
 }
 
@@ -1326,13 +1381,6 @@
 
   .zv-link-btn {
     min-height: 32px;
-  }
-
-  /* Master-Detail bleibt mobil beim heutigen Verhalten: sobald ein Detail
-     ausgewaehlt ist, weicht die Liste komplett dem Panel -- volle Seite,
-     "Zurueck"-Knopf im Panel fuehrt wieder zur Liste. */
-  .zv-master-detail.zv-detail-aktiv .zv-master-liste {
-    display: none;
   }
 
   /* App-Ansicht: aus der durchgehenden Desktop-Liste mit ausgerichteten

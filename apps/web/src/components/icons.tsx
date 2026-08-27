@@ -50,6 +50,8 @@ import {
   LogOut,
   MapPin,
   MapPinOff,
+  Maximize2,
+  Minimize2,
   Monitor,
   Moon,
   NotebookPen,
@@ -132,6 +134,8 @@ export const IAblehnen = baue(CircleX);
 export const IAuszahlen = baue(HandCoins);
 export const IPasswort = baue(KeyRound);
 export const IResetLink = baue(Link2);
+export const IVergroessern = baue(Maximize2);
+export const IVerkleinern = baue(Minimize2);
 export const IDokument = baue(FileText);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);
