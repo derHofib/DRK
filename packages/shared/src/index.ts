@@ -127,10 +127,11 @@ export interface KlientListEintragDto {
   amt: string;
   hzlRhythmus: HzlRhythmus;
   aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
+  anonymisiertAm: string | null;
 }
 
 export interface KlientDetailDto extends KlientListEintragDto {
-  geburtsdatum: string;
+  geburtsdatum: string | null;
 }
 
 export const ZIMMERSTATUS_LABEL: Record<Zimmerstatus, string> = {

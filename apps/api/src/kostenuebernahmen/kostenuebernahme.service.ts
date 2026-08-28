@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { klientIstErlaubt } from "../common/standort-restriction";
+import { isPgError } from "../common/pg-error";
 
 // SQLSTATE fuer eine verletzte EXCLUDE-Constraint, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -85,8 +86,4 @@ export class KostenuebernahmeService {
 
 function zuDto(r: any): KostenuebernahmeDto {
   return { id: r.id, klientId: r.klient_id, amt: r.amt, von: r.von, bis: r.bis };
-}
-
-function isPgError(err: unknown): err is { code: string } {
-  return typeof err === "object" && err !== null && "code" in err;
 }

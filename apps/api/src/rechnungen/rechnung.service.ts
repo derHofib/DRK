@@ -4,6 +4,7 @@ import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
+import { isPgError } from "../common/pg-error";
 
 // SQLSTATE-Codes, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -217,8 +218,4 @@ function zuDto(r: any): RechnungDto {
     statusGrund: r.grund,
     hatDokument: r.hat_dokument,
   };
-}
-
-function isPgError(err: unknown): err is { code: string; message: string } {
-  return typeof err === "object" && err !== null && "code" in err;
 }

@@ -3,15 +3,12 @@ import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { initialen } from "../common/anonymisierung";
+import { isPgError } from "../common/pg-error";
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (zimmer_standort_id_nummer_key,
 // siehe migrations/0009_zimmer.sql), kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
-
-function isPgError(err: unknown): err is { code: string } {
-  return typeof err === "object" && err !== null && "code" in err;
-}
 
 export type Zimmerstatus = "vergeben" | "zugeordnet";
 

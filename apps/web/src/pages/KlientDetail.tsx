@@ -10,7 +10,7 @@ import type {
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
-import { api } from "../api/client";
+import { api, tokenRolle } from "../api/client";
 import { Leerzustand, LeerzustandZeile } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -29,6 +29,7 @@ import {
   ILeerKostenuebernahmen,
   ILeerRechnungen,
   ILeerTagesberichte,
+  ILoeschen,
   INeu,
   IRechnung,
   ISErledigt,
@@ -62,16 +63,38 @@ function dateiZuBase64(datei: File): Promise<string> {
   });
 }
 
+const ROLLEN_MIT_ANONYMISIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
+
 export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
   const [tab, setTab] = useState<Tab>("uebersicht");
   const [fehler, setFehler] = useState<string | null>(null);
+  const [anonymisierenOffen, setAnonymisierenOffen] = useState(false);
+  const [wirdAnonymisiert, setWirdAnonymisiert] = useState(false);
+
+  // Nur ein Anzeige-Hinweis, der den Knopf ausblendet -- der Server prueft
+  // dieselbe Rolle nochmal in KlientService.anonymisieren() (siehe tokenRolle()).
+  const darfAnonymisieren = ROLLEN_MIT_ANONYMISIERUNG.has(tokenRolle() ?? "");
 
   function laden() {
     api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
   }
 
   useEffect(laden, [klientId]);
+
+  async function anonymisieren() {
+    setFehler(null);
+    setWirdAnonymisiert(true);
+    try {
+      await api.klientAnonymisieren(klientId);
+      setAnonymisierenOffen(false);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Klient konnte nicht anonymisiert werden.");
+    } finally {
+      setWirdAnonymisiert(false);
+    }
+  }
 
   return (
     <div>
@@ -89,14 +112,46 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
 
       {klient && (
         <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
-          <h2 style={{ margin: "0 0 4px", fontSize: 19 }}>
-            {klient.vorname} {klient.nachname}
-          </h2>
-          <p className="zv-sub" style={{ margin: 0 }}>
-            Aktenzeichen {klient.aktenzeichen} · {klient.amt} · geb. {klient.geburtsdatum} · HZL{" "}
-            {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}
-          </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: "0 0 4px", fontSize: 19 }}>
+                {klient.vorname} {klient.nachname}
+              </h2>
+              <p className="zv-sub" style={{ margin: 0 }}>
+                Aktenzeichen {klient.aktenzeichen} · {klient.amt}
+                {klient.geburtsdatum && <> · geb. {klient.geburtsdatum}</>} · HZL{" "}
+                {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}
+              </p>
+            </div>
+            {klient.anonymisiertAm ? (
+              <span className="zv-pill zv-pill-vergeben">
+                <ILoeschen />
+                Anonymisiert am {klient.anonymisiertAm.slice(0, 10)}
+              </span>
+            ) : (
+              darfAnonymisieren && (
+                <button className="zv-link-btn" onClick={() => setAnonymisierenOffen(true)}>
+                  <ILoeschen />
+                  Klient anonymisieren
+                </button>
+              )
+            )}
+          </div>
         </div>
+      )}
+
+      {anonymisierenOffen && (
+        <Modal titel="Klient anonymisieren" onClose={() => setAnonymisierenOffen(false)}>
+          <p style={{ marginTop: 0 }}>
+            Name und Geburtsdatum dieses Klienten werden dauerhaft überschrieben (Recht auf Löschung, Art. 17
+            DSGVO). Aktenzeichen, Amt sowie Kassenbuch- und Rechnungshistorie bleiben als Belege erhalten. Diese
+            Aktion kann nicht rückgängig gemacht werden.
+          </p>
+          <button className="zv-btn zv-btn-gefahr zv-btn-block" onClick={anonymisieren} disabled={wirdAnonymisiert}>
+            <ILoeschen />
+            {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient jetzt anonymisieren"}
+          </button>
+        </Modal>
       )}
 
       <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>

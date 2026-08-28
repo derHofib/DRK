@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
+import { isPgError } from "../common/pg-error";
 
 // 30 Minuten: lang genug, um den Link auf einem beliebigen Weg (Teams,
 // muendlich, ...) weiterzugeben, kurz genug, dass ein liegengelassener,
@@ -21,10 +22,6 @@ export interface BenutzerListEintrag {
 // siehe migrations/0004_benutzer.sql) -- kein geratener String, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
-
-function isPgError(err: unknown): err is { code: string } {
-  return typeof err === "object" && err !== null && "code" in err;
-}
 
 // Bereichsleitung darf traegerweit Mitarbeiter anlegen, Einrichtungsleitung
 // fuer die eigene Einrichtung (siehe Standort-Einschraenkung ueber

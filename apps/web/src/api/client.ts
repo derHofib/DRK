@@ -156,6 +156,7 @@ export const api = {
     amt: string;
     hzlRhythmus: "monatlich" | "woechentlich";
   }) => request<KlientDetailDto>("/klienten", { method: "POST", body: JSON.stringify(payload) }),
+  klientAnonymisieren: (id: string) => request<KlientDetailDto>(`/klienten/${id}/anonymisieren`, { method: "PATCH" }),
 
   belegungEinziehen: (payload: { zimmerId: string; klientId: string; einzug: string }) =>
     request("/belegungen", { method: "POST", body: JSON.stringify(payload) }),

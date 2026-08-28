@@ -4,6 +4,7 @@ import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
+import { isPgError } from "../common/pg-error";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -248,8 +249,4 @@ function zuDto(r: any): KassenbuchungDto {
     hatUnterschrift: r.hat_unterschrift,
     gebuchtVonName: r.gebucht_von_name,
   };
-}
-
-function isPgError(err: unknown): err is { code: string } {
-  return typeof err === "object" && err !== null && "code" in err;
 }

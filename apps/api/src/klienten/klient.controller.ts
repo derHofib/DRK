@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { KlientService } from "./klient.service";
@@ -30,5 +30,10 @@ export class KlientController {
   @Get(":id")
   async eines(@Param("id") id: string) {
     return this.klienten.findeEinen(id);
+  }
+
+  @Patch(":id/anonymisieren")
+  async anonymisieren(@Param("id") id: string) {
+    return this.klienten.anonymisieren(id);
   }
 }

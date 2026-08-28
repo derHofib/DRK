@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { isPgError } from "../common/pg-error";
 
 // Postgres-Fehlercode fuer eine verletzte EXCLUDE-Constraint. Kein String,
 // der irgendwo geraten ist -- offizieller SQLSTATE-Code, siehe
@@ -91,8 +92,4 @@ export class BelegungService {
 
 function zuDto(r: any): BelegungDto {
   return { id: r.id, zimmerId: r.zimmer_id, klientId: r.klient_id, einzug: r.einzug, auszug: r.auszug };
-}
-
-function isPgError(err: unknown): err is { code: string } {
-  return typeof err === "object" && err !== null && "code" in err;
 }
