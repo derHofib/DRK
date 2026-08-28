@@ -12,6 +12,7 @@ import { Standorte } from "./Standorte";
 import {
   IBestaetigen,
   IDarstellung,
+  IEinklappen,
   IErfolg,
   IFehler,
   ISicherheit,
@@ -25,9 +26,13 @@ type Bereich = "darstellung" | "standorte" | "sicherheit";
 export function Einstellungen({
   mandant,
   onMandantAktualisiert,
+  hoverAusklappen,
+  onHoverAusklappenAendern,
 }: {
   mandant: MandantDto | null;
   onMandantAktualisiert: (m: MandantDto) => void;
+  hoverAusklappen: boolean;
+  onHoverAusklappenAendern: (wert: boolean) => void;
 }) {
   const [bereich, setBereich] = useState<Bereich>("darstellung");
 
@@ -58,7 +63,12 @@ export function Einstellungen({
       </div>
 
       {bereich === "darstellung" && (
-        <Darstellung mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+        <Darstellung
+          mandant={mandant}
+          onMandantAktualisiert={onMandantAktualisiert}
+          hoverAusklappen={hoverAusklappen}
+          onHoverAusklappenAendern={onHoverAusklappenAendern}
+        />
       )}
       {bereich === "standorte" && <Standorte />}
       {bereich === "sicherheit" && <Sicherheit />}
@@ -69,9 +79,13 @@ export function Einstellungen({
 function Darstellung({
   mandant,
   onMandantAktualisiert,
+  hoverAusklappen,
+  onHoverAusklappenAendern,
 }: {
   mandant: MandantDto | null;
   onMandantAktualisiert: (m: MandantDto) => void;
+  hoverAusklappen: boolean;
+  onHoverAusklappenAendern: (wert: boolean) => void;
 }) {
   // Nur ein Anzeige-Hinweis -- der Server entscheidet (siehe tokenRolle()).
   const darfBranding = tokenRolle() === "bereichsleitung";
@@ -87,6 +101,24 @@ function Darstellung({
           Gilt nur für dich, auf diesem Gerät. Wird nicht auf dem Server gespeichert.
         </p>
         <ThemeAuswahl />
+      </section>
+
+      <section className="zv-einstellungen-abschnitt">
+        <h3>
+          <IEinklappen />
+          Menüband
+        </h3>
+        <p className="zv-sub">
+          Gilt nur für dich, auf diesem Gerät. Wirkt nur, solange das Menüband links eingeklappt ist.
+        </p>
+        <label className="zv-checkbox-zeile">
+          <input
+            type="checkbox"
+            checked={hoverAusklappen}
+            onChange={(e) => onHoverAusklappenAendern(e.target.checked)}
+          />
+          Beim Überfahren mit der Maus automatisch ausklappen
+        </label>
       </section>
 
       {darfBranding && mandant && (

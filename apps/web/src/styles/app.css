@@ -172,9 +172,26 @@
   display: none;
 }
 
+/*
+ * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (240px/68px) --
+ * ihr eigentlicher Inhalt sitzt in .zv-sidebar-inner, absolut positioniert
+ * ueber ihr. Das ist keine Spielerei: nur so kann die "Beim Ueberfahren
+ * ausklappen"-Einstellung (weiter unten) den Inhalt breiter zeichnen als
+ * die reservierte Spalte, OHNE dass .zv-shell-app daneben bei jedem
+ * Hover/Verlassen nachrueckt. Ohne die Trennung muesste die Breite von
+ * .zv-sidebar selbst waechst, und das ist ein echter Reflow des gesamten
+ * Layouts, keine reine Optik.
+ */
 .zv-sidebar {
   width: 240px;
   flex: none;
+  position: relative;
+}
+
+.zv-sidebar-inner {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 240px;
   display: flex;
   flex-direction: column;
   gap: var(--zv-space-6);
@@ -279,12 +296,17 @@
    damit @media (prefers-reduced-motion: reduce) aus tokens.css automatisch
    greift und die Transition dort abschaltet.
    ------------------------------------------------------------------ */
-.zv-sidebar {
+.zv-sidebar,
+.zv-sidebar-inner {
   transition: width var(--zv-transition-base), padding var(--zv-transition-base);
 }
 
-.zv-sidebar[data-eingeklappt="true"] {
+.zv-sidebar[data-eingeklappt="true"],
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-inner {
   width: 68px;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-inner {
   padding-left: var(--zv-space-2);
   padding-right: var(--zv-space-2);
 }
@@ -319,9 +341,10 @@
    dessen Verzoegerung (~1s) und Nichtverfuegbarkeit auf Touch waeren bei
    reiner Icon-Navigation zu unauffaellig. title bleibt zusaetzlich gesetzt
    (siehe Shell.tsx) und liefert hier den Text via attr(), keine zweite
-   Quelle der Wahrheit. */
-.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button:hover::after,
-.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button:focus-visible::after {
+   Quelle der Wahrheit. Nur, wenn "beim Ueberfahren ausklappen" AUS ist --
+   sonst zeigt der Hover ohnehin gleich das ganze Menueband, siehe unten. */
+.zv-sidebar[data-eingeklappt="true"]:not([data-hover-ausklappen="true"]) .zv-sidebar-nav button:hover::after,
+.zv-sidebar[data-eingeklappt="true"]:not([data-hover-ausklappen="true"]) .zv-sidebar-nav button:focus-visible::after {
   content: attr(title);
   position: absolute;
   left: calc(100% + var(--zv-space-2));
@@ -337,6 +360,58 @@
   box-shadow: var(--zv-shadow-1);
   z-index: 5;
   pointer-events: none;
+}
+
+/* ------------------------------------------------------------------
+   Einstellung "Beim Ueberfahren automatisch ausklappen" (Einstellungen ->
+   Darstellung -> Menueband). Nur .zv-sidebar-inner wird breiter -- die
+   reservierte Spaltenbreite von .zv-sidebar selbst bleibt bei 68px, siehe
+   Kommentar oben bei .zv-sidebar. :focus-within zusaetzlich zu :hover,
+   damit Tastaturnutzung (Tab in die Navigation) dieselbe Beschriftung
+   bekommt wie die Maus -- sonst waere die Navigation per Tastatur nur
+   ueber unbeschriftete Icons bedienbar.
+   ------------------------------------------------------------------ */
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-inner,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-inner {
+  width: 240px;
+  padding-left: var(--zv-space-4);
+  padding-right: var(--zv-space-4);
+  box-shadow: var(--zv-shadow-3);
+  z-index: 20;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-brand-text,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-brand-text {
+  display: flex;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-label,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-label {
+  display: inline;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-brand,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-brand {
+  justify-content: flex-start;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-nav button,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-nav button {
+  justify-content: flex-start;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  gap: var(--zv-space-2);
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-foot-icons,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-foot-icons {
+  flex-direction: row;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-foot .zv-btn,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-foot .zv-btn {
+  gap: var(--zv-space-2);
+  padding-left: var(--zv-space-4);
+  padding-right: var(--zv-space-4);
 }
 
 /* ==================================================================
@@ -515,6 +590,21 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--zv-space-3);
+}
+
+.zv-checkbox-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  cursor: pointer;
+}
+
+.zv-checkbox-zeile input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--zv-accent);
+  cursor: pointer;
 }
 
 .zv-inline-form {
