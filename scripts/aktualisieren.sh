@@ -29,15 +29,15 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 echo "-> Warte kurz, dann Status aller Container..."
 sleep 3
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 
 cat <<'EOF'
 
 Fertig. Zertifikate fuer app.hecaso.de/office.hecaso.de erscheinen in den
 caddy-Logs, sobald Let's Encrypt sie ausgestellt hat:
-  docker compose -f docker-compose.prod.yml logs -f caddy
+  docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f caddy
 
 Neue Migrationen laufen automatisch ueber den migrate-Dienst, bevor api
 neu startet -- Fortschritt:
-  docker compose -f docker-compose.prod.yml logs -f migrate api
+  docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f migrate api
 EOF
