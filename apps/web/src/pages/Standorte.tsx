@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
@@ -103,41 +103,39 @@ export function Standorte() {
       {standorte.length === 0 && !fehler ? (
         <Leerzustand icon={ILeerStandorte}>Noch keine Standorte angelegt.</Leerzustand>
       ) : (
-        <table className="zv-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Adresse</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {standorte.map((s) => (
-              <tr key={s.id}>
-                <td>
-                  <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
-                  {s.name}
-                </td>
-                <td className="zv-sub-inline">{s.adresse}</td>
-                <td>
-                  <span className={`zv-pill ${s.aktiv ? "zv-pill-zugeordnet" : "zv-pill-neutral"}`}>
-                    {s.aktiv ? "Aktiv" : "Inaktiv"}
-                  </span>
-                </td>
-                <td style={{ display: "flex", gap: 10 }}>
-                  <button className="zv-link-btn" onClick={() => { setFormFehler(null); setBearbeiteterStandort(s); }}>
-                    <IBearbeiten />
-                    Bearbeiten
-                  </button>
-                  <button className="zv-link-btn" onClick={() => aktivSchalten(s)}>
-                    {s.aktiv ? "Deaktivieren" : "Aktivieren"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 2fr 1fr 1.6fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Name</span>
+            <span>Adresse</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {standorte.map((s) => (
+            <div key={s.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">
+                <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
+                {s.name}
+              </span>
+              <span className="zv-liste-zelle" data-label="Adresse">
+                {s.adresse}
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
+                <span className={`zv-pill ${s.aktiv ? "zv-pill-zugeordnet" : "zv-pill-neutral"}`}>
+                  {s.aktiv ? "Aktiv" : "Inaktiv"}
+                </span>
+              </span>
+              <span className="zv-liste-zelle-aktionen">
+                <button className="zv-link-btn" onClick={() => { setFormFehler(null); setBearbeiteterStandort(s); }}>
+                  <IBearbeiten />
+                  Bearbeiten
+                </button>
+                <button className="zv-link-btn" onClick={() => aktivSchalten(s)}>
+                  {s.aktiv ? "Deaktivieren" : "Aktivieren"}
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
       )}
 
       {neuFormularOffen && (

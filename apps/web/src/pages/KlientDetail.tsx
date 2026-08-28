@@ -1,4 +1,4 @@
-import { CSSProperties, Fragment, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type {
   KassenbuchungDto,
   KlientDetailDto,
@@ -11,7 +11,7 @@ import type {
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
-import { Leerzustand, LeerzustandZeile } from "../components/Leerzustand";
+import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
@@ -41,7 +41,7 @@ import {
   IZurueck,
 } from "../components/icons";
 import { dateiZuBase64 } from "../datei";
-import { formatBetrag } from "../format";
+import { formatBetrag, formatDatum } from "../format";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
 type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch" | "tagesberichte";
@@ -430,22 +430,33 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
         </form>
       )}
 
-      <table className="zv-table">
-        <thead>
-          <tr>
-            <th>Amt</th>
-            <th>Von</th>
-            <th>Bis</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
+      {liste.length === 0 ? (
+        <Leerzustand icon={ILeerKostenuebernahmen}>Noch keine Kostenübernahme erfasst.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1.6fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Amt</span>
+            <span>Von</span>
+            <span>Bis</span>
+            <span></span>
+          </div>
           {liste.map((k) => (
-            <tr key={k.id}>
-              <td>{k.amt}</td>
-              <td>{k.von}</td>
-              <td>{k.bis ?? <span className="zv-pill zv-pill-offen"><ISOffen />Offen</span>}</td>
-              <td>
+            <div key={k.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">{k.amt}</span>
+              <span className="zv-liste-zelle" data-label="Von">
+                <strong>{formatDatum(k.von)}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Bis">
+                {k.bis ? (
+                  <strong>{formatDatum(k.bis)}</strong>
+                ) : (
+                  <span className="zv-pill zv-pill-offen">
+                    <ISOffen />
+                    Offen
+                  </span>
+                )}
+              </span>
+              <span className={`zv-liste-zelle-aktionen${k.bis !== null ? " zv-liste-zelle-aktionen-leer" : ""}`}>
                 {k.bis === null &&
                   (beendenId === k.id ? (
                     <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => beenden(e, k.id)}>
@@ -460,16 +471,11 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
                       Beenden
                     </button>
                   ))}
-              </td>
-            </tr>
+              </span>
+            </div>
           ))}
-          {liste.length === 0 && (
-            <LeerzustandZeile icon={ILeerKostenuebernahmen} spalten={4}>
-              Noch keine Kostenübernahme erfasst.
-            </LeerzustandZeile>
-          )}
-        </tbody>
-      </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -604,78 +610,73 @@ function RechnungenTab({ klientId }: { klientId: string }) {
         </form>
       )}
 
-      <table className="zv-table">
-        <thead>
-          <tr>
-            <th>Datum</th>
-            <th>Betrag</th>
-            <th>Beschreibung</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
+      {liste.length === 0 ? (
+        <Leerzustand icon={ILeerRechnungen}>Noch keine Rechnungen erfasst.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1.4fr 1.8fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Beschreibung</span>
+            <span>Datum</span>
+            <span>Betrag</span>
+            <span>Status</span>
+            <span></span>
+          </div>
           {liste.map((r) => (
-            <Fragment key={r.id}>
-              <tr>
-                <td>{r.erstelltAm.slice(0, 10)}</td>
-                <td>{formatBetrag(r.betragCent)}</td>
-                <td>{r.beschreibung}</td>
-                <td>
-                  <span
-                    className={`zv-pill ${
-                      r.status === "abgelehnt" ? "zv-pill-danger" : r.status === "ausgezahlt" ? "zv-pill-ok" : r.status === "genehmigt" ? "zv-pill-info" : "zv-pill-offen"
-                    }`}
-                  >
-                    {RECHNUNG_STATUS_LABEL[r.status]}
-                  </span>
-                  {r.status === "abgelehnt" && r.statusGrund && <span className="zv-sub-inline">{r.statusGrund}</span>}
-                </td>
-                <td style={{ display: "flex", gap: 10 }}>
-                  {r.hatDokument && (
-                    <button className="zv-link-btn" onClick={() => dokumentAnzeigen(r.id)}>
-                      <IDokument />
-                      Dokument
+            <div key={r.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">{r.beschreibung}</span>
+              <span className="zv-liste-zelle" data-label="Datum">
+                <strong>{formatDatum(r.erstelltAm.slice(0, 10))}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Betrag">
+                <strong className="zv-mono">{formatBetrag(r.betragCent)}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
+                <span
+                  className={`zv-pill ${
+                    r.status === "abgelehnt" ? "zv-pill-danger" : r.status === "ausgezahlt" ? "zv-pill-ok" : r.status === "genehmigt" ? "zv-pill-info" : "zv-pill-offen"
+                  }`}
+                >
+                  {RECHNUNG_STATUS_LABEL[r.status]}
+                </span>
+                {r.status === "abgelehnt" && r.statusGrund && <span className="zv-sub-inline">{r.statusGrund}</span>}
+              </span>
+              <span className="zv-liste-zelle-aktionen">
+                {r.hatDokument && (
+                  <button className="zv-link-btn" onClick={() => dokumentAnzeigen(r.id)}>
+                    <IDokument />
+                    Dokument
+                  </button>
+                )}
+                {r.status === "beantragt" && (
+                  <>
+                    <button className="zv-link-btn" onClick={() => statusAendern(r, "genehmigt")}>
+                      <IGenehmigen />
+                      Genehmigen
                     </button>
-                  )}
-                  {r.status === "beantragt" && (
-                    <>
-                      <button className="zv-link-btn" onClick={() => statusAendern(r, "genehmigt")}>
-                        <IGenehmigen />
-                        Genehmigen
-                      </button>
-                      <button className="zv-link-btn" onClick={() => statusAendern(r, "abgelehnt")}>
-                        <IAblehnen />
-                        Ablehnen
-                      </button>
-                    </>
-                  )}
-                  {r.status === "genehmigt" && (
-                    <button className="zv-link-btn" onClick={() => statusAendern(r, "ausgezahlt")}>
-                      <IAuszahlen />
-                      Auszahlen
+                    <button className="zv-link-btn" onClick={() => statusAendern(r, "abgelehnt")}>
+                      <IAblehnen />
+                      Ablehnen
                     </button>
-                  )}
-                </td>
-              </tr>
+                  </>
+                )}
+                {r.status === "genehmigt" && (
+                  <button className="zv-link-btn" onClick={() => statusAendern(r, "ausgezahlt")}>
+                    <IAuszahlen />
+                    Auszahlen
+                  </button>
+                )}
+              </span>
               {offenesDokument?.id === r.id && (
-                <tr>
-                  <td colSpan={5} style={{ background: "var(--zv-surface-2)" }}>
-                    <a href={offenesDokument.url} target="_blank" rel="noreferrer">
-                      Dokument in neuem Tab öffnen
-                    </a>
-                  </td>
-                </tr>
+                <div style={{ gridColumn: "1 / -1", marginTop: "var(--zv-space-2)" }}>
+                  <a href={offenesDokument.url} target="_blank" rel="noreferrer">
+                    Dokument in neuem Tab öffnen
+                  </a>
+                </div>
               )}
-            </Fragment>
+            </div>
           ))}
-          {liste.length === 0 && (
-            <LeerzustandZeile icon={ILeerRechnungen} spalten={5}>
-              Noch keine Rechnungen erfasst.
-            </LeerzustandZeile>
-          )}
-        </tbody>
-      </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -696,41 +697,51 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
           {fehler}
         </div>
       )}
-      <table className="zv-table">
-        <thead>
-          <tr>
-            <th>Datum</th>
-            <th>Betrag</th>
-            <th>Zweck</th>
-            <th>Typ</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
+      {buchungen.length === 0 ? (
+        <Leerzustand icon={ILeerKassenbuch}>Keine Kassenbuch-Einträge für diesen Klienten.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.2fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Zweck</span>
+            <span>Datum</span>
+            <span>Betrag</span>
+            <span>Typ</span>
+            <span>Status</span>
+          </div>
           {buchungen.map((b) => (
-            <tr key={b.id}>
-              <td>{b.datum}</td>
-              <td style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}>
-                {formatBetrag(b.betragCent)}
-              </td>
-              <td>{b.verwendungszweck}</td>
-              <td>{KASSENBUCHUNG_TYP_LABEL[b.typ]}</td>
-              <td>
+            <div key={b.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">{b.verwendungszweck}</span>
+              <span className="zv-liste-zelle" data-label="Datum">
+                <strong>{formatDatum(b.datum)}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Betrag">
+                <strong
+                  className="zv-mono"
+                  style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}
+                >
+                  {formatBetrag(b.betragCent)}
+                </strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Typ">
+                {KASSENBUCHUNG_TYP_LABEL[b.typ]}
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
                 {b.storniert ? (
-                  <span className="zv-pill zv-pill-vergeben"><ISStorniert />Storniert</span>
+                  <span className="zv-pill zv-pill-vergeben">
+                    <ISStorniert />
+                    Storniert
+                  </span>
                 ) : (
-                  <span className="zv-pill zv-pill-ok"><ISErledigt />Aktiv</span>
+                  <span className="zv-pill zv-pill-ok">
+                    <ISErledigt />
+                    Aktiv
+                  </span>
                 )}
-              </td>
-            </tr>
+              </span>
+            </div>
           ))}
-          {buchungen.length === 0 && (
-            <LeerzustandZeile icon={ILeerKassenbuch} spalten={5}>
-              Keine Kassenbuch-Einträge für diesen Klienten.
-            </LeerzustandZeile>
-          )}
-        </tbody>
-      </table>
+        </div>
+      )}
     </div>
   );
 }
