@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MandantDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
-import { akzentSetzen } from "../theme/theme";
+import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
@@ -81,6 +81,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         // Wechsel (anderer Traeger, anderswo geaenderte Farbe) korrigiert
         // sich damit spaetestens beim naechsten Laden.
         if (m?.akzentfarbe) akzentSetzen(m.akzentfarbe);
+        if (m?.dunkelGrundfarbe) dunkelGrundfarbeSetzen(m.dunkelGrundfarbe);
       })
       .catch(() => {});
   }, []);

@@ -39,6 +39,20 @@
               wurzel.style.setProperty("--zv-accent-c", teile[1]);
             }
           }
+
+          /*
+           * Dieselbe Ueberbrueckung wie oben, fuer die dunkle Grundfarbe
+           * (seit Migration 0029) -- unabhaengig vom Akzent, siehe
+           * tokens.css / theme/farbe.ts::grundfarbeAbleiten().
+           */
+          var dunkel = localStorage.getItem("zimmerakte_dunkel_hc");
+          if (dunkel) {
+            var dTeile = dunkel.split(" ");
+            if (dTeile.length === 2) {
+              wurzel.style.setProperty("--zv-dunkel-h", dTeile[0]);
+              wurzel.style.setProperty("--zv-dunkel-c", dTeile[1]);
+            }
+          }
         } catch (e) {
           /* Privatmodus ohne localStorage: dann eben Standardtheme. */
         }

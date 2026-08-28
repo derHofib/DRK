@@ -1,16 +1,20 @@
 /**
- * Die Akzentfarbe ist Corporate Branding je Traeger: sie gilt fuer alle
- * Mitarbeitenden gleichzeitig, darf aber nur von der Bereichsleitung gesetzt werden
- * -- und sie darf unter keinen Umstaenden ueber die Mandantengrenze
- * hinweg sichtbar oder aenderbar sein.
+ * Die Akzentfarbe und die dunkle Grundfarbe sind Corporate Branding je
+ * Traeger: sie gelten fuer alle Mitarbeitenden gleichzeitig, duerfen aber
+ * nur von der Bereichsleitung gesetzt werden -- und sie duerfen unter
+ * keinen Umstaenden ueber die Mandantengrenze hinweg sichtbar oder
+ * aenderbar sein. Beide teilen sich denselben Endpunkt (PATCH /mandant/me)
+ * und dieselbe Rollenpruefung, sind aber unabhaengige Spalten/Werte (siehe
+ * migrations/0029: die dunkle Grundfarbe folgte bis dahin ungewollt dem
+ * Farbton des Akzents).
  *
  * Wie die uebrigen Spezifikationen hier: ueber den echten HTTP-Pfad und
  * gegen eine echte PostgreSQL-Instanz. Zusaetzlich wird an zwei Stellen
  * bewusst UNTER der Anwendung geprueft (roher Client auf der App-Rolle),
  * weil die entscheidenden Zusicherungen dort liegen und nicht im
- * TypeScript: das spaltenscharfe GRANT und die CHECK-Bedingung aus
- * Migration 0019 muessen auch dann halten, wenn ein kuenftiger Codepfad an
- * Controller und zod vorbeigeht.
+ * TypeScript: die spaltenscharfen GRANTs und die CHECK-Bedingungen aus
+ * Migration 0019/0029 muessen auch dann halten, wenn ein kuenftiger
+ * Codepfad an Controller und zod vorbeigeht.
  */
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
@@ -23,6 +27,8 @@ import { AppModule } from "../src/app.module";
 
 // Seit Migration 0021: DRK Rot statt Petrol.
 const STANDARDFARBE = "#e3000f";
+// Migration 0029.
+const STANDARD_DUNKEL_GRUNDFARBE = "#10131a";
 
 interface Testbenutzer {
   benutzerId: string;
@@ -124,10 +130,17 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ akzentfarbe });
 
+  const setzeDunkelGrundfarbe = (token: string, dunkelGrundfarbe: unknown) =>
+    request(app.getHttpServer())
+      .patch("/mandant/me")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ dunkelGrundfarbe });
+
   it("legt neue Mandanten mit der Standardfarbe an", async () => {
     const res = await hole(await login(mandantA, mandantA.bereichsleitung));
     expect(res.status).toBe(200);
     expect(res.body.akzentfarbe).toBe(STANDARDFARBE);
+    expect(res.body.dunkelGrundfarbe).toBe(STANDARD_DUNKEL_GRUNDFARBE);
   });
 
   it("uebernimmt eine von der Bereichsleitung gesetzte Farbe dauerhaft", async () => {
@@ -204,6 +217,66 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
     });
   });
 
+  describe("dunkle Grundfarbe (unabhängig vom Akzent, Migration 0029)", () => {
+    it("uebernimmt eine gesetzte Grundfarbe dauerhaft, ohne die Akzentfarbe zu beruehren", async () => {
+      const token = await login(mandantA, mandantA.bereichsleitung);
+      await setze(token, "#a8a4f0");
+
+      const gesetzt = await setzeDunkelGrundfarbe(token, "#0d1913");
+      expect(gesetzt.status).toBe(200);
+      expect(gesetzt.body.dunkelGrundfarbe).toBe("#0d1913");
+      // Die Gegenprobe zum eigentlichen Anliegen dieser Migration: das
+      // Setzen der Grundfarbe darf die unabhaengige Akzentfarbe nicht
+      // veraendern.
+      expect(gesetzt.body.akzentfarbe).toBe("#a8a4f0");
+
+      const erneut = await hole(token);
+      expect(erneut.body.dunkelGrundfarbe).toBe("#0d1913");
+    });
+
+    it("haelt die Grundfarben zweier Mandanten strikt getrennt", async () => {
+      const tokenA = await login(mandantA, mandantA.bereichsleitung);
+      const tokenB = await login(mandantB, mandantB.bereichsleitung);
+
+      expect((await setzeDunkelGrundfarbe(tokenA, "#16121f")).status).toBe(200);
+      expect((await setzeDunkelGrundfarbe(tokenB, "#141414")).status).toBe(200);
+
+      const a = await hole(tokenA);
+      const b = await hole(tokenB);
+      expect(a.body.dunkelGrundfarbe).toBe("#16121f");
+      expect(a.body.dunkelGrundfarbe).not.toBe("#141414");
+      expect(b.body.dunkelGrundfarbe).toBe("#141414");
+      expect(b.body.dunkelGrundfarbe).not.toBe("#16121f");
+    });
+
+    it("weist eine Rolle ohne Branding-Recht mit 403 ab und aendert nichts", async () => {
+      const bereichsleitung = await login(mandantA, mandantA.bereichsleitung);
+      await setzeDunkelGrundfarbe(bereichsleitung, "#16151a");
+
+      const einrichtungsleitung = await login(mandantA, mandantA.einrichtungsleitung);
+      const abgewiesen = await setzeDunkelGrundfarbe(einrichtungsleitung, "#141414");
+      expect(abgewiesen.status).toBe(403);
+
+      const danach = await hole(bereichsleitung);
+      expect(danach.body.dunkelGrundfarbe).toBe("#16151a");
+    });
+
+    it("lehnt einen ungueltigen Hex-Wert mit 400 ab", async () => {
+      const token = await login(mandantA, mandantA.bereichsleitung);
+      const res = await setzeDunkelGrundfarbe(token, "nicht-hex");
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt einen leeren Body (weder akzentfarbe noch dunkelGrundfarbe) mit 400 ab", async () => {
+      const token = await login(mandantA, mandantA.bereichsleitung);
+      const res = await request(app.getHttpServer())
+        .patch("/mandant/me")
+        .set("Authorization", `Bearer ${token}`)
+        .send({});
+      expect(res.status).toBe(400);
+    });
+  });
+
   /**
    * Diese beiden Faelle umgehen die Anwendung bewusst: sie pruefen die
    * Zusicherungen der Datenbank selbst. Ohne sie wuerde ein spaeteres
@@ -232,10 +305,15 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
       }
     }
 
-    it("erlaubt der App-Rolle NUR die Spalte akzentfarbe", async () => {
+    it("erlaubt der App-Rolle NUR die Spalten akzentfarbe und dunkel_grundfarbe", async () => {
       await alsMandant(mandantA.mandantId, async () => {
         await expect(
           appRolle.query("UPDATE mandant SET akzentfarbe = '#123456'")
+        ).resolves.toBeTruthy();
+      });
+      await alsMandant(mandantA.mandantId, async () => {
+        await expect(
+          appRolle.query("UPDATE mandant SET dunkel_grundfarbe = '#101010'")
         ).resolves.toBeTruthy();
       });
 
@@ -255,6 +333,11 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
         await alsMandant(mandantA.mandantId, async () => {
           await expect(
             appRolle.query("UPDATE mandant SET akzentfarbe = $1", [wert])
+          ).rejects.toThrow(/check constraint/i);
+        });
+        await alsMandant(mandantA.mandantId, async () => {
+          await expect(
+            appRolle.query("UPDATE mandant SET dunkel_grundfarbe = $1", [wert])
           ).rejects.toThrow(/check constraint/i);
         });
       }

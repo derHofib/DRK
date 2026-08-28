@@ -55,6 +55,25 @@
 }
 
 /*
+ * Grundfarbe des DUNKLEN Designs -- eigenstaendig vom Akzent, siehe
+ * migrations/0029_mandant_dunkel_grundfarbe.sql und
+ * theme/farbe.ts::grundfarbeAbleiten(). Nur im dunklen Zweig der
+ * Neutraltoene unten verwendet (bg/surface/surface-2/surface-3/border/
+ * border-strong) -- Text-, Akzent- und Statusfarben bleiben unberuehrt.
+ */
+@property --zv-dunkel-h {
+  syntax: "<number>";
+  inherits: true;
+  /* #10131a, DUNKEL_GRUNDFARBE_STANDARD in packages/shared. */
+  initial-value: 266.8;
+}
+@property --zv-dunkel-c {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.0151;
+}
+
+/*
  * Die Schrift selbst kommt aus @fontsource-variable/inter und wird in
  * main.tsx importiert -- Vite buendelt die woff2-Datei mit und versieht sie
  * mit einem Hash. Bewusst kein Google-Fonts-CDN: das ist in Deutschland
@@ -117,13 +136,25 @@
   );
 
   /* ------------------------------------------------------------------
-     Neutrale -- mit einem Hauch des Markenfarbtons
+     Neutrale -- mit einem Hauch Farbton
      Das ist der Trick, der eine Oberflaeche "aus einem Guss" wirken laesst,
-     ohne sie einzufaerben. Auf 0 setzen schaltet es ab; bei einem
-     achromatischen Traeger (c = 0) entfaellt es automatisch.
+     ohne sie einzufaerben. Auf 0 setzen schaltet es ab; bei achromatischer
+     Wahl (c = 0) entfaellt es automatisch.
+
+     HELL folgt weiterhin dem AKZENT (--zv-tint-l aus --zv-accent-c) -- dort
+     gilt seit jeher dieselbe Unabhaengigkeit fuer --zv-bg/--zv-surface, die
+     jetzt fuer Dunkel nachgezogen wird (s.u.), also bleibt der helle Zweig
+     unveraendert.
+
+     DUNKEL folgt seit Migration 0029 NICHT mehr dem Akzent, sondern der
+     eigenstaendig einstellbaren dunklen Grundfarbe (--zv-dunkel-c): sonst
+     wanderte der Dunkelmodus-Hintergrund bei jeder Akzentaenderung mit --
+     im Hellen war --zv-bg dagegen schon immer reines Weiss, unabhaengig
+     vom Akzent. --zv-dunkel-c ist bereits die fertige Zielchroma (siehe
+     GRUNDFARBE_CHROMA_MAX in farbe.ts), deshalb hier ohne weiteren Faktor.
      ------------------------------------------------------------------ */
   --zv-tint-l: calc(var(--zv-accent-c) * 0.075);
-  --zv-tint-d: calc(var(--zv-accent-c) * 0.13);
+  --zv-tint-d: var(--zv-dunkel-c);
 
   /*
    * Hell bewusst OHNE Tint, anders als die uebrigen Neutraltoene hier:
@@ -134,21 +165,21 @@
    */
   --zv-bg: light-dark(
     oklch(1 0 0),
-    oklch(0.185 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.185 var(--zv-tint-d) var(--zv-dunkel-h))
   );
-  --zv-surface: light-dark(oklch(1 0 0), oklch(0.225 var(--zv-tint-d) var(--zv-accent-h)));
+  --zv-surface: light-dark(oklch(1 0 0), oklch(0.225 var(--zv-tint-d) var(--zv-dunkel-h)));
   --zv-surface-2: light-dark(
     oklch(0.968 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.265 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.265 var(--zv-tint-d) var(--zv-dunkel-h))
   );
   /* Zeilen-Hover in Tabellen. */
   --zv-surface-3: light-dark(
     oklch(0.935 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.315 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.315 var(--zv-tint-d) var(--zv-dunkel-h))
   );
   --zv-border: light-dark(
     oklch(0.905 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.34 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.34 var(--zv-tint-d) var(--zv-dunkel-h))
   );
   /*
    * Raender, die ein BEDIENELEMENT abgrenzen (Eingabefelder). Die Werte
@@ -165,7 +196,7 @@
    */
   --zv-border-strong: light-dark(
     oklch(0.66 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.54 var(--zv-tint-d) var(--zv-accent-h))
+    oklch(0.54 var(--zv-tint-d) var(--zv-dunkel-h))
   );
 
   --zv-text: light-dark(

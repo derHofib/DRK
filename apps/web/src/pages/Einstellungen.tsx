@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AKZENTFARBE_MUSTER,
+  DUNKEL_GRUNDFARBEN,
   PASTELL_PALETTEN,
   type MandantDto,
 } from "@zimmerakte/shared";
@@ -122,7 +123,10 @@ function Darstellung({
       </section>
 
       {darfBranding && mandant && (
-        <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+        <>
+          <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+          <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+        </>
       )}
     </div>
   );
@@ -265,6 +269,158 @@ function Traegerfarbe({
           />
           {!AKZENTFARBE_MUSTER.test(hexFeld) && (
             <span className="zv-sub-inline">Bitte im Format #e3000f.</span>
+          )}
+        </div>
+      </div>
+
+      <Vorschau />
+
+      <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
+        <button className="zv-btn" onClick={speichern} disabled={!geaendert || speichert}>
+          <ISpeichern />
+          {speichert ? "Speichert…" : "Speichern"}
+        </button>
+        <button className="zv-btn zv-btn-still" onClick={zuruecksetzen} disabled={!geaendert}>
+          <IZuruecksetzen />
+          Zurücksetzen
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Grundfarbe (Hintergrund/Flaechen) im dunklen Design -- unabhaengig von der
+ * Traegerfarbe (siehe migrations/0029). Baugleich zu Traegerfarbe() oben,
+ * nur mit der kleineren, bewusst "dezenten" Palette DUNKEL_GRUNDFARBEN statt
+ * PASTELL_PALETTEN und den dunkel*-Gegenstuecken aus dem Theme-Kontext.
+ */
+function DunkleGrundfarbe({
+  mandant,
+  onMandantAktualisiert,
+}: {
+  mandant: MandantDto;
+  onMandantAktualisiert: (m: MandantDto) => void;
+}) {
+  const { dunkelVorschau, dunkelUebernehmen } = useTheme();
+  const [gewaehlt, setGewaehlt] = useState(mandant.dunkelGrundfarbe);
+  const [hexFeld, setHexFeld] = useState(mandant.dunkelGrundfarbe);
+  const [speichert, setSpeichert] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [erfolg, setErfolg] = useState<string | null>(null);
+  // Siehe Traegerfarbe() oben fuer die Begruendung dieses Zaehlers.
+  const laufendeAnfrage = useRef(0);
+
+  useEffect(() => {
+    setGewaehlt(mandant.dunkelGrundfarbe);
+    setHexFeld(mandant.dunkelGrundfarbe);
+  }, [mandant.dunkelGrundfarbe]);
+
+  const geaendert = gewaehlt.toLowerCase() !== mandant.dunkelGrundfarbe.toLowerCase();
+
+  function waehle(hex: string) {
+    setGewaehlt(hex);
+    setHexFeld(hex);
+    setFehler(null);
+    setErfolg(null);
+    dunkelVorschau(hex);
+  }
+
+  function hexGeaendert(wert: string) {
+    setHexFeld(wert);
+    if (AKZENTFARBE_MUSTER.test(wert)) waehle(wert);
+  }
+
+  async function speichern() {
+    if (speichert) return;
+    const angefordert = ++laufendeAnfrage.current;
+    const ziel = gewaehlt;
+    setSpeichert(true);
+    setFehler(null);
+    setErfolg(null);
+    try {
+      const aktualisiert = await api.mandantDunkelGrundfarbeSetzen(ziel);
+      if (laufendeAnfrage.current !== angefordert) return;
+      onMandantAktualisiert(aktualisiert);
+      dunkelUebernehmen(aktualisiert.dunkelGrundfarbe);
+      setErfolg("Grundfarbe gespeichert. Sie gilt ab sofort für alle Mitarbeitenden.");
+    } catch (err) {
+      if (laufendeAnfrage.current !== angefordert) return;
+      setFehler(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+      dunkelVorschau(mandant.dunkelGrundfarbe);
+      setGewaehlt(mandant.dunkelGrundfarbe);
+      setHexFeld(mandant.dunkelGrundfarbe);
+    } finally {
+      if (laufendeAnfrage.current === angefordert) setSpeichert(false);
+    }
+  }
+
+  function zuruecksetzen() {
+    waehle(mandant.dunkelGrundfarbe);
+    setErfolg(null);
+    setFehler(null);
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>Grundfarbe des dunklen Designs</h3>
+      <p className="zv-sub">
+        Hintergrund und Flächen im dunklen Design, unabhängig von der Trägerfarbe oben. Gilt für alle
+        Mitarbeitenden von {mandant.name}.
+      </p>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      {erfolg && (
+        <div className="zv-hinweis zv-hinweis-erfolg">
+          <IErfolg />
+          {erfolg}
+        </div>
+      )}
+
+      <div className="zv-field">
+        <label id="grundfarbe-label">Grundton</label>
+        <div className="zv-swatch-grid" role="group" aria-labelledby="grundfarbe-label">
+          {DUNKEL_GRUNDFARBEN.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="zv-swatch"
+              style={{ background: p.hex }}
+              aria-pressed={gewaehlt.toLowerCase() === p.hex.toLowerCase()}
+              aria-label={p.name}
+              title={p.name}
+              onClick={() => waehle(p.hex)}
+            >
+              {gewaehlt.toLowerCase() === p.hex.toLowerCase() && <IBestaetigen />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="zv-field">
+        <label htmlFor="eigene-grundfarbe">Eigene Farbe</label>
+        <div className="zv-farbwahl-frei">
+          <input
+            id="eigene-grundfarbe"
+            type="color"
+            value={AKZENTFARBE_MUSTER.test(hexFeld) ? hexFeld : gewaehlt}
+            onChange={(e) => waehle(e.target.value)}
+          />
+          <input
+            type="text"
+            value={hexFeld}
+            onChange={(e) => hexGeaendert(e.target.value)}
+            aria-label="Grundfarbe als Hex"
+            spellCheck={false}
+            maxLength={7}
+          />
+          {!AKZENTFARBE_MUSTER.test(hexFeld) && (
+            <span className="zv-sub-inline">Bitte im Format #10131a.</span>
           )}
         </div>
       </div>

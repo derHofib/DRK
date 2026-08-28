@@ -1,5 +1,5 @@
-import { AKZENTFARBE_STANDARD } from "@zimmerakte/shared";
-import { akzentAbleiten, akzentAnwenden, type AkzentHC } from "./farbe";
+import { AKZENTFARBE_STANDARD, DUNKEL_GRUNDFARBE_STANDARD } from "@zimmerakte/shared";
+import { akzentAbleiten, akzentAnwenden, grundfarbeAbleiten, grundfarbeAnwenden, type AkzentHC } from "./farbe";
 
 export type ThemeModus = "hell" | "dunkel" | "system";
 
@@ -10,6 +10,8 @@ const THEME_KEY = "zimmerakte_theme";
  * setProperty-Aufrufe. Siehe index.html.
  */
 const AKZENT_KEY = "zimmerakte_akzent_hc";
+/** Dasselbe Cache-Muster wie AKZENT_KEY, fuer die dunkle Grundfarbe. */
+const DUNKEL_KEY = "zimmerakte_dunkel_hc";
 
 export const THEME_MODI: { wert: ThemeModus; label: string }[] = [
   { wert: "system", label: "System" },
@@ -81,6 +83,27 @@ export function akzentZuruecksetzen(): void {
 }
 
 /**
+ * Gegenstueck zu akzentSetzen() fuer die dunkle Grundfarbe -- siehe dort
+ * fuer die Begruendung von "merken".
+ */
+export function dunkelGrundfarbeSetzen(hex: string, merken = true): AkzentHC | null {
+  const hc = grundfarbeAnwenden(hex);
+  if (hc && merken) {
+    try {
+      localStorage.setItem(DUNKEL_KEY, `${hc.h} ${hc.c.toFixed(4)}`);
+    } catch {
+      /* siehe oben */
+    }
+  }
+  metaThemeColorAktualisieren();
+  return hc;
+}
+
+export function dunkelGrundfarbeZuruecksetzen(): void {
+  dunkelGrundfarbeSetzen(DUNKEL_GRUNDFARBE_STANDARD);
+}
+
+/**
  * Faerbt die Browser-Oberflaeche (Adressleiste auf Android, Statusleiste in
  * der installierten PWA) passend zum aktuellen Theme ein.
  *
@@ -96,4 +119,4 @@ export function metaThemeColorAktualisieren(): void {
   if (farbe) marke.setAttribute("content", farbe);
 }
 
-export { akzentAbleiten };
+export { akzentAbleiten, grundfarbeAbleiten };

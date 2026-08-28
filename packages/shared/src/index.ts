@@ -27,6 +27,11 @@ export interface MandantDto {
   slug: string;
   /** Akzentfarbe des Trägers als sRGB-Hex, z. B. "#5ec4c0". */
   akzentfarbe: string;
+  /**
+   * Grundfarbe (Hintergrund/Flächen) im dunklen Design als sRGB-Hex, z. B.
+   * "#10131a". Unabhängig von akzentfarbe -- siehe migrations/0029.
+   */
+  dunkelGrundfarbe: string;
 }
 
 /**
@@ -41,6 +46,34 @@ export interface MandantDto {
 export const AKZENTFARBE_MUSTER = /^#[0-9a-fA-F]{6}$/;
 
 export const AKZENTFARBE_STANDARD = "#e3000f";
+
+/**
+ * Standardwert der neuen Spalte dunkel_grundfarbe (Migration 0029). Siehe
+ * dort für die Begründung der Wahl: seine Helligkeit trifft fast exakt den
+ * bisherigen fest verdrahteten Dunkelmodus-Hintergrund.
+ */
+export const DUNKEL_GRUNDFARBE_STANDARD = "#10131a";
+
+export interface DunkelGrundfarbe {
+  id: string;
+  name: string;
+  hex: string;
+}
+
+/**
+ * Kuratierte Auswahl für den Grundfarben-Wähler -- kleiner als
+ * PASTELL_PALETTEN, weil hier keine Markenidentität gesucht wird, sondern
+ * ein ruhiger Grundton für Hintergrund und Flächen. Bewusst kein Rot, aus
+ * demselben Grund wie bei PASTELL_PALETTEN: Kollision mit
+ * --zv-status-danger und mit "DRK Rot" als Standardakzent.
+ */
+export const DUNKEL_GRUNDFARBEN: readonly DunkelGrundfarbe[] = [
+  { id: "schiefer", name: "Schiefer", hex: "#10131a" },
+  { id: "anthrazit", name: "Anthrazit", hex: "#16151a" },
+  { id: "waldnacht", name: "Waldnacht", hex: "#0d1913" },
+  { id: "amethyst", name: "Amethyst", hex: "#16121f" },
+  { id: "kohle", name: "Kohle", hex: "#141414" },
+] as const;
 
 export interface PastellPalette {
   id: string;

@@ -125,6 +125,8 @@ export const api = {
   eigenerMandant: () => request<MandantDto>("/mandant/me"),
   mandantAkzentfarbeSetzen: (akzentfarbe: string) =>
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ akzentfarbe }) }),
+  mandantDunkelGrundfarbeSetzen: (dunkelGrundfarbe: string) =>
+    request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ dunkelGrundfarbe }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   benutzerAnlegen: (payload: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),

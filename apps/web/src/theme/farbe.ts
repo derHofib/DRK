@@ -105,3 +105,43 @@ export function akzentAnwenden(hex: string): AkzentHC | null {
   wurzel.style.setProperty("--zv-accent-c", hc.c.toFixed(4));
   return hc;
 }
+
+/**
+ * Obergrenze fuer die dunkle Grundfarbe (Hintergrund/Flaechen im
+ * Dunkelmodus, --zv-dunkel-h/-c) -- bewusst deutlich niedriger als
+ * CHROMA_MAX oben: eine Grundflaeche soll "dezent" bleiben, keine zweite
+ * Markenfarbe werden.
+ *
+ * Anders als bei akzentAbleiten() gibt es HIER keine Untergrenze: echtes
+ * Grau/Schwarz ist fuer eine Grundfarbe eine vollkommen legitime Wahl
+ * (siehe Palette "Kohle"), waehrend eine fast-graue AKZENTfarbe das
+ * Pastellsystem entfaerben wuerde -- die beiden Faelle sind nicht
+ * dasselbe Problem.
+ */
+const GRUNDFARBE_CHROMA_MAX = 0.035;
+
+export function grundfarbeAbleiten(hex: string): AkzentHC {
+  const { c, h } = hexZuOklch(hex);
+  return {
+    h: Math.round(h * 10) / 10,
+    c: Math.min(GRUNDFARBE_CHROMA_MAX, c),
+  };
+}
+
+/**
+ * Schreibt Farbton und Buntheit der dunklen Grundfarbe auf <html> --
+ * Gegenstueck zu akzentAnwenden(), fuer die von der Akzentfarbe
+ * unabhaengige Hintergrund-/Flaechentonleiter im Dunkelmodus.
+ */
+export function grundfarbeAnwenden(hex: string): AkzentHC | null {
+  let hc: AkzentHC;
+  try {
+    hc = grundfarbeAbleiten(hex);
+  } catch {
+    return null;
+  }
+  const wurzel = document.documentElement;
+  wurzel.style.setProperty("--zv-dunkel-h", String(hc.h));
+  wurzel.style.setProperty("--zv-dunkel-c", hc.c.toFixed(4));
+  return hc;
+}

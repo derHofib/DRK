@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   akzentSetzen,
+  dunkelGrundfarbeSetzen,
   gelesenerModus,
   metaThemeColorAktualisieren,
   themeAnwenden,
@@ -14,6 +15,9 @@ interface ThemeKontextWert {
   akzentVorschau: (hex: string) => void;
   /** Uebernimmt eine Farbe dauerhaft (nach erfolgreichem Speichern). */
   akzentUebernehmen: (hex: string) => void;
+  /** Gegenstueck zu akzentVorschau/-Uebernehmen, fuer die dunkle Grundfarbe. */
+  dunkelVorschau: (hex: string) => void;
+  dunkelUebernehmen: (hex: string) => void;
 }
 
 const ThemeKontext = createContext<ThemeKontextWert | null>(null);
@@ -45,10 +49,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const akzentUebernehmen = useCallback((hex: string) => {
     akzentSetzen(hex, true);
   }, []);
+  const dunkelVorschau = useCallback((hex: string) => {
+    dunkelGrundfarbeSetzen(hex, false);
+  }, []);
+  const dunkelUebernehmen = useCallback((hex: string) => {
+    dunkelGrundfarbeSetzen(hex, true);
+  }, []);
 
   const wert = useMemo(
-    () => ({ modus, setModus, akzentVorschau, akzentUebernehmen }),
-    [modus, setModus, akzentVorschau, akzentUebernehmen]
+    () => ({ modus, setModus, akzentVorschau, akzentUebernehmen, dunkelVorschau, dunkelUebernehmen }),
+    [modus, setModus, akzentVorschau, akzentUebernehmen, dunkelVorschau, dunkelUebernehmen]
   );
 
   return <ThemeKontext.Provider value={wert}>{children}</ThemeKontext.Provider>;

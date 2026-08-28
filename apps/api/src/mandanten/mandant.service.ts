@@ -7,6 +7,13 @@ interface MandantZeile {
   name: string;
   slug: string;
   akzentfarbe: string;
+  dunkelGrundfarbe: string;
+}
+
+/** Partielles Update -- mindestens ein Feld ist gesetzt, siehe Controller. */
+interface ErscheinungsbildPatch {
+  akzentfarbe?: string;
+  dunkelGrundfarbe?: string;
 }
 
 /**
@@ -34,28 +41,50 @@ export class MandantService {
   async findEigenenMandanten() {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<MandantZeile>(
-        "SELECT id, name, slug, akzentfarbe FROM mandant"
+        'SELECT id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe" FROM mandant'
       );
       return rows[0] ?? null;
     });
   }
 
-  async setzeAkzentfarbe(akzentfarbe: string) {
+  /**
+   * Setzt Akzentfarbe und/oder dunkle Grundfarbe -- beide sind dieselbe
+   * traegerweite Branding-Entscheidung, nur zwei unabhaengige Werte davon
+   * (siehe migrations/0019 und 0029: die dunkle Grundfarbe folgte bis dahin
+   * ungewollt dem Farbton des Akzents).
+   *
+   * Die SET-Liste besteht ausschliesslich aus zwei fest verdrahteten
+   * Spaltennamen, nie aus Nutzereingaben -- kein SQL-Injection-Risiko, nur
+   * ein optionales Feld je Aufruf.
+   */
+  async aktualisiereErscheinungsbild(patch: ErscheinungsbildPatch) {
     const ctx = requireTenantContext();
     if (!ROLLEN_MIT_BRANDING.has(ctx.rolle)) {
       throw new ForbiddenException("Nur die Bereichsleitung darf das Erscheinungsbild des Trägers ändern.");
     }
 
+    const setzt: string[] = [];
+    const werte: string[] = [];
+    if (patch.akzentfarbe !== undefined) {
+      werte.push(patch.akzentfarbe);
+      setzt.push(`akzentfarbe = $${werte.length}`);
+    }
+    if (patch.dunkelGrundfarbe !== undefined) {
+      werte.push(patch.dunkelGrundfarbe);
+      setzt.push(`dunkel_grundfarbe = $${werte.length}`);
+    }
+
     return this.db.withTenant(async (client) => {
       // Weiterhin bewusst kein WHERE id = ... -- RLS laesst genau eine Zeile
-      // durch. Dass hier ausserdem nur EINE Spalte betroffen sein KANN,
-      // erzwingt nicht dieser SQL-Text, sondern das spaltenscharfe
-      // GRANT UPDATE (akzentfarbe) aus Migration 0019: ein UPDATE auf slug
+      // durch. Dass hier ausserdem nur die BEIDEN Branding-Spalten
+      // betroffen sein KOENNEN, erzwingt nicht dieser SQL-Text, sondern die
+      // spaltenscharfen GRANTs aus Migration 0019/0029: ein UPDATE auf slug
       // oder name scheitert dort an "permission denied", egal was hier
       // steht.
       const { rows } = await client.query<MandantZeile>(
-        "UPDATE mandant SET akzentfarbe = $1 RETURNING id, name, slug, akzentfarbe",
-        [akzentfarbe]
+        `UPDATE mandant SET ${setzt.join(", ")}
+         RETURNING id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe"`,
+        werte
       );
       return rows[0] ?? null;
     });
