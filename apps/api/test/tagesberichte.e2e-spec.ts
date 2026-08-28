@@ -13,6 +13,10 @@ import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 
+const TEST_PDF_BASE64 = "data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsO4CQ==";
+const TEST_PNG_BASE64 =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 describe("Tagesberichte", () => {
   let app: INestApplication;
   let admin: Client;
@@ -133,6 +137,7 @@ describe("Tagesberichte", () => {
       "DELETE FROM tagesbericht_tag WHERE mandant_id = ANY($1)",
       [[mandantId, mandantBId]]
     );
+    await admin.query("DELETE FROM tagesbericht_dokument WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM tagesbericht WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM tag WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
@@ -244,5 +249,107 @@ describe("Tagesberichte", () => {
   it("lehnt ungueltige Eingaben mit 400 ab", async () => {
     const res = await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient1, datum: "26.08.2026", text: "" });
     expect(res.status).toBe(400);
+  });
+
+  /**
+   * Dokumente an Tagesberichten: bewusst mehrere pro Bericht moeglich
+   * (anders als bei rechnung_dokument), gleiche Sicherheitsvorkehrungen wie
+   * bei Rechnungsdokumenten (MIME-Allowlist, "attachment"-Disposition,
+   * nosniff -- siehe common/datei.ts), und dieselbe Standort-/
+   * Mandanten-Isolation wie der Berichtstext selbst.
+   */
+  describe("Dokumente", () => {
+    let berichtId: string;
+
+    beforeAll(async () => {
+      const angelegt = await als(tokenBereichsleitung).post("/tagesberichte", {
+        klientId: klient1,
+        datum: "2026-08-27",
+        text: "Bericht mit Dokument.",
+        dokumente: [{ base64: TEST_PDF_BASE64, dateiname: "beleg.pdf", mimeType: "application/pdf" }],
+      });
+      berichtId = angelegt.body.id;
+    });
+
+    it("legt einen Bericht mit initialem Dokument an", async () => {
+      const res = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}`);
+      const bericht = res.body.find((b: { id: string }) => b.id === berichtId);
+      expect(bericht.dokumente.length).toBe(1);
+      expect(bericht.dokumente[0].dateiname).toBe("beleg.pdf");
+      expect(bericht.dokumente[0].mimeType).toBe("application/pdf");
+    });
+
+    it("laesst sich um ein zweites Dokument nachtraeglich ergaenzen (mehrere pro Bericht moeglich)", async () => {
+      const res = await als(tokenBereichsleitung).post(`/tagesberichte/${berichtId}/dokumente`, {
+        base64: TEST_PNG_BASE64,
+        dateiname: "foto.png",
+        mimeType: "image/png",
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.dokumente.length).toBe(2);
+      expect(res.body.dokumente.map((d: { dateiname: string }) => d.dateiname).sort()).toEqual([
+        "beleg.pdf",
+        "foto.png",
+      ]);
+    });
+
+    it("liefert den Dateiinhalt mit sicheren Headern (attachment, nosniff, Hash)", async () => {
+      const liste = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}`);
+      const bericht = liste.body.find((b: { id: string }) => b.id === berichtId);
+      const dokumentId = bericht.dokumente.find((d: { dateiname: string }) => d.dateiname === "beleg.pdf").id;
+
+      const res = await als(tokenBereichsleitung).get(`/tagesberichte/${berichtId}/dokumente/${dokumentId}`);
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/pdf");
+      expect(res.headers["content-disposition"]).toContain("attachment");
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["x-datei-hash"]).toBeTruthy();
+      expect(Buffer.from(res.body).length).toBeGreaterThan(0);
+    });
+
+    it("lehnt einen nicht erlaubten MIME-Type mit 400 ab", async () => {
+      const res = await als(tokenBereichsleitung).post(`/tagesberichte/${berichtId}/dokumente`, {
+        base64: "data:text/html;base64,PHNjcmlwdD48L3NjcmlwdD4=",
+        dateiname: "boese.html",
+        mimeType: "text/html",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("weist eine unbekannte Dokument-ID mit 404 ab", async () => {
+      const res = await als(tokenBereichsleitung).get(`/tagesberichte/${berichtId}/dokumente/${randomUUID()}`);
+      expect(res.status).toBe(404);
+    });
+
+    it("Standort-Einschraenkung: einrichtungsleitung-s1 kann kein Dokument fuer Klient 2 herunterladen oder hinzufuegen", async () => {
+      const berichtKlient2 = await als(tokenBereichsleitung).post("/tagesberichte", {
+        klientId: klient2,
+        datum: "2026-08-27",
+        text: "Bericht Klient 2 mit Dokument.",
+        dokumente: [{ base64: TEST_PDF_BASE64, dateiname: "beleg2.pdf", mimeType: "application/pdf" }],
+      });
+      const dokumentId = berichtKlient2.body.dokumente[0].id;
+
+      const hinzufuegen = await als(tokenEinrichtungsleitungS1).post(`/tagesberichte/${berichtKlient2.body.id}/dokumente`, {
+        base64: TEST_PNG_BASE64,
+        dateiname: "sollte-scheitern.png",
+        mimeType: "image/png",
+      });
+      expect(hinzufuegen.status).toBe(404);
+
+      const herunterladen = await als(tokenEinrichtungsleitungS1).get(
+        `/tagesberichte/${berichtKlient2.body.id}/dokumente/${dokumentId}`
+      );
+      expect(herunterladen.status).toBe(404);
+    });
+
+    it("Mandantentrennung: Bereichsleitung eines anderen Mandanten kann das Dokument nicht herunterladen", async () => {
+      const liste = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}`);
+      const bericht = liste.body.find((b: { id: string }) => b.id === berichtId);
+      const dokumentId = bericht.dokumente[0].id;
+
+      const res = await als(tokenBereichsleitungB).get(`/tagesberichte/${berichtId}/dokumente/${dokumentId}`);
+      expect(res.status).toBe(404);
+    });
   });
 });

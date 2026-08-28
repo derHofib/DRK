@@ -215,6 +215,13 @@ export interface TagDto {
   name: string;
 }
 
+export interface TagesberichtDokumentDto {
+  id: string;
+  dateiname: string;
+  mimeType: string;
+  erstelltAm: string;
+}
+
 export interface TagesberichtDto {
   id: string;
   klientId: string;
@@ -223,4 +230,5 @@ export interface TagesberichtDto {
   datum: string;
   text: string;
   tags: TagDto[];
+  dokumente: TagesberichtDokumentDto[];
 }

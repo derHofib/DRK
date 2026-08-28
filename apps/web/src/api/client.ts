@@ -212,8 +212,13 @@ export const api = {
 
   tagesberichteListe: (klientId?: string) =>
     request<TagesberichtDto[]>(`/tagesberichte${klientId ? `?klientId=${klientId}` : ""}`),
-  tagesberichtAnlegen: (payload: { klientId: string; datum: string; text: string; tagNamen?: string[] }) =>
-    request<TagesberichtDto>("/tagesberichte", { method: "POST", body: JSON.stringify(payload) }),
+  tagesberichtAnlegen: (payload: {
+    klientId: string;
+    datum: string;
+    text: string;
+    tagNamen?: string[];
+    dokumente?: { base64: string; dateiname: string; mimeType: string }[];
+  }) => request<TagesberichtDto>("/tagesberichte", { method: "POST", body: JSON.stringify(payload) }),
   tagesberichtTagHinzufuegen: (tagesberichtId: string, name: string) =>
     request<TagesberichtDto>(`/tagesberichte/${tagesberichtId}/tags`, {
       method: "POST",
@@ -221,5 +226,15 @@ export const api = {
     }),
   tagesberichtTagEntfernen: (tagesberichtId: string, tagId: string) =>
     request<{ ok: true }>(`/tagesberichte/${tagesberichtId}/tags/${tagId}`, { method: "DELETE" }),
+  tagesberichtDokumentHinzufuegen: (
+    tagesberichtId: string,
+    dokument: { base64: string; dateiname: string; mimeType: string }
+  ) =>
+    request<TagesberichtDto>(`/tagesberichte/${tagesberichtId}/dokumente`, {
+      method: "POST",
+      body: JSON.stringify(dokument),
+    }),
+  tagesberichtDokumentUrl: (tagesberichtId: string, dokumentId: string) =>
+    blobUrl(`/tagesberichte/${tagesberichtId}/dokumente/${dokumentId}`),
   tagsListe: () => request<TagDto[]>("/tags"),
 };

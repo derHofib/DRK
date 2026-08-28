@@ -2,21 +2,8 @@ import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Re
 import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
+import { ERLAUBTE_DOKUMENT_MIME_TYPES } from "../common/datei";
 import { RechnungService } from "./rechnung.service";
-
-/**
- * Allowlist statt freiem String: ein hochgeladenes "Dokument" landet
- * unveraendert in der Antwort auf GET :id/dokument, mit genau diesem Wert
- * als Content-Type-Header. Ohne Einschraenkung koennte jede Rolle (auch
- * betreuer) eine "Rechnung" mit dokumentMimeType "text/html" und einem
- * <script>-Inhalt anlegen -- oeffnet eine andere Person (z.B. die Leitung
- * beim Genehmigen) dieses Dokument, fuehrt der Browser das Skript im
- * Origin der Anwendung aus und kann das JWT aus localStorage lesen.
- * Live gegen die echte API nachgewiesen, kein theoretischer Fund.
- * Passt zum accept="application/pdf,image/*" des Datei-Feldes im Frontend
- * (KlientDetail.tsx).
- */
-const ERLAUBTE_DOKUMENT_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"] as const;
 
 const anlegenSchema = z.object({
   klientId: z.string().uuid(),

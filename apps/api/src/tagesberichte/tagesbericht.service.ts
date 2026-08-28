@@ -1,12 +1,21 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
+import { dateiAusBase64 } from "../common/datei";
 import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
 
 export interface TagDto {
   id: string;
   name: string;
+}
+
+export interface TagesberichtDokumentDto {
+  id: string;
+  dateiname: string;
+  mimeType: string;
+  erstelltAm: string;
 }
 
 export interface TagesberichtDto {
@@ -17,20 +26,28 @@ export interface TagesberichtDto {
   datum: string;
   text: string;
   tags: TagDto[];
+  dokumente: TagesberichtDokumentDto[];
 }
 
 const AUSWAHL = `
   SELECT
     t.id, t.klient_id, k.vorname, k.nachname, b.name AS autor_name, t.datum, t.text,
     COALESCE(
-      json_agg(json_build_object('id', tag.id, 'name', tag.name)) FILTER (WHERE tag.id IS NOT NULL),
+      json_agg(DISTINCT jsonb_build_object('id', tag.id, 'name', tag.name)) FILTER (WHERE tag.id IS NOT NULL),
       '[]'
-    ) AS tags
+    ) AS tags,
+    COALESCE(
+      json_agg(DISTINCT jsonb_build_object(
+        'id', d.id, 'dateiname', d.dateiname, 'mimeType', d.mime_type, 'erstelltAm', d.erstellt_am
+      )) FILTER (WHERE d.id IS NOT NULL),
+      '[]'
+    ) AS dokumente
   FROM tagesbericht t
   JOIN klient k ON k.id = t.klient_id
   LEFT JOIN benutzer b ON b.id = t.autor_id
   LEFT JOIN tagesbericht_tag tt ON tt.tagesbericht_id = t.id
   LEFT JOIN tag ON tag.id = tt.tag_id
+  LEFT JOIN tagesbericht_dokument d ON d.tagesbericht_id = t.id
 `;
 
 @Injectable()
@@ -76,6 +93,7 @@ export class TagesberichtService {
     datum: string;
     text: string;
     tagNamen?: string[];
+    dokumente?: { base64: string; dateiname: string; mimeType: string }[];
   }): Promise<TagesberichtDto> {
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
@@ -92,7 +110,57 @@ export class TagesberichtService {
       for (const name of input.tagNamen ?? []) {
         await tagZuweisen(client, mandantId, tagesberichtId, name);
       }
+      for (const dokument of input.dokumente ?? []) {
+        await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
+      }
       return ladeEinen(client, tagesberichtId);
+    });
+  }
+
+  /**
+   * "Kann auch nachtraeglich hinzugefuegt werden" -- gleiches Muster wie
+   * tagHinzufuegen(): ein Foto entsteht oft erst nach dem Schreiben des
+   * Berichtstextes. Bewusst NICHT vom REVOKE UPDATE auf tagesbericht selbst
+   * betroffen (0024) -- eine neue Zeile in tagesbericht_dokument aendert
+   * nie den Berichtstext.
+   */
+  async dokumentHinzufuegen(
+    tagesberichtId: string,
+    dokument: { base64: string; dateiname: string; mimeType: string }
+  ): Promise<TagesberichtDto> {
+    const { mandantId, benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const klientId = await klientIdDesBerichts(client, tagesberichtId);
+      if (!klientId || !(await klientIstErlaubt(client, benutzerId, klientId))) {
+        throw new NotFoundException("Tagesbericht nicht gefunden.");
+      }
+      await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
+      return ladeEinen(client, tagesberichtId);
+    });
+  }
+
+  async dokumentBild(
+    tagesberichtId: string,
+    dokumentId: string
+  ): Promise<{ inhalt: Buffer; mimeType: string; dateiname: string; hash: string } | null> {
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{
+        inhalt: Buffer;
+        mime_type: string;
+        dateiname: string;
+        inhalt_hash: string;
+        klient_id: string;
+      }>(
+        `SELECT d.inhalt, d.mime_type, d.dateiname, d.inhalt_hash, t.klient_id
+         FROM tagesbericht_dokument d
+         JOIN tagesbericht t ON t.id = d.tagesbericht_id
+         WHERE d.tagesbericht_id = $1 AND d.id = $2`,
+        [tagesberichtId, dokumentId]
+      );
+      if (rows.length === 0) return null;
+      if (!(await klientIstErlaubt(client, benutzerId, rows[0].klient_id))) return null;
+      return { inhalt: rows[0].inhalt, mimeType: rows[0].mime_type, dateiname: rows[0].dateiname, hash: rows[0].inhalt_hash };
     });
   }
 
@@ -169,6 +237,22 @@ async function tagZuweisen(client: PoolClient, mandantId: string, tagesberichtId
   );
 }
 
+async function dokumentSpeichern(
+  client: PoolClient,
+  mandantId: string,
+  tagesberichtId: string,
+  benutzerId: string,
+  dokument: { base64: string; dateiname: string; mimeType: string }
+) {
+  const inhalt = dateiAusBase64(dokument.base64);
+  const inhaltHash = createHash("sha256").update(inhalt).digest("hex");
+  await client.query(
+    `INSERT INTO tagesbericht_dokument (mandant_id, tagesbericht_id, dateiname, mime_type, inhalt, inhalt_hash, hochgeladen_von)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [mandantId, tagesberichtId, dokument.dateiname, dokument.mimeType, inhalt, inhaltHash, benutzerId]
+  );
+}
+
 async function ladeEinen(client: PoolClient, id: string): Promise<TagesberichtDto> {
   const { rows } = await client.query(
     `${AUSWAHL} WHERE t.id = $1 GROUP BY t.id, k.vorname, k.nachname, b.name`,
@@ -186,5 +270,6 @@ function zuDto(r: any): TagesberichtDto {
     datum: r.datum,
     text: r.text,
     tags: r.tags,
+    dokumente: r.dokumente,
   };
 }

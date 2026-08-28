@@ -40,6 +40,7 @@ import {
   IUebersicht,
   IZurueck,
 } from "../components/icons";
+import { dateiZuBase64 } from "../datei";
 import { formatBetrag } from "../format";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
@@ -53,15 +54,6 @@ const eingabeFeldStil = {
   color: "var(--zv-text)",
   fontSize: 14,
 };
-
-function dateiZuBase64(datei: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(datei);
-  });
-}
 
 const ROLLEN_MIT_ANONYMISIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
 
@@ -761,8 +753,15 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const tagsText = String(form.get("tags") ?? "");
+    const datei = form.get("dokument") as File | null;
     setFormFehler(null);
     try {
+      let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
+      if (datei && datei.size > 0) {
+        dokumente = [
+          { base64: await dateiZuBase64(datei), dateiname: datei.name, mimeType: datei.type || "application/octet-stream" },
+        ];
+      }
       await api.tagesberichtAnlegen({
         klientId,
         datum: String(form.get("datum")),
@@ -771,6 +770,7 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
+        dokumente,
       });
       setFormularOffen(false);
       laden();
@@ -795,6 +795,15 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
       laden();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Tag konnte nicht hinzugefügt werden.");
+    }
+  }
+
+  async function dokumentHinzufuegen(berichtId: string, base64: string, dateiname: string, mimeType: string) {
+    try {
+      await api.tagesberichtDokumentHinzufuegen(berichtId, { base64, dateiname, mimeType });
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Dokument konnte nicht hinzugefügt werden.");
     }
   }
 
@@ -844,6 +853,10 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
               <label>Tags (optional, durch Komma getrennt)</label>
               <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />
             </div>
+            <div className="zv-field">
+              <label>Dokument (optional)</label>
+              <input name="dokument" type="file" accept="application/pdf,image/*" />
+            </div>
             <button className="zv-btn zv-btn-block" type="submit">
               <ISpeichern />
               Anlegen
@@ -857,11 +870,12 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
       {berichte.length === 0 ? (
         <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diesen Klienten erfasst.</Leerzustand>
       ) : (
-        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1fr 3fr 1.8fr" } as CSSProperties}>
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "0.9fr 2.6fr 1.5fr 1.5fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
             <span>Datum</span>
             <span>Bericht</span>
             <span>Tags</span>
+            <span>Dokumente</span>
           </div>
           {berichte.map((b) => (
             <TagesberichtZeile
@@ -870,6 +884,7 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
               zeigeKlient={false}
               onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
               onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
+              onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
             />
           ))}
         </div>
