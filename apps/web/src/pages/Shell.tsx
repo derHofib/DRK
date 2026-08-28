@@ -5,6 +5,8 @@ import { akzentSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
+  IAusklappen,
+  IEinklappen,
   IEinstellungen,
   IKassenbuch,
   IKlienten,
@@ -35,9 +37,31 @@ const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
 const BREITE_REITER = new Set<Tab>(["kassenbuch", "klienten", "mitarbeitende", "tagesberichte"]);
 
+const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
+
+// Ob das Menueband eingeklappt ist, ist eine reine Anzeigepraeferenz dieses
+// Geraets -- wie das Theme (siehe ThemeProvider) gehoert das bewusst nicht in
+// die Datenbank und ist nach TTDSG §25 Abs. 2 einwilligungsfrei.
+function ladeSidebarZustand(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_SPEICHER) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
   const [tab, setTab] = useState<Tab>("zimmer");
+  const [eingeklappt, setEingeklappt] = useState(ladeSidebarZustand);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_SPEICHER, eingeklappt ? "1" : "0");
+    } catch {
+      // Privatmodus ohne localStorage: Praeferenz gilt dann nur fuer diese Sitzung.
+    }
+  }, [eingeklappt]);
 
   useEffect(() => {
     api
@@ -63,7 +87,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
       {/* Nur ab einer bestimmten Breite sichtbar (app.css) -- auf dem Handy
           uebernimmt weiterhin .zv-tabbar-app ganz unten, siehe dort fuer die
           Begruendung (kein position:fixed, echte Mobilbrowser-Tests). */}
-      <aside className="zv-sidebar">
+      <aside className="zv-sidebar" data-eingeklappt={eingeklappt}>
         <div className="zv-sidebar-brand">
           <span className="zv-brand-mark">ZA</span>
           <div className="zv-brand-text">
@@ -79,18 +103,35 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
               className={tab === wert ? "active" : ""}
               onClick={() => setTab(wert)}
               aria-current={tab === wert ? "page" : undefined}
+              title={label}
             >
               <Icon />
-              {label}
+              <span className="zv-sidebar-label">{label}</span>
             </button>
           ))}
         </nav>
 
         <div className="zv-sidebar-foot">
-          <ThemeToggle />
-          <button className="zv-btn zv-btn-still zv-btn-klein zv-btn-block" onClick={logout}>
+          <div className="zv-sidebar-foot-icons">
+            <ThemeToggle />
+            <button
+              type="button"
+              className="zv-icon-btn"
+              onClick={() => setEingeklappt((v) => !v)}
+              aria-label={eingeklappt ? "Menüband ausklappen" : "Menüband einklappen"}
+              title={eingeklappt ? "Menüband ausklappen" : "Menüband einklappen"}
+            >
+              {eingeklappt ? <IAusklappen /> : <IEinklappen />}
+            </button>
+          </div>
+          <button
+            className="zv-btn zv-btn-still zv-btn-klein zv-btn-block"
+            onClick={logout}
+            aria-label="Abmelden"
+            title="Abmelden"
+          >
             <IAbmelden />
-            Abmelden
+            <span className="zv-sidebar-label">Abmelden</span>
           </button>
         </div>
       </aside>

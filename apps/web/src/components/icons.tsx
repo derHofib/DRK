@@ -56,6 +56,8 @@ import {
   Moon,
   NotebookPen,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
   PenLine,
   Pencil,
   Plus,
@@ -148,6 +150,8 @@ export const IEinziehen = baue(UserRoundPlus);
 export const IAuszug = baue(UserRoundMinus);
 export const I2faEin = baue(ShieldCheck);
 export const I2faAus = baue(ShieldOff);
+export const IEinklappen = baue(PanelLeftClose);
+export const IAusklappen = baue(PanelLeftOpen);
 
 /* Richtungen */
 export const IAufklappen = baue(ChevronDown);

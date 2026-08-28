@@ -268,6 +268,77 @@
   gap: var(--zv-space-2);
 }
 
+.zv-sidebar-foot-icons {
+  display: flex;
+  gap: var(--zv-space-2);
+}
+
+/* ------------------------------------------------------------------
+   Eingeklapptes Menueband -- Icons bleiben, Beschriftung weicht.
+   width/padding sind ausdruecklich hier (nicht per Inline-Style) gesetzt,
+   damit @media (prefers-reduced-motion: reduce) aus tokens.css automatisch
+   greift und die Transition dort abschaltet.
+   ------------------------------------------------------------------ */
+.zv-sidebar {
+  transition: width var(--zv-transition-base), padding var(--zv-transition-base);
+}
+
+.zv-sidebar[data-eingeklappt="true"] {
+  width: 68px;
+  padding-left: var(--zv-space-2);
+  padding-right: var(--zv-space-2);
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-brand-text,
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-label {
+  display: none;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-brand {
+  justify-content: center;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button {
+  justify-content: center;
+  padding: var(--zv-space-2);
+  gap: 0;
+  position: relative;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot-icons {
+  flex-direction: column;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot .zv-btn {
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Eigene Sprechblase statt allein auf das title-Attribut zu vertrauen --
+   dessen Verzoegerung (~1s) und Nichtverfuegbarkeit auf Touch waeren bei
+   reiner Icon-Navigation zu unauffaellig. title bleibt zusaetzlich gesetzt
+   (siehe Shell.tsx) und liefert hier den Text via attr(), keine zweite
+   Quelle der Wahrheit. */
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button:hover::after,
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button:focus-visible::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + var(--zv-space-2));
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--zv-text);
+  color: var(--zv-bg);
+  padding: 4px var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  white-space: nowrap;
+  box-shadow: var(--zv-shadow-1);
+  z-index: 5;
+  pointer-events: none;
+}
+
 /* ==================================================================
    Karten
    ================================================================== */
