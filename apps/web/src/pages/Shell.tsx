@@ -38,7 +38,7 @@ const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
 ];
 
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
-const BREITE_REITER = new Set<Tab>(["kassenbuch", "klienten", "mitarbeitende", "tagesberichte"]);
+const BREITE_REITER = new Set<Tab>(["dashboard", "zimmer", "kassenbuch", "klienten", "mitarbeitende", "tagesberichte"]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
 const SIDEBAR_HOVER_SPEICHER = "zimmerakte_sidebar_hover_ausklappen";
