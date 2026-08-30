@@ -192,7 +192,7 @@ export const api = {
 
   kostenuebernahmenListe: (klientId: string) =>
     request<KostenuebernahmeDto[]>(`/kostenuebernahmen?klientId=${klientId}`),
-  kostenuebernahmeAnlegen: (payload: { klientId: string; amt: string; von: string }) =>
+  kostenuebernahmeAnlegen: (payload: { klientId: string; amt: string; von: string; bis?: string }) =>
     request<KostenuebernahmeDto>("/kostenuebernahmen", { method: "POST", body: JSON.stringify(payload) }),
   kostenuebernahmeBeenden: (id: string, bis: string) =>
     request<KostenuebernahmeDto>(`/kostenuebernahmen/${id}/beenden`, {

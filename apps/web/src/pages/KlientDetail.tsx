@@ -370,8 +370,14 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
     e.preventDefault();
     const formElement = e.currentTarget;
     const form = new FormData(formElement);
+    const bis = String(form.get("bis") ?? "");
     try {
-      await api.kostenuebernahmeAnlegen({ klientId, amt: String(form.get("amt")), von: String(form.get("von")) });
+      await api.kostenuebernahmeAnlegen({
+        klientId,
+        amt: String(form.get("amt")),
+        von: String(form.get("von")),
+        bis: bis || undefined,
+      });
       setFormularOffen(false);
       formElement.reset();
       laden();
@@ -421,6 +427,10 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
             <div className="zv-field">
               <label>Von</label>
               <input name="von" type="date" required />
+            </div>
+            <div className="zv-field">
+              <label>Bis (optional)</label>
+              <input name="bis" type="date" />
             </div>
           </div>
           <button className="zv-btn" type="submit">

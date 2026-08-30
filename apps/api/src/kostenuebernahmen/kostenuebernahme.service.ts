@@ -33,12 +33,19 @@ export class KostenuebernahmeService {
   }
 
   /**
+   * "bis" ist optional: eine Kostenuebernahme wird ueblicherweise vom Amt
+   * von vornherein fuer einen festen Zeitraum bewilligt, nicht nur
+   * unbefristet ab "von" -- deshalb laesst sich das Enddatum schon beim
+   * Anlegen mitgeben, statt zwingend erst spaeter per beenden() gesetzt zu
+   * werden. Offen bleibt weiterhin moeglich (bis = undefined), fuer Faelle,
+   * in denen die Bewilligungsdauer noch nicht feststeht.
+   *
    * Kein Ueberlappungs-Check im Anwendungscode -- gleiches Prinzip wie bei
    * belegung.service.ts: die EXCLUDE-Constraint auf kostenuebernahme
    * (migrations/0013) ist race-condition-sicher, eine Pruefung hier vorher
    * waere es nicht.
    */
-  async anlegen(input: { klientId: string; amt: string; von: string }): Promise<KostenuebernahmeDto> {
+  async anlegen(input: { klientId: string; amt: string; von: string; bis?: string }): Promise<KostenuebernahmeDto> {
     const { mandantId, benutzerId } = requireTenantContext();
     try {
       return await this.db.withTenant(async (client) => {
@@ -46,10 +53,10 @@ export class KostenuebernahmeService {
           throw new NotFoundException("Klient nicht gefunden.");
         }
         const { rows } = await client.query(
-          `INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, erstellt_von)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis, erstellt_von)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, klient_id, amt, von, bis`,
-          [mandantId, input.klientId, input.amt, input.von, benutzerId]
+          [mandantId, input.klientId, input.amt, input.von, input.bis ?? null, benutzerId]
         );
         return zuDto(rows[0]);
       });
