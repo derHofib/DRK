@@ -2,6 +2,7 @@ import type {
   BelegungsverlaufEintragDto,
   BenutzerListEintragDto,
   BenutzerRolle,
+  DashboardDto,
   KassenbuchungDto,
   KassenbuchungTyp,
   KlientDetailDto,
@@ -96,6 +97,8 @@ async function blobUrl(path: string): Promise<string> {
 }
 
 export const api = {
+  dashboard: () => request<DashboardDto>("/dashboard"),
+
   login: (payload: LoginRequest) =>
     request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   loginTotp: (pendingToken: string, code: string) =>

@@ -270,6 +270,32 @@ export interface TagesberichtDokumentDto {
   erstelltAm: string;
 }
 
+/**
+ * Eine Antwort, dieselben Daten fuer jede Rolle -- welche Kacheln davon
+ * angezeigt werden, entscheidet ausschliesslich das Frontend
+ * (apps/web/src/dashboard/sichtbarkeit.ts).
+ */
+export interface DashboardDto {
+  zimmer: { frei: number; gesamt: number; standorte: number };
+  hzlWoche: { bezahlt: number; gesamt: number; isoJahr: number; isoWoche: number };
+  offeneRechnungen: { anzahl: number; summeCent: number };
+  mitarbeitende: { aktiv: number; gesamt: number; ausstehendeResets: number };
+  kostenuebernahmenBaldEndend: {
+    klientId: string;
+    klientName: string;
+    amt: string;
+    bis: string;
+    tageVerbleibend: number;
+  }[];
+  klientenOhneTagesbericht: {
+    klientId: string;
+    klientName: string;
+    standortName: string;
+    zimmerNummer: string;
+    tageSeitLetztem: number | null;
+  }[];
+}
+
 export interface TagesberichtDto {
   id: string;
   klientId: string;

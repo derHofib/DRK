@@ -14,6 +14,7 @@ import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
 import { KostenuebernahmeModule } from "./kostenuebernahmen/kostenuebernahme.module";
 import { RechnungModule } from "./rechnungen/rechnung.module";
 import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
     KostenuebernahmeModule,
     RechnungModule,
     TagesberichtModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

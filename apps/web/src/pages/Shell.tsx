@@ -6,6 +6,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
   IAusklappen,
+  IDashboard,
   IEinklappen,
   IEinstellungen,
   IKassenbuch,
@@ -16,6 +17,7 @@ import {
   IZimmer,
   type IconKomponente,
 } from "../components/icons";
+import { Dashboard } from "./Dashboard";
 import { Zimmer } from "./Zimmer";
 import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
@@ -23,9 +25,10 @@ import { Kassenbuch } from "./Kassenbuch";
 import { Tagesberichte } from "./Tagesberichte";
 import { Einstellungen } from "./Einstellungen";
 
-type Tab = "mitarbeitende" | "zimmer" | "klienten" | "kassenbuch" | "tagesberichte" | "einstellungen";
+type Tab = "dashboard" | "mitarbeitende" | "zimmer" | "klienten" | "kassenbuch" | "tagesberichte" | "einstellungen";
 
 const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
+  { wert: "dashboard", label: "Dashboard", icon: IDashboard },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
@@ -61,7 +64,7 @@ function speichereBoolean(schluessel: string, wert: boolean) {
 
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
-  const [tab, setTab] = useState<Tab>("zimmer");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [eingeklappt, setEingeklappt] = useState(() => ladeBoolean(SIDEBAR_SPEICHER));
   // "Beim Ueberfahren ausklappen" wirkt nur, solange das Menueband
   // eingeklappt ist -- greift also erst zusammen mit eingeklappt=true (siehe
@@ -198,6 +201,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         </div>
 
         <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
+          {tab === "dashboard" && <Dashboard />}
           {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten />}
           {tab === "kassenbuch" && <Kassenbuch />}

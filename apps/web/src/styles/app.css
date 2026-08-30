@@ -1143,6 +1143,19 @@
   margin-left: var(--zv-space-1);
 }
 
+/* Eigene Zeile statt Fliesstext-Anhaengsel an den Namen: in den schmalen
+   zweispaltigen Dashboard-Karten (.zv-dashboard-spalten) reicht die
+   Spaltenbreite oft nicht fuer "Vorname Nachname Zusatzinfo" auf einer
+   Zeile. Der Name bricht dann um, aber CSS Grid schneidet ueberlaufenden
+   Fliesstext nicht an der Spaltenbreite ab -- die inline direkt
+   angehaengte Zusatzinfo landete dadurch sichtbar in der Nachbarspalte
+   (ueberlappend mit "Bis"/Datum). Eine erzwungene eigene Zeile umgeht das
+   unabhaengig von der verfuegbaren Breite. */
+.zv-sub-inline-zeile {
+  display: block;
+  margin-left: 0;
+}
+
 .zv-mono {
   font-family: var(--zv-font-mono);
 }
@@ -1183,6 +1196,19 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--zv-space-3);
   margin-bottom: var(--zv-space-4);
+}
+
+/* Zwei nebeneinander stehende Karten (Dashboard) -- unter 641px */
+/* untereinander, wie jede andere Zwei-Spalten-Ansicht in dieser App. */
+.zv-dashboard-spalten {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-4);
+}
+@media (max-width: 640px) {
+  .zv-dashboard-spalten {
+    grid-template-columns: 1fr;
+  }
 }
 
 .zv-stat-karte {

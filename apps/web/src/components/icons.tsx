@@ -44,6 +44,7 @@ import {
   IdCard,
   Info,
   KeyRound,
+  LayoutDashboard,
   LayoutList,
   Link2,
   LogIn,
@@ -68,6 +69,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  SlidersHorizontal,
   Sun,
   Tag,
   TriangleAlert,
@@ -108,6 +110,7 @@ function baue(Komponente: IconKomponente): IconKomponente {
 }
 
 /* Hauptnavigation */
+export const IDashboard = baue(LayoutDashboard);
 export const IZimmer = baue(DoorOpen);
 export const IKlienten = baue(Users);
 export const IKassenbuch = baue(Wallet);
@@ -152,6 +155,7 @@ export const I2faEin = baue(ShieldCheck);
 export const I2faAus = baue(ShieldOff);
 export const IEinklappen = baue(PanelLeftClose);
 export const IAusklappen = baue(PanelLeftOpen);
+export const IAnpassen = baue(SlidersHorizontal);
 
 /* Richtungen */
 export const IAufklappen = baue(ChevronDown);
