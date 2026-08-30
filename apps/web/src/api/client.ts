@@ -168,7 +168,8 @@ export const api = {
   kassenbuchungenListe: (klientId?: string) =>
     request<KassenbuchungDto[]>(`/kassenbuchungen${klientId ? `?klientId=${klientId}` : ""}`),
   kassenbuchungAnlegen: (payload: {
-    klientId: string;
+    klientId?: string;
+    standortId?: string;
     datum: string;
     betragCent: number;
     verwendungszweck: string;
@@ -176,6 +177,8 @@ export const api = {
     isoJahr?: number;
     isoWoche?: number;
     unterschriftBase64?: string;
+    teilnehmerKlientIds?: string[];
+    teilnehmerBenutzerIds?: string[];
   }) => request<KassenbuchungDto>("/kassenbuchungen", { method: "POST", body: JSON.stringify(payload) }),
   kassenbuchungStornieren: (id: string, grund: string) =>
     request<KassenbuchungDto>(`/kassenbuchungen/${id}/stornieren`, {

@@ -75,3 +75,40 @@ export async function klientIstErlaubt(
   );
   return rows.length > 0;
 }
+
+/**
+ * SQL-Bedingung fuer eine Zeile, die DIREKT eine standort_id traegt (z.B.
+ * kassenbuchung.standort_id bei einer Standort-Buchung) -- anders als
+ * klientStandortBedingung() gibt es hier keinen Umweg ueber eine offene
+ * Belegung, die Spalte IST schon die Standort-Referenz.
+ */
+export function standortIdBedingung(
+  erlaubteStandorte: string[] | null,
+  standortIdAusdruck: string,
+  params: unknown[]
+): string {
+  if (!erlaubteStandorte) return "1=1";
+  params.push(erlaubteStandorte);
+  return `${standortIdAusdruck} = ANY($${params.length})`;
+}
+
+/**
+ * Einzelfall-Variante von standortIdBedingung fuer Schreibpfade (z.B. vor
+ * dem Anlegen einer Standort-Buchung). Prueft zusaetzlich, dass der
+ * Standort ueberhaupt existiert (und damit -- ueber RLS auf der
+ * standort-Tabelle -- zum aktuellen Mandanten gehoert): anders als bei
+ * klientIstErlaubt() oben wird das hier nicht als Sonderfall
+ * "unrestricted = ungeprueft durchlassen" behandelt, weil eine falsche
+ * standort_id sonst unbemerkt aus einem fremden Mandanten stammen koennte.
+ */
+export async function standortIstErlaubt(
+  client: PoolClient,
+  benutzerId: string,
+  standortId: string
+): Promise<boolean> {
+  const { rows } = await client.query("SELECT 1 FROM standort WHERE id = $1", [standortId]);
+  if (rows.length === 0) return false;
+  const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+  if (!erlaubteStandorte) return true;
+  return erlaubteStandorte.includes(standortId);
+}

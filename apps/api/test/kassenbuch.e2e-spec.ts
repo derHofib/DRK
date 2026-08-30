@@ -26,6 +26,8 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
   let tokenBereichsleitung: string;
   let klientWoechentlich: string;
   let klientMonatlich: string;
+  let standortHaus: string;
+  let mitarbeiterTeilnehmerId: string;
 
   const passwort = "correct horse battery staple";
 
@@ -63,6 +65,19 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     klientMonatlich = klientMoRows[0].id;
 
+    const { rows: standortRows } = await admin.query<{ id: string }>(
+      "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Haus am Park', 'Teststr. 1') RETURNING id",
+      [mandantId]
+    );
+    standortHaus = standortRows[0].id;
+
+    const { rows: mitarbeiterRows } = await admin.query<{ id: string }>(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Betreuerin Teilnahme', $3, 'betreuer') RETURNING id`,
+      [mandantId, `betreuerin-${suffix}@beispiel.test`, passwortHash]
+    );
+    mitarbeiterTeilnehmerId = mitarbeiterRows[0].id;
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -78,7 +93,12 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       "DELETE FROM unterschrift WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
       [mandantId]
     );
+    await admin.query(
+      "DELETE FROM kassenbuchung_teilnehmer WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
+      [mandantId]
+    );
     await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
@@ -200,6 +220,180 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Nochmal" });
     expect(res.status).toBe(404);
+  });
+
+  describe("Standort-Buchungen (Spaßgeld/Freizeitveranstaltungen, Migration 0030)", () => {
+    it("lehnt eine Buchung ohne klientId und ohne standortId ab", async () => {
+      const res = await post("/kassenbuchungen", {
+        datum: "2026-08-21",
+        betragCent: 1000,
+        verwendungszweck: "weder noch",
+        typ: "sonstiges",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt eine Buchung mit klientId UND standortId gleichzeitig ab", async () => {
+      const res = await post("/kassenbuchungen", {
+        klientId: klientMonatlich,
+        standortId: standortHaus,
+        datum: "2026-08-21",
+        betragCent: 1000,
+        verwendungszweck: "beides",
+        typ: "sonstiges",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt HZL für einen Standort ab", async () => {
+      const res = await post("/kassenbuchungen", {
+        standortId: standortHaus,
+        datum: "2026-08-21",
+        betragCent: 2000,
+        verwendungszweck: "HZL für alle?",
+        typ: "hzl",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("legt eine Einzahlung für den Standort an -- ohne Klient, mit Teilnehmern", async () => {
+      const res = await post("/kassenbuchungen", {
+        standortId: standortHaus,
+        datum: "2026-08-21",
+        betragCent: 8000,
+        verwendungszweck: "Grillfest im Garten",
+        typ: "einzahlung",
+        teilnehmerKlientIds: [klientWoechentlich, klientMonatlich],
+        teilnehmerBenutzerIds: [mitarbeiterTeilnehmerId],
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.klientId).toBeNull();
+      expect(res.body.standortId).toBe(standortHaus);
+      expect(res.body.standortName).toBe("Haus am Park");
+      expect(res.body.teilnehmer).toHaveLength(3);
+      const teilnehmerKlientIds = res.body.teilnehmer.map((t: { klientId: string | null }) => t.klientId).filter(Boolean);
+      expect(teilnehmerKlientIds.sort()).toEqual([klientMonatlich, klientWoechentlich].sort());
+      expect(res.body.teilnehmer.some((t: { benutzerId: string | null }) => t.benutzerId === mitarbeiterTeilnehmerId)).toBe(
+        true
+      );
+    });
+
+    it("lehnt einen unbekannten Teilnehmer-Klienten mit 404 ab", async () => {
+      const res = await post("/kassenbuchungen", {
+        standortId: standortHaus,
+        datum: "2026-08-21",
+        betragCent: 500,
+        verwendungszweck: "sollte scheitern",
+        typ: "sonstiges",
+        teilnehmerKlientIds: [randomUUID()],
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("verlangt fuer eine Standort-Auszahlung ebenfalls eine Unterschrift", async () => {
+      const ohne = await post("/kassenbuchungen", {
+        standortId: standortHaus,
+        datum: "2026-08-22",
+        betragCent: -3000,
+        verwendungszweck: "Kino-Ausflug",
+        typ: "sonstiges",
+      });
+      expect(ohne.status).toBe(400);
+
+      const mit = await post("/kassenbuchungen", {
+        standortId: standortHaus,
+        datum: "2026-08-22",
+        betragCent: -3000,
+        verwendungszweck: "Kino-Ausflug",
+        typ: "sonstiges",
+        unterschriftBase64: TEST_PNG_BASE64,
+      });
+      expect(mit.status).toBe(201);
+      expect(mit.body.hatUnterschrift).toBe(true);
+    });
+
+    it("zeigt Klient- und Standort-Buchungen gemeinsam in der Liste, mit korrekt befuellten Feldern", async () => {
+      const res = await get("/kassenbuchungen");
+      const klientBuchung = res.body.find((b: { klientId: string | null }) => b.klientId === klientWoechentlich);
+      const standortBuchung = res.body.find((b: { standortId: string | null }) => b.standortId === standortHaus);
+      expect(klientBuchung.standortId).toBeNull();
+      expect(klientBuchung.standortName).toBeNull();
+      expect(standortBuchung.klientId).toBeNull();
+      expect(standortBuchung.klientName).toBeNull();
+    });
+
+    it("kann eine Standort-Buchung stornieren", async () => {
+      const liste = await get("/kassenbuchungen");
+      const grillfest = liste.body.find((b: { verwendungszweck: string }) => b.verwendungszweck === "Grillfest im Garten");
+
+      const res = await request(app.getHttpServer())
+        .patch(`/kassenbuchungen/${grillfest.id}/stornieren`)
+        .set("Authorization", `Bearer ${tokenBereichsleitung}`)
+        .send({ grund: "Wetter" });
+      expect(res.status).toBe(200);
+      expect(res.body.storniert).toBe(true);
+    });
+
+    /**
+     * Gegenproben: die beiden CHECKs aus Migration 0030 muessen auch dann
+     * greifen, wenn ein kuenftiger Codepfad an Controller und Service
+     * vorbeigeht.
+     */
+    describe("Zusicherungen der Datenbank (unterhalb der Anwendung)", () => {
+      let appRolle: Client;
+
+      beforeAll(async () => {
+        appRolle = new Client({ connectionString: process.env.APP_DATABASE_URL });
+        await appRolle.connect();
+      });
+
+      afterAll(async () => {
+        await appRolle.end();
+      });
+
+      async function alsMandant<T>(fn: () => Promise<T>): Promise<T> {
+        await appRolle.query("BEGIN");
+        await appRolle.query("SELECT set_config('app.mandant_id', $1, true)", [mandantId]);
+        try {
+          return await fn();
+        } finally {
+          await appRolle.query("ROLLBACK");
+        }
+      }
+
+      it("verhindert per CHECK, dass klient_id und standort_id gleichzeitig NULL oder beide gesetzt sind", async () => {
+        await alsMandant(async () => {
+          await expect(
+            appRolle.query(
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
+               VALUES ($1, NULL, NULL, '2026-08-23', 100, 'weder noch', 'sonstiges')`,
+              [mandantId]
+            )
+          ).rejects.toThrow(/check constraint/i);
+        });
+        await alsMandant(async () => {
+          await expect(
+            appRolle.query(
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
+               VALUES ($1, $2, $3, '2026-08-23', 100, 'beides', 'sonstiges')`,
+              [mandantId, klientMonatlich, standortHaus]
+            )
+          ).rejects.toThrow(/check constraint/i);
+        });
+      });
+
+      it("verhindert per CHECK eine HZL-Buchung ohne Klient", async () => {
+        await alsMandant(async () => {
+          await expect(
+            appRolle.query(
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
+               VALUES ($1, NULL, $2, '2026-08-23', 100, 'HZL ohne Klient', 'hzl')`,
+              [mandantId, standortHaus]
+            )
+          ).rejects.toThrow(/check constraint/i);
+        });
+      });
+    });
   });
 
   it("verweigert der App-Datenbankrolle jede Änderung an Betrag oder Datum einer Buchung", async () => {

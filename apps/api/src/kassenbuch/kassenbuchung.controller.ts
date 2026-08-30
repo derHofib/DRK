@@ -4,16 +4,32 @@ import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { KassenbuchungService } from "./kassenbuchung.service";
 
-const anlegenSchema = z.object({
-  klientId: z.string().uuid(),
-  datum: z.string().date(),
-  betragCent: z.number().int(),
-  verwendungszweck: z.string().min(1),
-  typ: z.enum(["hzl", "einzahlung", "sonstiges"]),
-  isoJahr: z.number().int().min(2000).max(2100).optional(),
-  isoWoche: z.number().int().min(1).max(53).optional(),
-  unterschriftBase64: z.string().optional(),
-});
+const anlegenSchema = z
+  .object({
+    // Genau eins von beiden -- eine Standort-Buchung (Spassgeld/
+    // Freizeitveranstaltung) gehoert dem ganzen Haus, nicht einem
+    // einzelnen Klienten. Der Service prueft dieselbe Regel nochmal
+    // (fuer Aufrufer, die an diesem Controller vorbeikommen); hier sitzt
+    // sie zusaetzlich, damit eine falsche Kombination bereits als 400
+    // und nicht erst tiefer im Code auffaellt.
+    klientId: z.string().uuid().optional(),
+    standortId: z.string().uuid().optional(),
+    datum: z.string().date(),
+    betragCent: z.number().int(),
+    verwendungszweck: z.string().min(1),
+    typ: z.enum(["hzl", "einzahlung", "sonstiges"]),
+    isoJahr: z.number().int().min(2000).max(2100).optional(),
+    isoWoche: z.number().int().min(1).max(53).optional(),
+    unterschriftBase64: z.string().optional(),
+    teilnehmerKlientIds: z.array(z.string().uuid()).optional(),
+    teilnehmerBenutzerIds: z.array(z.string().uuid()).optional(),
+  })
+  .refine((v) => Boolean(v.klientId) !== Boolean(v.standortId), {
+    message: "Entweder klientId oder standortId angeben, nicht beides und nicht keins.",
+  })
+  .refine((v) => v.typ !== "hzl" || Boolean(v.klientId), {
+    message: "HZL ist ausschließlich für einen einzelnen Klienten möglich.",
+  });
 
 const stornierenSchema = z.object({
   grund: z.string().min(1),

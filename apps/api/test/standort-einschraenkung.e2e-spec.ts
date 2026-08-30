@@ -38,10 +38,14 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
 
   let klient1: string; // wohnt in Standort 1
   let klient2: string; // wohnt in Standort 2
+  let standort1Id: string;
+  let standort2Id: string;
 
   let buchung1: string;
   let buchung2: string;
   let auszahlung2: string; // Auszahlung mit Unterschrift, Klient 2
+  let standortBuchung1: string; // Standort-Buchung (kein Klient) fuer Standort 1
+  let standortBuchung2: string; // Standort-Buchung (kein Klient) fuer Standort 2
 
   let kostenuebernahme2: string;
 
@@ -80,11 +84,13 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       [mandantId]
     );
     const standort1 = standort1Rows[0].id;
+    standort1Id = standort1;
     const { rows: standort2Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 2', 'Str. 2') RETURNING id",
       [mandantId]
     );
     const standort2 = standort2Rows[0].id;
+    standort2Id = standort2;
 
     // einrichtungsleitung-s1 ist NUR auf Standort 1 eingeschraenkt.
     await admin.query(
@@ -186,6 +192,24 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       dokumentMimeType: "image/png",
     });
     rechnung2 = r2.body.id;
+
+    const sb1 = await postAls(tokenBereichsleitung, "/kassenbuchungen", {
+      standortId: standort1,
+      datum: "2026-01-03",
+      betragCent: 5000,
+      verwendungszweck: "Grillfest S1",
+      typ: "einzahlung",
+    });
+    standortBuchung1 = sb1.body.id;
+
+    const sb2 = await postAls(tokenBereichsleitung, "/kassenbuchungen", {
+      standortId: standort2,
+      datum: "2026-01-03",
+      betragCent: 5000,
+      verwendungszweck: "Grillfest S2",
+      typ: "einzahlung",
+    });
+    standortBuchung2 = sb2.body.id;
   });
 
   afterAll(async () => {
@@ -269,6 +293,45 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       expect(res.status).toBe(404);
     });
 
+    it("sieht in /kassenbuchungen nur die Standort-Buchung von Standort 1, nicht die von Standort 2", async () => {
+      const res = await als(tokenEinrichtungsleitungS1).get("/kassenbuchungen");
+      const ids = res.body.map((b: { id: string }) => b.id);
+      expect(ids).toContain(standortBuchung1);
+      expect(ids).not.toContain(standortBuchung2);
+    });
+
+    it("kann fuer Standort 1 eine Standort-Buchung anlegen, fuer Standort 2 nicht", async () => {
+      const eigener = await als(tokenEinrichtungsleitungS1).post("/kassenbuchungen", {
+        standortId: standort1Id,
+        datum: "2026-01-04",
+        betragCent: 1000,
+        verwendungszweck: "sollte klappen",
+        typ: "sonstiges",
+      });
+      expect(eigener.status).toBe(201);
+
+      const fremder = await als(tokenEinrichtungsleitungS1).post("/kassenbuchungen", {
+        standortId: standort2Id,
+        datum: "2026-01-04",
+        betragCent: 1000,
+        verwendungszweck: "sollte scheitern",
+        typ: "sonstiges",
+      });
+      expect(fremder.status).toBe(404);
+    });
+
+    it("kann die Standort-Buchung von Standort 1 stornieren, die von Standort 2 nicht", async () => {
+      const eigene = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${standortBuchung1}/stornieren`, {
+        grund: "Testkorrektur",
+      });
+      expect(eigene.status).toBe(200);
+
+      const fremde = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${standortBuchung2}/stornieren`, {
+        grund: "sollte scheitern",
+      });
+      expect(fremde.status).toBe(404);
+    });
+
     it("sieht fuer Klient 2 eine leere Kostenuebernahme-Liste statt der echten Daten", async () => {
       const res = await als(tokenEinrichtungsleitungS1).get(`/kostenuebernahmen?klientId=${klient2}`);
       expect(res.status).toBe(200);
@@ -332,6 +395,13 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       const res = await als(tokenBereichsleitung).get(`/klienten/${klient2}`);
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(klient2);
+    });
+
+    it("sieht in /kassenbuchungen die Standort-Buchungen beider Standorte", async () => {
+      const res = await als(tokenBereichsleitung).get("/kassenbuchungen");
+      const ids = res.body.map((b: { id: string }) => b.id);
+      expect(ids).toContain(standortBuchung1);
+      expect(ids).toContain(standortBuchung2);
     });
 
     it("sieht die Rechnung von Klient 2 in Liste und Detailabruf und kann ihren Status aendern", async () => {

@@ -1,5 +1,12 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { KassenbuchungDto, KassenbuchungTyp, KlientListEintragDto, WochenuebersichtEintragDto } from "@zimmerakte/shared";
+import type {
+  BenutzerListEintragDto,
+  KassenbuchungDto,
+  KassenbuchungTyp,
+  KlientListEintragDto,
+  StandortDto,
+  WochenuebersichtEintragDto,
+} from "@zimmerakte/shared";
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
@@ -7,13 +14,17 @@ import { Modal } from "../components/Modal";
 import {
   IAuszahlen,
   IFehler,
+  IKlienten,
   ILeerKassenbuch,
+  ILeerStandorte,
   ILeerWoche,
+  IMitarbeitende,
   INeu,
   ISErledigt,
   ISOffen,
   ISStorniert,
   ISpeichern,
+  IStandort,
   IStornieren,
   IUnterschrift,
   IVor,
@@ -23,6 +34,7 @@ import { SignaturePad } from "../components/SignaturePad";
 import { formatBetrag, formatDatum } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
+type Ziel = "klient" | "standort";
 
 function isoWocheVon(datum: Date): { jahr: number; woche: number } {
   const d = new Date(Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()));
@@ -87,8 +99,11 @@ function summeCent(buchungen: KassenbuchungDto[]): number {
 
 export function Kassenbuch() {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  const [mitarbeitende, setMitarbeitende] = useState<BenutzerListEintragDto[]>([]);
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
   const [filterKlientId, setFilterKlientId] = useState("");
+  const [filterStandortId, setFilterStandortId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
   const initialeWoche = aktuelleIsoWoche();
@@ -99,6 +114,8 @@ export function Kassenbuch() {
   const [formularOffen, setFormularOffen] = useState(false);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [vorbelegung, setVorbelegung] = useState<{ klientId: string; isoJahr: number; isoWoche: number } | null>(null);
+  const [ziel, setZiel] = useState<Ziel>("klient");
+  const [formStandortId, setFormStandortId] = useState("");
   const [richtung, setRichtung] = useState<Richtung>("einzahlung");
   const [typ, setTyp] = useState<KassenbuchungTyp>("hzl");
   const [unterschrift, setUnterschrift] = useState<string | null>(null);
@@ -116,6 +133,8 @@ export function Kassenbuch() {
 
   useEffect(() => {
     api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
+    api.standorteListe().then(setStandorte).catch((err) => setFehler(err.message));
+    api.benutzerListe().then(setMitarbeitende).catch((err) => setFehler(err.message));
     ladeBuchungen();
   }, []);
 
@@ -140,11 +159,21 @@ export function Kassenbuch() {
 
   function formularOeffnenFuer(klientId: string) {
     setVorbelegung({ klientId, isoJahr: uebersichtJahr, isoWoche: uebersichtWoche });
+    setZiel("klient");
+    setFormStandortId("");
     setTyp("hzl");
     setRichtung("auszahlung");
     setUnterschrift(null);
     setFormFehler(null);
     setFormularOffen(true);
+  }
+
+  // Wechsel zu "Standort": HZL gibt es dort nicht (siehe Migration 0030,
+  // kassenbuchung_hzl_nur_klient) -- ohne diesen Reset bliebe sonst ein
+  // Formular mit unsichtbaren, aber gesetzten ISO-Jahr/Woche-Feldern stehen.
+  function zielWaehlen(neu: Ziel) {
+    setZiel(neu);
+    if (neu === "standort" && typ === "hzl") setTyp("einzahlung");
   }
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
@@ -167,7 +196,8 @@ export function Kassenbuch() {
     setWirdGespeichert(true);
     try {
       await api.kassenbuchungAnlegen({
-        klientId: String(form.get("klientId")),
+        klientId: ziel === "klient" ? String(form.get("klientId")) : undefined,
+        standortId: ziel === "standort" ? String(form.get("standortId")) : undefined,
         datum: String(form.get("datum")),
         betragCent,
         verwendungszweck: String(form.get("verwendungszweck")),
@@ -175,6 +205,8 @@ export function Kassenbuch() {
         isoJahr: typ === "hzl" ? Number(form.get("isoJahr")) : undefined,
         isoWoche: typ === "hzl" ? Number(form.get("isoWoche")) : undefined,
         unterschriftBase64: unterschrift ?? undefined,
+        teilnehmerKlientIds: ziel === "standort" ? form.getAll("teilnehmerKlientIds").map(String) : undefined,
+        teilnehmerBenutzerIds: ziel === "standort" ? form.getAll("teilnehmerBenutzerIds").map(String) : undefined,
       });
       setFormularOffen(false);
       setVorbelegung(null);
@@ -227,11 +259,35 @@ export function Kassenbuch() {
 
   const bezahltAnzahl = uebersicht.filter((e) => e.bezahlt).length;
 
-  const gefilterteBuchungen = filterKlientId ? buchungen.filter((b) => b.klientId === filterKlientId) : buchungen;
-  const aktiveGesamt = aktive(buchungen);
+  // Standort-Buchungen (Spaßgeld/Freizeitveranstaltungen) gehören dem ganzen
+  // Haus, nicht einem Klienten -- deshalb bewusst getrennte Listen und
+  // Salden, statt sie in "alle Klienten" mitzuzählen (siehe Migration 0030).
+  const klientBuchungen = buchungen.filter((b) => b.klientId !== null);
+  const standortBuchungen = buchungen.filter((b) => b.standortId !== null);
+
+  const gefilterteBuchungen = filterKlientId ? klientBuchungen.filter((b) => b.klientId === filterKlientId) : klientBuchungen;
+  const aktiveGesamt = aktive(klientBuchungen);
   const aktiveGefiltert = aktive(gefilterteBuchungen);
   const gesamtsaldo = summeCent(aktiveGesamt);
   const summeFilter = summeCent(aktiveGefiltert);
+
+  const gefilterteStandortBuchungen = filterStandortId
+    ? standortBuchungen.filter((b) => b.standortId === filterStandortId)
+    : standortBuchungen;
+  const aktiveStandortGesamt = aktive(standortBuchungen);
+  const aktiveStandortGefiltert = aktive(gefilterteStandortBuchungen);
+  const standortGesamtsaldo = summeCent(aktiveStandortGesamt);
+  const standortSummeFilter = summeCent(aktiveStandortGefiltert);
+
+  // Vorschlag fuer die Teilnehmer-Klienten-Auswahl: nur Klienten, die
+  // aktuell am gewählten Standort wohnen -- fällt (z. B. bei fehlender
+  // Zimmerzuordnung) niemand in diesen Filter, lieber die volle Liste
+  // zeigen als eine leere Auswahl.
+  const gewaehlterStandortName = standorte.find((s) => s.id === formStandortId)?.name;
+  const klientenAmStandort = gewaehlterStandortName
+    ? klienten.filter((k) => k.aktuellesZimmer?.standortName === gewaehlterStandortName)
+    : [];
+  const teilnehmerKlientenOptionen = klientenAmStandort.length > 0 ? klientenAmStandort : klienten;
 
   return (
     <div>
@@ -253,6 +309,8 @@ export function Kassenbuch() {
           className="zv-btn"
           onClick={() => {
             setVorbelegung(null);
+            setZiel("klient");
+            setFormStandortId("");
             setTyp("hzl");
             setRichtung("einzahlung");
             setUnterschrift(null);
@@ -274,31 +332,109 @@ export function Kassenbuch() {
                 {formFehler}
               </div>
             )}
-            <div className="zv-field-row">
+            {!vorbelegung && (
               <div className="zv-field">
-                <label>Klient</label>
-                <select name="klientId" required defaultValue={vorbelegung?.klientId ?? ""} autoFocus>
-                  <option value="" disabled>
-                    Bitte wählen
-                  </option>
-                  {klienten.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.vorname} {k.nachname}
-                    </option>
-                  ))}
-                </select>
+                <label id="ziel-label">Buchung für</label>
+                <div className="zv-segmented" role="radiogroup" aria-labelledby="ziel-label">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={ziel === "klient"}
+                    className={ziel === "klient" ? "active" : ""}
+                    onClick={() => zielWaehlen("klient")}
+                  >
+                    <IKlienten />
+                    Klient
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={ziel === "standort"}
+                    className={ziel === "standort" ? "active" : ""}
+                    onClick={() => zielWaehlen("standort")}
+                  >
+                    <IStandort />
+                    Standort (Spaßgeld/Veranstaltung)
+                  </button>
+                </div>
               </div>
+            )}
+
+            <div className="zv-field-row">
+              {ziel === "klient" ? (
+                <div className="zv-field">
+                  <label>Klient</label>
+                  <select name="klientId" required defaultValue={vorbelegung?.klientId ?? ""} autoFocus>
+                    <option value="" disabled>
+                      Bitte wählen
+                    </option>
+                    {klienten.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.vorname} {k.nachname}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="zv-field">
+                  <label htmlFor="standortId">Standort</label>
+                  <select
+                    id="standortId"
+                    name="standortId"
+                    required
+                    value={formStandortId}
+                    onChange={(e) => setFormStandortId(e.target.value)}
+                    autoFocus
+                  >
+                    <option value="" disabled>
+                      Bitte wählen
+                    </option>
+                    {standorte.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="zv-field">
                 <label>Datum</label>
                 <input name="datum" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
               </div>
             </div>
 
+            {ziel === "standort" && (
+              <div className="zv-field-row">
+                <div className="zv-field">
+                  <label htmlFor="teilnehmerKlientIds">Teilnehmende Klienten (optional)</label>
+                  <select id="teilnehmerKlientIds" name="teilnehmerKlientIds" multiple size={5}>
+                    {teilnehmerKlientenOptionen.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.vorname} {k.nachname}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="zv-field">
+                  <label htmlFor="teilnehmerBenutzerIds">Teilnehmende Mitarbeiter (optional)</label>
+                  <select id="teilnehmerBenutzerIds" name="teilnehmerBenutzerIds" multiple size={5}>
+                    {mitarbeitende
+                      .filter((m) => m.aktiv)
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="zv-field-row">
               <div className="zv-field">
                 <label>Typ</label>
                 <select name="typ" value={typ} onChange={(e) => setTyp(e.target.value as KassenbuchungTyp)}>
-                  <option value="hzl">HZL</option>
+                  {ziel === "klient" && <option value="hzl">HZL</option>}
                   <option value="einzahlung">Einzahlung</option>
                   <option value="sonstiges">Sonstiges</option>
                 </select>
@@ -312,7 +448,7 @@ export function Kassenbuch() {
               </div>
             </div>
 
-            {typ === "hzl" && (
+            {typ === "hzl" && ziel === "klient" && (
               <div className="zv-field-row">
                 <div className="zv-field">
                   <label>ISO-Jahr</label>
@@ -519,6 +655,143 @@ export function Kassenbuch() {
               </span>
               <span className="zv-liste-zelle" data-label="Mitarbeiter">
                 {b.gebuchtVonName ?? "–"}
+              </span>
+              <span className="zv-liste-zelle" data-label="Status">
+                {b.storniert ? (
+                  <span className="zv-pill zv-pill-vergeben">
+                    <ISStorniert />
+                    Storniert
+                  </span>
+                ) : (
+                  <span className="zv-pill zv-pill-ok">
+                    <ISErledigt />
+                    Aktiv
+                  </span>
+                )}
+              </span>
+              <span
+                className={`zv-liste-zelle-aktionen${!b.hatUnterschrift && b.storniert ? " zv-liste-zelle-aktionen-leer" : ""}`}
+              >
+                {b.hatUnterschrift && (
+                  <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
+                    <IUnterschrift />
+                    Unterschrift
+                  </button>
+                )}
+                {!b.storniert && (
+                  <button className="zv-link-btn" onClick={() => stornieren(b)}>
+                    <IStornieren />
+                    Stornieren
+                  </button>
+                )}
+              </span>
+              {offeneUnterschrift?.buchungId === b.id && (
+                <div style={{ gridColumn: "1 / -1", marginTop: "var(--zv-space-2)" }}>
+                  <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="zv-seiten-kopf" style={{ marginTop: "var(--zv-space-6)" }}>
+        <div>
+          <h2 style={{ fontSize: "var(--zv-text-xl)" }}>Standort-Buchungen</h2>
+          <p className="zv-sub" style={{ margin: "2px 0 0" }}>
+            Spaßgeld für Freizeitveranstaltungen und Ähnliches — dem Haus zugeordnet, nicht einem einzelnen Klienten.
+          </p>
+        </div>
+      </div>
+
+      <div className="zv-stat-grid">
+        <div className="zv-stat-karte">
+          <p className="zv-stat-label">Gesamtsaldo Standort-Buchungen</p>
+          <p className="zv-stat-wert">{formatBetrag(standortGesamtsaldo)}</p>
+          <p className="zv-stat-sub">{aktiveStandortGesamt.length} Buchungen gesamt</p>
+        </div>
+        <div className="zv-stat-karte">
+          <p className="zv-stat-label">Summe (Filter)</p>
+          <p className="zv-stat-wert">{formatBetrag(standortSummeFilter)}</p>
+          <p className="zv-stat-sub">{aktiveStandortGefiltert.length} Buchungen</p>
+        </div>
+      </div>
+
+      <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
+        <select
+          aria-label="Nach Standort filtern"
+          value={filterStandortId}
+          onChange={(e) => setFilterStandortId(e.target.value)}
+        >
+          <option value="">Alle Standorte</option>
+          {standorte.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {gefilterteStandortBuchungen.length === 0 ? (
+        <Leerzustand icon={ILeerStandorte}>Noch keine Standort-Buchungen erfasst.</Leerzustand>
+      ) : (
+        <div
+          className="zv-karten-liste"
+          style={{ "--zv-liste-spalten": "1.2fr 1fr 1fr 1.4fr 1fr 1.2fr 1.8fr 1fr 1.6fr" } as CSSProperties}
+        >
+          <div className="zv-liste-kopf">
+            <span>Standort</span>
+            <span>Datum</span>
+            <span>Betrag</span>
+            <span>Zweck</span>
+            <span>Typ</span>
+            <span>Mitarbeiter</span>
+            <span>Teilnehmer</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          {gefilterteStandortBuchungen.map((b) => (
+            <div key={b.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">{b.standortName}</span>
+              <span className="zv-liste-zelle" data-label="Datum">
+                <strong>{formatDatum(b.datum)}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Betrag">
+                <strong
+                  className="zv-mono"
+                  style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}
+                >
+                  {formatBetrag(b.betragCent)}
+                </strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Zweck">
+                <strong>{b.verwendungszweck}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Typ">
+                <strong>{KASSENBUCHUNG_TYP_LABEL[b.typ]}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Mitarbeiter">
+                {b.gebuchtVonName ?? "–"}
+              </span>
+              <span className="zv-liste-zelle" data-label="Teilnehmer">
+                {b.teilnehmer.length > 0 ? (
+                  <span title={b.teilnehmer.map((t) => t.name).join(", ")}>
+                    {b.teilnehmer.length === 1 ? (
+                      b.teilnehmer[0].name
+                    ) : (
+                      <>
+                        {b.teilnehmer.length} Teilnehmende
+                        {b.teilnehmer.some((t) => t.klientId) && b.teilnehmer.some((t) => t.benutzerId) && (
+                          <span className="zv-sub-inline">
+                            (<IKlienten style={{ verticalAlign: "-2px" }} />/<IMitarbeitende style={{ verticalAlign: "-2px" }} />)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                ) : (
+                  "–"
+                )}
               </span>
               <span className="zv-liste-zelle" data-label="Status">
                 {b.storniert ? (

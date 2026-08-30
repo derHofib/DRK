@@ -179,10 +179,24 @@ export const HZL_RHYTHMUS_LABEL: Record<HzlRhythmus, string> = {
 
 export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
 
+export interface KassenbuchungTeilnehmerDto {
+  klientId: string | null;
+  benutzerId: string | null;
+  name: string;
+}
+
+/**
+ * Genau eins von klientId/standortId ist gesetzt (siehe migrations/0030):
+ * die meisten Buchungen gehören einem Klienten, eine Standort-Buchung
+ * (Spaßgeld/Freizeitveranstaltung) gehört dem ganzen Haus. HZL ist
+ * ausschließlich klientenbezogen.
+ */
 export interface KassenbuchungDto {
   id: string;
-  klientId: string;
-  klientName: string;
+  klientId: string | null;
+  klientName: string | null;
+  standortId: string | null;
+  standortName: string | null;
   datum: string;
   betragCent: number;
   verwendungszweck: string;
@@ -193,6 +207,7 @@ export interface KassenbuchungDto {
   stornoGrund: string | null;
   hatUnterschrift: boolean;
   gebuchtVonName: string | null;
+  teilnehmer: KassenbuchungTeilnehmerDto[];
 }
 
 export interface WochenuebersichtEintragDto {
