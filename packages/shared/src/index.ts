@@ -5,7 +5,7 @@
 
 export type BenutzerRolle = "bereichsleitung" | "einrichtungsleitung" | "betreuer";
 export type HzlRhythmus = "monatlich" | "woechentlich";
-export type Zimmerstatus = "vergeben" | "zugeordnet";
+export type Zimmerstatus = "vergeben" | "teilweise" | "zugeordnet";
 
 export interface LoginRequest {
   mandantSlug: string;
@@ -135,14 +135,38 @@ export interface StandortDto {
   aktiv: boolean;
 }
 
+export interface ZimmerBewohnerDto {
+  id: string;
+  name: string;
+  einzug: string;
+  belegungId: string;
+}
+
+/**
+ * Ein Kapazitaetsantrag wirkt NIE sofort (anders als Nummer/Etage) --
+ * siehe zimmer.service.ts, kapazitaetAendern()/kapazitaetEntscheiden().
+ * Vier-Augen: die entscheidende Person muss die jeweils ANDERE
+ * Leitungsrolle als beantragtVonRolle haben.
+ */
+export interface OffenerKapazitaetsantragDto {
+  id: string;
+  alteKapazitaet: number;
+  neueKapazitaet: number;
+  beantragtVonName: string;
+  beantragtVonRolle: BenutzerRolle;
+  beantragtAm: string;
+}
+
 export interface ZimmerListEintragDto {
   id: string;
   nummer: string;
   etage: string;
   standortId: string;
   standortName: string;
+  kapazitaet: number;
   status: Zimmerstatus;
-  aktuellerKlient: { id: string; name: string; einzug: string; belegungId: string } | null;
+  bewohner: ZimmerBewohnerDto[];
+  offenerKapazitaetsantrag: OffenerKapazitaetsantragDto | null;
 }
 
 export interface BelegungsverlaufEintragDto {
@@ -171,6 +195,7 @@ export interface KlientDetailDto extends KlientListEintragDto {
 
 export const ZIMMERSTATUS_LABEL: Record<Zimmerstatus, string> = {
   vergeben: "Vergeben",
+  teilweise: "Teilweise belegt",
   zugeordnet: "Zugeordnet",
 };
 

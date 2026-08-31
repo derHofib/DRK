@@ -122,7 +122,8 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
     const zimmer = res.body.find((z: { id: string }) => z.id === zimmerId);
 
     expect(zimmer.status).toBe("vergeben");
-    expect(zimmer.aktuellerKlient.name).toBe(`${klientAktuell.vorname} ${klientAktuell.nachname}`);
+    expect(zimmer.bewohner).toHaveLength(1);
+    expect(zimmer.bewohner[0].name).toBe(`${klientAktuell.vorname} ${klientAktuell.nachname}`);
   });
 
   it("liefert im Belegungsverlauf für Betreuer nur Initialen der ehemaligen Person, aber den vollen Namen der aktuellen", async () => {

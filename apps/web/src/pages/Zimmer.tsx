@@ -2,20 +2,25 @@ import { FormEvent, useEffect, useState } from "react";
 import type {
   BelegungsverlaufEintragDto,
   KlientListEintragDto,
+  OffenerKapazitaetsantragDto,
   StandortDto,
+  ZimmerBewohnerDto,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
-import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
+import { BENUTZER_ROLLE_LABEL, ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
+  IAblehnen,
   IAufklappen,
   IAuszug,
   IBearbeiten,
   IEinziehen,
   IFehler,
+  IGenehmigen,
+  IKapazitaet,
   ILeerVerlauf,
   ILeerZimmer,
   INeu,
@@ -30,8 +35,15 @@ import {
 /** Sentinel-Wert im Standort-Select fuer "einen neuen Standort anlegen". */
 const NEUER_STANDORT = "__neu__";
 
+/**
+ * "teilweise" (Mehrbettzimmer mit noch freiem Platz) bekommt bewusst
+ * dasselbe Icon wie "zugeordnet" -- beide bedeuten fuer die Zuweisung
+ * dasselbe ("hier passt noch jemand rein"), nur die Pill-Farbe (siehe
+ * app.css, zv-pill-teilweise) unterscheidet sie visuell von "ganz frei".
+ */
 const STATUS_ICON = {
   vergeben: ISVergeben,
+  teilweise: ISZugeordnet,
   zugeordnet: ISZugeordnet,
 } as const;
 
@@ -65,8 +77,13 @@ export function Zimmer() {
 
   const [zuweisungsZimmer, setZuweisungsZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
-  const [auszugZimmer, setAuszugZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [auszugBewohner, setAuszugBewohner] = useState<{ zimmer: ZimmerListEintragDto; bewohner: ZimmerBewohnerDto } | null>(
+    null
+  );
   const [auszugFehler, setAuszugFehler] = useState<string | null>(null);
+
+  const [kapazitaetZimmer, setKapazitaetZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [kapazitaetFehler, setKapazitaetFehler] = useState<string | null>(null);
 
   function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
@@ -110,6 +127,7 @@ export function Zimmer() {
     const form = new FormData(formElement);
     const nummer = String(form.get("nummer") ?? "").trim();
     const etage = String(form.get("etage") ?? "").trim();
+    const kapazitaet = Number(form.get("kapazitaet") ?? 1);
     setFormFehler(null);
     setWirdGespeichert(true);
     try {
@@ -120,7 +138,7 @@ export function Zimmer() {
         const neuerStandort = await api.standortAnlegen({ name, adresse });
         standortId = neuerStandort.id;
       }
-      await api.zimmerAnlegen({ standortId, nummer, etage: etage || undefined });
+      await api.zimmerAnlegen({ standortId, nummer, etage: etage || undefined, kapazitaet });
       setFormularOffen(false);
       ladeZimmer();
       ladeStandorte();
@@ -186,13 +204,13 @@ export function Zimmer() {
 
   async function auszugEintragen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!auszugZimmer?.aktuellerKlient) return;
+    if (!auszugBewohner) return;
     const form = new FormData(e.currentTarget);
     setAuszugFehler(null);
     setWirdGespeichert(true);
     try {
-      await api.belegungAusziehen(auszugZimmer.aktuellerKlient.belegungId, String(form.get("auszug")));
-      setAuszugZimmer(null);
+      await api.belegungAusziehen(auszugBewohner.bewohner.belegungId, String(form.get("auszug")));
+      setAuszugBewohner(null);
       ladeZimmer();
       ladeKlienten();
     } catch (err) {
@@ -200,6 +218,52 @@ export function Zimmer() {
     } finally {
       setWirdGespeichert(false);
     }
+  }
+
+  async function kapazitaetAendern(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!kapazitaetZimmer) return;
+    const form = new FormData(e.currentTarget);
+    const neueKapazitaet = Number(form.get("neueKapazitaet"));
+    setKapazitaetFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.zimmerKapazitaetAendern(kapazitaetZimmer.id, neueKapazitaet);
+      setKapazitaetZimmer(null);
+      ladeZimmer();
+    } catch (err) {
+      setKapazitaetFehler(err instanceof Error ? err.message : "Kapazitätsänderung konnte nicht beantragt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function kapazitaetEntscheiden(antrag: OffenerKapazitaetsantragDto, entscheidung: "bestaetigt" | "abgelehnt") {
+    let grund: string | undefined;
+    if (entscheidung === "abgelehnt") {
+      const eingabe = window.prompt("Grund für die Ablehnung:");
+      if (!eingabe) return;
+      grund = eingabe;
+    }
+    try {
+      await api.zimmerKapazitaetEntscheiden(antrag.id, entscheidung, grund);
+      ladeZimmer();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Kapazitätsänderung konnte nicht entschieden werden.");
+    }
+  }
+
+  /**
+   * Reiner Anzeige-Hinweis (der Server prueft es erneut, siehe
+   * kapazitaetEntscheiden() in zimmer.service.ts): Bestaetigen/Ablehnen nur
+   * fuer die jeweils ANDERE Leitungsrolle als die antragstellende --
+   * niemals fuer dieselbe Rolle, auch nicht fuer die antragstellende
+   * Person selbst.
+   */
+  function darfKapazitaetEntscheiden(antrag: OffenerKapazitaetsantragDto): boolean {
+    if (rolleZimmer !== "bereichsleitung" && rolleZimmer !== "einrichtungsleitung") return false;
+    const gegenrolle = antrag.beantragtVonRolle === "bereichsleitung" ? "einrichtungsleitung" : "bereichsleitung";
+    return rolleZimmer === gegenrolle;
   }
 
   async function verlaufAnzeigen(zimmerId: string) {
@@ -298,14 +362,64 @@ export function Zimmer() {
                         {ZIMMERSTATUS_LABEL[z.status]}
                       </span>
                     </div>
-                    {z.aktuellerKlient ? (
-                      <div className="zv-room-klient">
-                        {z.aktuellerKlient.name}
-                        <span className="zv-sub-inline">seit {z.aktuellerKlient.einzug}</span>
-                      </div>
-                    ) : (
+                    <p className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                      {z.bewohner.length} / {z.kapazitaet} {z.kapazitaet === 1 ? "Platz belegt" : "Plätze belegt"}
+                    </p>
+                    {z.bewohner.length === 0 ? (
                       <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {z.bewohner.map((bew) => (
+                          <div
+                            key={bew.belegungId}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+                          >
+                            <span className="zv-room-klient" style={{ margin: 0 }}>
+                              {bew.name}
+                              <span className="zv-sub-inline">seit {bew.einzug}</span>
+                            </span>
+                            <button
+                              className="zv-link-btn"
+                              onClick={() => {
+                                setAuszugFehler(null);
+                                setAuszugBewohner({ zimmer: z, bewohner: bew });
+                              }}
+                            >
+                              <IAuszug />
+                              Auszug
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
+
+                    {z.offenerKapazitaetsantrag && (
+                      <div className="zv-hinweis zv-hinweis-info" style={{ marginTop: "var(--zv-space-2)" }}>
+                        Kapazitätsänderung {z.offenerKapazitaetsantrag.alteKapazitaet} →{" "}
+                        {z.offenerKapazitaetsantrag.neueKapazitaet} beantragt von{" "}
+                        {z.offenerKapazitaetsantrag.beantragtVonName} (
+                        {BENUTZER_ROLLE_LABEL[z.offenerKapazitaetsantrag.beantragtVonRolle]})
+                        {darfKapazitaetEntscheiden(z.offenerKapazitaetsantrag) && (
+                          <div className="zv-vorschau-zeile" style={{ marginTop: "var(--zv-space-1)" }}>
+                            <button
+                              className="zv-link-btn"
+                              onClick={() => kapazitaetEntscheiden(z.offenerKapazitaetsantrag!, "bestaetigt")}
+                            >
+                              <IGenehmigen />
+                              Bestätigen
+                            </button>
+                            <button
+                              className="zv-link-btn"
+                              onClick={() => kapazitaetEntscheiden(z.offenerKapazitaetsantrag!, "abgelehnt")}
+                            >
+                              <IAblehnen />
+                              Ablehnen
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="zv-vorschau-zeile">
                       <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
                         {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
@@ -324,34 +438,33 @@ export function Zimmer() {
                           Bearbeiten
                         </button>
                       )}
-                      {z.status === "zugeordnet" ? (
-                        <>
-                          <button
-                            className="zv-link-btn"
-                            onClick={() => {
-                              setZuweisungFehler(null);
-                              setZuweisungsZimmer(z);
-                            }}
-                          >
-                            <IEinziehen />
-                            Klient zuweisen
-                          </button>
-                          {darfStammdatenBearbeiten && (
-                            <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
-                              Deaktivieren
-                            </button>
-                          )}
-                        </>
-                      ) : (
+                      {darfStammdatenBearbeiten && !z.offenerKapazitaetsantrag && (
                         <button
                           className="zv-link-btn"
                           onClick={() => {
-                            setAuszugFehler(null);
-                            setAuszugZimmer(z);
+                            setKapazitaetFehler(null);
+                            setKapazitaetZimmer(z);
                           }}
                         >
-                          <IAuszug />
-                          Auszug eintragen
+                          <IKapazitaet />
+                          Kapazität ändern
+                        </button>
+                      )}
+                      {z.bewohner.length < z.kapazitaet && (
+                        <button
+                          className="zv-link-btn"
+                          onClick={() => {
+                            setZuweisungFehler(null);
+                            setZuweisungsZimmer(z);
+                          }}
+                        >
+                          <IEinziehen />
+                          Klient zuweisen
+                        </button>
+                      )}
+                      {darfStammdatenBearbeiten && z.bewohner.length === 0 && (
+                        <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                          Deaktivieren
                         </button>
                       )}
                     </div>
@@ -444,6 +557,11 @@ export function Zimmer() {
                 <label htmlFor="zimmer-etage">Etage</label>
                 <input id="zimmer-etage" name="etage" list="zv-etagen-vorschlaege" placeholder="z. B. EG" defaultValue="EG" />
               </div>
+            </div>
+
+            <div className="zv-field">
+              <label htmlFor="zimmer-kapazitaet">Kapazität (Bewohner:innen)</label>
+              <input id="zimmer-kapazitaet" name="kapazitaet" type="number" min={1} max={12} defaultValue={1} />
             </div>
 
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
@@ -547,8 +665,11 @@ export function Zimmer() {
         </Modal>
       )}
 
-      {auszugZimmer && (
-        <Modal titel={`Auszug eintragen — Zimmer ${auszugZimmer.nummer}`} onClose={() => setAuszugZimmer(null)}>
+      {auszugBewohner && (
+        <Modal
+          titel={`Auszug eintragen — Zimmer ${auszugBewohner.zimmer.nummer}`}
+          onClose={() => setAuszugBewohner(null)}
+        >
           <form onSubmit={auszugEintragen}>
             {auszugFehler && (
               <div className="zv-hinweis zv-hinweis-fehler">
@@ -557,7 +678,7 @@ export function Zimmer() {
               </div>
             )}
             <p className="zv-sub" style={{ margin: "0 0 12px" }}>
-              {auszugZimmer.aktuellerKlient?.name} zieht aus diesem Zimmer aus.
+              {auszugBewohner.bewohner.name} zieht aus diesem Zimmer aus.
             </p>
             <div className="zv-field">
               <label htmlFor="auszug-datum">Auszugsdatum</label>
@@ -573,6 +694,40 @@ export function Zimmer() {
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
               {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {kapazitaetZimmer && (
+        <Modal titel={`Kapazität ändern — Zimmer ${kapazitaetZimmer.nummer}`} onClose={() => setKapazitaetZimmer(null)}>
+          <form onSubmit={kapazitaetAendern}>
+            {kapazitaetFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {kapazitaetFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ marginTop: 0 }}>
+              Aktuelle Kapazität: {kapazitaetZimmer.kapazitaet}. Die Änderung wirkt erst, wenn die jeweils andere
+              Leitungsrolle sie bestätigt hat.
+            </p>
+            <div className="zv-field">
+              <label htmlFor="kapazitaet-neu">Neue Kapazität</label>
+              <input
+                id="kapazitaet-neu"
+                name="neueKapazitaet"
+                type="number"
+                min={1}
+                max={12}
+                required
+                autoFocus
+                defaultValue={kapazitaetZimmer.kapazitaet}
+              />
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Änderung beantragen"}
             </button>
           </form>
         </Modal>

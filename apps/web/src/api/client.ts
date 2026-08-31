@@ -145,11 +145,21 @@ export const api = {
     request<StandortDto>(`/standorte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   zimmerListe: () => request<ZimmerListEintragDto[]>("/zimmer"),
-  zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string }) =>
+  zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string; kapazitaet?: number }) =>
     request<ZimmerListEintragDto>("/zimmer", { method: "POST", body: JSON.stringify(payload) }),
   zimmerAktualisieren: (id: string, payload: { nummer: string; etage?: string }) =>
     request<ZimmerListEintragDto>(`/zimmer/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   zimmerDeaktivieren: (id: string) => request<ZimmerListEintragDto>(`/zimmer/${id}/deaktivieren`, { method: "PATCH" }),
+  zimmerKapazitaetAendern: (id: string, neueKapazitaet: number) =>
+    request<ZimmerListEintragDto>(`/zimmer/${id}/kapazitaet`, {
+      method: "PATCH",
+      body: JSON.stringify({ neueKapazitaet }),
+    }),
+  zimmerKapazitaetEntscheiden: (antragId: string, entscheidung: "bestaetigt" | "abgelehnt", grund?: string) =>
+    request<ZimmerListEintragDto>(`/zimmer/kapazitaetsantraege/${antragId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ entscheidung, grund }),
+    }),
   belegungsverlauf: (zimmerId: string) =>
     request<BelegungsverlaufEintragDto[]>(`/zimmer/${zimmerId}/belegungsverlauf`),
 

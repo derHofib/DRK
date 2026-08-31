@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Ban,
   Banknote,
+  BedDouble,
   BookX,
   Building2,
   CalendarCheck,
@@ -156,6 +157,7 @@ export const I2faAus = baue(ShieldOff);
 export const IEinklappen = baue(PanelLeftClose);
 export const IAusklappen = baue(PanelLeftOpen);
 export const IAnpassen = baue(SlidersHorizontal);
+export const IKapazitaet = baue(BedDouble);
 
 /* Richtungen */
 export const IAufklappen = baue(ChevronDown);

@@ -953,6 +953,13 @@
   color: var(--zv-status-ok);
 }
 
+/* Mehrbettzimmer mit noch mindestens einem freien Platz -- zwischen
+   "zugeordnet" (ganz leer) und "vergeben" (voll). */
+.zv-pill-teilweise {
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-status-warn);
+}
+
 .zv-pill-danger {
   background: var(--zv-status-danger-bg);
   color: var(--zv-status-danger);

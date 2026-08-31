@@ -196,7 +196,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
 
   useEffect(() => {
     if (klient.aktuellesZimmer) return;
-    api.zimmerListe().then((liste) => setFreieZimmer(liste.filter((z) => z.status === "zugeordnet")));
+    api.zimmerListe().then((liste) => setFreieZimmer(liste.filter((z) => z.bewohner.length < z.kapazitaet)));
   }, [klient.id, klient.aktuellesZimmer]);
 
   async function zimmerZuweisen(e: FormEvent<HTMLFormElement>) {
@@ -299,6 +299,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
                 {freieZimmer.map((z) => (
                   <option key={z.id} value={z.id}>
                     {z.nummer} · {z.standortName}
+                    {z.kapazitaet > 1 ? ` (${z.bewohner.length}/${z.kapazitaet})` : ""}
                   </option>
                 ))}
               </select>

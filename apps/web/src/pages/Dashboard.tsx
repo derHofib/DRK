@@ -83,7 +83,7 @@ export function Dashboard() {
               <div className="zv-stat-karte">
                 <p className="zv-stat-label">
                   <IZimmer style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                  Zimmer frei
+                  Plätze frei
                 </p>
                 <p className="zv-stat-wert">
                   {daten.zimmer.frei} / {daten.zimmer.gesamt}

@@ -80,6 +80,14 @@ export class DashboardService {
     });
   }
 
+  /**
+   * "frei" zaehlt seit Migration 0032 freie PLAETZE, nicht freie Zimmer --
+   * ein Zimmer mit Kapazitaet 3 und 2 Bewohnern traegt einen freien Platz
+   * bei, nicht null. Ein einfacher LEFT JOIN auf belegung wuerde bei
+   * mehreren Bewohnern pro Zimmer mehrere Zeilen je Zimmer liefern (falsch
+   * gezaehlte Kapazitaet) -- die LATERAL-Subquery zaehlt deshalb je Zimmer
+   * separat, bevor summiert wird.
+   */
   private async zimmerFrei(client: PoolClient, erlaubteStandorte: string[] | null) {
     const bedingungen = ["z.aktiv"];
     const params: unknown[] = [];
@@ -90,11 +98,14 @@ export class DashboardService {
     const { rows } = await client.query(
       `
       SELECT
-        count(*) FILTER (WHERE b.id IS NULL) AS frei,
-        count(*) AS gesamt,
+        COALESCE(SUM(z.kapazitaet - belegte.anzahl), 0) AS frei,
+        COALESCE(SUM(z.kapazitaet), 0) AS gesamt,
         count(DISTINCT z.standort_id) AS standorte
       FROM zimmer z
-      LEFT JOIN belegung b ON b.zimmer_id = z.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+      LEFT JOIN LATERAL (
+        SELECT count(*) AS anzahl FROM belegung b
+        WHERE b.zimmer_id = z.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+      ) belegte ON true
       WHERE ${bedingungen.join(" AND ")}
       `,
       params

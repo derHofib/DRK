@@ -7,7 +7,14 @@ import { isPgError } from "../common/pg-error";
 // Postgres-Fehlercode fuer eine verletzte EXCLUDE-Constraint. Kein String,
 // der irgendwo geraten ist -- offizieller SQLSTATE-Code, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
+// Nach Migration 0032 nur noch fuer belegung_klient_ohne_ueberlappung
+// zustaendig -- die Zimmer-Ueberlappung ist kein EXCLUDE-Constraint mehr,
+// sondern der Trigger belegung_kapazitaet_pruefen() (naechste Konstante).
 const EXCLUSION_VIOLATION = "23P01";
+
+// Custom-SQLSTATE aus belegung_kapazitaet_pruefen() (migrations/0032),
+// kein Standard-Code -- siehe dort.
+const KAPAZITAET_UEBERSCHRITTEN = "ZA001";
 
 export interface BelegungDto {
   id: string;
@@ -22,13 +29,15 @@ export class BelegungService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * Kein Ueberlappungs-Check im Anwendungscode -- der waere unter
-   * gleichzeitigen Anfragen eine Race Condition (zwei Requests lesen
-   * "frei", bevor einer schreibt). Die Datenbank lehnt stattdessen per
-   * EXCLUDE-Constraint ab (siehe migrations/0010_belegung.sql), und dieser
-   * Code uebersetzt genau diesen einen Fehlercode in ein 409 -- alles
-   * andere laeuft als 500 durch, wie es sich fuer einen unerwarteten Fehler
-   * gehoert.
+   * Kein Kapazitaets-/Ueberlappungs-Check im Anwendungscode -- der waere
+   * unter gleichzeitigen Anfragen eine Race Condition (zwei Requests lesen
+   * "noch ein Platz frei", bevor einer schreibt). Die Datenbank lehnt
+   * stattdessen ab: der Trigger belegung_kapazitaet_pruefen() fuer die
+   * Zimmerkapazitaet, der EXCLUDE-Constraint belegung_klient_ohne_
+   * ueberlappung fuer die zweite Garantie (siehe migrations/0010 und
+   * 0032). Dieser Code uebersetzt genau diese zwei Fehlercodes in ein 409
+   * -- alles andere laeuft als 500 durch, wie es sich fuer einen
+   * unerwarteten Fehler gehoert.
    */
   async einziehen(input: { zimmerId: string; klientId: string; einzug: string }): Promise<BelegungDto> {
     const { mandantId, benutzerId } = requireTenantContext();
@@ -53,10 +62,11 @@ export class BelegungService {
         return zuDto(rows[0]);
       });
     } catch (err) {
+      if (isPgError(err) && err.code === KAPAZITAET_UEBERSCHRITTEN) {
+        throw new ConflictException("Dieses Zimmer hat im gewählten Zeitraum keine freien Plätze mehr.");
+      }
       if (isPgError(err) && err.code === EXCLUSION_VIOLATION) {
-        throw new ConflictException(
-          "Diese Belegung überschneidet sich mit einer bestehenden Belegung desselben Zimmers oder Klienten."
-        );
+        throw new ConflictException("Dieser Klient ist im gewählten Zeitraum bereits einem anderen Zimmer zugeordnet.");
       }
       throw err;
     }
