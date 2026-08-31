@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 
 export interface StandortDto {
   id: string;
@@ -28,11 +29,23 @@ export class StandortService {
    * (Einstellungen) muss sie zeigen koennen, um sie wieder zu aktivieren.
    * Wer nur die aktiven fuer eine Auswahlliste braucht (z.B. beim
    * Zimmer-Anlegen), filtert das im Frontend auf "aktiv".
+   *
+   * Wie ueberall sonst (siehe common/standort-restriction.ts) rein
+   * datengetrieben ueber benutzer_standort, nicht rollenbasiert: eine
+   * Bereichsleitung sieht "alle Standorte" nur, weil ihr faktisch nie eine
+   * Zuordnung gegeben wird, nicht weil ihre Rolle hier gesondert behandelt
+   * wuerde. Ein Betreuer mit Standort-Zuordnung sieht ab hier nur noch
+   * seine eigenen -- vorher wurde diese Liste ueberhaupt nicht gefiltert.
    */
   async findeAlle(): Promise<StandortDto[]> {
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      const bedingung = erlaubteStandorte ? "id = ANY($1)" : "true";
+      const params = erlaubteStandorte ? [erlaubteStandorte] : [];
       const { rows } = await client.query<StandortDto>(
-        "SELECT id, name, adresse, aktiv FROM standort ORDER BY name"
+        `SELECT id, name, adresse, aktiv FROM standort WHERE ${bedingung} ORDER BY name`,
+        params
       );
       return rows;
     });

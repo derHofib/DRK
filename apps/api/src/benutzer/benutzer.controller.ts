@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { BenutzerService } from "./benutzer.service";
@@ -10,6 +10,10 @@ const anlegenSchema = z.object({
   // Mindestlaenge wie bei jedem neu vergebenen Passwort -- die eigentliche
   // Staerkepruefung bleibt der Person ueberlassen, die es einrichtet.
   passwort: z.string().min(8),
+});
+
+const standorteSetzenSchema = z.object({
+  standortIds: z.array(z.string().uuid()),
 });
 
 @Controller("benutzer")
@@ -30,5 +34,11 @@ export class BenutzerController {
   @Post(":id/passwort-reset")
   async passwortResetErstellen(@Param("id") id: string) {
     return this.benutzer.passwortResetErstellen(id);
+  }
+
+  @Put(":id/standorte")
+  async standorteSetzen(@Param("id") id: string, @Body() body: unknown) {
+    const { standortIds } = standorteSetzenSchema.parse(body);
+    return this.benutzer.standorteSetzen(id, standortIds);
   }
 }

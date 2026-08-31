@@ -18,12 +18,20 @@ import { isPgError } from "../common/pg-error";
 const UNIQUE_VIOLATION = "23505";
 
 // Ein Storno macht eine Auszahlung/Einzahlung rueckwirkend ungueltig -- wer
-// das darf, entscheidet ueber die Kassenbuchfuehrung, nicht ueber einzelne
-// Klientendaten. Betreuer legen Buchungen an, duerfen sie aber nicht im
-// Nachhinein aus der Kasse entfernen.
-const ROLLEN_MIT_STORNO = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
+// darueber selbst entscheiden (nicht nur beantragen) darf, entscheidet ueber
+// die Kassenbuchfuehrung, nicht ueber einzelne Klientendaten. Ein Betreuer
+// darf einen Storno-ANTRAG stellen (stornoBeantragen(), jede Rolle darf
+// das), aber nicht selbst bewilligen -- das entscheidet stornoEntscheiden().
+const ROLLEN_MIT_STORNO_ENTSCHEIDEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
+
+export interface OffenerStornoantragDto {
+  id: string;
+  grund: string;
+  beantragtVonName: string;
+  beantragtAm: string;
+}
 
 export interface KassenbuchungTeilnehmerDto {
   klientId: string | null;
@@ -48,6 +56,10 @@ export interface KassenbuchungDto {
   hatUnterschrift: boolean;
   gebuchtVonName: string | null;
   teilnehmer: KassenbuchungTeilnehmerDto[];
+  // Genau der eine noch unentschiedene Antrag, falls vorhanden -- eine
+  // Buchung kann laut kassenbuchung_stornoantrag_offen_je_buchung nie mehr
+  // als einen gleichzeitig haben.
+  offenerStornoantrag: OffenerStornoantragDto | null;
 }
 
 export interface WochenuebersichtEintrag {
@@ -66,12 +78,16 @@ const BUCHUNG_SELECT = `
   SELECT b.id, b.klient_id, k.vorname, k.nachname, b.standort_id, s.name AS standort_name,
          b.datum, b.betrag_cent, b.verwendungszweck, b.typ, b.iso_jahr, b.iso_woche,
          b.storniert, b.storno_grund,
-         (u.id IS NOT NULL) AS hat_unterschrift, mb.name AS gebucht_von_name
+         (u.id IS NOT NULL) AS hat_unterschrift, mb.name AS gebucht_von_name,
+         sa.id AS storno_antrag_id, sa.grund AS storno_antrag_grund,
+         sab.name AS storno_beantragt_von_name, sa.beantragt_am AS storno_beantragt_am
   FROM kassenbuchung b
   LEFT JOIN klient k ON k.id = b.klient_id
   LEFT JOIN standort s ON s.id = b.standort_id
   LEFT JOIN unterschrift u ON u.kassenbuchung_id = b.id
   LEFT JOIN benutzer mb ON mb.id = b.gebucht_von
+  LEFT JOIN kassenbuchung_stornoantrag sa ON sa.kassenbuchung_id = b.id AND sa.status = 'beantragt'
+  LEFT JOIN benutzer sab ON sab.id = sa.beantragt_von
 `;
 
 @Injectable()
@@ -198,39 +214,136 @@ export class KassenbuchungService {
     }
   }
 
-  async stornieren(id: string, grund: string): Promise<KassenbuchungDto> {
+  /**
+   * Stellt einen Storno-Antrag. Jede Rolle darf das (auch ein Betreuer, der
+   * die Buchung nicht mehr selbst rueckgaengig machen kann) -- ob er sofort
+   * wirksam wird, entscheidet allein die Rolle der antragstellenden Person:
+   * Bereichs-/Einrichtungsleitung bewilligen sich damit im selben Zug
+   * selbst (kein Sinn, auf die eigene Bewilligung zu warten), ein Betreuer
+   * stellt nur den Antrag und muss auf stornoEntscheiden() warten.
+   */
+  async stornoBeantragen(kassenbuchungId: string, grund: string): Promise<KassenbuchungDto> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STORNO.has(ctx.rolle)) {
-      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Buchungen stornieren.");
-    }
     const { benutzerId } = ctx;
     return this.db.withTenant(async (client) => {
       const { rows: buchungRows } = await client.query(
-        "SELECT klient_id, standort_id FROM kassenbuchung WHERE id = $1",
-        [id]
+        "SELECT klient_id, standort_id, storniert FROM kassenbuchung WHERE id = $1",
+        [kassenbuchungId]
       );
       if (buchungRows.length === 0) {
-        throw new NotFoundException("Buchung nicht gefunden oder bereits storniert.");
+        throw new NotFoundException("Buchung nicht gefunden.");
       }
-      const { klient_id, standort_id } = buchungRows[0];
+      const { klient_id, standort_id, storniert } = buchungRows[0];
+      if (storniert) {
+        throw new ConflictException("Diese Buchung ist bereits storniert.");
+      }
       const erlaubt = klient_id
         ? await klientIstErlaubt(client, benutzerId, klient_id)
         : await standortIstErlaubt(client, benutzerId, standort_id);
       if (!erlaubt) {
-        throw new NotFoundException("Buchung nicht gefunden oder bereits storniert.");
+        throw new NotFoundException("Buchung nicht gefunden.");
       }
 
-      const { rowCount } = await client.query(
-        `UPDATE kassenbuchung
-         SET storniert = true, storno_grund = $1, storniert_von = $2, storniert_am = now()
-         WHERE id = $3 AND NOT storniert`,
-        [grund, benutzerId, id]
-      );
-      if (rowCount === 0) {
-        throw new NotFoundException("Buchung nicht gefunden oder bereits storniert.");
+      let antragQuery;
+      try {
+        antragQuery = await client.query<{ id: string }>(
+          `INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [ctx.mandantId, kassenbuchungId, grund, benutzerId]
+        );
+      } catch (err) {
+        if (isPgError(err) && err.code === UNIQUE_VIOLATION) {
+          throw new ConflictException("Für diese Buchung liegt bereits ein offener Storno-Antrag vor.");
+        }
+        throw err;
       }
-      return this.findeEineIntern(client, id);
+
+      if (ROLLEN_MIT_STORNO_ENTSCHEIDEN.has(ctx.rolle)) {
+        await this.bewilligeAntrag(client, antragQuery.rows[0].id, kassenbuchungId, grund, benutzerId);
+      }
+      return this.findeEineIntern(client, kassenbuchungId);
     });
+  }
+
+  /**
+   * Bewilligt oder lehnt einen fremden (typischerweise: von einem Betreuer
+   * gestellten) Storno-Antrag ab. Die Standort-Sichtbarkeitspruefung ist
+   * dieselbe wie beim frueheren Direkt-Storno: eine Einrichtungsleitung
+   * darf nur ueber Antraege ihres eigenen Standorts entscheiden, die
+   * Bereichsleitung standortuebergreifend (weil ermittleErlaubteStandortIds
+   * fuer sie null liefert, siehe common/standort-restriction.ts).
+   */
+  async stornoEntscheiden(antragId: string, entscheidung: "genehmigt" | "abgelehnt", ablehnungGrund?: string): Promise<KassenbuchungDto> {
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STORNO_ENTSCHEIDEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen über Storno-Anträge entscheiden.");
+    }
+    if (entscheidung === "abgelehnt" && !ablehnungGrund) {
+      throw new BadRequestException("Für eine Ablehnung ist ein Grund erforderlich.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query(
+        `SELECT sa.grund, b.id AS kassenbuchung_id, b.klient_id, b.standort_id
+         FROM kassenbuchung_stornoantrag sa
+         JOIN kassenbuchung b ON b.id = sa.kassenbuchung_id
+         WHERE sa.id = $1 AND sa.status = 'beantragt'`,
+        [antragId]
+      );
+      if (rows.length === 0) {
+        throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
+      }
+      const { grund, kassenbuchung_id, klient_id, standort_id } = rows[0];
+      const erlaubt = klient_id
+        ? await klientIstErlaubt(client, ctx.benutzerId, klient_id)
+        : await standortIstErlaubt(client, ctx.benutzerId, standort_id);
+      if (!erlaubt) {
+        throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
+      }
+
+      if (entscheidung === "genehmigt") {
+        await this.bewilligeAntrag(client, antragId, kassenbuchung_id, grund, ctx.benutzerId);
+      } else {
+        const { rowCount } = await client.query(
+          `UPDATE kassenbuchung_stornoantrag
+           SET status = 'abgelehnt', ablehnung_grund = $1, entschieden_von = $2, entschieden_am = now()
+           WHERE id = $3 AND status = 'beantragt'`,
+          [ablehnungGrund, ctx.benutzerId, antragId]
+        );
+        if (rowCount === 0) {
+          throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
+        }
+      }
+      return this.findeEineIntern(client, kassenbuchung_id);
+    });
+  }
+
+  /**
+   * Gemeinsamer Kern von Sofort-Bewilligung (stornoBeantragen() bei
+   * Leitung) und Fremd-Bewilligung (stornoEntscheiden()): markiert den
+   * Antrag als genehmigt und fuehrt den eigentlichen Storno aus (dieselbe
+   * Spalten-UPDATE wie das frueheren Direkt-Storno). "WHERE status =
+   * 'beantragt'"/"WHERE NOT storniert" schuetzen beide gegen ein doppeltes
+   * Ausfuehren, falls zwei Anfragen sich ueberschneiden.
+   */
+  private async bewilligeAntrag(
+    client: PoolClient,
+    antragId: string,
+    kassenbuchungId: string,
+    grund: string,
+    entschiedenVon: string
+  ): Promise<void> {
+    await client.query(
+      `UPDATE kassenbuchung_stornoantrag
+       SET status = 'genehmigt', entschieden_von = $1, entschieden_am = now()
+       WHERE id = $2 AND status = 'beantragt'`,
+      [entschiedenVon, antragId]
+    );
+    await client.query(
+      `UPDATE kassenbuchung
+       SET storniert = true, storno_grund = $1, storniert_von = $2, storniert_am = now()
+       WHERE id = $3 AND NOT storniert`,
+      [grund, entschiedenVon, kassenbuchungId]
+    );
   }
 
   async findeAlle(filter?: { klientId?: string }): Promise<KassenbuchungDto[]> {
@@ -356,5 +469,13 @@ function zuDto(r: any, teilnehmer: KassenbuchungTeilnehmerDto[]): KassenbuchungD
     hatUnterschrift: r.hat_unterschrift,
     gebuchtVonName: r.gebucht_von_name,
     teilnehmer,
+    offenerStornoantrag: r.storno_antrag_id
+      ? {
+          id: r.storno_antrag_id,
+          grund: r.storno_antrag_grund,
+          beantragtVonName: r.storno_beantragt_von_name,
+          beantragtAm: r.storno_beantragt_am,
+        }
+      : null,
   };
 }

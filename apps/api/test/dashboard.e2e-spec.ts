@@ -132,6 +132,27 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       [mandantId, klient1, jahr, woche]
     );
 
+    // Storno-Antraege: einer fuer klient1 (Standort 1), einer fuer klient2
+    // (Standort 2) -- fuer die S1-Leitung darf nur der erste sichtbar sein.
+    const { rows: stornoBuchung1 } = await admin.query<{ id: string }>(
+      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, gebucht_von)
+       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S1', 'sonstiges', $3) RETURNING id`,
+      [mandantId, klient1, bereichsleitungRows[0].id]
+    );
+    await admin.query(
+      "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S1', $3)",
+      [mandantId, stornoBuchung1[0].id, bereichsleitungRows[0].id]
+    );
+    const { rows: stornoBuchung2 } = await admin.query<{ id: string }>(
+      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, gebucht_von)
+       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S2', 'sonstiges', $3) RETURNING id`,
+      [mandantId, klient2, bereichsleitungRows[0].id]
+    );
+    await admin.query(
+      "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S2', $3)",
+      [mandantId, stornoBuchung2[0].id, bereichsleitungRows[0].id]
+    );
+
     // Rechnung: eine offene ("beantragt") fuer klient1, eine bereits genehmigte fuer klient2 (zaehlt nicht mit).
     const { rows: r1 } = await admin.query<{ id: string }>(
       "INSERT INTO rechnung (mandant_id, klient_id, betrag_cent, beschreibung, erstellt_von) VALUES ($1, $2, 1500, 'Offen', NULL) RETURNING id",
@@ -205,6 +226,7 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM rechnung_statuswechsel WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
@@ -236,6 +258,11 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     it("zaehlt genau die eine offene Rechnung, nicht die bereits genehmigte", async () => {
       const res = await get(tokenBereichsleitung);
       expect(res.body.offeneRechnungen).toEqual({ anzahl: 1, summeCent: 1500 });
+    });
+
+    it("zaehlt beide offenen Storno-Antraege ueber beide Standorte hinweg", async () => {
+      const res = await get(tokenBereichsleitung);
+      expect(res.body.offeneStornoantraege).toEqual({ anzahl: 2 });
     });
 
     it("sieht alle Mitarbeitenden und den ausstehenden Passwort-Reset", async () => {
@@ -275,6 +302,11 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     it("sieht nur den woechentlichen Klienten von Standort 1 in der HZL-Uebersicht", async () => {
       const res = await get(tokenEinrichtungsleitungS1);
       expect(res.body.hzlWoche).toEqual({ bezahlt: 1, gesamt: 1, isoJahr: jahr, isoWoche: woche });
+    });
+
+    it("zaehlt nur den Storno-Antrag von Standort 1, nicht den von Standort 2", async () => {
+      const res = await get(tokenEinrichtungsleitungS1);
+      expect(res.body.offeneStornoantraege).toEqual({ anzahl: 1 });
     });
 
     it("sieht nur die Kostenuebernahme von Standort 1, nicht die von Standort 2", async () => {

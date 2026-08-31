@@ -118,6 +118,8 @@ export interface BenutzerListEintragDto {
   name: string;
   rolle: BenutzerRolle;
   aktiv: boolean;
+  // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
+  standortIds: string[];
 }
 
 export const BENUTZER_ROLLE_LABEL: Record<BenutzerRolle, string> = {
@@ -185,6 +187,13 @@ export interface KassenbuchungTeilnehmerDto {
   name: string;
 }
 
+export interface OffenerStornoantragDto {
+  id: string;
+  grund: string;
+  beantragtVonName: string;
+  beantragtAm: string;
+}
+
 /**
  * Genau eins von klientId/standortId ist gesetzt (siehe migrations/0030):
  * die meisten Buchungen gehören einem Klienten, eine Standort-Buchung
@@ -208,6 +217,7 @@ export interface KassenbuchungDto {
   hatUnterschrift: boolean;
   gebuchtVonName: string | null;
   teilnehmer: KassenbuchungTeilnehmerDto[];
+  offenerStornoantrag: OffenerStornoantragDto | null;
 }
 
 export interface WochenuebersichtEintragDto {
@@ -279,6 +289,7 @@ export interface DashboardDto {
   zimmer: { frei: number; gesamt: number; standorte: number };
   hzlWoche: { bezahlt: number; gesamt: number; isoJahr: number; isoWoche: number };
   offeneRechnungen: { anzahl: number; summeCent: number };
+  offeneStornoantraege: { anzahl: number };
   mitarbeitende: { aktiv: number; gesamt: number; ausstehendeResets: number };
   kostenuebernahmenBaldEndend: {
     klientId: string;

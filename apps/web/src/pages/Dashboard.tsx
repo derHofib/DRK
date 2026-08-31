@@ -12,6 +12,7 @@ import {
   ILeerTagesberichte,
   IMitarbeitende,
   IRechnung,
+  IStornieren,
   ITagesberichte,
   IZimmer,
   IZuruecksetzen,
@@ -110,6 +111,18 @@ export function Dashboard() {
                 </p>
                 <p className="zv-stat-wert">{daten.offeneRechnungen.anzahl}</p>
                 <p className="zv-stat-sub">{formatBetrag(daten.offeneRechnungen.summeCent)} warten auf Genehmigung</p>
+              </div>
+            )}
+            {sichtbarkeit.stornoantraege && (
+              <div className="zv-stat-karte">
+                <p className="zv-stat-label">
+                  <IStornieren style={{ verticalAlign: "-2px", marginRight: 6 }} />
+                  Offene Storno-Anträge
+                </p>
+                <p className="zv-stat-wert">{daten.offeneStornoantraege.anzahl}</p>
+                <p className="zv-stat-sub">
+                  {daten.offeneStornoantraege.anzahl === 0 ? "Nichts wartet auf Bewilligung" : "warten auf Bewilligung"}
+                </p>
               </div>
             )}
             {sichtbarkeit.mitarbeitende && (

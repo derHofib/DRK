@@ -221,6 +221,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       "DELETE FROM unterschrift WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
       [mandantId]
     );
+    await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
@@ -245,6 +246,22 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
   }
 
   describe("einrichtungsleitung-s1 (auf Standort 1 eingeschraenkt)", () => {
+    it("sieht in /standorte nur Standort 1, bereichsleitung sieht beide", async () => {
+      const eingeschraenkt = await als(tokenEinrichtungsleitungS1).get("/standorte");
+      const eingeschraenkteIds = eingeschraenkt.body.map((s: { id: string }) => s.id);
+      expect(eingeschraenkteIds).toContain(standort1Id);
+      expect(eingeschraenkteIds).not.toContain(standort2Id);
+
+      // Eingebaute Gegenprobe (siehe Dateikopf): dieselbe Abfrage ohne
+      // Standort-Zuordnung muss beide liefern -- sonst koennnte ein Test,
+      // der einfach immer eine leere/verkuerzte Liste liefert, unbemerkt
+      // gruen bleiben.
+      const unrestricted = await als(tokenBereichsleitung).get("/standorte");
+      const unrestrictedIds = unrestricted.body.map((s: { id: string }) => s.id);
+      expect(unrestrictedIds).toContain(standort1Id);
+      expect(unrestrictedIds).toContain(standort2Id);
+    });
+
     it("sieht in /klienten nur Klient 1, nicht Klient 2", async () => {
       const res = await als(tokenEinrichtungsleitungS1).get("/klienten");
       const ids = res.body.map((k: { id: string }) => k.id);
@@ -277,12 +294,15 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann die Buchung von Klient 1 stornieren, die von Klient 2 nicht", async () => {
-      const eigene = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${buchung1}/stornieren`, {
+      // einrichtungsleitung-s1 beantragt und bewilligt sich damit im selben
+      // Zug selbst (siehe kassenbuchung.service.ts, stornoBeantragen()).
+      const eigene = await als(tokenEinrichtungsleitungS1).post(`/kassenbuchungen/${buchung1}/storno-antrag`, {
         grund: "Testkorrektur",
       });
-      expect(eigene.status).toBe(200);
+      expect(eigene.status).toBe(201);
+      expect(eigene.body.storniert).toBe(true);
 
-      const fremde = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${buchung2}/stornieren`, {
+      const fremde = await als(tokenEinrichtungsleitungS1).post(`/kassenbuchungen/${buchung2}/storno-antrag`, {
         grund: "sollte scheitern",
       });
       expect(fremde.status).toBe(404);
@@ -321,12 +341,13 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     });
 
     it("kann die Standort-Buchung von Standort 1 stornieren, die von Standort 2 nicht", async () => {
-      const eigene = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${standortBuchung1}/stornieren`, {
+      const eigene = await als(tokenEinrichtungsleitungS1).post(`/kassenbuchungen/${standortBuchung1}/storno-antrag`, {
         grund: "Testkorrektur",
       });
-      expect(eigene.status).toBe(200);
+      expect(eigene.status).toBe(201);
+      expect(eigene.body.storniert).toBe(true);
 
-      const fremde = await als(tokenEinrichtungsleitungS1).patch(`/kassenbuchungen/${standortBuchung2}/stornieren`, {
+      const fremde = await als(tokenEinrichtungsleitungS1).post(`/kassenbuchungen/${standortBuchung2}/storno-antrag`, {
         grund: "sollte scheitern",
       });
       expect(fremde.status).toBe(404);

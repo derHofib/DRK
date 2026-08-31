@@ -4,6 +4,7 @@ import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
+import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 
 // 30 Minuten: lang genug, um den Link auf einem beliebigen Weg (Teams,
 // muendlich, ...) weiterzugeben, kurz genug, dass ein liegengelassener,
@@ -16,6 +17,7 @@ export interface BenutzerListEintrag {
   name: string;
   rolle: string;
   aktiv: boolean;
+  standortIds: string[];
 }
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (benutzer_mandant_id_email_key,
@@ -31,6 +33,13 @@ const UNIQUE_VIOLATION = "23505";
 // andere hochstufen.
 const ROLLEN_MIT_BENUTZER_ANLEGEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
+// Wer einem Betreuer Standorte zuweisen darf: dasselbe Rollenpaar wie beim
+// Anlegen. Die Einrichtungsleitung ist dabei zusaetzlich (siehe
+// standorteSetzen()) auf ihre EIGENEN erlaubten Standorte begrenzt --
+// anders als beim Anlegen, wo sie traegerweit keine Grenze hat, weil dort
+// jede neue Person ohnehin zunaechst unbeschraenkt ist.
+const ROLLEN_MIT_STANDORT_ZUWEISEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
+
 @Injectable()
 export class BenutzerService {
   constructor(private readonly db: DatabaseService) {}
@@ -43,10 +52,29 @@ export class BenutzerService {
    */
   async findeAlleImEigenenMandanten(): Promise<BenutzerListEintrag[]> {
     return this.db.withTenant(async (client) => {
-      const { rows } = await client.query<BenutzerListEintrag>(
-        "SELECT id, email, name, rolle, aktiv FROM benutzer ORDER BY name"
+      const { rows } = await client.query<{
+        id: string;
+        email: string;
+        name: string;
+        rolle: string;
+        aktiv: boolean;
+        standort_ids: string[];
+      }>(
+        `SELECT b.id, b.email, b.name, b.rolle, b.aktiv,
+                COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids
+         FROM benutzer b
+         LEFT JOIN benutzer_standort bs ON bs.benutzer_id = b.id
+         GROUP BY b.id, b.email, b.name, b.rolle, b.aktiv
+         ORDER BY b.name`
       );
-      return rows;
+      return rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        name: r.name,
+        rolle: r.rolle,
+        aktiv: r.aktiv,
+        standortIds: r.standort_ids,
+      }));
     });
   }
 
@@ -123,6 +151,66 @@ export class BenutzerService {
       );
 
       return { token, laeuftAbAm: rows[0].laeuft_ab_am };
+    });
+  }
+
+  /**
+   * Ersetzt die komplette Standort-Zuordnung einer Person (siehe
+   * benutzer_standort, migrations/0007). Bewusst als "setzen", nicht
+   * "hinzufuegen/entfernen" -- das Frontend zeigt eine Checkbox-Liste, ein
+   * voller Ersatz ist da einfacher richtig zu bekommen als ein Diff.
+   *
+   * Eine leere Liste ist ausdruecklich erlaubt: sie hebt jede Einschraenkung
+   * wieder auf (siehe common/standort-restriction.ts, "keine Zeile = keine
+   * Einschraenkung").
+   */
+  async standorteSetzen(zielBenutzerId: string, standortIds: string[]): Promise<string[]> {
+    const ctx = requireTenantContext();
+    if (!ROLLEN_MIT_STANDORT_ZUWEISEN.has(ctx.rolle)) {
+      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Standorte zuweisen.");
+    }
+    const eindeutigeIds = [...new Set(standortIds)];
+
+    return this.db.withTenant(async (client) => {
+      const { rows: zielRows } = await client.query<{ rolle: BenutzerRolle }>(
+        "SELECT rolle FROM benutzer WHERE id = $1",
+        [zielBenutzerId]
+      );
+      if (zielRows.length === 0) {
+        throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
+      }
+
+      // Eine Einrichtungsleitung verwaltet ausschliesslich Betreuer:innen
+      // (nie andere Leitung -- sonst koennte sie sich selbst oder eine
+      // Kollegin standortmaessig einschraenken oder befreien) und nur
+      // innerhalb ihrer eigenen Standorte, nie darueber hinaus.
+      if (ctx.rolle === "einrichtungsleitung") {
+        if (zielRows[0].rolle !== "betreuer") {
+          throw new ForbiddenException("Einrichtungsleitung darf nur Betreuer:innen Standorte zuweisen.");
+        }
+        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+        if (erlaubteStandorte && eindeutigeIds.some((id) => !erlaubteStandorte.includes(id))) {
+          throw new ForbiddenException("Einrichtungsleitung darf nur die eigenen Standorte zuweisen.");
+        }
+      }
+
+      if (eindeutigeIds.length > 0) {
+        const { rows: standortRows } = await client.query("SELECT id FROM standort WHERE id = ANY($1)", [
+          eindeutigeIds,
+        ]);
+        if (standortRows.length !== eindeutigeIds.length) {
+          throw new NotFoundException("Mindestens ein Standort wurde nicht gefunden.");
+        }
+      }
+
+      await client.query("DELETE FROM benutzer_standort WHERE benutzer_id = $1", [zielBenutzerId]);
+      for (const standortId of eindeutigeIds) {
+        await client.query(
+          "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
+          [ctx.mandantId, zielBenutzerId, standortId]
+        );
+      }
+      return eindeutigeIds;
     });
   }
 }

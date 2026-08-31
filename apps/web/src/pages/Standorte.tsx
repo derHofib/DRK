@@ -1,6 +1,6 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { StandortDto } from "@zimmerakte/shared";
-import { api } from "../api/client";
+import { api, tokenRolle } from "../api/client";
 import { Modal } from "../components/Modal";
 import { Leerzustand } from "../components/Leerzustand";
 import {
@@ -26,6 +26,10 @@ export function Standorte() {
   const [bearbeiteterStandort, setBearbeiteterStandort] = useState<StandortDto | null>(null);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
+  // (siehe ROLLEN_MIT_STANDORT_ANLEGEN in standort.service.ts).
+  const darfAnlegen = tokenRolle() === "bereichsleitung";
 
   function laden() {
     api.standorteListe().then(setStandorte).catch((err) => setFehler(err.message));
@@ -94,10 +98,12 @@ export function Standorte() {
 
       <div className="zv-seiten-kopf">
         <h2>Standorte</h2>
-        <button className="zv-btn" onClick={() => { setFormFehler(null); setNeuFormularOffen(true); }}>
-          <INeu />
-          Neuer Standort
-        </button>
+        {darfAnlegen && (
+          <button className="zv-btn" onClick={() => { setFormFehler(null); setNeuFormularOffen(true); }}>
+            <INeu />
+            Neuer Standort
+          </button>
+        )}
       </div>
 
       {standorte.length === 0 && !fehler ? (

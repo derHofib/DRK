@@ -135,6 +135,8 @@ export const api = {
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
   passwortResetErstellen: (benutzerId: string) =>
     request<{ token: string; laeuftAbAm: string }>(`/benutzer/${benutzerId}/passwort-reset`, { method: "POST" }),
+  benutzerStandorteSetzen: (benutzerId: string, standortIds: string[]) =>
+    request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),
 
   standorteListe: () => request<StandortDto[]>("/standorte"),
   standortAnlegen: (payload: { name: string; adresse: string }) =>
@@ -183,10 +185,15 @@ export const api = {
     teilnehmerKlientIds?: string[];
     teilnehmerBenutzerIds?: string[];
   }) => request<KassenbuchungDto>("/kassenbuchungen", { method: "POST", body: JSON.stringify(payload) }),
-  kassenbuchungStornieren: (id: string, grund: string) =>
-    request<KassenbuchungDto>(`/kassenbuchungen/${id}/stornieren`, {
-      method: "PATCH",
+  kassenbuchungStornoBeantragen: (id: string, grund: string) =>
+    request<KassenbuchungDto>(`/kassenbuchungen/${id}/storno-antrag`, {
+      method: "POST",
       body: JSON.stringify({ grund }),
+    }),
+  kassenbuchungStornoEntscheiden: (antragId: string, entscheidung: "genehmigt" | "abgelehnt", grund?: string) =>
+    request<KassenbuchungDto>(`/kassenbuchungen/storno-antraege/${antragId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ entscheidung, grund }),
     }),
   wochenuebersicht: (isoJahr: number, isoWoche: number) =>
     request<WochenuebersichtEintragDto[]>(`/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}`),

@@ -10,12 +10,20 @@
  * eigene Barrierefreiheits- und Zustandsfragen mit, deren Nutzen hier noch
  * unbewiesen ist.
  */
-export type WidgetId = "zimmer" | "hzl" | "rechnungen" | "mitarbeitende" | "kostenuebernahmen" | "tagesberichte";
+export type WidgetId =
+  | "zimmer"
+  | "hzl"
+  | "rechnungen"
+  | "stornoantraege"
+  | "mitarbeitende"
+  | "kostenuebernahmen"
+  | "tagesberichte";
 
 export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "zimmer",
   "hzl",
   "rechnungen",
+  "stornoantraege",
   "mitarbeitende",
   "kostenuebernahmen",
   "tagesberichte",
@@ -25,23 +33,30 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   zimmer: "Zimmer frei",
   hzl: "HZL diese Woche",
   rechnungen: "Offene Rechnungen",
+  stornoantraege: "Offene Storno-Anträge",
   mitarbeitende: "Mitarbeitende",
   kostenuebernahmen: "Kostenübernahmen laufen bald aus",
   tagesberichte: "Klienten ohne aktuellen Tagesbericht",
 };
 
 /**
- * Nur diese beiden sind fuer die Basisrolle standardmaessig ausgeblendet --
- * und das ist eine Relevanz-Vorbelegung, keine Rechtesperre:
+ * Nur diese sind fuer die Basisrolle standardmaessig ausgeblendet -- und das
+ * ist eine Relevanz-Vorbelegung, keine Rechtesperre:
  * - "rechnungen" traegt eine ECHTE Serverrolle (PATCH /rechnungen/:id/status
  *   ist auf Bereichs-/Einrichtungsleitung beschraenkt, siehe
  *   rechnung.service.ts), das Betrachten der Zahl selbst aber nicht.
+ * - "stornoantraege" traegt ebenfalls eine ECHTE Serverrolle (nur Bereichs-/
+ *   Einrichtungsleitung entscheiden ueber einen Antrag, siehe
+ *   ROLLEN_MIT_STORNO_ENTSCHEIDEN in kassenbuchung.service.ts) -- ein
+ *   Betreuer sieht den Status seines eigenen Antrags ohnehin direkt in der
+ *   Kassenbuch-Liste, diese Kachel ist die Bewilligungs-Uebersicht der
+ *   Leitung.
  * - "mitarbeitende" hat ueberhaupt keine Sperre (GET /benutzer kennt keine
  *   Rollenpruefung) -- es ist nur fuer den Alltag eines Betreuers selten
  *   relevant.
- * Beide lassen sich ueber "Anpassen" jederzeit einblenden.
+ * Alle drei lassen sich ueber "Anpassen" jederzeit einblenden.
  */
-const NUR_LEITUNG: WidgetId[] = ["rechnungen", "mitarbeitende"];
+const NUR_LEITUNG: WidgetId[] = ["rechnungen", "stornoantraege", "mitarbeitende"];
 
 const SICHTBARKEIT_KEY = "zimmerakte_dashboard_sichtbarkeit";
 

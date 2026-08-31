@@ -97,6 +97,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       "DELETE FROM kassenbuchung_teilnehmer WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
       [mandantId]
     );
+    await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
@@ -185,13 +186,16 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     const liste = await get(`/kassenbuchungen?klientId=${klientWoechentlich}`);
     const offeneHzl = liste.body.find((b: { typ: string; storniert: boolean }) => b.typ === "hzl" && !b.storniert);
 
+    // Bereichsleitung beantragt und bewilligt sich damit im selben Zug
+    // selbst (siehe kassenbuchung.service.ts, stornoBeantragen()).
     const stornoRes = await request(app.getHttpServer())
-      .patch(`/kassenbuchungen/${offeneHzl.id}/stornieren`)
+      .post(`/kassenbuchungen/${offeneHzl.id}/storno-antrag`)
       .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Falscher Betrag eingegeben" });
-    expect(stornoRes.status).toBe(200);
+    expect(stornoRes.status).toBe(201);
     expect(stornoRes.body.storniert).toBe(true);
     expect(stornoRes.body.stornoGrund).toBe("Falscher Betrag eingegeben");
+    expect(stornoRes.body.offenerStornoantrag).toBeNull();
 
     const neueBuchung = await post("/kassenbuchungen", {
       klientId: klientWoechentlich,
@@ -211,15 +215,15 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     expect(listeNachStorno.body.find((b: { id: string }) => b.id === offeneHzl.id).storniert).toBe(true);
   });
 
-  it("lehnt ein zweites Stornieren derselben Buchung ab", async () => {
+  it("lehnt einen Storno-Antrag für eine bereits stornierte Buchung ab", async () => {
     const liste = await get(`/kassenbuchungen?klientId=${klientWoechentlich}`);
     const bereitsStorniert = liste.body.find((b: { storniert: boolean }) => b.storniert);
 
     const res = await request(app.getHttpServer())
-      .patch(`/kassenbuchungen/${bereitsStorniert.id}/stornieren`)
+      .post(`/kassenbuchungen/${bereitsStorniert.id}/storno-antrag`)
       .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Nochmal" });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(409);
   });
 
   describe("Standort-Buchungen (Spaßgeld/Freizeitveranstaltungen, Migration 0030)", () => {
@@ -327,10 +331,10 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       const grillfest = liste.body.find((b: { verwendungszweck: string }) => b.verwendungszweck === "Grillfest im Garten");
 
       const res = await request(app.getHttpServer())
-        .patch(`/kassenbuchungen/${grillfest.id}/stornieren`)
+        .post(`/kassenbuchungen/${grillfest.id}/storno-antrag`)
         .set("Authorization", `Bearer ${tokenBereichsleitung}`)
         .send({ grund: "Wetter" });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       expect(res.body.storniert).toBe(true);
     });
 

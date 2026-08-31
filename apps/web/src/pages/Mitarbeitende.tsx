@@ -1,29 +1,62 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, BenutzerRolle } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, BenutzerRolle, StandortDto } from "@zimmerakte/shared";
 import { BENUTZER_ROLLE_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern } from "../components/icons";
+import { IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
 
 export function Mitarbeitende() {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [resetLink, setResetLink] = useState<{ name: string; url: string; laeuftAbAm: string } | null>(null);
   const [kopiert, setKopiert] = useState(false);
+  const [standortZuweisung, setStandortZuweisung] = useState<BenutzerListEintragDto | null>(null);
+  const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
+  const [wirdZugewiesen, setWirdZugewiesen] = useState(false);
 
   // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
   // (siehe ROLLEN_MIT_BENUTZER_ANLEGEN in benutzer.service.ts).
   const rolle = tokenRolle();
   const darfAnlegen = rolle === "bereichsleitung" || rolle === "einrichtungsleitung";
+  // Standort-Zuweisung ist ein eigenes Recht (ROLLEN_MIT_STANDORT_ZUWEISEN),
+  // faellt hier aber mit darfAnlegen zusammen -- gleiches Rollenpaar.
+  const darfStandorteZuweisen = darfAnlegen;
 
   function laden() {
     api.benutzerListe().then(setBenutzer).catch((err) => setFehler(err.message));
+    // Liefert bereits nur die eigenen erlaubten Standorte (siehe
+    // StandortService.findeAlle) -- eine Einrichtungsleitung sieht hier von
+    // selbst nur das, was sie auch zuweisen darf.
+    if (darfStandorteZuweisen) {
+      api.standorteListe().then(setStandorte).catch(() => {});
+    }
   }
 
   useEffect(laden, []);
+
+  const standortName = (id: string) => standorte.find((s) => s.id === id)?.name ?? "?";
+
+  async function standorteSpeichern(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!standortZuweisung) return;
+    const form = new FormData(e.currentTarget);
+    const gewaehlteIds = form.getAll("standortIds").map(String);
+    setZuweisungFehler(null);
+    setWirdZugewiesen(true);
+    try {
+      await api.benutzerStandorteSetzen(standortZuweisung.id, gewaehlteIds);
+      setStandortZuweisung(null);
+      laden();
+    } catch (err) {
+      setZuweisungFehler(err instanceof Error ? err.message : "Standorte konnten nicht gespeichert werden.");
+    } finally {
+      setWirdZugewiesen(false);
+    }
+  }
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -161,13 +194,18 @@ export function Mitarbeitende() {
       ) : (
         <div
           className="zv-karten-liste"
-          style={{ "--zv-liste-spalten": darfAnlegen ? "1.3fr 1.6fr 1fr 1fr 1.6fr" : "1.3fr 1.6fr 1fr 1fr" } as CSSProperties}
+          style={
+            {
+              "--zv-liste-spalten": darfAnlegen ? "1.2fr 1.5fr 0.9fr 0.8fr 1.6fr 1.7fr" : "1.3fr 1.6fr 1fr 1fr",
+            } as CSSProperties
+          }
         >
           <div className="zv-liste-kopf">
             <span>Name</span>
             <span>E-Mail</span>
             <span>Rolle</span>
             <span>Status</span>
+            {darfAnlegen && <span>Standorte</span>}
             {darfAnlegen && <span></span>}
           </div>
           {benutzer.map((b) => (
@@ -183,16 +221,81 @@ export function Mitarbeitende() {
                 <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
               </span>
               {darfAnlegen && (
+                <span className="zv-liste-zelle" data-label="Standorte">
+                  {b.standortIds.length === 0 ? (
+                    <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                      Alle
+                    </span>
+                  ) : (
+                    b.standortIds.map((id) => (
+                      <span key={id} className="zv-pill" style={{ marginRight: 4 }}>
+                        {standortName(id)}
+                      </span>
+                    ))
+                  )}
+                </span>
+              )}
+              {darfAnlegen && (
                 <span className="zv-liste-zelle-aktionen">
                   <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
                     <IResetLink />
                     Passwort zurücksetzen
                   </button>
+                  {darfStandorteZuweisen && b.rolle === "betreuer" && (
+                    <button
+                      className="zv-link-btn"
+                      onClick={() => {
+                        setZuweisungFehler(null);
+                        setStandortZuweisung(b);
+                      }}
+                    >
+                      <IStandort />
+                      Standorte zuweisen
+                    </button>
+                  )}
                 </span>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {standortZuweisung && (
+        <Modal titel={`Standorte zuweisen — ${standortZuweisung.name}`} onClose={() => setStandortZuweisung(null)}>
+          <form onSubmit={standorteSpeichern}>
+            {zuweisungFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {zuweisungFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ marginTop: 0 }}>
+              Ohne Auswahl sieht {standortZuweisung.name} weiterhin alle Standorte. Mit mindestens einem Haken ist
+              die Ansicht auf genau diese Standorte begrenzt.
+            </p>
+            {standorte.length === 0 ? (
+              <p className="zv-sub">Keine Standorte verfügbar.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {standorte.map((s) => (
+                  <label key={s.id} className="zv-checkbox-zeile">
+                    <input
+                      type="checkbox"
+                      name="standortIds"
+                      value={s.id}
+                      defaultChecked={standortZuweisung.standortIds.includes(s.id)}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdZugewiesen} style={{ marginTop: 20 }}>
+              <ISpeichern />
+              {wirdZugewiesen ? "Speichert…" : "Speichern"}
+            </button>
+          </form>
+        </Modal>
       )}
     </div>
   );

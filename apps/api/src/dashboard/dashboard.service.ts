@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { ermittleErlaubteStandortIds, klientStandortBedingung } from "../common/standort-restriction";
+import { ermittleErlaubteStandortIds, klientStandortBedingung, standortIdBedingung } from "../common/standort-restriction";
 import { isoWoche } from "../common/iso-woche";
 
 /**
@@ -29,6 +29,7 @@ export interface DashboardDto {
   zimmer: { frei: number; gesamt: number; standorte: number };
   hzlWoche: { bezahlt: number; gesamt: number; isoJahr: number; isoWoche: number };
   offeneRechnungen: { anzahl: number; summeCent: number };
+  offeneStornoantraege: { anzahl: number };
   mitarbeitende: { aktiv: number; gesamt: number; ausstehendeResets: number };
   kostenuebernahmenBaldEndend: {
     klientId: string;
@@ -63,10 +64,19 @@ export class DashboardService {
       const zimmer = await this.zimmerFrei(client, erlaubteStandorte);
       const hzlWoche = await this.hzlWoche(client, erlaubteStandorte);
       const offeneRechnungen = await this.offeneRechnungen(client, erlaubteStandorte);
+      const offeneStornoantraege = await this.offeneStornoantraege(client, erlaubteStandorte);
       const mitarbeitende = await this.mitarbeitende(client, erlaubteStandorte);
       const kostenuebernahmenBaldEndend = await this.kostenuebernahmenBaldEndend(client, erlaubteStandorte);
       const klientenOhneTagesbericht = await this.klientenOhneTagesbericht(client, erlaubteStandorte);
-      return { zimmer, hzlWoche, offeneRechnungen, mitarbeitende, kostenuebernahmenBaldEndend, klientenOhneTagesbericht };
+      return {
+        zimmer,
+        hzlWoche,
+        offeneRechnungen,
+        offeneStornoantraege,
+        mitarbeitende,
+        kostenuebernahmenBaldEndend,
+        klientenOhneTagesbericht,
+      };
     });
   }
 
@@ -130,6 +140,29 @@ export class DashboardService {
     );
     const r = rows[0];
     return { anzahl: Number(r.anzahl), summeCent: Number(r.summe_cent) };
+  }
+
+  /**
+   * Zaehlt Antraege auf Standort-Buchungen ODER Klienten-Buchungen -- eine
+   * kassenbuchung hat immer genau eins von beiden (siehe Migration 0030),
+   * dieselbe Bedingung wie in kassenbuchung.service.ts::findeAlle().
+   */
+  private async offeneStornoantraege(client: PoolClient, erlaubteStandorte: string[] | null) {
+    const params: unknown[] = [];
+    const klientBed = klientStandortBedingung(erlaubteStandorte, "k", params);
+    const standortBed = standortIdBedingung(erlaubteStandorte, "b.standort_id", params);
+    const { rows } = await client.query(
+      `
+      SELECT count(*) AS anzahl
+      FROM kassenbuchung_stornoantrag sa
+      JOIN kassenbuchung b ON b.id = sa.kassenbuchung_id
+      LEFT JOIN klient k ON k.id = b.klient_id
+      WHERE sa.status = 'beantragt'
+        AND ((b.klient_id IS NOT NULL AND ${klientBed}) OR (b.standort_id IS NOT NULL AND ${standortBed}))
+      `,
+      params
+    );
+    return { anzahl: Number(rows[0].anzahl) };
   }
 
   /**

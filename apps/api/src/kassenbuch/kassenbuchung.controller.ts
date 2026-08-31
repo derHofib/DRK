@@ -31,8 +31,13 @@ const anlegenSchema = z
     message: "HZL ist ausschließlich für einen einzelnen Klienten möglich.",
   });
 
-const stornierenSchema = z.object({
+const stornoBeantragenSchema = z.object({
   grund: z.string().min(1),
+});
+
+const stornoEntscheidenSchema = z.object({
+  entscheidung: z.enum(["genehmigt", "abgelehnt"]),
+  grund: z.string().min(1).optional(),
 });
 
 const wochenuebersichtSchema = z.object({
@@ -61,10 +66,16 @@ export class KassenbuchungController {
     return this.kassenbuch.anlegen(anlegenSchema.parse(body));
   }
 
-  @Patch(":id/stornieren")
-  async stornieren(@Param("id") id: string, @Body() body: unknown) {
-    const { grund } = stornierenSchema.parse(body);
-    return this.kassenbuch.stornieren(id, grund);
+  @Post(":id/storno-antrag")
+  async stornoBeantragen(@Param("id") id: string, @Body() body: unknown) {
+    const { grund } = stornoBeantragenSchema.parse(body);
+    return this.kassenbuch.stornoBeantragen(id, grund);
+  }
+
+  @Patch("storno-antraege/:antragId")
+  async stornoEntscheiden(@Param("antragId") antragId: string, @Body() body: unknown) {
+    const { entscheidung, grund } = stornoEntscheidenSchema.parse(body);
+    return this.kassenbuch.stornoEntscheiden(antragId, entscheidung, grund);
   }
 
   @Get(":id/unterschrift")
