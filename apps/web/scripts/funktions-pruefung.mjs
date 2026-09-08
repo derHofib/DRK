@@ -9,6 +9,8 @@
  *   4 Akzentfarbe: live, gespeichert, ueber Neuladen, ueber Benutzer
  *     hinweg -- und 403 fuer Rollen ohne Branding-Recht
  *   5 Kein horizontaler Ueberlauf bei 390px, mobile Navigation intakt
+ *   6 Sammelmenue ("Mehr", Phase 8): oeffnen, Zieleintrag anklicken,
+ *     Route wechselt, Menue schliesst sich, Fokus liegt sinnvoll
  *
  * Voraussetzung: Dev-Anmeldedaten (siehe Aufrufparameter unten). Bewusst
  * kein Bestandteil der CI -- dort laeuft design-pruefung.mjs, die ohne
@@ -96,7 +98,33 @@ async function anmelden(page, email = LEITUNG) {
   await page.fill("#email", email);
   await page.fill("#passwort", PW);
   await page.click('button[type="submit"]');
-  await page.waitForSelector(".zv-tabbar-app", { timeout: 10000 });
+  // NICHT auf .zv-tabbar-app warten: seit der Sidebar (Phase 7) ist die per
+  // CSS display:none oberhalb von 640px -- ein Warten auf "visible" haengt
+  // dort auf ewig. .zv-content ist unabhaengig von der Fensterbreite immer
+  // da, sobald die Anmeldung durch ist.
+  await page.waitForSelector(".zv-content", { timeout: 10000 });
+}
+
+/**
+ * Funktioniert unabhaengig von der Fensterbreite: die Desktop-Sidebar
+ * zeigt immer alle Reiter direkt (kein Sammelmenue-Konzept dort). Auf der
+ * mobilen Reiterleiste liegen seit Phase 8 nur vier Reiter direkt, der Rest
+ * (Dashboard/Zimmer/Mitarbeitende/Einstellungen) im Sammelmenue ("Mehr").
+ */
+async function reiterWaehlen(page, label) {
+  const sidebarEintrag = page.locator(`.zv-sidebar-nav button:has-text("${label}")`);
+  if (await sidebarEintrag.isVisible().catch(() => false)) {
+    await sidebarEintrag.click();
+    return;
+  }
+  const direkt = page.locator(`.zv-tabbar-app button:has-text("${label}")`);
+  if (await direkt.isVisible().catch(() => false)) {
+    await direkt.click();
+    return;
+  }
+  await page.click('.zv-tabbar-app button:has-text("Mehr")');
+  await page.waitForSelector("#zv-sammelmenue-panel");
+  await page.click(`#zv-sammelmenue-panel button:has-text("${label}")`);
 }
 
 // ---------------------------------------------------------------- 1
@@ -105,10 +133,13 @@ console.log("\n1) Anmeldung und Grundgeruest");
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
-  ok(await page.locator(".zv-tabbar-app button").count() === 5, "Hauptnavigation hat 5 Reiter");
+  // Vier direkt sichtbare Reiter + der "Mehr"-Knopf selbst -- seit Phase 8
+  // (Sammelmenue), siehe Shell.tsx/REITER_MOBIL_SICHTBAR.
+  ok(await page.locator(".zv-tabbar-app button").count() === 5, "Mobile Reiterleiste hat 4 Reiter + 'Mehr'");
   const reiter = await page.locator(".zv-tabbar-app button").allInnerTexts();
-  ok(reiter.includes("Einstellungen"), `Reiter "Einstellungen" vorhanden (${reiter.join(", ")})`);
-  ok(!reiter.includes("Sicherheit"), "Reiter \"Sicherheit\" ist aufgegangen, nicht mehr eigenstaendig");
+  ok(reiter.includes("Aufgaben"), `Reiter "Aufgaben" direkt sichtbar (${reiter.join(", ")})`);
+  ok(reiter.includes("Mehr"), `Sammelmenue-Knopf "Mehr" vorhanden (${reiter.join(", ")})`);
+  ok(!reiter.includes("Einstellungen"), "Reiter \"Einstellungen\" ist ins Sammelmenue gewandert, nicht mehr direkt sichtbar");
   ok(await page.locator(".zv-tabbar-app svg").count() >= 5, "Jeder Reiter traegt ein Icon");
   await ctx.close();
 }
@@ -120,8 +151,14 @@ console.log("\n2) Theme-Umschalter kippt wirklich etwas");
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
   const vorher = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await page.click(".zv-topbar .zv-icon-btn");   // system -> hell
-  await page.click(".zv-topbar .zv-icon-btn");   // hell   -> dunkel
+  // ThemeToggle sitzt zweimal im DOM (Sidebar UND mobile Topbar, siehe
+  // Shell.tsx) -- CSS blendet je nach Breite eine der beiden aus. ":visible"
+  // trifft die tatsaechlich sichtbare, ".zv-icon-btn" allein waere nicht
+  // eindeutig genug (die Sidebar hat noch den Einklappen-Knopf mit
+  // derselben Klasse).
+  const themeKnopf = page.locator('[aria-label^="Design:"]:visible');
+  await themeKnopf.click(); // system -> hell
+  await themeKnopf.click(); // hell   -> dunkel
   await page.waitForTimeout(300);
   const nachher = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const attr = await page.evaluate(() => document.documentElement.dataset.theme);
@@ -161,7 +198,7 @@ console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
-  await page.click('.zv-tabbar-app button:has-text("Einstellungen")');
+  await reiterWaehlen(page, "Einstellungen");
   await page.waitForSelector(".zv-swatch-grid", { timeout: 5000 });
 
   const knopfFarbe = () => page.evaluate(() => {
@@ -193,7 +230,7 @@ console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
   ok(true, "Speichern meldet Erfolg");
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.click('.zv-tabbar-app button:has-text("Einstellungen")');
+  await reiterWaehlen(page, "Einstellungen");
   await page.waitForSelector(".zv-swatch-grid");
   const nachReload = await knopfFarbe();
   ok(nachReload === nachAuswahl, `Farbe ueberlebt das Neuladen (${nachReload})`);
@@ -217,7 +254,7 @@ console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
      `(h=${andererNutzer}, erwartet ${erwarteterFarbton} von "${zielFarbe}")`);
 
   // ... und darf sie NICHT aendern
-  await page2.click('.zv-tabbar-app button:has-text("Einstellungen")');
+  await reiterWaehlen(page2, "Einstellungen");
   await page2.waitForTimeout(500);
   const hatFarbwahl = await page2.locator(".zv-swatch-grid").count();
   ok(hatFarbwahl === 0, "Bezugsbetreuung bekommt den Farbabschnitt gar nicht erst angeboten");
@@ -244,8 +281,10 @@ console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
     await anmelden(page, LEITUNG);
     await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
 
-    for (const reiter of ["Zimmer", "Klienten", "Kassenbuch", "Mitarbeitende", "Einstellungen"]) {
-      await page.click(`.zv-tabbar-app button:has-text("${reiter}")`);
+    // Zimmer/Mitarbeitende/Einstellungen liegen seit Phase 8 im
+    // Sammelmenue -- reiterWaehlen() oeffnet es bei Bedarf automatisch.
+    for (const reiter of ["Zimmer", "Klienten", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
+      await reiterWaehlen(page, reiter);
       await page.waitForTimeout(250);
       const ueberlauf = await page.evaluate(() =>
         document.documentElement.scrollWidth > document.documentElement.clientWidth);
@@ -274,6 +313,46 @@ console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
     }
     await ctx.close();
   }
+}
+
+// ---------------------------------------------------------------- 6
+console.log("\n6) Sammelmenue (\"Mehr\"): oeffnen, waehlen, schliessen, Fokus");
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await anmelden(page, LEITUNG);
+
+  const mehrKnopf = page.locator('.zv-tabbar-app button:has-text("Mehr")');
+  ok((await mehrKnopf.getAttribute("aria-expanded")) === "false", "Mehr-Knopf startet mit aria-expanded=false");
+
+  await mehrKnopf.click();
+  await page.waitForSelector("#zv-sammelmenue-panel");
+  ok((await mehrKnopf.getAttribute("aria-expanded")) === "true", "aria-expanded wird beim Öffnen true");
+  ok(
+    (await mehrKnopf.getAttribute("aria-controls")) === "zv-sammelmenue-panel",
+    "aria-controls verweist auf das Panel"
+  );
+
+  // Zieleintrag anklicken -> Route wechselt, Menue ist zu.
+  await page.click('#zv-sammelmenue-panel button:has-text("Dashboard")');
+  await page.waitForTimeout(300);
+  ok((await page.locator("#zv-sammelmenue-panel").count()) === 0, "Panel ist nach Auswahl geschlossen");
+  ok(await page.locator("h2:has-text('Dashboard')").isVisible(), "Route ist zu Dashboard gewechselt");
+  ok(
+    (await mehrKnopf.getAttribute("class"))?.includes("active") ?? false,
+    "Mehr-Knopf zeigt aktiven Zustand, wenn die aktuelle Route im Sammelmenue liegt"
+  );
+
+  // Escape schliesst und gibt den Fokus zurueck auf den Toggle-Knopf.
+  await mehrKnopf.click();
+  await page.waitForSelector("#zv-sammelmenue-panel");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  ok((await page.locator("#zv-sammelmenue-panel").count()) === 0, "Escape schließt das Panel");
+  const fokussiertesLabel = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  ok(fokussiertesLabel === "Mehr", `Fokus liegt nach Escape auf dem Mehr-Knopf (${fokussiertesLabel})`);
+
+  await ctx.close();
 }
 
 await browser.close();

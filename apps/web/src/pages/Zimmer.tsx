@@ -1,6 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import type {
+  AufgabeDto,
+  AufgabePrioritaet,
   BelegungsverlaufEintragDto,
+  BenutzerListEintragDto,
   KlientListEintragDto,
   OffenerKapazitaetsantragDto,
   StandortDto,
@@ -8,12 +11,14 @@ import type {
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { BENUTZER_ROLLE_LABEL, ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api, tokenBenutzerId, tokenRolle } from "../api/client";
+import { AufgabeZeile } from "../components/AufgabeZeile";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
   IAblehnen,
+  IAufgaben,
   IAufklappen,
   IAuszug,
   IBearbeiten,
@@ -58,6 +63,7 @@ export function Zimmer() {
   // zuweisen/Auszug eintragen/Belegungsverlauf bleiben davon unberuehrt --
   // das ist Tagesgeschaeft, keine Stammdatenpflege.
   const rolleZimmer = tokenRolle();
+  const aktuelleBenutzerId = tokenBenutzerId();
   const darfStammdatenBearbeiten = rolleZimmer === "bereichsleitung" || rolleZimmer === "einrichtungsleitung";
 
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
@@ -85,8 +91,18 @@ export function Zimmer() {
   const [kapazitaetZimmer, setKapazitaetZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [kapazitaetFehler, setKapazitaetFehler] = useState<string | null>(null);
 
+  const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
+  const [aufgabenAnzahl, setAufgabenAnzahl] = useState<Record<string, number>>({});
+  const [offenesAufgabenZimmer, setOffenesAufgabenZimmer] = useState<string | null>(null);
+  const [aufgabenImZimmer, setAufgabenImZimmer] = useState<AufgabeDto[]>([]);
+  const [aufgabeFormFehler, setAufgabeFormFehler] = useState<string | null>(null);
+
   function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
+  }
+
+  function ladeAufgabenAnzahl() {
+    api.aufgabenAnzahlOffen().then((a) => setAufgabenAnzahl(a.jeZimmer)).catch(() => {});
   }
 
   function ladeKlienten() {
@@ -114,6 +130,8 @@ export function Zimmer() {
     ladeZimmer();
     ladeStandorte();
     ladeKlienten();
+    ladeAufgabenAnzahl();
+    api.benutzerListe().then(setBenutzerListe).catch(() => {});
   }, []);
 
   function formularOeffnen() {
@@ -279,6 +297,75 @@ export function Zimmer() {
     }
   }
 
+  async function ladeAufgabenFuerZimmer(zimmerId: string) {
+    try {
+      setAufgabenImZimmer(await api.aufgabenListe({ zimmerId }));
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Aufgaben konnten nicht geladen werden.");
+    }
+  }
+
+  async function aufgabenAnzeigen(zimmerId: string) {
+    if (offenesAufgabenZimmer === zimmerId) {
+      setOffenesAufgabenZimmer(null);
+      return;
+    }
+    setOffenesAufgabenZimmer(zimmerId);
+    await ladeAufgabenFuerZimmer(zimmerId);
+  }
+
+  async function aufgabeImZimmerAnlegen(e: FormEvent<HTMLFormElement>, zimmerId: string) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    const titel = String(form.get("titel") ?? "").trim();
+    if (!titel) return;
+    setAufgabeFormFehler(null);
+    try {
+      await api.aufgabeAnlegen({
+        titel,
+        zimmerId,
+        prioritaet: form.get("prioritaet") as AufgabePrioritaet,
+        faelligAm: String(form.get("faelligAm") ?? "") || undefined,
+        zugewiesenAn: String(form.get("zugewiesenAn") ?? "") || undefined,
+      });
+      formElement.reset();
+      await ladeAufgabenFuerZimmer(zimmerId);
+      ladeAufgabenAnzahl();
+    } catch (err) {
+      setAufgabeFormFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht angelegt werden.");
+    }
+  }
+
+  async function aufgabeErledigen(zimmerId: string, aufgabeId: string) {
+    try {
+      await api.aufgabeErledigen(aufgabeId);
+      await ladeAufgabenFuerZimmer(zimmerId);
+      ladeAufgabenAnzahl();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht erledigt werden.");
+    }
+  }
+
+  async function aufgabeZuweisenAendern(zimmerId: string, aufgabeId: string, zugewiesenAn: string | null) {
+    try {
+      await api.aufgabeAktualisieren(aufgabeId, { zugewiesenAn });
+      await ladeAufgabenFuerZimmer(zimmerId);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Zuweisung konnte nicht geändert werden.");
+    }
+  }
+
+  async function aufgabeImZimmerLoeschen(zimmerId: string, aufgabeId: string) {
+    try {
+      await api.aufgabeLoeschen(aufgabeId);
+      await ladeAufgabenFuerZimmer(zimmerId);
+      ladeAufgabenAnzahl();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht gelöscht werden.");
+    }
+  }
+
   const gruppen = zimmer.reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
     (acc[z.standortName] ??= []).push(z);
     return acc;
@@ -357,9 +444,17 @@ export function Zimmer() {
                   <div key={z.id} className="zv-room-card">
                     <div className="zv-room-head">
                       <span className="zv-room-nummer">{z.nummer}</span>
-                      <span className={`zv-pill zv-pill-${z.status}`}>
-                        <StatusIcon />
-                        {ZIMMERSTATUS_LABEL[z.status]}
+                      <span style={{ display: "flex", gap: 6 }}>
+                        {!!aufgabenAnzahl[z.id] && (
+                          <span className="zv-pill zv-pill-offen" title="Offene Zimmer-Aufgaben">
+                            <IAufgaben />
+                            {aufgabenAnzahl[z.id]}
+                          </span>
+                        )}
+                        <span className={`zv-pill zv-pill-${z.status}`}>
+                          <StatusIcon />
+                          {ZIMMERSTATUS_LABEL[z.status]}
+                        </span>
                       </span>
                     </div>
                     <p className="zv-sub-inline" style={{ marginLeft: 0 }}>
@@ -421,6 +516,19 @@ export function Zimmer() {
                     )}
 
                     <div className="zv-vorschau-zeile">
+                      <button
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setAufgabeFormFehler(null);
+                          aufgabenAnzeigen(z.id);
+                        }}
+                      >
+                        {offenesAufgabenZimmer === z.id ? <IZuklappen /> : <IAufgaben />}
+                        {offenesAufgabenZimmer === z.id
+                          ? "Aufgaben ausblenden"
+                          : `Aufgaben${aufgabenAnzahl[z.id] ? ` (${aufgabenAnzahl[z.id]})` : ""}`}
+                        {offenesAufgabenZimmer !== z.id && <IAufklappen />}
+                      </button>
                       <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
                         {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
                         {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
@@ -481,6 +589,59 @@ export function Zimmer() {
                         ))}
                         {verlauf.length === 0 && <li className="zv-sub-inline">Noch keine Belegung erfasst.</li>}
                       </ul>
+                    )}
+
+                    {offenesAufgabenZimmer === z.id && (
+                      <div style={{ marginTop: "var(--zv-space-2)" }}>
+                        {aufgabeFormFehler && (
+                          <div className="zv-hinweis zv-hinweis-fehler">
+                            <IFehler />
+                            {aufgabeFormFehler}
+                          </div>
+                        )}
+                        {aufgabenImZimmer.length === 0 ? (
+                          <p className="zv-sub-inline">Noch keine Aufgaben für dieses Zimmer.</p>
+                        ) : (
+                          <div className="zv-karten-liste">
+                            {aufgabenImZimmer.map((a) => (
+                              <AufgabeZeile
+                                key={a.id}
+                                aufgabe={a}
+                                benutzerListe={benutzerListe}
+                                aktuelleBenutzerId={aktuelleBenutzerId}
+                                aktuelleRolle={rolleZimmer}
+                                onErledigen={() => aufgabeErledigen(z.id, a.id)}
+                                onZuweisenAendern={(bid) => aufgabeZuweisenAendern(z.id, a.id, bid)}
+                                onLoeschen={() => aufgabeImZimmerLoeschen(z.id, a.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <form
+                          onSubmit={(e) => aufgabeImZimmerAnlegen(e, z.id)}
+                          style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "var(--zv-space-2)" }}
+                        >
+                          <input name="titel" placeholder="Neue Aufgabe, z. B. Fenstergriff defekt" required style={{ flex: "1 1 200px" }} />
+                          <select name="prioritaet" defaultValue="normal" aria-label="Priorität">
+                            <option value="niedrig">Niedrig</option>
+                            <option value="normal">Normal</option>
+                            <option value="hoch">Hoch</option>
+                          </select>
+                          <input name="faelligAm" type="date" aria-label="Fälligkeit" />
+                          <select name="zugewiesenAn" defaultValue="" aria-label="Zuweisen an">
+                            <option value="">Niemand</option>
+                            {benutzerListe.map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="zv-btn zv-btn-klein" type="submit">
+                            <INeu />
+                            Anlegen
+                          </button>
+                        </form>
+                      </div>
                     )}
                   </div>
                   );

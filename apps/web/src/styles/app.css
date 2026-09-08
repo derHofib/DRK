@@ -1512,14 +1512,45 @@
     flex: 1 1 auto;
     overflow-y: auto;
     padding: var(--zv-space-4);
-    /* Reihenfolge im DOM ist topbar/tabbar/content (siehe Shell.tsx) --
-       hier visuell hinter die Navigation gestellt, ohne die Quellreihenfolge
-       anzufassen. */
+    /* Reihenfolge im DOM ist topbar/Sammelmenue/tabbar/content (siehe
+       Shell.tsx) -- hier per "order" visuell hinter die Navigation
+       gestellt, ohne die Quellreihenfolge anzufassen. */
     order: 1;
   }
 
-  .zv-tabbar-app {
+  /* Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. Sitzt
+     als ganz normales Flex-Kind zwischen Inhalt und Reiterleiste in
+     derselben 100dvh-Spalte -- bewusst KEIN position:fixed, aus demselben
+     Grund wie bei .zv-tabbar-app selbst (Layout- vs. visueller Viewport
+     auf echten Mobilbrowsern, siehe deren Kommentar unten). */
+  .zv-sammelmenue {
     order: 2;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--zv-surface);
+    border-top: 1px solid var(--zv-border);
+  }
+
+  .zv-sammelmenue button {
+    display: flex;
+    align-items: center;
+    gap: var(--zv-space-2);
+    min-height: 44px;
+    padding: var(--zv-space-2) var(--zv-space-4);
+    font-size: var(--zv-text-m);
+    text-align: left;
+    border-bottom: 1px solid var(--zv-border);
+  }
+
+  .zv-sammelmenue button.active {
+    color: var(--zv-accent-strong);
+    font-weight: var(--zv-weight-semibold);
+    background: var(--zv-accent-soft);
+  }
+
+  .zv-tabbar-app {
+    order: 3;
     flex-shrink: 0;
     justify-content: space-around;
     padding: 0;

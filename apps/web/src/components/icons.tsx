@@ -48,11 +48,14 @@ import {
   LayoutDashboard,
   LayoutList,
   Link2,
+  ListChecks,
+  ListTodo,
   LogIn,
   LogOut,
   MapPin,
   MapPinOff,
   Maximize2,
+  Menu,
   Minimize2,
   Monitor,
   Moon,
@@ -70,6 +73,9 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  SignalHigh,
+  SignalLow,
+  SignalMedium,
   SlidersHorizontal,
   Sun,
   Tag,
@@ -118,6 +124,9 @@ export const IKassenbuch = baue(Wallet);
 export const IMitarbeitende = baue(IdCard);
 export const ITagesberichte = baue(NotebookPen);
 export const IEinstellungen = baue(Settings);
+export const IAufgaben = baue(ListChecks);
+/** Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. */
+export const IMehr = baue(Menu);
 
 /* Unterreiter */
 export const IUebersicht = baue(LayoutList);
@@ -158,6 +167,16 @@ export const IEinklappen = baue(PanelLeftClose);
 export const IAusklappen = baue(PanelLeftOpen);
 export const IAnpassen = baue(SlidersHorizontal);
 export const IKapazitaet = baue(BedDouble);
+
+/**
+ * Prioritaet: Signalstaerken-Symbole statt reiner Farbe -- WCAG 1.4.1
+ * verlangt, dass Information nicht ausschliesslich ueber Farbe vermittelt
+ * wird. Drei unterschiedliche Formen (ein/zwei/drei Balken) bleiben auch
+ * fuer Personen mit Farbfehlsichtigkeit unterscheidbar.
+ */
+export const IPrioritaetHoch = baue(SignalHigh);
+export const IPrioritaetNormal = baue(SignalMedium);
+export const IPrioritaetNiedrig = baue(SignalLow);
 
 /* Richtungen */
 export const IAufklappen = baue(ChevronDown);
@@ -206,6 +225,7 @@ export const ILeerKostenuebernahmen = baueLeer(FileClock);
 export const ILeerVerlauf = baueLeer(History);
 export const ILeerStandorte = baueLeer(MapPinOff);
 export const ILeerTagesberichte = baueLeer(BookX);
+export const ILeerAufgaben = baueLeer(ListTodo);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);

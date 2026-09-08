@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MandantDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
+  IAufgaben,
   IAusklappen,
   IDashboard,
   IEinklappen,
   IEinstellungen,
   IKassenbuch,
   IKlienten,
+  IMehr,
   IMitarbeitende,
   ITagesberichte,
   ITraeger,
@@ -23,22 +25,55 @@ import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import { Tagesberichte } from "./Tagesberichte";
+import { Aufgaben } from "./Aufgaben";
 import { Einstellungen } from "./Einstellungen";
 
-type Tab = "dashboard" | "mitarbeitende" | "zimmer" | "klienten" | "kassenbuch" | "tagesberichte" | "einstellungen";
+type Tab =
+  | "dashboard"
+  | "mitarbeitende"
+  | "zimmer"
+  | "klienten"
+  | "kassenbuch"
+  | "tagesberichte"
+  | "aufgaben"
+  | "einstellungen";
 
+/**
+ * Reihenfolge ist die EINE Quelle fuer Sidebar (Desktop, zeigt immer alle)
+ * UND mobile Reiterleiste (zeigt nur die ersten vier direkt, der Rest
+ * wandert dort ins Sammelmenue) -- siehe SICHTBAR_MOBIL/MEHR_MOBIL unten.
+ * Kriterium fuer die Reihenfolge: Aufrufhaeufigkeit im Tagesbetrieb, nicht
+ * Wichtigkeit. Klienten/Tagesberichte/Kassenbuch/Aufgaben sind das
+ * Tagesgeschaeft einer Schicht; Dashboard ist eher "einmal pro Schicht
+ * ansehen", Zimmer aendert sich nur bei Ein-/Auszug oder Bauzustand,
+ * Mitarbeitende/Einstellungen sind administrativ und selten.
+ */
 const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
+  { wert: "klienten", label: "Klienten", icon: IKlienten },
+  { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
+  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
+  { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
   { wert: "dashboard", label: "Dashboard", icon: IDashboard },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
-  { wert: "klienten", label: "Klienten", icon: IKlienten },
-  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
-  { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
 
+/** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
+const MOBIL_SICHTBAR_ANZAHL = 4;
+const REITER_MOBIL_SICHTBAR = REITER.slice(0, MOBIL_SICHTBAR_ANZAHL);
+const REITER_MOBIL_MEHR = REITER.slice(MOBIL_SICHTBAR_ANZAHL);
+
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
-const BREITE_REITER = new Set<Tab>(["dashboard", "zimmer", "kassenbuch", "klienten", "mitarbeitende", "tagesberichte"]);
+const BREITE_REITER = new Set<Tab>([
+  "dashboard",
+  "zimmer",
+  "kassenbuch",
+  "klienten",
+  "mitarbeitende",
+  "tagesberichte",
+  "aufgaben",
+]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
 const SIDEBAR_HOVER_SPEICHER = "zimmerakte_sidebar_hover_ausklappen";
@@ -73,6 +108,64 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
 
   useEffect(() => speichereBoolean(SIDEBAR_SPEICHER, eingeklappt), [eingeklappt]);
   useEffect(() => speichereBoolean(SIDEBAR_HOVER_SPEICHER, hoverAusklappen), [hoverAusklappen]);
+
+  // Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe app.css. Die
+  // Sidebar (Desktop) kennt dieses Konzept nicht, sie zeigt immer alle
+  // Eintraege direkt.
+  const [mehrOffen, setMehrOffen] = useState(false);
+  const mehrKnopfRef = useRef<HTMLButtonElement>(null);
+  const mehrPanelRef = useRef<HTMLDivElement>(null);
+  const aktuelleRouteImMehr = REITER_MOBIL_MEHR.some((r) => r.wert === tab);
+
+  function mehrSchliessen() {
+    setMehrOffen(false);
+    mehrKnopfRef.current?.focus();
+  }
+
+  function tabWaehlen(wert: Tab) {
+    setTab(wert);
+    if (mehrOffen) mehrSchliessen();
+  }
+
+  // Escape schliesst, Klick ausserhalb schliesst, Tab haelt den Fokus im
+  // Panel gefangen, solange es offen ist -- alles nur aktiv, waehrend
+  // mehrOffen true ist, damit ausserhalb davon kein Listener herumhaengt.
+  useEffect(() => {
+    if (!mehrOffen) return;
+    mehrPanelRef.current?.querySelector<HTMLElement>("button")?.focus();
+
+    function beiEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") mehrSchliessen();
+    }
+    function beiAussenklick(e: MouseEvent) {
+      const ziel = e.target as Node;
+      if (mehrPanelRef.current?.contains(ziel) || mehrKnopfRef.current?.contains(ziel)) return;
+      setMehrOffen(false);
+    }
+    function beiTab(e: KeyboardEvent) {
+      if (e.key !== "Tab" || !mehrPanelRef.current) return;
+      const fokussierbar = mehrPanelRef.current.querySelectorAll<HTMLElement>("button");
+      if (fokussierbar.length === 0) return;
+      const erster = fokussierbar[0];
+      const letzter = fokussierbar[fokussierbar.length - 1];
+      if (e.shiftKey && document.activeElement === erster) {
+        e.preventDefault();
+        letzter.focus();
+      } else if (!e.shiftKey && document.activeElement === letzter) {
+        e.preventDefault();
+        erster.focus();
+      }
+    }
+    document.addEventListener("keydown", beiEscape);
+    document.addEventListener("mousedown", beiAussenklick);
+    document.addEventListener("keydown", beiTab);
+    return () => {
+      document.removeEventListener("keydown", beiEscape);
+      document.removeEventListener("mousedown", beiAussenklick);
+      document.removeEventListener("keydown", beiTab);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mehrOffen]);
 
   useEffect(() => {
     api
@@ -130,7 +223,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
               <button
                 key={wert}
                 className={tab === wert ? "active" : ""}
-                onClick={() => setTab(wert)}
+                onClick={() => tabWaehlen(wert)}
                 aria-current={tab === wert ? "page" : undefined}
                 title={label}
               >
@@ -186,18 +279,52 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         </div>
 
+        {mehrOffen && (
+          <div
+            id="zv-sammelmenue-panel"
+            className="zv-sammelmenue"
+            ref={mehrPanelRef}
+            role="menu"
+            aria-label="Weitere Bereiche"
+          >
+            {REITER_MOBIL_MEHR.map(({ wert, label, icon: Icon }) => (
+              <button
+                key={wert}
+                role="menuitem"
+                className={tab === wert ? "active" : ""}
+                onClick={() => tabWaehlen(wert)}
+                aria-current={tab === wert ? "page" : undefined}
+              >
+                <Icon />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="zv-tabbar zv-tabbar-app">
-          {REITER.map(({ wert, label, icon: Icon }) => (
+          {REITER_MOBIL_SICHTBAR.map(({ wert, label, icon: Icon }) => (
             <button
               key={wert}
               className={tab === wert ? "active" : ""}
-              onClick={() => setTab(wert)}
+              onClick={() => tabWaehlen(wert)}
               aria-current={tab === wert ? "page" : undefined}
             >
               <Icon />
               {label}
             </button>
           ))}
+          <button
+            ref={mehrKnopfRef}
+            className={aktuelleRouteImMehr ? "active" : ""}
+            aria-expanded={mehrOffen}
+            aria-controls="zv-sammelmenue-panel"
+            aria-current={aktuelleRouteImMehr ? "page" : undefined}
+            onClick={() => setMehrOffen((v) => !v)}
+          >
+            <IMehr />
+            Mehr
+          </button>
         </div>
 
         <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
@@ -206,6 +333,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "klienten" && <Klienten />}
           {tab === "kassenbuch" && <Kassenbuch />}
           {tab === "tagesberichte" && <Tagesberichte />}
+          {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "einstellungen" && (
             <Einstellungen

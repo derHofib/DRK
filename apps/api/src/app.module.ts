@@ -15,6 +15,7 @@ import { KostenuebernahmeModule } from "./kostenuebernahmen/kostenuebernahme.mod
 import { RechnungModule } from "./rechnungen/rechnung.module";
 import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { AufgabeModule } from "./aufgaben/aufgabe.module";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     RechnungModule,
     TagesberichtModule,
     DashboardModule,
+    AufgabeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

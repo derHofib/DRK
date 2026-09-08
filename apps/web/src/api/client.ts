@@ -1,4 +1,7 @@
 import type {
+  AufgabeDto,
+  AufgabenAnzahlDto,
+  AufgabePrioritaet,
   BelegungsverlaufEintragDto,
   BenutzerListEintragDto,
   BenutzerRolle,
@@ -58,6 +61,27 @@ export function tokenRolle(): BenutzerRolle | null {
     const json = atob(nutzlast.replace(/-/g, "+").replace(/_/g, "/"));
     const rolle = JSON.parse(json)?.rolle;
     return typeof rolle === "string" ? (rolle as BenutzerRolle) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Gleiches Prinzip wie tokenRolle(): reiner Anzeige-Hinweis ohne
+ * Signaturpruefung (z.B. "ist diese Aufgabe mir zugewiesen?" in
+ * Aufgaben.tsx). Die Autoritaet bleibt der Server -- RLS und die
+ * Rollenpruefung in aufgabe.service.ts werten app.benutzer_id aus dem
+ * verifizierten JWT aus, nie diesen Wert hier.
+ */
+export function tokenBenutzerId(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const nutzlast = token.split(".")[1];
+    if (!nutzlast) return null;
+    const json = atob(nutzlast.replace(/-/g, "+").replace(/_/g, "/"));
+    const sub = JSON.parse(json)?.sub;
+    return typeof sub === "string" ? sub : null;
   } catch {
     return null;
   }
@@ -262,4 +286,46 @@ export const api = {
   tagesberichtDokumentUrl: (tagesberichtId: string, dokumentId: string) =>
     blobUrl(`/tagesberichte/${tagesberichtId}/dokumente/${dokumentId}`),
   tagsListe: () => request<TagDto[]>("/tags"),
+
+  aufgabenListe: (filter?: {
+    zimmerId?: string;
+    zugewiesenAn?: string;
+    nurEigene?: boolean;
+    offen?: boolean;
+    faelligBis?: string;
+    prioritaet?: AufgabePrioritaet;
+    sortierung?: "faelligkeit" | "prioritaet";
+  }) => {
+    const params = new URLSearchParams();
+    if (filter?.zimmerId) params.set("zimmerId", filter.zimmerId);
+    if (filter?.zugewiesenAn) params.set("zugewiesenAn", filter.zugewiesenAn);
+    if (filter?.nurEigene) params.set("nurEigene", "true");
+    if (filter?.offen !== undefined) params.set("offen", String(filter.offen));
+    if (filter?.faelligBis) params.set("faelligBis", filter.faelligBis);
+    if (filter?.prioritaet) params.set("prioritaet", filter.prioritaet);
+    if (filter?.sortierung) params.set("sortierung", filter.sortierung);
+    const qs = params.toString();
+    return request<AufgabeDto[]>(`/aufgaben${qs ? `?${qs}` : ""}`);
+  },
+  aufgabenAnzahlOffen: () => request<AufgabenAnzahlDto>("/aufgaben/anzahl-offen"),
+  aufgabeAnlegen: (payload: {
+    titel: string;
+    beschreibung?: string;
+    prioritaet?: AufgabePrioritaet;
+    faelligAm?: string;
+    zimmerId?: string;
+    zugewiesenAn?: string;
+  }) => request<AufgabeDto>("/aufgaben", { method: "POST", body: JSON.stringify(payload) }),
+  aufgabeAktualisieren: (
+    id: string,
+    payload: {
+      titel?: string;
+      beschreibung?: string | null;
+      faelligAm?: string | null;
+      prioritaet?: AufgabePrioritaet;
+      zugewiesenAn?: string | null;
+    }
+  ) => request<AufgabeDto>(`/aufgaben/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  aufgabeErledigen: (id: string) => request<AufgabeDto>(`/aufgaben/${id}/erledigen`, { method: "PATCH" }),
+  aufgabeLoeschen: (id: string) => request<{ ok: true }>(`/aufgaben/${id}`, { method: "DELETE" }),
 };

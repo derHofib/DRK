@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 7 (Designsystem)
+## Stand: Phase 8 (Aufgaben)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
@@ -296,9 +296,9 @@ Damit ist der ursprüngliche Phasenplan durch. Was jetzt noch fehlt, ist in
   und keine per Hand abgelegte Binärdatei — die Version hängt an der
   `pnpm-lock.yaml`.
 - **Navigation:** „Sicherheit" wurde zu „Einstellungen" und nimmt 2FA als
-  Unterbereich auf. Damit bleibt die Hauptnavigation bei fünf Einträgen —
-  ein sechster wäre auf 390 px nur 65 px breit, und „Kassenbuch" passt dort
-  nicht mehr hinein.
+  Unterbereich auf. Damit blieb die Hauptnavigation bei fünf Einträgen — ein
+  sechster wäre auf 390 px nur 65 px breit gewesen (Phase 8 löst das mit
+  einem Sammelmenü, siehe dort, als weitere Reiter dazukamen).
 
 **Zwei echte Fehler, die dabei nebenbei behoben wurden** (nachgerechnet,
 nicht geschätzt):
@@ -313,8 +313,93 @@ nicht geschätzt):
   3:1 verlangt — und weil die Felder dieselbe Flächenfarbe haben wie die
   Karte darunter, ist dieser Rand ihr einziges Erkennungsmerkmal.
 
+**Phase 8 — Aufgaben (Zimmer-Aufgaben und persönliche Aufgaben)**
+- **Ein Modell für zwei Fälle statt zwei Tabellen:** `aufgabe` trägt
+  `zimmer_id` und `zugewiesen_an` unabhängig voneinander nullable — alle
+  vier Kombinationen (Zimmer×Zuweisung je gesetzt/leer) sind gültig. Eine
+  Zimmer-Aufgabe ohne Zuweisung ist ein offener Posten, kein Fehlerzustand.
+- **Kein Statusfeld**, gleiches Prinzip wie bei `zimmer`/`belegung`: offen
+  ist `erledigt_am IS NULL`, abgeleitet statt gespeichert. Wiedereröffnen
+  ist bewusst nicht vorgesehen — würde es gebraucht, wäre das ein
+  mehrstufiger `aufgabe_statuswechsel` nach dem Muster von `rechnung`
+  (0014), keine nachträglich eingeführte Statusspalte.
+- **Bewusste Ausnahme vom Append-only-Muster:** anders als `kassenbuchung`
+  und `rechnung` erlaubt `aufgabe` UPDATE und DELETE uneingeschränkt.
+  Aufgaben sind Arbeitsorganisation, keine Buchführung — es gibt keine
+  Aufbewahrungspflicht für eine falsch getippte oder erledigte Aufgabe, und
+  eine wachsende Historie wäre hier reine Ablenkung vom eigentlichen Zweck
+  (was liegt gerade an).
+- **Drei Sichtbarkeitsebenen, zwei verschiedene Mechanismen.** Mandant
+  (RLS) und Person (RLS) sitzen in derselben Policy, weil beide nur Spalten
+  von `aufgabe` selbst gegen den Session-Kontext vergleichen —
+  `app.benutzer_id` steht in `DatabaseService.withTenant()` seit jeher
+  bereit, wurde bislang nur noch nie für eine Policy gebraucht:
+  ```sql
+  USING (
+    mandant_id = current_setting('app.mandant_id', true)::uuid
+    AND (
+      zimmer_id IS NOT NULL
+      OR erstellt_von = current_setting('app.benutzer_id', true)::uuid
+      OR zugewiesen_an = current_setting('app.benutzer_id', true)::uuid
+    )
+  )
+  ```
+  Standort (Ebene 2) bleibt dagegen im Service (`aufgabe.service.ts`): sie
+  braucht einen Join über `benutzer_standort`/`zimmer`, und „leere Liste vs.
+  keine Einschränkung" lässt sich laut dem bestehenden Kommentar in
+  `common/standort-restriction.ts` in RLS nicht sauber ausdrücken — exakt
+  der Grund, aus dem sie schon bei Zimmer/Klient im Service sitzt.
+- **Keine Anonymisierung für Aufgabentexte**, geprüft und bewusst
+  verworfen: der Belegungsverlauf-Kompromiss (Initialen für Rollen ohne
+  volles Recht) funktioniert nur, weil dort ein *strukturierter* Name
+  anonymisiert wird. Aufgabentext ist Freitext — ein Klientenname lässt
+  sich daraus nicht sauber herausschneiden. Wichtiger: es gibt keine Rolle,
+  die eine Zimmer-Aufgabe sehen, aber den darin genannten Klienten *nicht*
+  sehen dürfte. Der Schutz läuft vollständig über die drei
+  Sichtbarkeitsebenen.
+- **Rechte:** Anlegen ist für jede Rolle offen (Tagesgeschäft wie
+  Tagesberichte, keine Stammdatenpflege). Ändern/Erledigen/Löschen einer
+  fremden Aufgabe bleibt Ersteller:in, zugewiesener Person oder Leitung
+  vorbehalten — mit einer gezielten Ausnahme: jede Person, die eine Aufgabe
+  sehen darf, kann sich selbst zuweisen oder die eigene Zuweisung wieder
+  entfernen, auch ohne die übrigen Rechte, damit eine offene Zimmer-Aufgabe
+  sich jemand greifen kann.
+- **Navigation: Sammelmenü statt sechstem/siebtem Eintrag.** Die mobile
+  Reiterleiste zeigt nur die vier Reiter, die im Tagesbetrieb laufend
+  gebraucht werden (Klienten, Tagesberichte, Kassenbuch, Aufgaben); der
+  Rest (Dashboard, Zimmer, Mitarbeitende, Einstellungen) wandert hinter
+  einen „Mehr"-Knopf mit Panel — vollständig barrierefrei (`aria-expanded`/
+  `aria-controls`, Escape schließt, Fokusfalle solange offen, Fokus geht
+  beim Schließen zurück auf den Knopf). Bewusst ein **reines
+  Mobile-Muster**: die Desktop-Sidebar zeigt seit Phase 7 ohnehin immer
+  alle Einträge direkt, dort gibt es kein Platzproblem. Kein
+  `position: fixed` fürs Panel, gleiche Begründung wie bei der unteren
+  Navigation selbst (Layout- vs. visueller Viewport auf echten
+  Mobilbrowsern).
+- **Prioritätskennzeichnung nicht allein über Farbe** (WCAG 1.4.1): jede
+  der drei Stufen hat ein eigenes Signalstärke-Icon (`SignalHigh/-Medium/
+  -Low`) zusätzlich zur Pill-Farbe.
 
-## Was hier bewusst fehlt
+**Zwei echte Fehler, die dabei gefunden wurden:**
+- `COALESCE($4, 'normal')` beim Anlegen scheiterte an einer
+  Typzweideutigkeit zwischen dem `text`-Parameter und dem
+  `aufgabe_prioritaet`-Enum (`column "prioritaet" is of type
+  aufgabe_prioritaet but expression is of type text`) — behoben mit
+  explizitem Cast `$4::aufgabe_prioritaet`. Gefunden beim ersten echten
+  Testlauf der neuen Spec, nicht beim Schreiben vorhergesehen.
+- `scripts/funktions-pruefung.mjs` war seit der Sidebar (Phase 7) an zwei
+  Stellen unbemerkt kaputt: `anmelden()` wartete auf `.zv-tabbar-app`
+  („visible"), das ist aber oberhalb von 640 px per `display: none`
+  versteckt — jeder Lauf bei Desktop-Breite hing dort auf ewig. Derselbe
+  Fehler beim Theme-Umschalter-Klick (`.zv-topbar .zv-icon-btn`). Da das
+  Skript nicht Teil der CI ist (nur `design-pruefung.mjs` läuft dort,
+  siehe unten), ist das nie aufgefallen. Behoben, indem auf `.zv-content`
+  statt der mobilen Leiste gewartet wird und der Theme-Knopf über sein
+  `aria-label` mit `:visible` eindeutig angesprochen wird — beim
+  vollständigen Durchlauf (32 Prüfungen über alle sechs Abschnitte)
+  bestätigt.
+
+
 
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. Das System in

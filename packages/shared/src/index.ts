@@ -342,3 +342,42 @@ export interface TagesberichtDto {
   tags: TagDto[];
   dokumente: TagesberichtDokumentDto[];
 }
+
+export type AufgabePrioritaet = "niedrig" | "normal" | "hoch";
+
+export const AUFGABE_PRIORITAET_LABEL: Record<AufgabePrioritaet, string> = {
+  niedrig: "Niedrig",
+  normal: "Normal",
+  hoch: "Hoch",
+};
+
+/**
+ * Ein einheitliches Modell fuer Zimmer-Aufgaben (zimmerId gesetzt) und
+ * persoenliche Aufgaben (zimmerId null) -- siehe migrations/0033_aufgabe.sql.
+ * zugewiesenAn ist davon unabhaengig nullable, alle vier Kombinationen sind
+ * gueltig.
+ */
+export interface AufgabeDto {
+  id: string;
+  titel: string;
+  beschreibung: string | null;
+  prioritaet: AufgabePrioritaet;
+  faelligAm: string | null;
+  zimmerId: string | null;
+  zimmerNummer: string | null;
+  standortName: string | null;
+  zugewiesenAn: string | null;
+  zugewiesenAnName: string | null;
+  erstelltVon: string;
+  erstelltVonName: string;
+  erledigtAm: string | null;
+  erledigtVonName: string | null;
+  erstelltAm: string;
+}
+
+export interface AufgabenAnzahlDto {
+  /** offene Zimmer-Aufgaben je zimmerId, fuer die Badge in der Zimmeruebersicht. */
+  jeZimmer: Record<string, number>;
+  /** offene Aufgaben (Zimmer- oder persoenlich), die dem eigenen Benutzer zugewiesen sind. */
+  eigene: number;
+}
