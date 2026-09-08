@@ -2,7 +2,10 @@ import type { AufgabeDto, BenutzerListEintragDto, BenutzerRolle } from "@zimmera
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { IGenehmigen, ILoeschen, IPrioritaetHoch, IPrioritaetNiedrig, IPrioritaetNormal } from "./icons";
 
-const PRIORITAET_ICON = {
+// Exportiert, damit andere Stellen (z.B. Dashboard.tsx) dieselbe Zuordnung
+// verwenden statt sie ein zweites Mal nachzubauen -- sonst laeuft eine
+// Kopie irgendwann auseinander.
+export const PRIORITAET_ICON = {
   hoch: IPrioritaetHoch,
   normal: IPrioritaetNormal,
   niedrig: IPrioritaetNiedrig,
@@ -11,7 +14,7 @@ const PRIORITAET_ICON = {
 // Bewusst NICHT nur Farbe (WCAG 1.4.1): jede Prioritaet hat ein eigenes
 // Icon (Signalstaerke) UND einen eigenen Pill-Farbton -- beides zusammen
 // traegt die Information, nicht die Farbe allein.
-const PRIORITAET_PILL_KLASSE = {
+export const PRIORITAET_PILL_KLASSE = {
   hoch: "zv-pill-danger",
   normal: "zv-pill",
   niedrig: "zv-pill-vergeben",
@@ -28,7 +31,7 @@ function darfBearbeiten(aufgabe: AufgabeDto, benutzerId: string | null, rolle: B
   return aufgabe.erstelltVon === benutzerId || aufgabe.zugewiesenAn === benutzerId;
 }
 
-function faelligkeitsHinweis(faelligAm: string | null): { text: string; klasse: string } | null {
+export function faelligkeitsHinweis(faelligAm: string | null): { text: string; klasse: string } | null {
   if (!faelligAm) return null;
   const heute = new Date().toISOString().slice(0, 10);
   if (faelligAm < heute) return { text: `überfällig seit ${faelligAm}`, klasse: "zv-pill-danger" };

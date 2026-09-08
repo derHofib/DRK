@@ -16,6 +16,8 @@ export type WidgetId =
   | "rechnungen"
   | "stornoantraege"
   | "mitarbeitende"
+  | "unzugewieseneAufgaben"
+  | "meineAufgaben"
   | "kostenuebernahmen"
   | "tagesberichte";
 
@@ -25,6 +27,8 @@ export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "rechnungen",
   "stornoantraege",
   "mitarbeitende",
+  "unzugewieseneAufgaben",
+  "meineAufgaben",
   "kostenuebernahmen",
   "tagesberichte",
 ];
@@ -35,6 +39,8 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   rechnungen: "Offene Rechnungen",
   stornoantraege: "Offene Storno-Anträge",
   mitarbeitende: "Mitarbeitende",
+  unzugewieseneAufgaben: "Unzugewiesene Zimmer-Aufgaben",
+  meineAufgaben: "Mir zugewiesene Aufgaben",
   kostenuebernahmen: "Kostenübernahmen laufen bald aus",
   tagesberichte: "Klienten ohne aktuellen Tagesbericht",
 };

@@ -399,7 +399,16 @@ nicht geschätzt):
   vollständigen Durchlauf (32 Prüfungen über alle sechs Abschnitte)
   bestätigt.
 
-
+**Nachtrag — Aufgaben im Dashboard:** zwei weitere Kacheln, nach demselben
+Muster wie „Kostenübernahmen laufen bald aus" (Kartenliste statt Zahl):
+„Unzugewiesene Zimmer-Aufgaben" (offene Zimmer-Aufgaben ohne Zuweisung,
+standort-eingeschränkt wie überall) und „Mir zugewiesene Aufgaben" (offene
+Aufgaben — Zimmer oder persönlich — die dem eigenen Benutzer zugewiesen
+sind, ohne Standort-Filter, richtet sich rein nach der Zuweisung wie schon
+beim Zähl-Endpunkt für die Zimmer-Badges). Beide standardmäßig für jede
+Rolle sichtbar, keine Führungsinformation. Priorität-Icon/-Pill-Zuordnung
+aus `AufgabeZeile.tsx` exportiert und hier wiederverwendet, statt ein
+zweites Mal nachgebaut zu werden.
 
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. Das System in

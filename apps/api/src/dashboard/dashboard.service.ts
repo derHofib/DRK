@@ -4,6 +4,7 @@ import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientStandortBedingung, standortIdBedingung } from "../common/standort-restriction";
 import { isoWoche } from "../common/iso-woche";
+import { AufgabePrioritaet } from "../aufgaben/aufgabe.service";
 
 /**
  * Schwellen fuer die beiden Hinweislisten -- Vorschlagswerte aus dem
@@ -45,6 +46,22 @@ export interface DashboardDto {
     zimmerNummer: string;
     tageSeitLetztem: number | null;
   }[];
+  unzugewieseneZimmeraufgaben: {
+    id: string;
+    titel: string;
+    standortName: string;
+    zimmerNummer: string;
+    prioritaet: AufgabePrioritaet;
+    faelligAm: string | null;
+  }[];
+  meineOffenenAufgaben: {
+    id: string;
+    titel: string;
+    standortName: string | null;
+    zimmerNummer: string | null;
+    prioritaet: AufgabePrioritaet;
+    faelligAm: string | null;
+  }[];
 }
 
 @Injectable()
@@ -68,6 +85,8 @@ export class DashboardService {
       const mitarbeitende = await this.mitarbeitende(client, erlaubteStandorte);
       const kostenuebernahmenBaldEndend = await this.kostenuebernahmenBaldEndend(client, erlaubteStandorte);
       const klientenOhneTagesbericht = await this.klientenOhneTagesbericht(client, erlaubteStandorte);
+      const unzugewieseneZimmeraufgaben = await this.unzugewieseneZimmeraufgaben(client, erlaubteStandorte);
+      const meineOffenenAufgaben = await this.meineOffenenAufgaben(client, benutzerId);
       return {
         zimmer,
         hzlWoche,
@@ -76,6 +95,8 @@ export class DashboardService {
         mitarbeitende,
         kostenuebernahmenBaldEndend,
         klientenOhneTagesbericht,
+        unzugewieseneZimmeraufgaben,
+        meineOffenenAufgaben,
       };
     });
   }
@@ -268,6 +289,70 @@ export class DashboardService {
       tageSeitLetztem: r.letzter_bericht
         ? Math.floor((Date.now() - new Date(r.letzter_bericht).getTime()) / 86_400_000)
         : null,
+    }));
+  }
+
+  /**
+   * Offene Zimmer-Aufgaben ohne Zuweisung -- der Standort-Filter greift
+   * hier genau wie in aufgabe.service.ts (ladeListe()): RLS laesst
+   * Zimmer-Aufgaben immer durch, die eigentliche Standort-Schranke sitzt
+   * im Anwendungscode, weil sie einen Join ueber zimmer/standort braucht.
+   */
+  private async unzugewieseneZimmeraufgaben(client: PoolClient, erlaubteStandorte: string[] | null) {
+    const bedingungen = ["a.erledigt_am IS NULL", "a.zugewiesen_an IS NULL", "a.zimmer_id IS NOT NULL"];
+    const params: unknown[] = [];
+    if (erlaubteStandorte) {
+      params.push(erlaubteStandorte);
+      bedingungen.push(`z.standort_id = ANY($${params.length})`);
+    }
+    const { rows } = await client.query(
+      `
+      SELECT a.id, a.titel, a.prioritaet, a.faellig_am, z.nummer AS zimmer_nummer, s.name AS standort_name
+      FROM aufgabe a
+      JOIN zimmer z ON z.id = a.zimmer_id
+      JOIN standort s ON s.id = z.standort_id
+      WHERE ${bedingungen.join(" AND ")}
+      ORDER BY a.faellig_am ASC NULLS LAST
+      LIMIT ${LISTEN_LIMIT}
+      `,
+      params
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      titel: r.titel,
+      standortName: r.standort_name,
+      zimmerNummer: r.zimmer_nummer,
+      prioritaet: r.prioritaet as AufgabePrioritaet,
+      faelligAm: r.faellig_am,
+    }));
+  }
+
+  /**
+   * Aufgaben (Zimmer- oder persoenlich), die dem eigenen Benutzer
+   * zugewiesen sind -- kein Standort-Filter, richtet sich rein nach der
+   * Zuweisung, gleiches Prinzip wie "eigene" im Zaehlendpunkt fuer die
+   * Badges (aufgabe.service.ts::zaehleOffene()).
+   */
+  private async meineOffenenAufgaben(client: PoolClient, benutzerId: string) {
+    const { rows } = await client.query(
+      `
+      SELECT a.id, a.titel, a.prioritaet, a.faellig_am, z.nummer AS zimmer_nummer, s.name AS standort_name
+      FROM aufgabe a
+      LEFT JOIN zimmer z ON z.id = a.zimmer_id
+      LEFT JOIN standort s ON s.id = z.standort_id
+      WHERE a.erledigt_am IS NULL AND a.zugewiesen_an = $1
+      ORDER BY a.faellig_am ASC NULLS LAST
+      LIMIT ${LISTEN_LIMIT}
+      `,
+      [benutzerId]
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      titel: r.titel,
+      standortName: r.standort_name,
+      zimmerNummer: r.zimmer_nummer,
+      prioritaet: r.prioritaet as AufgabePrioritaet,
+      faelligAm: r.faellig_am,
     }));
   }
 }

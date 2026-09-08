@@ -1,13 +1,17 @@
 import { CSSProperties, useEffect, useState } from "react";
 import type { DashboardDto } from "@zimmerakte/shared";
+import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
+import { faelligkeitsHinweis, PRIORITAET_ICON, PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
 import {
   IAnpassen,
+  IAufgaben,
   IFehler,
   IKassenbuch,
   IKostenuebernahme,
+  ILeerAufgaben,
   ILeerKostenuebernahmen,
   ILeerTagesberichte,
   IMitarbeitende,
@@ -141,8 +145,105 @@ export function Dashboard() {
             )}
           </div>
 
-          {(sichtbarkeit.kostenuebernahmen || sichtbarkeit.tagesberichte) && (
+          {(sichtbarkeit.unzugewieseneAufgaben ||
+            sichtbarkeit.meineAufgaben ||
+            sichtbarkeit.kostenuebernahmen ||
+            sichtbarkeit.tagesberichte) && (
             <div className="zv-dashboard-spalten">
+              {sichtbarkeit.unzugewieseneAufgaben && (
+                <div className="zv-card">
+                  <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
+                    <IAufgaben />
+                    Unzugewiesene Zimmer-Aufgaben
+                  </h3>
+                  {daten.unzugewieseneZimmeraufgaben.length === 0 ? (
+                    <Leerzustand icon={ILeerAufgaben}>Jede offene Zimmer-Aufgabe ist bereits zugewiesen.</Leerzustand>
+                  ) : (
+                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.6fr 1fr 1fr" } as CSSProperties}>
+                      <div className="zv-liste-kopf">
+                        <span>Aufgabe</span>
+                        <span>Priorität</span>
+                        <span>Fälligkeit</span>
+                      </div>
+                      {daten.unzugewieseneZimmeraufgaben.map((a) => {
+                        const PrioritaetIcon = PRIORITAET_ICON[a.prioritaet];
+                        const faelligkeit = faelligkeitsHinweis(a.faelligAm);
+                        return (
+                          <div key={a.id} className="zv-info-karte">
+                            <span className="zv-liste-zelle-titel">
+                              {a.titel}
+                              <span className="zv-sub-inline zv-sub-inline-zeile">
+                                {a.standortName}, Zimmer {a.zimmerNummer}
+                              </span>
+                            </span>
+                            <span className="zv-liste-zelle" data-label="Priorität">
+                              <span className={`zv-pill ${PRIORITAET_PILL_KLASSE[a.prioritaet]}`}>
+                                <PrioritaetIcon />
+                                {AUFGABE_PRIORITAET_LABEL[a.prioritaet]}
+                              </span>
+                            </span>
+                            <span className="zv-liste-zelle" data-label="Fälligkeit">
+                              {faelligkeit ? (
+                                <span className={`zv-pill ${faelligkeit.klasse}`}>{faelligkeit.text}</span>
+                              ) : (
+                                <span className="zv-sub-inline">ohne Termin</span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sichtbarkeit.meineAufgaben && (
+                <div className="zv-card">
+                  <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
+                    <IAufgaben />
+                    Mir zugewiesene Aufgaben
+                  </h3>
+                  {daten.meineOffenenAufgaben.length === 0 ? (
+                    <Leerzustand icon={ILeerAufgaben}>Dir sind aktuell keine offenen Aufgaben zugewiesen.</Leerzustand>
+                  ) : (
+                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.6fr 1fr 1fr" } as CSSProperties}>
+                      <div className="zv-liste-kopf">
+                        <span>Aufgabe</span>
+                        <span>Priorität</span>
+                        <span>Fälligkeit</span>
+                      </div>
+                      {daten.meineOffenenAufgaben.map((a) => {
+                        const PrioritaetIcon = PRIORITAET_ICON[a.prioritaet];
+                        const faelligkeit = faelligkeitsHinweis(a.faelligAm);
+                        return (
+                          <div key={a.id} className="zv-info-karte">
+                            <span className="zv-liste-zelle-titel">
+                              {a.titel}
+                              <span className="zv-sub-inline zv-sub-inline-zeile">
+                                {a.zimmerNummer ? `${a.standortName}, Zimmer ${a.zimmerNummer}` : "Persönliche Aufgabe"}
+                              </span>
+                            </span>
+                            <span className="zv-liste-zelle" data-label="Priorität">
+                              <span className={`zv-pill ${PRIORITAET_PILL_KLASSE[a.prioritaet]}`}>
+                                <PrioritaetIcon />
+                                {AUFGABE_PRIORITAET_LABEL[a.prioritaet]}
+                              </span>
+                            </span>
+                            <span className="zv-liste-zelle" data-label="Fälligkeit">
+                              {faelligkeit ? (
+                                <span className={`zv-pill ${faelligkeit.klasse}`}>{faelligkeit.text}</span>
+                              ) : (
+                                <span className="zv-sub-inline">ohne Termin</span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {sichtbarkeit.kostenuebernahmen && (
                 <div className="zv-card">
                   <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>

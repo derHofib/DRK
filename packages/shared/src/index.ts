@@ -330,6 +330,22 @@ export interface DashboardDto {
     zimmerNummer: string;
     tageSeitLetztem: number | null;
   }[];
+  unzugewieseneZimmeraufgaben: {
+    id: string;
+    titel: string;
+    standortName: string;
+    zimmerNummer: string;
+    prioritaet: AufgabePrioritaet;
+    faelligAm: string | null;
+  }[];
+  meineOffenenAufgaben: {
+    id: string;
+    titel: string;
+    standortName: string | null;
+    zimmerNummer: string | null;
+    prioritaet: AufgabePrioritaet;
+    faelligAm: string | null;
+  }[];
 }
 
 export interface TagesberichtDto {

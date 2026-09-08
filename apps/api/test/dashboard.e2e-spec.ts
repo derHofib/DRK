@@ -208,6 +208,26 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       [mandantId, einrichtungsleitungS1Id, randomUUID()]
     );
 
+    // Aufgaben: eine unzugewiesene Zimmer-Aufgabe je Standort (fuer die
+    // Standort-Einschraenkung der ersten neuen Kachel), plus eine der
+    // S1-Einrichtungsleitung zugewiesene Aufgabe (fuer die zweite, die sich
+    // nur nach Zuweisung richtet, nicht nach Standort).
+    await admin.query(
+      `INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von)
+       VALUES ($1, 'Unzugewiesen Standort 1', $2, $3)`,
+      [mandantId, zimmer1Rows[0].id, bereichsleitungRows[0].id]
+    );
+    await admin.query(
+      `INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von)
+       VALUES ($1, 'Unzugewiesen Standort 2', $2, $3)`,
+      [mandantId, zimmer2Rows[0].id, bereichsleitungRows[0].id]
+    );
+    await admin.query(
+      `INSERT INTO aufgabe (mandant_id, titel, erstellt_von, zugewiesen_an)
+       VALUES ($1, 'Persoenlich fuer S1-Leitung', $2, $2)`,
+      [mandantId, einrichtungsleitungS1Id]
+    );
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -221,6 +241,7 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
   });
 
   afterAll(async () => {
+    await admin.query("DELETE FROM aufgabe WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM tagesbericht WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
@@ -291,6 +312,18 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       const eintragKlient3 = res.body.klientenOhneTagesbericht.find((k: { klientId: string }) => k.klientId === klient3);
       expect(eintragKlient3.tageSeitLetztem).toBeNull();
     });
+
+    it("sieht unzugewiesene Zimmer-Aufgaben beider Standorte", async () => {
+      const res = await get(tokenBereichsleitung);
+      const titel = res.body.unzugewieseneZimmeraufgaben.map((a: { titel: string }) => a.titel);
+      expect(titel).toContain("Unzugewiesen Standort 1");
+      expect(titel).toContain("Unzugewiesen Standort 2");
+    });
+
+    it("hat keine eigenen zugewiesenen Aufgaben -- die eine existierende Aufgabe ist der S1-Leitung zugewiesen", async () => {
+      const res = await get(tokenBereichsleitung);
+      expect(res.body.meineOffenenAufgaben).toEqual([]);
+    });
   });
 
   describe("einrichtungsleitung-s1 (auf Standort 1 eingeschraenkt)", () => {
@@ -327,6 +360,19 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     it("zaehlt bei Mitarbeitenden nur sich selbst -- die Bereichsleitung ist keinem Standort zugeordnet", async () => {
       const res = await get(tokenEinrichtungsleitungS1);
       expect(res.body.mitarbeitende.gesamt).toBe(1);
+    });
+
+    it("sieht nur die unzugewiesene Zimmer-Aufgabe von Standort 1, nicht die von Standort 2", async () => {
+      const res = await get(tokenEinrichtungsleitungS1);
+      const titel = res.body.unzugewieseneZimmeraufgaben.map((a: { titel: string }) => a.titel);
+      expect(titel).toContain("Unzugewiesen Standort 1");
+      expect(titel).not.toContain("Unzugewiesen Standort 2");
+    });
+
+    it("sieht die ihr zugewiesene persönliche Aufgabe -- unabhängig vom Standort-Filter", async () => {
+      const res = await get(tokenEinrichtungsleitungS1);
+      const titel = res.body.meineOffenenAufgaben.map((a: { titel: string }) => a.titel);
+      expect(titel).toContain("Persoenlich fuer S1-Leitung");
     });
   });
 });
