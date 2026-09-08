@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { DatabaseModule } from "./database/database.module";
 import { ZodExceptionFilter } from "./common/zod-exception.filter";
+import { PostgresExceptionFilter } from "./common/postgres-exception.filter";
 import { AuthModule } from "./auth/auth.module";
 import { MandantModule } from "./mandanten/mandant.module";
 import { BenutzerModule } from "./benutzer/benutzer.module";
@@ -55,6 +56,14 @@ import { AufgabeModule } from "./aufgaben/aufgabe.module";
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Reihenfolge wichtig -- und zwar GENAU ANDERSHERUM als man erwarten
+    // wuerde: Nest loest mehrere APP_FILTER-Provider in umgekehrter
+    // Registrierungsreihenfolge auf (empirisch mit einer Gegenprobe
+    // bestaetigt, nicht angenommen). PostgresExceptionFilter (@Catch() ohne
+    // Typ, matcht alles) muss deshalb ZUERST hier stehen, damit
+    // ZodExceptionFilter (spezifisch fuer ZodError) am Ende der intern
+    // aufgebauten Liste landet und zuerst geprueft wird.
+    { provide: APP_FILTER, useClass: PostgresExceptionFilter },
     { provide: APP_FILTER, useClass: ZodExceptionFilter },
   ],
 })

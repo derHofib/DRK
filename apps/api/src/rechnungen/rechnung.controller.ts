@@ -14,7 +14,9 @@ const anlegenSchema = z.object({
   // sie hier, damit ein negativer oder Null-Betrag als 400 auffaellt statt
   // als 500 aus dem CHECK-Verstoss.
   betragCent: z.number().int().positive().max(2147483647),
-  beschreibung: z.string().min(1),
+  // .trim() VOR .min(1): sonst zaehlt reines Leerraum-Padding als
+  // gueltiger Inhalt und legt eine fachlich leere Rechnung an.
+  beschreibung: z.string().trim().min(1, "Beschreibung darf nicht leer sein."),
   dokumentBase64: z.string().optional(),
   dokumentDateiname: z.string().optional(),
   dokumentMimeType: z.enum(ERLAUBTE_DOKUMENT_MIME_TYPES).optional(),
@@ -22,7 +24,7 @@ const anlegenSchema = z.object({
 
 const statusAendernSchema = z.object({
   status: z.enum(["genehmigt", "ausgezahlt", "abgelehnt"]),
-  grund: z.string().min(1).optional(),
+  grund: z.string().trim().min(1, "Grund darf nicht leer sein.").optional(),
 });
 
 @Controller("rechnungen")

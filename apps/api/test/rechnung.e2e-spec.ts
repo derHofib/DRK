@@ -197,6 +197,21 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
       expect(res.status).toBe(400);
     });
 
+    /**
+     * Chaos-Test-Fund: z.string().min(1) allein akzeptiert reines
+     * Leerzeichen-Padding ("   ") als "nicht leer". .trim() VOR .min(1) im
+     * Schema schliesst das (rechnung.controller.ts).
+     */
+    it("lehnt 'abgelehnt' mit einem rein aus Leerzeichen bestehenden Grund mit 400 ab", async () => {
+      const res = await patch(`/rechnungen/${rechnungId}/status`, { status: "abgelehnt", grund: "     " });
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt eine rein aus Leerzeichen bestehende Beschreibung beim Anlegen mit 400 ab", async () => {
+      const res = await post("/rechnungen", { klientId, betragCent: 1000, beschreibung: "   " });
+      expect(res.status).toBe(400);
+    });
+
     it("erlaubt 'beantragt' -> 'genehmigt'", async () => {
       const res = await patch(`/rechnungen/${rechnungId}/status`, { status: "genehmigt" });
       expect(res.status).toBe(200);

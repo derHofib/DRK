@@ -337,4 +337,43 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
       await expect(versuchNurErledigtVon).rejects.toThrow(/check/i);
     });
   });
+
+  /**
+   * Chaos-Test-Fund: z.string().min(1) allein akzeptiert reines
+   * Leerzeichen-Padding ("   ") als "nicht leer" -- dadurch liessen sich
+   * fachlich leere Aufgaben anlegen. .trim() VOR .min(1) im Schema schliesst
+   * das (aufgabe.controller.ts).
+   */
+  describe("Leerzeichen-Validierung: .trim() vor .min(1)", () => {
+    it("lehnt einen rein aus Leerzeichen bestehenden Titel beim Anlegen mit 400 ab", async () => {
+      const res = await als(tokenBereichsleitung).post("/aufgaben", { titel: "     " });
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt eine rein aus Leerzeichen bestehende Beschreibung beim Anlegen mit 400 ab", async () => {
+      const res = await als(tokenBereichsleitung).post("/aufgaben", {
+        titel: "Gültiger Titel",
+        beschreibung: "   ",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("lehnt einen rein aus Leerzeichen bestehenden Titel beim Aktualisieren mit 400 ab", async () => {
+      const angelegt = await als(tokenBereichsleitung).post("/aufgaben", { titel: "Wird aktualisiert" });
+      expect(angelegt.status).toBe(201);
+
+      const res = await als(tokenBereichsleitung).patch(`/aufgaben/${angelegt.body.id}`, { titel: "   " });
+      expect(res.status).toBe(400);
+
+      const geladen = await als(tokenBereichsleitung).get("/aufgaben");
+      const unveraendert = geladen.body.find((a: { id: string }) => a.id === angelegt.body.id);
+      expect(unveraendert.titel).toBe("Wird aktualisiert");
+    });
+
+    it("speichert einen Titel mit fuehrenden/nachfolgenden Leerzeichen getrimmt", async () => {
+      const res = await als(tokenBereichsleitung).post("/aufgaben", { titel: "  Umlaufende Leerzeichen  " });
+      expect(res.status).toBe(201);
+      expect(res.body.titel).toBe("Umlaufende Leerzeichen");
+    });
+  });
 });

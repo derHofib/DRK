@@ -6,8 +6,10 @@ import { AufgabePrioritaet, AufgabeService } from "./aufgabe.service";
 const prioritaetSchema = z.enum(["niedrig", "normal", "hoch"]);
 
 const anlegenSchema = z.object({
-  titel: z.string().min(1),
-  beschreibung: z.string().min(1).optional(),
+  // .trim() VOR .min(1): sonst zaehlt reines Leerraum-Padding als
+  // gueltiger Inhalt und legt eine fachlich leere Aufgabe an.
+  titel: z.string().trim().min(1, "Titel darf nicht leer sein."),
+  beschreibung: z.string().trim().min(1, "Beschreibung darf nicht leer sein.").optional(),
   prioritaet: prioritaetSchema.optional(),
   faelligAm: z.string().date().optional(),
   zimmerId: z.string().uuid().optional(),
@@ -16,8 +18,8 @@ const anlegenSchema = z.object({
 
 const aktualisierenSchema = z
   .object({
-    titel: z.string().min(1).optional(),
-    beschreibung: z.string().min(1).nullable().optional(),
+    titel: z.string().trim().min(1, "Titel darf nicht leer sein.").optional(),
+    beschreibung: z.string().trim().min(1, "Beschreibung darf nicht leer sein.").nullable().optional(),
     prioritaet: prioritaetSchema.optional(),
     faelligAm: z.string().date().nullable().optional(),
     zugewiesenAn: z.string().uuid().nullable().optional(),

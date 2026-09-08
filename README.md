@@ -479,6 +479,55 @@ build` sauber. Die vier `window.prompt()`-Ersetzungen und die
 und schließt sich korrekt, echte Raten-Schranke ausgelöst und die
 übersetzte Meldung im UI geprüft, nicht nur der Code gelesen).
 
+**Nachtrag — zwei weitere Funde aus einem Chaos-/Grenzwert-Test gegen
+`office.hecaso.de`** (die übrigen sieben aus demselben Testlauf waren
+bereits durch den vorigen Nachtrag abgedeckt):
+- **Fehlende UUID-Validierung an allen `:id`-Routen:** kein Controller
+  validiert seine Pfad- oder Query-Parameter einzeln (kein
+  `ParseUUIDPipe`) -- eine syntaktisch ungültige ID (`GET
+  /klienten/keine-uuid`) erreichte Postgres unverändert und löste dort
+  SQLSTATE `22P02` ("invalid input syntax for type uuid") aus, ungefangen
+  als `500`. Statt `ParseUUIDPipe` an über 15 Stellen zu wiederholen (und
+  bei jedem neuen Endpunkt erneut zu vergessen), sitzt der Fix einmal
+  zentral in einem neuen globalen Filter,
+  `common/postgres-exception.filter.ts`, nach demselben Prinzip wie der
+  bestehende `ZodExceptionFilter`. Er erbt von Nests eigenem
+  `BaseExceptionFilter` und reicht alles außer dem einen bekannten
+  SQLSTATE unverändert per `super.catch()` durch -- sonst bräche er das
+  Verhalten für jede andere Fehlerart in der gesamten Anwendung, da er als
+  `@Catch()` ohne Typ für wirklich jede nicht spezifischer behandelte
+  Exception aufgerufen wird. **Stolperfalle dabei:** Nest löst mehrere
+  `APP_FILTER`-Provider in *umgekehrter* Registrierungsreihenfolge auf --
+  der neue, alles fangende Filter musste deshalb in `app.module.ts`
+  *vor* `ZodExceptionFilter` eingetragen werden, sonst hätte er dessen
+  ZodErrors ebenfalls abgefangen. Per Gegenprobe bemerkt (die erste Fassung
+  verschluckte reihenweise ZodErrors als 500) und mit einem Kommentar an
+  der Registrierungsstelle festgehalten, damit es niemand intuitiv wieder
+  umdreht.
+- **Reine Leerzeichen in Pflicht-Textfeldern:** `z.string().min(1)` allein
+  akzeptiert `"     "` als "nicht leer" -- `verwendungszweck`
+  (Kassenbuch), `beschreibung`/Ablehnungs-`grund` (Rechnung, Kassenbuch)
+  und `titel`/`beschreibung` (Aufgaben) ließen sich dadurch fachlich leer
+  anlegen. Jetzt überall `.string().trim().min(1, "…")` -- die Reihenfolge
+  ist wichtig: `.trim()` vor `.min(1)`, sonst zählt das Leerraum-Padding
+  weiterhin als Inhalt. `.trim()` transformiert dabei auch den
+  gespeicherten Wert, nicht nur die Prüfung -- ein Titel mit nur
+  umlaufenden Leerzeichen wird also tatsächlich getrimmt abgespeichert.
+
+Geprüft: 7 neue Fälle für den UUID-Filter (fünf verschiedene Controller
+inklusive eines Query-Parameters, nicht nur `:id`-Pfade, plus zwei
+Regressionsschutz-Fälle: eine wohlgeformte, aber unbekannte UUID liefert
+weiterhin `404`, ein gewöhnlicher `403/404`-Pfad bleibt vom neuen Filter
+unberührt) und 6 neue Fälle für die Leerzeichen-Validierung (inklusive
+einem Fall, der das korrekte Trimmen eines gültigen Werts belegt) -- alle
+mit Gegenprobe (Prüfung deaktiviert, genau die vorgesehenen Tests werden
+rot, wiederhergestellt, wieder grün; bei der Leerzeichen-Gegenprobe lief
+zusätzlich eine erwartete Kettenreaktion in `rechnung.e2e-spec.ts` mit, weil
+ein fälschlich durchgelassenes "abgelehnt" den für nachfolgende Tests
+vorausgesetzten Status "beantragt" konsumierte -- genau der Beleg, dass die
+Prüfung etwas Echtes verhindert). Alle 238 API-Tests grün, `pnpm build`
+sauber.
+
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. Das System in
   `apps/web/src/styles/tokens.css` ist deshalb ein eigenständiges,

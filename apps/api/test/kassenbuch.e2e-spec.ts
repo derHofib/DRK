@@ -189,6 +189,23 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     expect(liste.body.find((b: { verwendungszweck: string }) => b.verwendungszweck === "Sollte scheitern")).toBeUndefined();
   });
 
+  /**
+   * Chaos-Test-Fund: z.string().min(1) allein akzeptiert reines
+   * Leerzeichen-Padding ("   ") als "nicht leer" -- dadurch liesse sich eine
+   * fachlich leere Kassenbuchung anlegen. .trim() VOR .min(1) im Schema
+   * schliesst das (kassenbuchung.controller.ts).
+   */
+  it("lehnt einen rein aus Leerzeichen bestehenden Verwendungszweck mit 400 ab", async () => {
+    const res = await post("/kassenbuchungen", {
+      klientId: klientMonatlich,
+      datum: "2026-08-05",
+      betragCent: 1000,
+      verwendungszweck: "     ",
+      typ: "einzahlung",
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("lehnt eine zweite HZL-Buchung für dieselbe Woche mit 409 ab", async () => {
     const res = await post("/kassenbuchungen", {
       klientId: klientWoechentlich,

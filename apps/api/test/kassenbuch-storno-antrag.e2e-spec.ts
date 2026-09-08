@@ -162,6 +162,17 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     expect(res.body.offenerStornoantrag).toMatchObject({ grund: "Falscher Betrag", beantragtVonName: "betreuer Test" });
   });
 
+  /**
+   * Chaos-Test-Fund: z.string().min(1) allein akzeptiert reines
+   * Leerzeichen-Padding ("   ") als "nicht leer" -- .trim() VOR .min(1) im
+   * Schema schliesst das (kassenbuchung.controller.ts).
+   */
+  it("lehnt einen rein aus Leerzeichen bestehenden Storno-Grund mit 400 ab", async () => {
+    const buchungId = await neueBuchung(klient1, "Testbuchung Leerzeichen");
+    const res = await als(tokenBetreuer).post(`/kassenbuchungen/${buchungId}/storno-antrag`, { grund: "     " });
+    expect(res.status).toBe(400);
+  });
+
   it("Betreuer darf nicht selbst entscheiden -- 403, Buchung bleibt unveraendert", async () => {
     const buchungId = await neueBuchung(klient1, "Testbuchung B");
     const antrag = await als(tokenBetreuer).post(`/kassenbuchungen/${buchungId}/storno-antrag`, { grund: "Grund" });

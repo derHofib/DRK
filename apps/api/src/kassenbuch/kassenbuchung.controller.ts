@@ -27,7 +27,10 @@ const anlegenSchema = z
       .min(-2147483648)
       .max(2147483647)
       .refine((v) => v !== 0, { message: "Der Betrag darf nicht 0 sein." }),
-    verwendungszweck: z.string().min(1),
+    // .trim() VOR .min(1): sonst zaehlt reines Leerraum-Padding
+    // ("   ") als gueltiger Inhalt und legt einen fachlich leeren
+    // Kassenbucheintrag an.
+    verwendungszweck: z.string().trim().min(1, "Verwendungszweck darf nicht leer sein."),
     typ: z.enum(["hzl", "einzahlung", "sonstiges"]),
     isoJahr: z.number().int().min(2000).max(2100).optional(),
     isoWoche: z.number().int().min(1).max(53).optional(),
@@ -43,12 +46,12 @@ const anlegenSchema = z
   });
 
 const stornoBeantragenSchema = z.object({
-  grund: z.string().min(1),
+  grund: z.string().trim().min(1, "Grund darf nicht leer sein."),
 });
 
 const stornoEntscheidenSchema = z.object({
   entscheidung: z.enum(["genehmigt", "abgelehnt"]),
-  grund: z.string().min(1).optional(),
+  grund: z.string().trim().min(1, "Grund darf nicht leer sein.").optional(),
 });
 
 const wochenuebersichtSchema = z.object({
