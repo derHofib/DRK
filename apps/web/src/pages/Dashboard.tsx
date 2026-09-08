@@ -1,5 +1,5 @@
 import { CSSProperties, useEffect, useState } from "react";
-import type { DashboardDto } from "@zimmerakte/shared";
+import type { DashboardDto, StandortDto } from "@zimmerakte/shared";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { faelligkeitsHinweis, PRIORITAET_ICON, PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
@@ -34,16 +34,77 @@ import {
 
 const HEUTE = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
+/**
+ * Reine Anzeigepraeferenz dieses Geraets, genau wie die Widget-Sichtbarkeit
+ * (siehe dashboard/sichtbarkeit.ts) -- deshalb localStorage, nicht die
+ * Datenbank. Eine gespeicherte ID, die es in der aktuellen Liste nicht mehr
+ * gibt (Standort deaktiviert, Zuordnung geaendert), faellt beim Laden still
+ * auf "Alle Standorte" zurueck statt einen Fehler zu zeigen.
+ */
+const STANDORT_AUSWAHL_KEY = "zimmerakte_dashboard_standort";
+
+function geleseneStandortAuswahl(): string | null {
+  try {
+    return localStorage.getItem(STANDORT_AUSWAHL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function standortAuswahlSpeichern(standortId: string | null): void {
+  try {
+    if (standortId) localStorage.setItem(STANDORT_AUSWAHL_KEY, standortId);
+    else localStorage.removeItem(STANDORT_AUSWAHL_KEY);
+  } catch {
+    // Nicht speichern zu koennen darf das Umschalten nicht verhindern.
+  }
+}
+
 export function Dashboard() {
   const istLeitung = tokenRolle() === "bereichsleitung" || tokenRolle() === "einrichtungsleitung";
   const [daten, setDaten] = useState<DashboardDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [sichtbarkeit, setSichtbarkeit] = useState(() => geleseneSichtbarkeit(istLeitung));
   const [anpassenOffen, setAnpassenOffen] = useState(false);
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  const [standortAuswahl, setStandortAuswahl] = useState<string | null>(() => geleseneStandortAuswahl());
+  const [standorteBereit, setStandorteBereit] = useState(false);
+  const [wirdGeladen, setWirdGeladen] = useState(false);
 
   useEffect(() => {
-    api.dashboard().then(setDaten).catch((err) => setFehler(err.message));
+    api
+      .standorteListe()
+      .then((liste) => {
+        const aktive = liste.filter((s) => s.aktiv);
+        setStandorte(aktive);
+        setStandortAuswahl((vorher) => (vorher && !aktive.some((s) => s.id === vorher) ? null : vorher));
+      })
+      .catch((err) => setFehler(err.message))
+      .finally(() => setStandorteBereit(true));
   }, []);
+
+  useEffect(() => {
+    // Erst laden, wenn die Standortliste die gespeicherte Auswahl geprueft
+    // hat -- sonst ginge kurz eine Anfrage mit einer inzwischen ungueltigen
+    // ID raus, bevor der Rueckfall auf "Alle Standorte" greift.
+    if (!standorteBereit) return;
+    setWirdGeladen(true);
+    api
+      .dashboard(standortAuswahl ?? undefined)
+      .then((d) => {
+        setDaten(d);
+        setFehler(null);
+      })
+      .catch((err) => setFehler(err.message))
+      .finally(() => setWirdGeladen(false));
+  }, [standortAuswahl, standorteBereit]);
+
+  function standortWaehlen(id: string | null) {
+    setStandortAuswahl(id);
+    standortAuswahlSpeichern(id);
+  }
+
+  const ausgewaehlterStandort = standortAuswahl ? standorte.find((s) => s.id === standortAuswahl) ?? null : null;
 
   function sichtbarkeitAendern(id: WidgetId, sichtbar: boolean) {
     setSichtbarkeit((vorher) => {
@@ -72,6 +133,7 @@ export function Dashboard() {
           <h2>Dashboard</h2>
           <p className="zv-sub" style={{ margin: "2px 0 0" }}>
             {HEUTE}
+            {standorte.length === 1 && ` · ${standorte[0].name}`}
           </p>
         </div>
         <button className="zv-btn zv-btn-sekundaer" onClick={() => setAnpassenOffen(true)}>
@@ -80,8 +142,30 @@ export function Dashboard() {
         </button>
       </div>
 
+      {standorte.length > 1 && (
+        <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>
+          <button
+            className={standortAuswahl === null ? "active" : ""}
+            aria-current={standortAuswahl === null ? "true" : undefined}
+            onClick={() => standortWaehlen(null)}
+          >
+            Alle Standorte
+          </button>
+          {standorte.map((s) => (
+            <button
+              key={s.id}
+              className={standortAuswahl === s.id ? "active" : ""}
+              aria-current={standortAuswahl === s.id ? "true" : undefined}
+              onClick={() => standortWaehlen(s.id)}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {daten && (
-        <>
+        <div style={{ opacity: wirdGeladen ? 0.6 : 1, transition: "opacity var(--zv-transition-base)" }}>
           <div className="zv-stat-grid">
             {sichtbarkeit.zimmer && (
               <div className="zv-stat-karte">
@@ -92,7 +176,9 @@ export function Dashboard() {
                 <p className="zv-stat-wert">
                   {daten.zimmer.frei} / {daten.zimmer.gesamt}
                 </p>
-                <p className="zv-stat-sub">über {daten.zimmer.standorte} Standorte</p>
+                <p className="zv-stat-sub">
+                  {ausgewaehlterStandort ? ausgewaehlterStandort.name : `über ${daten.zimmer.standorte} Standorte`}
+                </p>
               </div>
             )}
             {sichtbarkeit.hzl && (
@@ -202,6 +288,7 @@ export function Dashboard() {
                   <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
                     <IAufgaben />
                     Mir zugewiesene Aufgaben
+                    {standortAuswahl !== null && <span className="zv-sub-inline">alle Standorte</span>}
                   </h3>
                   {daten.meineOffenenAufgaben.length === 0 ? (
                     <Leerzustand icon={ILeerAufgaben}>Dir sind aktuell keine offenen Aufgaben zugewiesen.</Leerzustand>
@@ -319,7 +406,7 @@ export function Dashboard() {
               )}
             </div>
           )}
-        </>
+        </div>
       )}
 
       <Seitenpanel offen={anpassenOffen} onSchliessen={() => setAnpassenOffen(false)}>

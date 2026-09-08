@@ -410,6 +410,24 @@ Rolle sichtbar, keine Führungsinformation. Priorität-Icon/-Pill-Zuordnung
 aus `AufgabeZeile.tsx` exportiert und hier wiederverwendet, statt ein
 zweites Mal nachgebaut zu werden.
 
+**Nachtrag — Standort-Umschalter im Dashboard:** eine Reiterleiste
+(„Alle Standorte" + ein Reiter je erlaubtem Standort, `.zv-tabbar`-Muster
+aus `KlientDetail.tsx`) engt alle standort-abhängigen Kacheln auf einen
+einzelnen Standort ein. `GET /dashboard` akzeptiert dafür einen optionalen
+Query-Parameter `standortId`, geprüft mit demselben `standortIstErlaubt()`
+aus `common/standort-restriction.ts`, das schon Kassenbuch-Standortbuchungen
+absichert — die Auswahl darf die serverseitig ohnehin ermittelte
+Standort-Menge nur einengen, nie erweitern; eine fremde oder nicht erlaubte
+ID liefert `403`, nicht stillschweigend ungefilterte Daten. „Mir zugewiesene
+Aufgaben" bleibt bewusst außen vor (siehe Nachtrag oben) — dafür markiert
+ein kleiner „alle Standorte"-Hinweis an der Kachel das, sobald ein
+einzelner Standort aktiv gewählt ist, damit die Reiterleiste dort nichts
+Falsches suggeriert. Die Auswahl ist eine reine Geräte-Anzeigepräferenz
+(localStorage, wie schon die Widget-Sichtbarkeit) und fällt bei einer
+inzwischen ungültigen gespeicherten ID still auf „Alle Standorte" zurück.
+Bei nur einem erlaubten Standort (der typische Betreuer-Fall) entfällt die
+Reiterleiste ganz zugunsten einer Standort-Subline im Seitenkopf.
+
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. Das System in
   `apps/web/src/styles/tokens.css` ist deshalb ein eigenständiges,

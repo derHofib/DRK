@@ -28,6 +28,11 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
   let klient2: string; // Standort 2, woechentlich, HZL offen, aktueller Tagesbericht
   let klient3: string; // Standort 1, monatlich, kein Tagesbericht je
 
+  let standort1Id: string;
+  let standort2Id: string;
+  let fremderStandortId: string; // gehoert einem anderen Mandanten
+  let fremdMandantId: string;
+
   const passwort = "correct horse battery staple";
   const { jahr, woche } = isoWoche(new Date());
 
@@ -61,12 +66,29 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
       [mandantId]
     );
-    const standort1 = standort1Rows[0].id;
+    standort1Id = standort1Rows[0].id;
+    const standort1 = standort1Id;
     const { rows: standort2Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 2', 'Str. 2') RETURNING id",
       [mandantId]
     );
-    const standort2 = standort2Rows[0].id;
+    standort2Id = standort2Rows[0].id;
+    const standort2 = standort2Id;
+
+    // Standort eines fremden Mandanten -- fuer den 403-Test bei einer
+    // standortId ausserhalb des eigenen Mandanten. RLS auf "standort" laesst
+    // den aktuellen Mandanten diese Zeile gar nicht sehen; standortIstErlaubt()
+    // muss das ueber die eigene Existenzpruefung abfangen.
+    const { rows: fremdMandantRows } = await admin.query<{ id: string }>(
+      "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
+      [`Fremdmandant Dashboard ${suffix}`, `test-dashboard-fremd-${suffix}`]
+    );
+    fremdMandantId = fremdMandantRows[0].id;
+    const { rows: fremdStandortRows } = await admin.query<{ id: string }>(
+      "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Fremdstandort', 'Str. 9') RETURNING id",
+      [fremdMandantId]
+    );
+    fremderStandortId = fremdStandortRows[0].id;
 
     await admin.query(
       "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
@@ -256,12 +278,16 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    await admin.query("DELETE FROM standort WHERE id = $1", [fremderStandortId]);
+    await admin.query("DELETE FROM mandant WHERE id = $1", [fremdMandantId]);
     await admin.end();
     await app.close();
   });
 
-  function get(token: string) {
-    return request(app.getHttpServer()).get("/dashboard").set("Authorization", `Bearer ${token}`);
+  function get(token: string, standortId?: string) {
+    return request(app.getHttpServer())
+      .get(`/dashboard${standortId ? `?standortId=${standortId}` : ""}`)
+      .set("Authorization", `Bearer ${token}`);
   }
 
   describe("bereichsleitung (unrestricted)", () => {
@@ -373,6 +399,59 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       const res = await get(tokenEinrichtungsleitungS1);
       const titel = res.body.meineOffenenAufgaben.map((a: { titel: string }) => a.titel);
       expect(titel).toContain("Persoenlich fuer S1-Leitung");
+    });
+  });
+
+  /**
+   * Standort-Umschalter im Dashboard (Dashboard.tsx): "standortId" engt die
+   * bereits erlaubte Standort-Menge weiter ein, darf sie aber nie erweitern.
+   * standortIstErlaubt() deckt dabei sowohl eine ungueltige/fremde ID als
+   * auch eine ausserhalb der eigenen Zuordnung liegende in einer einzigen
+   * Pruefung ab (siehe DashboardService.ermitteln()).
+   */
+  describe("standortId-Filter", () => {
+    it("ohne standortId bleibt das Verhalten unveraendert (Regressionsschutz)", async () => {
+      const res = await get(tokenBereichsleitung);
+      expect(res.status).toBe(200);
+      expect(res.body.zimmer).toEqual({ frei: 1, gesamt: 4, standorte: 2 });
+    });
+
+    it("bereichsleitung mit standortId von Standort 1 sieht nur dessen Teilmenge, inklusive unzugewiesener Zimmer-Aufgaben", async () => {
+      const res = await get(tokenBereichsleitung, standort1Id);
+      expect(res.status).toBe(200);
+      expect(res.body.zimmer).toEqual({ frei: 1, gesamt: 3, standorte: 1 });
+      expect(res.body.hzlWoche).toEqual({ bezahlt: 1, gesamt: 1, isoJahr: jahr, isoWoche: woche });
+      expect(res.body.offeneStornoantraege).toEqual({ anzahl: 1 });
+      const kuIds = res.body.kostenuebernahmenBaldEndend.map((k: { klientId: string }) => k.klientId);
+      expect(kuIds).toContain(klient1);
+      expect(kuIds).not.toContain(klient2);
+      const tbIds = res.body.klientenOhneTagesbericht.map((k: { klientId: string }) => k.klientId);
+      expect(tbIds).toContain(klient1);
+      expect(tbIds).toContain(klient3);
+      expect(tbIds).not.toContain(klient2);
+      const aufgabenTitel = res.body.unzugewieseneZimmeraufgaben.map((a: { titel: string }) => a.titel);
+      expect(aufgabenTitel).toEqual(["Unzugewiesen Standort 1"]);
+    });
+
+    it("meineOffenenAufgaben bleibt bei aktivem standortId unveraendert -- die Ausnahme aus KlientDetail bleibt bestehen", async () => {
+      const ungefiltert = await get(tokenBereichsleitung);
+      const gefiltert = await get(tokenBereichsleitung, standort1Id);
+      expect(gefiltert.body.meineOffenenAufgaben).toEqual(ungefiltert.body.meineOffenenAufgaben);
+    });
+
+    it("einrichtungsleitung-s1 mit standortId von Standort 2 (ausserhalb der eigenen Zuordnung) -- 403", async () => {
+      const res = await get(tokenEinrichtungsleitungS1, standort2Id);
+      expect(res.status).toBe(403);
+    });
+
+    it("standortId eines fremden Mandanten -- 403, keine stillen Nullwerte", async () => {
+      const res = await get(tokenBereichsleitung, fremderStandortId);
+      expect(res.status).toBe(403);
+    });
+
+    it("standortId ohne UUID-Format -- 400", async () => {
+      const res = await get(tokenBereichsleitung, "nicht-uuid");
+      expect(res.status).toBe(400);
     });
   });
 });

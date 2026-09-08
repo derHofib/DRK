@@ -1,8 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { ermittleErlaubteStandortIds, klientStandortBedingung, standortIdBedingung } from "../common/standort-restriction";
+import {
+  ermittleErlaubteStandortIds,
+  klientStandortBedingung,
+  standortIdBedingung,
+  standortIstErlaubt,
+} from "../common/standort-restriction";
 import { isoWoche } from "../common/iso-woche";
 import { AufgabePrioritaet } from "../aufgaben/aufgabe.service";
 
@@ -68,10 +73,22 @@ export interface DashboardDto {
 export class DashboardService {
   constructor(private readonly db: DatabaseService) {}
 
-  async ermitteln(): Promise<DashboardDto> {
+  async ermitteln(standortId?: string): Promise<DashboardDto> {
     const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      let erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      // Standort-Auswahl darf die bereits ermittelte Menge nur EINENGEN,
+      // nie erweitern -- standortIstErlaubt() deckt in einer Pruefung sowohl
+      // "existiert nicht" als auch "gehoert (per RLS) einem fremden
+      // Mandanten" als auch "liegt ausserhalb der eigenen Zuordnung" ab.
+      // Kein stiller Rueckfall auf "alle": eine ungueltige Auswahl ist ein
+      // Fehler des Aufrufers, kein Anlass, mehr zu zeigen als angefragt.
+      if (standortId) {
+        if (!(await standortIstErlaubt(client, benutzerId, standortId))) {
+          throw new ForbiddenException("Standort nicht gefunden oder nicht erlaubt.");
+        }
+        erlaubteStandorte = [standortId];
+      }
       // Nacheinander statt Promise.all: alle Abfragen teilen sich denselben
       // PoolClient (eine Transaktion, siehe DatabaseService.withTenant), und
       // ein einzelner Client kann immer nur eine Abfrage gleichzeitig

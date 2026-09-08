@@ -121,7 +121,7 @@ async function blobUrl(path: string): Promise<string> {
 }
 
 export const api = {
-  dashboard: () => request<DashboardDto>("/dashboard"),
+  dashboard: (standortId?: string) => request<DashboardDto>(`/dashboard${standortId ? `?standortId=${standortId}` : ""}`),
 
   login: (payload: LoginRequest) =>
     request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
