@@ -32,6 +32,7 @@ import {
   CircleSlash,
   CircleX,
   Clock,
+  Contact,
   Copy,
   DoorClosed,
   DoorOpen,
@@ -226,6 +227,7 @@ export const ILeerVerlauf = baueLeer(History);
 export const ILeerStandorte = baueLeer(MapPinOff);
 export const ILeerTagesberichte = baueLeer(BookX);
 export const ILeerAufgaben = baueLeer(ListTodo);
+export const ILeerKontakte = baueLeer(Contact);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);

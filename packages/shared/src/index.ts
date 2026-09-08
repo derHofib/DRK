@@ -191,6 +191,68 @@ export interface KlientListEintragDto {
 
 export interface KlientDetailDto extends KlientListEintragDto {
   geburtsdatum: string | null;
+  aufnahmeAm: string | null;
+  entlassenAm: string | null;
+  stammdaten: KlientStammdatenDto | null;
+  kontakte: KlientKontaktDto[];
+}
+
+/**
+ * Erweitertes Klientenprofil aus dem Aufnahme-Datenblatt, 1:1 zu Klient
+ * (siehe migrations/0034_klient_stammdaten.sql). "Zuständiges Jugendamt
+ * (Name)" ist bewusst NICHT hier -- das ist KlientDetailDto.amt.
+ * Aufnahme-/Entlassungsdatum ebenfalls bewusst nicht hier -- die werden aus
+ * der Zimmer-Belegung abgeleitet (siehe KlientDetailDto.aufnahmeAm/-entlassenAm).
+ */
+export interface KlientStammdatenDto {
+  geburtsort: string | null;
+  nationalitaet: string | null;
+  sorgeberechtigt: string | null;
+  bezugsbetreuerId: string | null;
+  bezugsbetreuerName: string | null;
+  betreuungsstunden: string | null;
+  telefon: string | null;
+  sprachen: string | null;
+  anmerkungen: string | null;
+  personaldokumente: string | null;
+  bankkonto: string | null;
+  iban: string | null;
+  jugendamtAdresse: string | null;
+  jugendamtSachbearbeiter: string | null;
+  jugendamtStellenzeichen: string | null;
+  jugendamtTelefon: string | null;
+  jugendamtEmail: string | null;
+  wjhName: string | null;
+  wjhTelefon: string | null;
+  wjhEmail: string | null;
+  personensorgeberechtigte: string | null;
+  besuchskontakte: string | null;
+  krankenkasse: string | null;
+  versichertennummer: string | null;
+  medikamente: string | null;
+  diagnosen: string | null;
+  allergien: string | null;
+  besonderheitenGesundheitlich: string | null;
+  besonderheitenPsychisch: string | null;
+  schule: string | null;
+  klassenstufe: string | null;
+  schulabschluesse: string | null;
+  foerderbedarfe: string | null;
+  vorherigeEinrichtungTraeger: string | null;
+  vorherigeEinrichtungKontakt: string | null;
+  vorherigeEinrichtungAnfrageAm: string | null;
+  vorherigeEinrichtungEinzugAm: string | null;
+  vorherigeEinrichtungAuszugAm: string | null;
+  aktualisiertAm: string;
+}
+
+export interface KlientKontaktDto {
+  id: string;
+  beziehung: string | null;
+  name: string;
+  adresse: string | null;
+  email: string | null;
+  telefon: string | null;
 }
 
 export const ZIMMERSTATUS_LABEL: Record<Zimmerstatus, string> = {

@@ -22,8 +22,63 @@ export interface KlientListEintrag {
   anonymisiertAm: string | null;
 }
 
+export interface KlientStammdaten {
+  geburtsort: string | null;
+  nationalitaet: string | null;
+  sorgeberechtigt: string | null;
+  bezugsbetreuerId: string | null;
+  bezugsbetreuerName: string | null;
+  betreuungsstunden: string | null;
+  telefon: string | null;
+  sprachen: string | null;
+  anmerkungen: string | null;
+  personaldokumente: string | null;
+  bankkonto: string | null;
+  iban: string | null;
+  jugendamtAdresse: string | null;
+  jugendamtSachbearbeiter: string | null;
+  jugendamtStellenzeichen: string | null;
+  jugendamtTelefon: string | null;
+  jugendamtEmail: string | null;
+  wjhName: string | null;
+  wjhTelefon: string | null;
+  wjhEmail: string | null;
+  personensorgeberechtigte: string | null;
+  besuchskontakte: string | null;
+  krankenkasse: string | null;
+  versichertennummer: string | null;
+  medikamente: string | null;
+  diagnosen: string | null;
+  allergien: string | null;
+  besonderheitenGesundheitlich: string | null;
+  besonderheitenPsychisch: string | null;
+  schule: string | null;
+  klassenstufe: string | null;
+  schulabschluesse: string | null;
+  foerderbedarfe: string | null;
+  vorherigeEinrichtungTraeger: string | null;
+  vorherigeEinrichtungKontakt: string | null;
+  vorherigeEinrichtungAnfrageAm: string | null;
+  vorherigeEinrichtungEinzugAm: string | null;
+  vorherigeEinrichtungAuszugAm: string | null;
+  aktualisiertAm: string;
+}
+
+export interface KlientKontakt {
+  id: string;
+  beziehung: string | null;
+  name: string;
+  adresse: string | null;
+  email: string | null;
+  telefon: string | null;
+}
+
 export interface KlientDetail extends KlientListEintrag {
   geburtsdatum: string | null;
+  aufnahmeAm: string | null;
+  entlassenAm: string | null;
+  stammdaten: KlientStammdaten | null;
+  kontakte: KlientKontakt[];
 }
 
 @Injectable()
@@ -71,7 +126,16 @@ export class KlientService {
          RETURNING id, vorname, nachname, geburtsdatum, aktenzeichen, amt, hzl_rhythmus`,
         [mandantId, input.vorname, input.nachname, input.geburtsdatum, input.aktenzeichen, input.amt, input.hzlRhythmus]
       );
-      return { ...rows[0], hzlRhythmus: rows[0].hzl_rhythmus, aktuellesZimmer: null, anonymisiertAm: null };
+      return {
+        ...rows[0],
+        hzlRhythmus: rows[0].hzl_rhythmus,
+        aktuellesZimmer: null,
+        anonymisiertAm: null,
+        aufnahmeAm: null,
+        entlassenAm: null,
+        stammdaten: null,
+        kontakte: [],
+      };
     });
   }
 
@@ -138,7 +202,47 @@ export class KlientService {
       params
     );
     if (rows.length === 0) return null;
-    return { ...zuListEintrag(rows[0]), geburtsdatum: rows[0].geburtsdatum };
+
+    // Aufnahme-/Entlassungsdatum werden bewusst nicht gespeichert, sondern
+    // aus den Belegungen abgeleitet (siehe migrations/0034_klient_stammdaten.sql):
+    // Aufnahme = fruehester jemals erfasster Einzug, Entlassung = spaetester
+    // Auszug, aber nur wenn AKTUELL kein offener Aufenthalt mehr besteht --
+    // sonst wuerde ein fruehstes abgeschlossenes Intervall faelschlich als
+    // "entlassen" angezeigt, obwohl der Klient laengst wieder da ist.
+    const { rows: zeitraumRows } = await client.query(
+      `
+      SELECT
+        MIN(einzug) AS aufnahme_am,
+        CASE WHEN bool_or(auszug IS NULL AND einzug <= CURRENT_DATE) THEN NULL ELSE MAX(auszug) END AS entlassen_am
+      FROM belegung
+      WHERE klient_id = $1
+      `,
+      [id]
+    );
+
+    const { rows: stammdatenRows } = await client.query(
+      `
+      SELECT ks.*, b.name AS bezugsbetreuer_name
+      FROM klient_stammdaten ks
+      LEFT JOIN benutzer b ON b.id = ks.bezugsbetreuer_id
+      WHERE ks.klient_id = $1
+      `,
+      [id]
+    );
+
+    const { rows: kontaktRows } = await client.query(
+      `SELECT id, beziehung, name, adresse, email, telefon FROM klient_kontakt WHERE klient_id = $1 ORDER BY erstellt_am`,
+      [id]
+    );
+
+    return {
+      ...zuListEintrag(rows[0]),
+      geburtsdatum: rows[0].geburtsdatum,
+      aufnahmeAm: zeitraumRows[0].aufnahme_am,
+      entlassenAm: zeitraumRows[0].entlassen_am,
+      stammdaten: stammdatenRows.length > 0 ? zuStammdatenDto(stammdatenRows[0]) : null,
+      kontakte: kontaktRows.map(zuKontaktDto),
+    };
   }
 }
 
@@ -154,5 +258,60 @@ function zuListEintrag(r: any): KlientListEintrag {
       ? { id: r.zimmer_id, nummer: r.zimmer_nummer, standortName: r.standort_name, belegungId: r.belegung_id }
       : null,
     anonymisiertAm: r.anonymisiert_am,
+  };
+}
+
+export function zuStammdatenDto(r: any): KlientStammdaten {
+  return {
+    geburtsort: r.geburtsort,
+    nationalitaet: r.nationalitaet,
+    sorgeberechtigt: r.sorgeberechtigt,
+    bezugsbetreuerId: r.bezugsbetreuer_id,
+    bezugsbetreuerName: r.bezugsbetreuer_name,
+    betreuungsstunden: r.betreuungsstunden,
+    telefon: r.telefon,
+    sprachen: r.sprachen,
+    anmerkungen: r.anmerkungen,
+    personaldokumente: r.personaldokumente,
+    bankkonto: r.bankkonto,
+    iban: r.iban,
+    jugendamtAdresse: r.jugendamt_adresse,
+    jugendamtSachbearbeiter: r.jugendamt_sachbearbeiter,
+    jugendamtStellenzeichen: r.jugendamt_stellenzeichen,
+    jugendamtTelefon: r.jugendamt_telefon,
+    jugendamtEmail: r.jugendamt_email,
+    wjhName: r.wjh_name,
+    wjhTelefon: r.wjh_telefon,
+    wjhEmail: r.wjh_email,
+    personensorgeberechtigte: r.personensorgeberechtigte,
+    besuchskontakte: r.besuchskontakte,
+    krankenkasse: r.krankenkasse,
+    versichertennummer: r.versichertennummer,
+    medikamente: r.medikamente,
+    diagnosen: r.diagnosen,
+    allergien: r.allergien,
+    besonderheitenGesundheitlich: r.besonderheiten_gesundheitlich,
+    besonderheitenPsychisch: r.besonderheiten_psychisch,
+    schule: r.schule,
+    klassenstufe: r.klassenstufe,
+    schulabschluesse: r.schulabschluesse,
+    foerderbedarfe: r.foerderbedarfe,
+    vorherigeEinrichtungTraeger: r.vorherige_einrichtung_traeger,
+    vorherigeEinrichtungKontakt: r.vorherige_einrichtung_kontakt,
+    vorherigeEinrichtungAnfrageAm: r.vorherige_einrichtung_anfrage_am,
+    vorherigeEinrichtungEinzugAm: r.vorherige_einrichtung_einzug_am,
+    vorherigeEinrichtungAuszugAm: r.vorherige_einrichtung_auszug_am,
+    aktualisiertAm: r.aktualisiert_am,
+  };
+}
+
+export function zuKontaktDto(r: any): KlientKontakt {
+  return {
+    id: r.id,
+    beziehung: r.beziehung,
+    name: r.name,
+    adresse: r.adresse,
+    email: r.email,
+    telefon: r.telefon,
   };
 }

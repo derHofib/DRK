@@ -566,6 +566,75 @@ sauber.
   Empfang erfassen und später synchronisieren) ist nicht Teil dieser
   Phase und bräuchte eine eigene Warteschlangen-Logik.
 
+**Nachtrag — erweiterte Klienten-Stammdaten (Aufnahme-Datenblatt) und
+Kontakte.** Auf Wunsch wurden alle Felder aus dem Papier-Aufnahme-Datenblatt
+als ausfüllbare Stammdaten im Reiter „Übersicht" ergänzt, plus beliebig viele
+Kontaktpersonen je Klient als Unterformular:
+- **Neue Tabellen statt neuer Spalten auf `klient`:** `klient_stammdaten`
+  (1:1, `UNIQUE` auf `klient_id`) und `klient_kontakt` (1:n), beide RLS- und
+  standort-eingeschränkt wie jede andere klientenbezogene Tabelle
+  (`migrations/0034_klient_stammdaten.sql`). Der Grund liegt in einer
+  bestehenden Entscheidung aus Phase 3: `klient` selbst ist seit der
+  Anonymisierungs-Migration (0027) spaltenscharf gesperrt (`REVOKE UPDATE,
+  DELETE … GRANT UPDATE (vorname, nachname, geburtsdatum, …)`) — eine neue
+  Tabelle mit den Standard-Rechten aus Migration 0002 ist der einfachste Weg
+  zu einem frei bearbeitbaren erweiterten Profil, ohne diese Sperre
+  aufzuweichen.
+- **„Zuständiges Jugendamt (Name)" wurde nicht dupliziert** — das ist
+  inhaltlich `klient.amt`, das es bereits seit Phase 1 gibt. Nur die
+  zusätzlichen Detailfelder (Adresse, Sachbearbeiter:in, Stellenzeichen,
+  Telefon, E-Mail) sind neu.
+- **Aufnahme- und Entlassungsdatum werden nicht gespeichert, sondern aus der
+  Zimmer-Belegung abgeleitet** (frühester Einzug / spätester Auszug, aber nur
+  wenn aktuell kein offener Aufenthalt mehr besteht) — dieselbe Philosophie
+  wie beim abgeleiteten Zimmerstatus (CLAUDE.md, „Zustände werden
+  abgeleitet, nicht gespeichert").
+- **Partial-Update statt vollständigem Formular:** `PATCH
+  /klienten/:id/stammdaten` speichert nur die mitgeschickten Felder
+  (`INSERT … ON CONFLICT (klient_id) DO UPDATE SET spalte = COALESCE(
+  EXCLUDED.spalte, klient_stammdaten.spalte)`), alle anderen bleiben
+  unangetastet — das Formular ist nach den sechs Abschnitten des
+  Datenblatts gegliedert (Schnelle Informationen, Weitere Informationen,
+  Kontakt/Betreuung, Gesundheit, Bildung/Ausbildung, Vorherige Einrichtung)
+  und jeder Abschnitt speichert unabhängig. Ein leerer String leert ein Feld
+  gezielt.
+- **Bezugsbetreuer:in ist eine echte Verknüpfung** (`bezugsbetreuer_id uuid
+  REFERENCES benutzer`), keine Freitextspalte — ein Dropdown aus den
+  Mitarbeitenden. Eine unbekannte Benutzer-id liefert `404` statt eines
+  rohen FK-Verletzungs-`500`ers (derselbe Grundsatz wie beim
+  UUID-Validierungs-Nachtrag oben). Bewusste Lücke: die Zuordnung lässt sich
+  über dieses Formular aktuell nicht wieder entfernen, weil ein leerer
+  String bei einer `uuid`-Spalte kein gültiger „löschen"-Wert ist wie bei
+  Text — anders als bei den übrigen Feldern würde er den Insert/Update mit
+  einem Typfehler scheitern lassen. Für ein späteres "nicht zugeordnet"
+  bräuchte es eine eigene Handhabung dieser einen Spalte.
+- **Gesundheitsdaten (Medikamente, Diagnosen, Allergien, Besonderheiten)**
+  sind eine Stufe sensibler als der Rest der Akte, bleiben aber bewusst ohne
+  gesonderte Rollensperre lesbar/bearbeitbar für alle mit Klienten-Zugriff —
+  ausdrückliche Projektentscheidung, weil Betreuer:innen sie im Alltag
+  brauchen (siehe Kommentar in der Migration).
+- **Kontakte** (`klient_kontakt`) sind bewusst 1:n mit freiem Feld
+  „Beziehung/Rolle" — das Datenblatt hat vier identische, unbeschriftete
+  Kontaktblöcke, damit bleibt erkennbar, wer wer ist. Volle CRUD
+  (`POST`/`PATCH`/`DELETE /klienten/:id/kontakte[/:kontaktId]`).
+
+Geprüft: 15 neue e2e-Tests (`klient-stammdaten.e2e-spec.ts`) gegen echtes
+PostgreSQL — Partial-Update-Semantik (drei Fälle: erstes Speichern, zweites
+unabhängiges Speichern lässt vorherige Felder unangetastet, leerer String
+leert gezielt), Bezugsbetreuer-Verknüpfung inkl. `404` bei unbekannter und
+`400` bei syntaktisch ungültiger id, Standort-Einschränkung für Stammdaten
+UND Kontakte (mit eingebauter Gegenprobe: dieselbe Aktion klappt für eine
+unrestricted Rolle), volle Kontakte-CRUD inklusive doppeltem Löschen, sowie
+das abgeleitete Aufnahme-/Entlassungsdatum in beiden Fällen (offener und
+abgeschlossener Aufenthalt). Beide sicherheitsrelevanten Prüfungen
+(Standort-Zugriff, Bezugsbetreuer-FK-Vorprüfung) per Gegenprobe verifiziert:
+Prüfung im Service auskommentiert, exakt die vorgesehenen zwei Tests wurden
+rot (`500` statt `404` bzw. `200` statt `404`), Prüfung wiederhergestellt,
+wieder alle 253 API-Tests grün. `pnpm build` (shared + api + web) sauber.
+Zusätzlich live im Browser geprüft (Hell- und Dunkelmodus): Abschnitt
+bearbeiten, Kontakt anlegen und wieder löschen, abgeleitetes Aufnahmedatum
+sichtbar — Testmandant danach wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

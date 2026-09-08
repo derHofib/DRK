@@ -1,7 +1,10 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type {
+  BenutzerListEintragDto,
   KassenbuchungDto,
   KlientDetailDto,
+  KlientKontaktDto,
+  KlientStammdatenDto,
   KostenuebernahmeDto,
   RechnungDto,
   RechnungStatus,
@@ -19,6 +22,7 @@ import {
   IAblehnen,
   IAuszahlen,
   IAuszug,
+  IBearbeiten,
   IBeenden,
   IDokument,
   IEinziehen,
@@ -27,6 +31,7 @@ import {
   IKassenbuch,
   IKostenuebernahme,
   ILeerKassenbuch,
+  ILeerKontakte,
   ILeerKostenuebernahmen,
   ILeerRechnungen,
   ILeerTagesberichte,
@@ -184,6 +189,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     undefined
   );
   const [freieZimmer, setFreieZimmer] = useState<ZimmerListEintragDto[]>([]);
+  const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
   const [zuweisungOffen, setZuweisungOffen] = useState(false);
   const [auszugOffen, setAuszugOffen] = useState(false);
   const [formFehler, setFormFehler] = useState<string | null>(null);
@@ -199,6 +205,12 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     if (klient.aktuellesZimmer) return;
     api.zimmerListe().then((liste) => setFreieZimmer(liste.filter((z) => z.bewohner.length < z.kapazitaet)));
   }, [klient.id, klient.aktuellesZimmer]);
+
+  // Fuer das Bezugsbetreuer-Dropdown in den Stammdaten -- einmal fuer die
+  // ganze Uebersicht geladen statt je Abschnitt neu.
+  useEffect(() => {
+    api.benutzerListe().then(setBenutzerListe).catch(() => {});
+  }, []);
 
   async function zimmerZuweisen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -238,7 +250,8 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
   }
 
   return (
-    <div className="zv-card zv-card-weit">
+    <div>
+    <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", rowGap: 12, fontSize: 14 }}>
         <div style={{ color: "var(--zv-text-muted)" }}>Zimmer</div>
         <div>
@@ -280,6 +293,10 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
               ? `${aktuelleKostenuebernahme.amt}, seit ${aktuelleKostenuebernahme.von}`
               : "Kein offener Zeitraum"}
         </div>
+        <div style={{ color: "var(--zv-text-muted)" }}>Aufnahme am</div>
+        <div>{klient.aufnahmeAm ? formatDatum(klient.aufnahmeAm) : "–"}</div>
+        <div style={{ color: "var(--zv-text-muted)" }}>Entlassen am</div>
+        <div>{klient.entlassenAm ? formatDatum(klient.entlassenAm) : "–"}</div>
       </div>
 
       {zuweisungOffen && (
@@ -349,6 +366,448 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
               {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+    </div>
+
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Schnelle Informationen"
+      felder={SCHNELLE_INFO_FELDER}
+      stammdaten={klient.stammdaten}
+      benutzerListe={benutzerListe}
+      onGeaendert={onGeaendert}
+    />
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Weitere Informationen"
+      felder={WEITERE_INFO_FELDER}
+      stammdaten={klient.stammdaten}
+      onGeaendert={onGeaendert}
+    />
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Kontakt / Betreuung"
+      felder={KONTAKT_BETREUUNG_FELDER}
+      stammdaten={klient.stammdaten}
+      onGeaendert={onGeaendert}
+    />
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Gesundheit"
+      felder={GESUNDHEIT_FELDER}
+      stammdaten={klient.stammdaten}
+      onGeaendert={onGeaendert}
+    />
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Bildung / Ausbildung"
+      felder={BILDUNG_FELDER}
+      stammdaten={klient.stammdaten}
+      onGeaendert={onGeaendert}
+    />
+    <StammdatenAbschnitt
+      klientId={klient.id}
+      titel="Vorherige Einrichtung"
+      felder={VORHERIGE_EINRICHTUNG_FELDER}
+      stammdaten={klient.stammdaten}
+      onGeaendert={onGeaendert}
+    />
+
+    <KontakteAbschnitt klientId={klient.id} kontakte={klient.kontakte} onGeaendert={onGeaendert} />
+    </div>
+  );
+}
+
+type StammdatenFeldTyp = "text" | "textarea" | "datum" | "benutzer";
+
+interface StammdatenFeld {
+  key: keyof Omit<KlientStammdatenDto, "bezugsbetreuerName" | "aktualisiertAm">;
+  label: string;
+  typ: StammdatenFeldTyp;
+}
+
+const SCHNELLE_INFO_FELDER: StammdatenFeld[] = [
+  { key: "geburtsort", label: "Geburtsort", typ: "text" },
+  { key: "nationalitaet", label: "Nationalität", typ: "text" },
+  { key: "sorgeberechtigt", label: "Sorgeberechtigt", typ: "text" },
+  { key: "bezugsbetreuerId", label: "Bezugsbetreuer:in", typ: "benutzer" },
+  { key: "betreuungsstunden", label: "Betreuungsstunden", typ: "text" },
+  { key: "telefon", label: "Telefon", typ: "text" },
+  { key: "sprachen", label: "Sprachen", typ: "text" },
+  { key: "anmerkungen", label: "Anmerkungen", typ: "textarea" },
+];
+
+const WEITERE_INFO_FELDER: StammdatenFeld[] = [
+  { key: "personaldokumente", label: "Personaldokumente", typ: "text" },
+  { key: "bankkonto", label: "Bankkonto (Kontoinhaber:in)", typ: "text" },
+  { key: "iban", label: "IBAN", typ: "text" },
+];
+
+const KONTAKT_BETREUUNG_FELDER: StammdatenFeld[] = [
+  { key: "jugendamtAdresse", label: "Adresse des Jugendamts", typ: "text" },
+  { key: "jugendamtSachbearbeiter", label: "Sachbearbeiter:in", typ: "text" },
+  { key: "jugendamtStellenzeichen", label: "Stellenzeichen", typ: "text" },
+  { key: "jugendamtTelefon", label: "Telefon Jugendamt", typ: "text" },
+  { key: "jugendamtEmail", label: "E-Mail Jugendamt", typ: "text" },
+  { key: "wjhName", label: "WJH (Name)", typ: "text" },
+  { key: "wjhTelefon", label: "WJH Telefon", typ: "text" },
+  { key: "wjhEmail", label: "WJH E-Mail", typ: "text" },
+  { key: "personensorgeberechtigte", label: "Personensorgeberechtigte(r)", typ: "text" },
+  { key: "besuchskontakte", label: "Besuchskontakte", typ: "textarea" },
+];
+
+const GESUNDHEIT_FELDER: StammdatenFeld[] = [
+  { key: "krankenkasse", label: "Krankenkasse", typ: "text" },
+  { key: "versichertennummer", label: "Versichertennummer", typ: "text" },
+  { key: "medikamente", label: "Medikamente", typ: "textarea" },
+  { key: "diagnosen", label: "Diagnosen", typ: "textarea" },
+  { key: "allergien", label: "Allergien", typ: "textarea" },
+  { key: "besonderheitenGesundheitlich", label: "Besonderheiten (gesundheitlich)", typ: "textarea" },
+  { key: "besonderheitenPsychisch", label: "Besonderheiten (psychisch)", typ: "textarea" },
+];
+
+const BILDUNG_FELDER: StammdatenFeld[] = [
+  { key: "schule", label: "Schule", typ: "text" },
+  { key: "klassenstufe", label: "Klassenstufe", typ: "text" },
+  { key: "schulabschluesse", label: "Schulabschlüsse", typ: "text" },
+  { key: "foerderbedarfe", label: "Förderbedarfe", typ: "textarea" },
+];
+
+const VORHERIGE_EINRICHTUNG_FELDER: StammdatenFeld[] = [
+  { key: "vorherigeEinrichtungTraeger", label: "Träger", typ: "text" },
+  { key: "vorherigeEinrichtungKontakt", label: "Kontakt", typ: "text" },
+  { key: "vorherigeEinrichtungAnfrageAm", label: "Anfrage am", typ: "datum" },
+  { key: "vorherigeEinrichtungEinzugAm", label: "Einzug am", typ: "datum" },
+  { key: "vorherigeEinrichtungAuszugAm", label: "Auszug am", typ: "datum" },
+];
+
+function anzeigeWert(feld: StammdatenFeld, stammdaten: KlientStammdatenDto | null): string {
+  if (!stammdaten) return "–";
+  if (feld.typ === "benutzer") return stammdaten.bezugsbetreuerName ?? "–";
+  const wert = stammdaten[feld.key] as string | null;
+  if (!wert) return "–";
+  return feld.typ === "datum" ? formatDatum(wert) : wert;
+}
+
+function StammdatenAbschnitt({
+  klientId,
+  titel,
+  felder,
+  stammdaten,
+  benutzerListe,
+  onGeaendert,
+}: {
+  klientId: string;
+  titel: string;
+  felder: StammdatenFeld[];
+  stammdaten: KlientStammdatenDto | null;
+  benutzerListe?: BenutzerListEintragDto[];
+  onGeaendert: () => void;
+}) {
+  const [bearbeitenOffen, setBearbeitenOffen] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  async function speichern(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const payload: Record<string, string> = {};
+    for (const f of felder) {
+      const wert = String(form.get(f.key) ?? "");
+      // "Nicht zugeordnet" beim Bezugsbetreuer wird bewusst NICHT
+      // mitgeschickt: die Spalte ist eine uuid-FK, ein leerer String waere
+      // dort kein gueltiger "loeschen"-Wert wie bei Text (siehe
+      // KlientStammdatenService.setzen()) -- einmal zugeordnet, laesst sich
+      // die Zuordnung ueber dieses Formular nicht wieder entfernen.
+      if (f.typ === "benutzer" && wert === "") continue;
+      payload[f.key] = wert;
+    }
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.klientStammdatenSetzen(klientId, payload);
+      setBearbeitenOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Angaben konnten nicht gespeichert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  return (
+    <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
+      <div className="zv-seiten-kopf" style={{ marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>{titel}</h3>
+        <button className="zv-link-btn" onClick={() => setBearbeitenOffen(true)}>
+          <IBearbeiten />
+          Bearbeiten
+        </button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", rowGap: 10, fontSize: 14 }}>
+        {felder.map((f) => (
+          <div key={f.key} style={{ display: "contents" }}>
+            <div style={{ color: "var(--zv-text-muted)" }}>{f.label}</div>
+            <div style={{ whiteSpace: f.typ === "textarea" ? "pre-wrap" : undefined }}>
+              {anzeigeWert(f, stammdaten)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {bearbeitenOffen && (
+        <Modal titel={titel} onClose={() => setBearbeitenOffen(false)}>
+          <form onSubmit={speichern}>
+            {fehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {fehler}
+              </div>
+            )}
+            {felder.map((f) => (
+              <div className="zv-field" key={f.key}>
+                <label htmlFor={`sf-${f.key}`}>{f.label}</label>
+                {f.typ === "textarea" ? (
+                  <textarea id={`sf-${f.key}`} name={f.key} rows={3} defaultValue={stammdaten?.[f.key] ?? ""} />
+                ) : f.typ === "datum" ? (
+                  <input
+                    id={`sf-${f.key}`}
+                    name={f.key}
+                    type="date"
+                    defaultValue={(stammdaten?.[f.key] as string | null) ?? ""}
+                  />
+                ) : f.typ === "benutzer" ? (
+                  <select id={`sf-${f.key}`} name={f.key} defaultValue={stammdaten?.bezugsbetreuerId ?? ""}>
+                    <option value="">Nicht zugeordnet</option>
+                    {(benutzerListe ?? []).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id={`sf-${f.key}`}
+                    name={f.key}
+                    type="text"
+                    defaultValue={(stammdaten?.[f.key] as string | null) ?? ""}
+                  />
+                )}
+              </div>
+            ))}
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function KontakteAbschnitt({
+  klientId,
+  kontakte,
+  onGeaendert,
+}: {
+  klientId: string;
+  kontakte: KlientKontaktDto[];
+  onGeaendert: () => void;
+}) {
+  const [formularOffen, setFormularOffen] = useState(false);
+  const [bearbeitenKontakt, setBearbeitenKontakt] = useState<KlientKontaktDto | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  async function hinzufuegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.klientKontaktHinzufuegen(klientId, {
+        beziehung: String(form.get("beziehung") ?? "") || undefined,
+        name: String(form.get("name") ?? ""),
+        adresse: String(form.get("adresse") ?? "") || undefined,
+        email: String(form.get("email") ?? "") || undefined,
+        telefon: String(form.get("telefon") ?? "") || undefined,
+      });
+      setFormularOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Kontakt konnte nicht angelegt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function aktualisieren(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!bearbeitenKontakt) return;
+    const form = new FormData(e.currentTarget);
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.klientKontaktAktualisieren(klientId, bearbeitenKontakt.id, {
+        beziehung: String(form.get("beziehung") ?? ""),
+        name: String(form.get("name") ?? ""),
+        adresse: String(form.get("adresse") ?? ""),
+        email: String(form.get("email") ?? ""),
+        telefon: String(form.get("telefon") ?? ""),
+      });
+      setBearbeitenKontakt(null);
+      onGeaendert();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Kontakt konnte nicht gespeichert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function loeschen(kontaktId: string) {
+    setFehler(null);
+    try {
+      await api.klientKontaktLoeschen(klientId, kontaktId);
+      onGeaendert();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Kontakt konnte nicht gelöscht werden.");
+    }
+  }
+
+  return (
+    <div className="zv-card zv-card-weit">
+      <div className="zv-seiten-kopf" style={{ marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Kontakte</h3>
+        <button className="zv-btn" onClick={() => setFormularOffen(true)}>
+          <INeu />
+          Kontakt hinzufügen
+        </button>
+      </div>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+
+      {kontakte.length === 0 ? (
+        <Leerzustand icon={ILeerKontakte}>Noch keine Kontakte erfasst.</Leerzustand>
+      ) : (
+        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.2fr 1.4fr 1.8fr 1.4fr 1.4fr" } as CSSProperties}>
+          <div className="zv-liste-kopf">
+            <span>Beziehung</span>
+            <span>Name</span>
+            <span>Adresse</span>
+            <span>Kontakt</span>
+            <span></span>
+          </div>
+          {kontakte.map((k) => (
+            <div key={k.id} className="zv-info-karte">
+              <span className="zv-liste-zelle-titel">{k.beziehung || "–"}</span>
+              <span className="zv-liste-zelle" data-label="Name">
+                <strong>{k.name}</strong>
+              </span>
+              <span className="zv-liste-zelle" data-label="Adresse">
+                {k.adresse || "–"}
+              </span>
+              <span className="zv-liste-zelle" data-label="Kontakt">
+                {k.telefon || "–"}
+                {k.email && <span className="zv-sub-inline">{k.email}</span>}
+              </span>
+              <span className="zv-liste-zelle-aktionen">
+                <button className="zv-link-btn" onClick={() => setBearbeitenKontakt(k)}>
+                  <IBearbeiten />
+                  Bearbeiten
+                </button>
+                <button className="zv-link-btn" onClick={() => loeschen(k.id)}>
+                  <ILoeschen />
+                  Löschen
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {formularOffen && (
+        <Modal titel="Kontakt hinzufügen" onClose={() => setFormularOffen(false)}>
+          <form onSubmit={hinzufuegen}>
+            {fehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {fehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="kontakt-beziehung">Beziehung/Rolle</label>
+              <input id="kontakt-beziehung" name="beziehung" placeholder="z. B. Mutter, Anwalt, Pflegefamilie" />
+            </div>
+            <div className="zv-field">
+              <label htmlFor="kontakt-name">Name</label>
+              <input id="kontakt-name" name="name" required autoFocus />
+            </div>
+            <div className="zv-field">
+              <label htmlFor="kontakt-adresse">Adresse</label>
+              <input id="kontakt-adresse" name="adresse" />
+            </div>
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="kontakt-telefon">Telefon</label>
+                <input id="kontakt-telefon" name="telefon" />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="kontakt-email">E-Mail</label>
+                <input id="kontakt-email" name="email" type="email" />
+              </div>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Hinzufügen"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {bearbeitenKontakt && (
+        <Modal titel="Kontakt bearbeiten" onClose={() => setBearbeitenKontakt(null)}>
+          <form onSubmit={aktualisieren}>
+            {fehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {fehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="kb-beziehung">Beziehung/Rolle</label>
+              <input id="kb-beziehung" name="beziehung" defaultValue={bearbeitenKontakt.beziehung ?? ""} />
+            </div>
+            <div className="zv-field">
+              <label htmlFor="kb-name">Name</label>
+              <input id="kb-name" name="name" required autoFocus defaultValue={bearbeitenKontakt.name} />
+            </div>
+            <div className="zv-field">
+              <label htmlFor="kb-adresse">Adresse</label>
+              <input id="kb-adresse" name="adresse" defaultValue={bearbeitenKontakt.adresse ?? ""} />
+            </div>
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="kb-telefon">Telefon</label>
+                <input id="kb-telefon" name="telefon" defaultValue={bearbeitenKontakt.telefon ?? ""} />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="kb-email">E-Mail</label>
+                <input id="kb-email" name="email" type="email" defaultValue={bearbeitenKontakt.email ?? ""} />
+              </div>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Speichern"}
             </button>
           </form>
         </Modal>

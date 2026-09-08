@@ -9,7 +9,9 @@ import type {
   KassenbuchungDto,
   KassenbuchungTyp,
   KlientDetailDto,
+  KlientKontaktDto,
   KlientListEintragDto,
+  KlientStammdatenDto,
   KostenuebernahmeDto,
   LoginRequest,
   LoginResponse,
@@ -206,6 +208,28 @@ export const api = {
     hzlRhythmus: "monatlich" | "woechentlich";
   }) => request<KlientDetailDto>("/klienten", { method: "POST", body: JSON.stringify(payload) }),
   klientAnonymisieren: (id: string) => request<KlientDetailDto>(`/klienten/${id}/anonymisieren`, { method: "PATCH" }),
+
+  // Alle Felder optional und einzeln uebergebbar: das Formular speichert pro
+  // Datenblatt-Abschnitt, ein leerer String loescht ein Feld bewusst (siehe
+  // KlientStammdatenService.setzen() im Backend).
+  klientStammdatenSetzen: (id: string, payload: Partial<Omit<KlientStammdatenDto, "bezugsbetreuerName" | "aktualisiertAm">>) =>
+    request<KlientStammdatenDto>(`/klienten/${id}/stammdaten`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  klientKontaktHinzufuegen: (
+    klientId: string,
+    payload: { beziehung?: string; name: string; adresse?: string; email?: string; telefon?: string }
+  ) => request<KlientKontaktDto>(`/klienten/${klientId}/kontakte`, { method: "POST", body: JSON.stringify(payload) }),
+  klientKontaktAktualisieren: (
+    klientId: string,
+    kontaktId: string,
+    payload: { beziehung?: string; name?: string; adresse?: string; email?: string; telefon?: string }
+  ) =>
+    request<KlientKontaktDto>(`/klienten/${klientId}/kontakte/${kontaktId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  klientKontaktLoeschen: (klientId: string, kontaktId: string) =>
+    request<{ ok: true }>(`/klienten/${klientId}/kontakte/${kontaktId}`, { method: "DELETE" }),
 
   belegungEinziehen: (payload: { zimmerId: string; klientId: string; einzug: string }) =>
     request("/belegungen", { method: "POST", body: JSON.stringify(payload) }),
