@@ -57,6 +57,24 @@ export function klientStandortBedingung(
  * mit einer einzelnen klientId (z.B. vor dem Anlegen einer Buchung, oder um
  * eine schon geladene klient_id gegenzupruefen) -- dort gibt es keine
  * Ergebnisliste, die sich per WHERE filtern liesse, nur ein Ja/Nein.
+ *
+ * Zugriff besteht, wenn eine der drei Bedingungen zutrifft:
+ * 1. Der Klient ist AKTUELL an einem erlaubten Standort untergebracht.
+ * 2. Der Mitarbeitende steht in klient_stammdaten als Bezugsbetreuer:in --
+ *    das gilt unabhaengig vom aktuellen Aufenthaltsort, weil eine
+ *    Bezugsbetreuung bewusst ueber einen Umzug hinaus bestehen bleiben kann.
+ * 3. Die LETZTE (auch laengst abgeschlossene) Belegung lag an einem
+ *    erlaubten Standort -- ohne das wuerde ein Klient im Moment des Auszugs
+ *    (z.B. Verselbststaendigung in eine eigene Wohnung) fuer das bis dahin
+ *    zustaendige Standort-Team schlagartig unsichtbar, und jede
+ *    Nachbetreuungsdokumentation (Stammdaten, Tagesberichte, ...) waere
+ *    unmoeglich -- siehe Nachbetreuungs-Bugreport.
+ *
+ * Bewusst NICHT in klientStandortBedingung() uebernommen: die dort
+ * gefilterten Listenabfragen (z.B. GET /klienten) sollen weiterhin nur
+ * aktuell untergebrachte Klient:innen zeigen -- die Nachbetreuung geschieht
+ * gezielt ueber die schon bekannte Akte, nicht ueber das Auftauchen in einer
+ * allgemeinen Liste.
  */
 export async function klientIstErlaubt(
   client: PoolClient,
@@ -66,12 +84,29 @@ export async function klientIstErlaubt(
   const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
   if (!erlaubteStandorte) return true;
   const { rows } = await client.query(
-    `SELECT 1 FROM belegung b
-     JOIN zimmer z ON z.id = b.zimmer_id
-     WHERE b.klient_id = $1 AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
-       AND z.standort_id = ANY($2)
-     LIMIT 1`,
-    [klientId, erlaubteStandorte]
+    `SELECT 1
+     WHERE EXISTS (
+       SELECT 1 FROM belegung b
+       JOIN zimmer z ON z.id = b.zimmer_id
+       WHERE b.klient_id = $1 AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+         AND z.standort_id = ANY($2)
+     )
+     OR EXISTS (
+       SELECT 1 FROM klient_stammdaten ks
+       WHERE ks.klient_id = $1 AND ks.bezugsbetreuer_id = $3
+     )
+     OR EXISTS (
+       SELECT 1 FROM (
+         SELECT z2.standort_id
+         FROM belegung b2
+         JOIN zimmer z2 ON z2.id = b2.zimmer_id
+         WHERE b2.klient_id = $1
+         ORDER BY b2.einzug DESC
+         LIMIT 1
+       ) letzte
+       WHERE letzte.standort_id = ANY($2)
+     )`,
+    [klientId, erlaubteStandorte, benutzerId]
   );
   return rows.length > 0;
 }

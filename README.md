@@ -635,6 +635,35 @@ Zusätzlich live im Browser geprüft (Hell- und Dunkelmodus): Abschnitt
 bearbeiten, Kontakt anlegen und wieder löschen, abgeleitetes Aufnahmedatum
 sichtbar — Testmandant danach wieder entfernt.
 
+**Nachtrag — Nachbetreuung ausgezogener Klient:innen war für
+standortbeschränkte Betreuer:innen unmöglich.** `klientIstErlaubt()`
+(`common/standort-restriction.ts`) prüfte ausschließlich die aktuell offene
+Belegung. Im selben Moment, in dem ein Klient auszieht (z. B.
+Verselbstständigung in eine eigene Wohnung), verlor das bis dahin
+zuständige Standort-Team — und sogar der in `klient_stammdaten` eingetragene
+Bezugsbetreuer — jeden Lese- und Schreibzugriff auf Stammdaten,
+Tagesberichte usw. (`404` auf allen darauf aufbauenden Endpunkten). Die
+Prüfung erlaubt jetzt zusätzlich den Zugriff, wenn (a) der Mitarbeitende in
+`klient_stammdaten.bezugsbetreuer_id` eingetragen ist — unabhängig vom
+aktuellen Aufenthaltsort, weil eine Bezugsbetreuung bewusst über einen Umzug
+hinaus bestehen bleiben kann —, oder (b) die letzte, auch längst
+abgeschlossene Belegung (`ORDER BY einzug DESC LIMIT 1`) an einem der
+erlaubten Standorte lag. Bewusst **nicht** angefasst:
+`klientStandortBedingung()` (Listenabfragen wie `GET /klienten`) bleibt
+unverändert — ein ausgezogener Klient soll weiterhin nicht in der
+allgemeinen Klientenliste auftauchen, die Nachbetreuung geschieht gezielt
+über die schon bekannte Akte.
+
+Geprüft: 4 neue e2e-Tests (`nachbetreuung.e2e-spec.ts`) — Zugriff über den
+letzten historischen Standort, ein neuer Tagesbericht für denselben
+ausgezogenen Klienten, Zugriff allein über die Bezugsbetreuer-Zuordnung
+(ohne jeden Standort-Bezug), und eine Gegenprobe ohne beides, die weiterhin
+`404` liefert. Per Gegenprobe verifiziert: Erweiterung in
+`klientIstErlaubt()` auf die ursprüngliche Prüfung zurückgesetzt — exakt die
+drei vom Fix abhängigen Tests wurden rot (`404` statt `200`/`201`), die
+Negativprobe blieb grün, wiederhergestellt, wieder alle 257 API-Tests grün.
+`pnpm build` sauber.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
