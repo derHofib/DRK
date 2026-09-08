@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
@@ -15,6 +15,11 @@ const EXCLUSION_VIOLATION = "23P01";
 // Custom-SQLSTATE aus belegung_kapazitaet_pruefen() (migrations/0032),
 // kein Standard-Code -- siehe dort.
 const KAPAZITAET_UEBERSCHRITTEN = "ZA001";
+
+// CHECK-Constraint "auszug IS NULL OR auszug > einzug" (migrations/0010).
+// Ohne diese Uebersetzung liefe ein Auszug vor/am Einzugsdatum als
+// unbehandelter 500 durch, wie ein realer Systemtest gezeigt hat.
+const CHECK_VIOLATION = "23514";
 
 export interface BelegungDto {
   id: string;
@@ -74,29 +79,36 @@ export class BelegungService {
 
   async ausziehen(id: string, auszug: string): Promise<BelegungDto> {
     const { benutzerId } = requireTenantContext();
-    return this.db.withTenant(async (client) => {
-      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
-      if (erlaubteStandorte) {
-        const { rows: bRows } = await client.query(
-          "SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
-          [id]
+    try {
+      return await this.db.withTenant(async (client) => {
+        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+        if (erlaubteStandorte) {
+          const { rows: bRows } = await client.query(
+            "SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
+            [id]
+          );
+          if (bRows.length === 0 || !erlaubteStandorte.includes(bRows[0].standort_id)) {
+            throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
+          }
+        }
+
+        const { rows } = await client.query(
+          `UPDATE belegung SET auszug = $1
+           WHERE id = $2 AND auszug IS NULL
+           RETURNING id, zimmer_id, klient_id, einzug, auszug`,
+          [auszug, id]
         );
-        if (bRows.length === 0 || !erlaubteStandorte.includes(bRows[0].standort_id)) {
+        if (rows.length === 0) {
           throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
         }
+        return zuDto(rows[0]);
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === CHECK_VIOLATION) {
+        throw new BadRequestException("Das Auszugsdatum muss nach dem Einzugsdatum liegen.");
       }
-
-      const { rows } = await client.query(
-        `UPDATE belegung SET auszug = $1
-         WHERE id = $2 AND auszug IS NULL
-         RETURNING id, zimmer_id, klient_id, einzug, auszug`,
-        [auszug, id]
-      );
-      if (rows.length === 0) {
-        throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
-      }
-      return zuDto(rows[0]);
-    });
+      throw err;
+    }
   }
 }
 

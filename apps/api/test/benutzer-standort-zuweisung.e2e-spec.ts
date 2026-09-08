@@ -182,4 +182,27 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  /**
+   * Privilege-Escalation-Fund aus einem realen Systemtest: eine leere Liste
+   * hebt laut "eine leere Liste hebt die Einschraenkung wieder auf" oben
+   * jede Standort-Einschraenkung auf. Fuer die Bereichsleitung ist das
+   * Absicht (Test oben). Fuer die Einrichtungsleitung waere es das
+   * Gegenteil ihrer eigenen Beschraenkung ("darf nur die eigenen Standorte
+   * zuweisen") -- sie koennte einen Betreuer, den sie nur innerhalb ihrer
+   * Standorte verwalten darf, unbemerkt zum traegerweiten Springer machen,
+   * weil "eindeutigeIds.some(...)" bei einem LEEREN Array nie zuschlaegt.
+   */
+  it("Einrichtungsleitung darf die Standort-Einschraenkung NICHT per leerer Liste vollstaendig aufheben (403)", async () => {
+    await als(tokenBereichsleitung).put(`/benutzer/${betreuerId}/standorte`, { standortIds: [standort1Id] });
+
+    const res = await als(tokenEinrichtungsleitungS1).put(`/benutzer/${betreuerId}/standorte`, { standortIds: [] });
+    expect(res.status).toBe(403);
+
+    // Die bestehende Einschraenkung muss unveraendert bestehen bleiben --
+    // nicht nur der Statuscode zaehlt.
+    const liste = await als(tokenBereichsleitung).get("/benutzer");
+    const betreuer = liste.body.find((b: { id: string }) => b.id === betreuerId);
+    expect(betreuer.standortIds).toEqual([standort1Id]);
+  });
 });

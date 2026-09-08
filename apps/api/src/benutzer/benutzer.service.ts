@@ -160,9 +160,13 @@ export class BenutzerService {
    * "hinzufuegen/entfernen" -- das Frontend zeigt eine Checkbox-Liste, ein
    * voller Ersatz ist da einfacher richtig zu bekommen als ein Diff.
    *
-   * Eine leere Liste ist ausdruecklich erlaubt: sie hebt jede Einschraenkung
+   * Eine leere Liste ist grundsaetzlich erlaubt: sie hebt jede Einschraenkung
    * wieder auf (siehe common/standort-restriction.ts, "keine Zeile = keine
-   * Einschraenkung").
+   * Einschraenkung"). Fuer die Bereichsleitung ist das gewollt (traegerweite
+   * Sicht ist ihr Normalfall). Fuer die Einrichtungsleitung waere es dagegen
+   * eine stille Eskalation -- sie duerfte einen Betreuer damit ausserhalb
+   * ihrer eigenen Standorte befoerdern, siehe die eigene Pruefung weiter
+   * unten.
    */
   async standorteSetzen(zielBenutzerId: string, standortIds: string[]): Promise<string[]> {
     const ctx = requireTenantContext();
@@ -187,6 +191,19 @@ export class BenutzerService {
       if (ctx.rolle === "einrichtungsleitung") {
         if (zielRows[0].rolle !== "betreuer") {
           throw new ForbiddenException("Einrichtungsleitung darf nur Betreuer:innen Standorte zuweisen.");
+        }
+        // Eine leere Liste hebt laut Klassenkommentar oben JEDE Einschraenkung
+        // auf ("keine Zeile = keine Einschraenkung") -- fuer die
+        // Bereichsleitung ist das gewollt, fuer die Einrichtungsleitung waere
+        // es eine stille Eskalation: sie koennte einen Betreuer, den sie nur
+        // innerhalb der eigenen Standorte verwalten darf, zum traegerweiten
+        // Springer machen. Die Pruefung unten (eindeutigeIds.some(...)) greift
+        // bei einem LEEREN Array nicht -- deshalb ein eigener, vorgezogener
+        // Check.
+        if (eindeutigeIds.length === 0) {
+          throw new ForbiddenException(
+            "Einrichtungsleitung darf die Standort-Einschränkung nicht vollständig aufheben."
+          );
         }
         const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
         if (erlaubteStandorte && eindeutigeIds.some((id) => !erlaubteStandorte.includes(id))) {

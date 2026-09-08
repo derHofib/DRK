@@ -99,6 +99,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    // Die Raten-Schranke (@nestjs/throttler, siehe auth.controller.ts) gibt
+    // eine englische Systemmeldung ("ThrottlerException: Too Many Requests")
+    // zurueck, die roh angezeigt sonst wie ein Fehlerbild aussieht statt wie
+    // eine verstaendliche Rueckmeldung -- deshalb hier fest uebersetzt, vor
+    // jedem Body-Parsing.
+    if (res.status === 429) {
+      throw new Error("Zu viele Anmeldeversuche. Bitte warten Sie eine Minute, bevor Sie es erneut versuchen.");
+    }
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(body.message ?? `Anfrage fehlgeschlagen (${res.status})`);
   }

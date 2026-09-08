@@ -114,7 +114,7 @@ export function Mitarbeitende() {
             }}
           >
             <INeu />
-            Neuer Mitarbeiter
+            Mitarbeiter:in anlegen
           </button>
         )}
       </div>

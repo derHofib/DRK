@@ -159,6 +159,36 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     expect(res.body.hatUnterschrift).toBe(false);
   });
 
+  /**
+   * Realer Systemtest-Fund: das zod-Schema pruefte nur "int()", nicht die
+   * Grenzen der Postgres-Spalte betrag_cent (integer, 32-Bit signed) --
+   * ein zu grosser Betrag loeste dort "numeric field overflow" aus, als
+   * unbehandelter 500. Ausserdem war ein Betrag von 0 fachlich unsinnig,
+   * aber technisch erlaubt.
+   */
+  it("lehnt einen Betrag von 0 und einen 32-Bit-Integer-Overflow jeweils mit 400 ab", async () => {
+    const nullBetrag = await post("/kassenbuchungen", {
+      klientId: klientMonatlich,
+      datum: "2026-08-05",
+      betragCent: 0,
+      verwendungszweck: "Sollte scheitern",
+      typ: "einzahlung",
+    });
+    expect(nullBetrag.status).toBe(400);
+
+    const overflow = await post("/kassenbuchungen", {
+      klientId: klientMonatlich,
+      datum: "2026-08-05",
+      betragCent: 99_999_999_999,
+      verwendungszweck: "Sollte scheitern",
+      typ: "einzahlung",
+    });
+    expect(overflow.status).toBe(400);
+
+    const liste = await get(`/kassenbuchungen?klientId=${klientMonatlich}`);
+    expect(liste.body.find((b: { verwendungszweck: string }) => b.verwendungszweck === "Sollte scheitern")).toBeUndefined();
+  });
+
   it("lehnt eine zweite HZL-Buchung für dieselbe Woche mit 409 ab", async () => {
     const res = await post("/kassenbuchungen", {
       klientId: klientWoechentlich,

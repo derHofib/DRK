@@ -9,6 +9,7 @@ import type {
 } from "@zimmerakte/shared";
 import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
+import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -124,6 +125,8 @@ export function Kassenbuch() {
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
   const [offeneUnterschrift, setOffeneUnterschrift] = useState<{ buchungId: string; url: string } | null>(null);
+  const [stornoBeantragenBuchung, setStornoBeantragenBuchung] = useState<KassenbuchungDto | null>(null);
+  const [stornoAblehnenBuchung, setStornoAblehnenBuchung] = useState<KassenbuchungDto | null>(null);
 
   // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
   // (siehe ROLLEN_MIT_STORNO_ENTSCHEIDEN in kassenbuchung.service.ts).
@@ -229,14 +232,10 @@ export function Kassenbuch() {
   // Wer selbst entscheiden darf (siehe darfStornoEntscheiden), bewilligt sich
   // damit im selben Zug -- der Server macht daraus sofort einen Storno (siehe
   // stornoBeantragen() in kassenbuchung.service.ts). Fuer alle anderen bleibt
-  // es ein Antrag, der erst nach Bewilligung wirkt.
-  async function stornoBeantragen(buchung: KassenbuchungDto) {
-    const grund = window.prompt(
-      darfStornoEntscheiden
-        ? `Grund für die Stornierung von "${buchung.verwendungszweck}":`
-        : `Grund für den Storno-Antrag zu "${buchung.verwendungszweck}":`
-    );
-    if (!grund) return;
+  // es ein Antrag, der erst nach Bewilligung wirkt. Der Grund kommt ueber das
+  // GrundAbfrage-Modal weiter unten, nicht mehr per window.prompt() -- das
+  // wird in installierten PWAs (v.a. iOS Standalone) haeufig unterdrueckt.
+  async function stornoBeantragen(buchung: KassenbuchungDto, grund: string) {
     try {
       await api.kassenbuchungStornoBeantragen(buchung.id, grund);
       ladeBuchungen();
@@ -246,14 +245,8 @@ export function Kassenbuch() {
     }
   }
 
-  async function stornoEntscheiden(buchung: KassenbuchungDto, entscheidung: "genehmigt" | "abgelehnt") {
+  async function stornoEntscheiden(buchung: KassenbuchungDto, entscheidung: "genehmigt" | "abgelehnt", grund?: string) {
     if (!buchung.offenerStornoantrag) return;
-    let grund: string | undefined;
-    if (entscheidung === "abgelehnt") {
-      const eingabe = window.prompt("Grund für die Ablehnung:");
-      if (!eingabe) return;
-      grund = eingabe;
-    }
     try {
       await api.kassenbuchungStornoEntscheiden(buchung.offenerStornoantrag.id, entscheidung, grund);
       ladeBuchungen();
@@ -720,7 +713,7 @@ export function Kassenbuch() {
                   </button>
                 )}
                 {!b.storniert && !b.offenerStornoantrag && (
-                  <button className="zv-link-btn" onClick={() => stornoBeantragen(b)}>
+                  <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
                     <IStornieren />
                     {darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
                   </button>
@@ -731,7 +724,7 @@ export function Kassenbuch() {
                       <IGenehmigen />
                       Genehmigen
                     </button>
-                    <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "abgelehnt")}>
+                    <button className="zv-link-btn" onClick={() => setStornoAblehnenBuchung(b)}>
                       <IAblehnen />
                       Ablehnen
                     </button>
@@ -879,7 +872,7 @@ export function Kassenbuch() {
                   </button>
                 )}
                 {!b.storniert && !b.offenerStornoantrag && (
-                  <button className="zv-link-btn" onClick={() => stornoBeantragen(b)}>
+                  <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
                     <IStornieren />
                     {darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
                   </button>
@@ -890,7 +883,7 @@ export function Kassenbuch() {
                       <IGenehmigen />
                       Genehmigen
                     </button>
-                    <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "abgelehnt")}>
+                    <button className="zv-link-btn" onClick={() => setStornoAblehnenBuchung(b)}>
                       <IAblehnen />
                       Ablehnen
                     </button>
@@ -905,6 +898,36 @@ export function Kassenbuch() {
             </div>
           ))}
         </div>
+      )}
+
+      {stornoBeantragenBuchung && (
+        <GrundAbfrage
+          titel={darfStornoEntscheiden ? "Buchung stornieren" : "Storno beantragen"}
+          label={
+            darfStornoEntscheiden
+              ? `Grund für die Stornierung von „${stornoBeantragenBuchung.verwendungszweck}"`
+              : `Grund für den Storno-Antrag zu „${stornoBeantragenBuchung.verwendungszweck}"`
+          }
+          bestaetigenText={darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
+          onAbbrechen={() => setStornoBeantragenBuchung(null)}
+          onBestaetigen={(grund) => {
+            stornoBeantragen(stornoBeantragenBuchung, grund);
+            setStornoBeantragenBuchung(null);
+          }}
+        />
+      )}
+
+      {stornoAblehnenBuchung && (
+        <GrundAbfrage
+          titel="Storno-Antrag ablehnen"
+          label="Grund für die Ablehnung"
+          bestaetigenText="Ablehnen"
+          onAbbrechen={() => setStornoAblehnenBuchung(null)}
+          onBestaetigen={(grund) => {
+            stornoEntscheiden(stornoAblehnenBuchung, "abgelehnt", grund);
+            setStornoAblehnenBuchung(null);
+          }}
+        />
       )}
     </div>
   );

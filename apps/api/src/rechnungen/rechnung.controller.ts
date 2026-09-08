@@ -7,7 +7,13 @@ import { RechnungService } from "./rechnung.service";
 
 const anlegenSchema = z.object({
   klientId: z.string().uuid(),
-  betragCent: z.number().int().positive(),
+  // Obergrenze der Postgres-Spalte betrag_cent (integer, 32-Bit signed) --
+  // ohne sie wirft ein zu grosser Betrag "numeric field overflow" erst in
+  // der Datenbank, als unbehandelter 500. Die Untergrenze (> 0) erzwingt
+  // bereits die DB-CHECK-Constraint (migrations/0014); .positive() spiegelt
+  // sie hier, damit ein negativer oder Null-Betrag als 400 auffaellt statt
+  // als 500 aus dem CHECK-Verstoss.
+  betragCent: z.number().int().positive().max(2147483647),
   beschreibung: z.string().min(1),
   dokumentBase64: z.string().optional(),
   dokumentDateiname: z.string().optional(),

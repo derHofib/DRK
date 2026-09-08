@@ -11,6 +11,7 @@ import type {
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
+import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -497,6 +498,7 @@ function RechnungenTab({ klientId }: { klientId: string }) {
   const [formularOffen, setFormularOffen] = useState(false);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
   const [offenesDokument, setOffenesDokument] = useState<{ id: string; url: string } | null>(null);
+  const [ablehnenRechnung, setAblehnenRechnung] = useState<RechnungDto | null>(null);
 
   function laden() {
     api.rechnungenListe(klientId).then(setListe).catch((err) => setFehler(err.message));
@@ -538,13 +540,7 @@ function RechnungenTab({ klientId }: { klientId: string }) {
     }
   }
 
-  async function statusAendern(r: RechnungDto, status: RechnungStatus) {
-    let grund: string | undefined;
-    if (status === "abgelehnt") {
-      const eingabe = window.prompt("Grund für die Ablehnung:");
-      if (!eingabe) return;
-      grund = eingabe;
-    }
+  async function statusAendern(r: RechnungDto, status: RechnungStatus, grund?: string) {
     try {
       await api.rechnungStatusAendern(r.id, status, grund);
       laden();
@@ -664,7 +660,7 @@ function RechnungenTab({ klientId }: { klientId: string }) {
                       <IGenehmigen />
                       Genehmigen
                     </button>
-                    <button className="zv-link-btn" onClick={() => statusAendern(r, "abgelehnt")}>
+                    <button className="zv-link-btn" onClick={() => setAblehnenRechnung(r)}>
                       <IAblehnen />
                       Ablehnen
                     </button>
@@ -687,6 +683,19 @@ function RechnungenTab({ klientId }: { klientId: string }) {
             </div>
           ))}
         </div>
+      )}
+
+      {ablehnenRechnung && (
+        <GrundAbfrage
+          titel="Rechnung ablehnen"
+          label="Grund für die Ablehnung"
+          bestaetigenText="Ablehnen"
+          onAbbrechen={() => setAblehnenRechnung(null)}
+          onBestaetigen={(grund) => {
+            statusAendern(ablehnenRechnung, "abgelehnt", grund);
+            setAblehnenRechnung(null);
+          }}
+        />
       )}
     </div>
   );

@@ -15,7 +15,18 @@ const anlegenSchema = z
     klientId: z.string().uuid().optional(),
     standortId: z.string().uuid().optional(),
     datum: z.string().date(),
-    betragCent: z.number().int(),
+    // Grenzen der Postgres-Spalte betrag_cent (integer, 32-Bit signed) --
+    // ohne sie wirft ein zu grosser Betrag "numeric field overflow" erst in
+    // der Datenbank, als unbehandelter 500. "!== 0" ist fachlich: eine
+    // Kassenbuchung ohne jede Geldbewegung ist kein sinnvoller Vorgang
+    // (anders als bei rechnung, wo betrag_cent > 0 schon per CHECK erzwungen
+    // ist -- hier kann der Betrag auch negativ sein, siehe Kommentar oben).
+    betragCent: z
+      .number()
+      .int()
+      .min(-2147483648)
+      .max(2147483647)
+      .refine((v) => v !== 0, { message: "Der Betrag darf nicht 0 sein." }),
     verwendungszweck: z.string().min(1),
     typ: z.enum(["hzl", "einzahlung", "sonstiges"]),
     isoJahr: z.number().int().min(2000).max(2100).optional(),

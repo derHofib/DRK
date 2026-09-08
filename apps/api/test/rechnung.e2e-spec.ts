@@ -125,6 +125,43 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
       const res = await get(`/kostenuebernahmen?klientId=${klientId}`);
       expect(res.body).toHaveLength(2);
     });
+
+    /**
+     * Realer Systemtest-Fund: anlegen() prueft "bis > von" schon per zod
+     * (kostenuebernahme.controller.ts), aber beenden() kannte "von" bislang
+     * erst nach einem Datenbank-Lookup und hatte gar keine eigene Pruefung
+     * -- ein zu fruehes Enddatum stuerzte dort mit einem unbehandelten 500
+     * ab (CHECK-Constraint "bis IS NULL OR bis > von", migrations/0013),
+     * statt sauber 400 zu liefern.
+     */
+    it("lehnt beim Beenden ein Enddatum vor oder am Startdatum sauber mit 400 ab, statt mit 500 abzustuerzen", async () => {
+      // Eigener, sonst unbeteiligter Klient -- der geteilte "klientId" hat zu
+      // diesem Zeitpunkt bereits einen offenen (unbefristeten) Zeitraum ab
+      // 2026-06-01 (siehe Test oben), ein zweiter offener Zeitraum fuer
+      // denselben Klienten wuerde also selbst schon an der
+      // EXCLUDE-Constraint scheitern, unabhaengig vom hier zu pruefenden Bug.
+      const { rows } = await admin.query<{ id: string }>(
+        `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
+         VALUES ($1, 'Fruehende', 'Test', '1990-01-01', $2, 'Testamt') RETURNING id`,
+        [mandantId, `AZ-FRUEHENDE-${randomUUID().slice(0, 8)}`]
+      );
+      const eigenerKlient = rows[0].id;
+
+      const offenRes = await post("/kostenuebernahmen", { klientId: eigenerKlient, amt: "Amt Fruehende", von: "2028-01-01" });
+      expect(offenRes.status).toBe(201);
+      const zeitraumId = offenRes.body.id;
+
+      const amGleichenTag = await patch(`/kostenuebernahmen/${zeitraumId}/beenden`, { bis: "2028-01-01" });
+      expect(amGleichenTag.status).toBe(400);
+
+      const davor = await patch(`/kostenuebernahmen/${zeitraumId}/beenden`, { bis: "2027-12-01" });
+      expect(davor.status).toBe(400);
+
+      // Keiner der beiden abgelehnten Versuche darf den Zeitraum beendet haben.
+      const liste = await get(`/kostenuebernahmen?klientId=${eigenerKlient}`);
+      const zeitraum = liste.body.find((k: { id: string }) => k.id === zeitraumId);
+      expect(zeitraum.bis).toBeNull();
+    });
   });
 
   describe("Rechnungen: Statusworkflow", () => {
@@ -199,6 +236,23 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
       expect(ablehnenRes.body.status).toBe("abgelehnt");
       expect(ablehnenRes.body.statusGrund).toBe("Beleg fehlt");
       expect(ablehnenRes.body.hatDokument).toBe(false);
+    });
+
+    /**
+     * Realer Systemtest-Fund: .positive() allein liess einen Betrag jenseits
+     * der 32-Bit-Grenze der Postgres-Spalte betrag_cent durch -- das loeste
+     * dort "numeric field overflow" aus, als unbehandelter 500.
+     */
+    it("lehnt einen 32-Bit-Integer-Overflow beim Betrag mit 400 ab", async () => {
+      const res = await post("/rechnungen", {
+        klientId,
+        betragCent: 99_999_999_999,
+        beschreibung: "Sollte scheitern",
+      });
+      expect(res.status).toBe(400);
+
+      const liste = await get(`/rechnungen?klientId=${klientId}`);
+      expect(liste.body.find((r: { beschreibung: string }) => r.beschreibung === "Sollte scheitern")).toBeUndefined();
     });
 
     it("verweigert der App-Datenbankrolle jede Änderung an Betrag oder Beschreibung einer Rechnung", async () => {

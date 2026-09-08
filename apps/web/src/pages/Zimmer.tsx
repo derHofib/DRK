@@ -13,6 +13,7 @@ import type {
 import { BENUTZER_ROLLE_LABEL, ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId, tokenRolle } from "../api/client";
 import { AufgabeZeile } from "../components/AufgabeZeile";
+import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -90,6 +91,7 @@ export function Zimmer() {
 
   const [kapazitaetZimmer, setKapazitaetZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [kapazitaetFehler, setKapazitaetFehler] = useState<string | null>(null);
+  const [kapazitaetAblehnenAntrag, setKapazitaetAblehnenAntrag] = useState<OffenerKapazitaetsantragDto | null>(null);
 
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
   const [aufgabenAnzahl, setAufgabenAnzahl] = useState<Record<string, number>>({});
@@ -256,13 +258,11 @@ export function Zimmer() {
     }
   }
 
-  async function kapazitaetEntscheiden(antrag: OffenerKapazitaetsantragDto, entscheidung: "bestaetigt" | "abgelehnt") {
-    let grund: string | undefined;
-    if (entscheidung === "abgelehnt") {
-      const eingabe = window.prompt("Grund für die Ablehnung:");
-      if (!eingabe) return;
-      grund = eingabe;
-    }
+  async function kapazitaetEntscheiden(
+    antrag: OffenerKapazitaetsantragDto,
+    entscheidung: "bestaetigt" | "abgelehnt",
+    grund?: string
+  ) {
     try {
       await api.zimmerKapazitaetEntscheiden(antrag.id, entscheidung, grund);
       ladeZimmer();
@@ -505,7 +505,7 @@ export function Zimmer() {
                             </button>
                             <button
                               className="zv-link-btn"
-                              onClick={() => kapazitaetEntscheiden(z.offenerKapazitaetsantrag!, "abgelehnt")}
+                              onClick={() => setKapazitaetAblehnenAntrag(z.offenerKapazitaetsantrag!)}
                             >
                               <IAblehnen />
                               Ablehnen
@@ -892,6 +892,19 @@ export function Zimmer() {
             </button>
           </form>
         </Modal>
+      )}
+
+      {kapazitaetAblehnenAntrag && (
+        <GrundAbfrage
+          titel="Kapazitätsänderung ablehnen"
+          label="Grund für die Ablehnung"
+          bestaetigenText="Ablehnen"
+          onAbbrechen={() => setKapazitaetAblehnenAntrag(null)}
+          onBestaetigen={(grund) => {
+            kapazitaetEntscheiden(kapazitaetAblehnenAntrag, "abgelehnt", grund);
+            setKapazitaetAblehnenAntrag(null);
+          }}
+        />
       )}
     </div>
   );

@@ -428,6 +428,57 @@ inzwischen ungültigen gespeicherten ID still auf „Alle Standorte" zurück.
 Bei nur einem erlaubten Standort (der typische Betreuer-Fall) entfällt die
 Reiterleiste ganz zugunsten einer Standort-Subline im Seitenkopf.
 
+**Nachtrag — sieben Funde aus einem realen Systemtest gegen `office.hecaso.de`:**
+- **Rechte-Eskalation:** `PUT /benutzer/:id/standorte` mit `standortIds: []`
+  hob bei einer Einrichtungsleitung die Standort-Einschränkung eines
+  Betreuers vollständig auf, statt sie nur zu ändern — die vorhandene
+  Prüfung griff nur bei einer NICHT-leeren, fremden Liste, ein leeres Array
+  lief an ihr vorbei durch. Jetzt ein eigener, vorgezogener Check in
+  `benutzer.service.ts::standorteSetzen()`. Für die Bereichsleitung bleibt
+  die leere Liste weiterhin der vorgesehene Weg, jede Einschränkung
+  aufzuheben.
+- **Zwei unbehandelte CHECK-Constraints als 500:** `PATCH /belegungen/:id`
+  mit einem Auszug vor/am Einzug (`belegung_check`,
+  migrations/0010) und `PATCH /kostenuebernahmen/:id/beenden` mit einem
+  Enddatum vor/am Start (`kostenuebernahme_check`, migrations/0013) stürzten
+  unbehandelt mit `500` ab — beide Services übersetzen das jetzt nach dem
+  etablierten Muster aus `rechnung.service.ts` (SQLSTATE `23514` →
+  `BadRequestException`). Bei `beenden()` zusätzlich ein vorgezogener
+  Anwendungscheck, weil „von" dort erst nach einem Datenbank-Lookup bekannt
+  ist.
+- **32-Bit-Integer-Overflow als 500:** Die zod-Schemas für
+  `kassenbuchung.betragCent` und `rechnung.betragCent` prüften nur `int()`,
+  nicht die Grenzen der Postgres-Spalte (`integer`, 32-Bit signed) — ein
+  hinreichend großer Betrag löste „numeric field overflow" ungefangen aus.
+  Beide Schemas haben jetzt `.min()/.max()` auf `±2147483647`;
+  `kassenbuchung.betragCent` zusätzlich `.refine(v => v !== 0, …)`, weil ein
+  Betrag von exakt 0 fachlich keine Buchung ist (anders als bei `rechnung`,
+  wo die DB-`CHECK (betrag_cent > 0)` das ohnehin schon erzwingt).
+- **Rohe `ThrottlerException`-Meldung im UI:** Ein `429` von der
+  Raten-Schranke (`@nestjs/throttler`) zeigte die englische
+  Systemmeldung unformatiert an. `api/client.ts::request()` übersetzt
+  `429` jetzt fest ins Deutsche, vor dem sonstigen Body-Parsing.
+- **`window.prompt()` für Begründungen ersetzt:** In installierten PWAs
+  (vor allem iOS Standalone) wird `window.prompt()` häufig unterdrückt oder
+  ignoriert, und er folgt ohnehin nicht den Design-Tokens. Neue,
+  wiederverwendbare Komponente `components/GrundAbfrage.tsx` (baut auf dem
+  bestehenden `Modal` auf) ersetzt alle vier Stellen: Kapazitätsantrag
+  ablehnen (`Zimmer.tsx`), Storno beantragen/ablehnen (`Kassenbuch.tsx`,
+  zwei Stellen mit identischem Code dank gemeinsamer Funktionen automatisch
+  mit erledigt) und Rechnung ablehnen (`KlientDetail.tsx`).
+- **Kosmetik:** Der Anlege-Knopf in `Mitarbeitende.tsx` hieß „Neuer
+  Mitarbeiter" neben der Überschrift „Mitarbeitende" — jetzt einheitlich
+  „Mitarbeiter:in anlegen".
+
+Geprüft: 5 neue e2e-Fälle (Rechte-Eskalation mit Gegenprobe, beide
+CHECK-Constraint-Fälle je mit Gegenprobe, Integer-Overflow für Rechnung,
+Nullbetrag + Overflow für Kassenbuch) — alle 223 API-Tests grün, `pnpm
+build` sauber. Die vier `window.prompt()`-Ersetzungen und die
+429-Übersetzung live im Browser bestätigt (Playwright: kein
+`window.prompt()`/`alert()`/`confirm()` mehr ausgelöst, Modal erscheint
+und schließt sich korrekt, echte Raten-Schranke ausgelöst und die
+übersetzte Meldung im UI geprüft, nicht nur der Code gelesen).
+
 - **fieldvibes echtes Design.** `fieldvibe.de` war aus dieser
   Entwicklungsumgebung nicht erreichbar. Das System in
   `apps/web/src/styles/tokens.css` ist deshalb ein eigenständiges,

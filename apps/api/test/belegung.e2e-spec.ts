@@ -225,4 +225,48 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
     zimmerListe = await request(app.getHttpServer()).get("/zimmer").set("Authorization", `Bearer ${tokenBereichsleitung}`);
     expect(zimmerListe.body.find((z: { id: string }) => z.id === auszugZimmer).status).toBe("zugeordnet");
   });
+
+  /**
+   * Realer Systemtest-Fund: ohne Abfangen der CHECK-Constraint
+   * "auszug IS NULL OR auszug > einzug" (migrations/0010) stuerzte dieser
+   * Aufruf mit einem unbehandelten 500 ab, statt sauber 400 zu liefern.
+   */
+  it("lehnt ein Auszugsdatum vor oder am Einzugsdatum sauber mit 400 ab, statt mit 500 abzustuerzen", async () => {
+    const { rows } = await admin.query(
+      `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
+       VALUES ($1, 'Fruehauszug', 'Test', '1980-01-01', $2, 'Testamt') RETURNING id`,
+      [mandantId, `AZ-FRUEH-${randomUUID().slice(0, 8)}`]
+    );
+    const klient = rows[0].id;
+
+    const { rows: zimmerRows } = await admin.query<{ id: string }>(
+      "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, '301') RETURNING id",
+      [mandantId, standortId]
+    );
+    const zimmer = zimmerRows[0].id;
+
+    const einzugRes = await request(app.getHttpServer())
+      .post("/belegungen")
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
+      .send({ zimmerId: zimmer, klientId: klient, einzug: "2025-03-01" });
+    expect(einzugRes.status).toBe(201);
+
+    const amGleichenTag = await request(app.getHttpServer())
+      .patch(`/belegungen/${einzugRes.body.id}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
+      .send({ auszug: "2025-03-01" });
+    expect(amGleichenTag.status).toBe(400);
+
+    const davor = await request(app.getHttpServer())
+      .patch(`/belegungen/${einzugRes.body.id}`)
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`)
+      .send({ auszug: "2025-02-01" });
+    expect(davor.status).toBe(400);
+
+    // Keiner der beiden abgelehnten Versuche darf die Belegung beendet haben.
+    const zimmerListe = await request(app.getHttpServer())
+      .get("/zimmer")
+      .set("Authorization", `Bearer ${tokenBereichsleitung}`);
+    expect(zimmerListe.body.find((z: { id: string }) => z.id === zimmer).status).toBe("vergeben");
+  });
 });
