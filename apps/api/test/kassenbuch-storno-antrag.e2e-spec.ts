@@ -34,6 +34,7 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
   let standort2Id: string;
   let klient1: string;
   let klient2: string;
+  let einzahlungTypId: string;
 
   const passwort = "correct horse battery staple";
 
@@ -100,6 +101,14 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     klient1 = await neuerKlient("Eins", standort1Id);
     klient2 = await neuerKlient("Zwei", standort2Id);
 
+    // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
+    // (siehe migrations/0035_kassenbuchung_typ.sql).
+    const { rows: typRows } = await admin.query<{ id: string }>(
+      "SELECT id FROM kassenbuchung_typ WHERE mandant_id = $1 AND bezeichnung = 'Einzahlung'",
+      [mandantId]
+    );
+    einzahlungTypId = typRows[0].id;
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -124,6 +133,7 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();
@@ -146,7 +156,7 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
       datum: "2026-08-30",
       betragCent: 500,
       verwendungszweck: zweck,
-      typ: "einzahlung",
+      typId: einzahlungTypId,
     });
     expect(res.status).toBe(201);
     return res.body.id;

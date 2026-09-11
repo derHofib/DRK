@@ -81,6 +81,10 @@ describe("Mandantentrennung (RLS end-to-end)", () => {
       mandantA.mandantId,
       mandantB.mandantId,
     ]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [
+      mandantA.mandantId,
+      mandantB.mandantId,
+    ]);
     await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [mandantA.mandantId, mandantB.mandantId]);
     await admin.end();
     await app.close();

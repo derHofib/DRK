@@ -2,12 +2,11 @@ import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type {
   BenutzerListEintragDto,
   KassenbuchungDto,
-  KassenbuchungTyp,
+  KassenbuchungTypDto,
   KlientListEintragDto,
   StandortDto,
   WochenuebersichtEintragDto,
 } from "@zimmerakte/shared";
-import { KASSENBUCHUNG_TYP_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
@@ -104,6 +103,7 @@ export function Kassenbuch() {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [mitarbeitende, setMitarbeitende] = useState<BenutzerListEintragDto[]>([]);
+  const [typen, setTypen] = useState<KassenbuchungTypDto[]>([]);
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
   const [filterKlientId, setFilterKlientId] = useState("");
   const [filterStandortId, setFilterStandortId] = useState("");
@@ -120,7 +120,7 @@ export function Kassenbuch() {
   const [ziel, setZiel] = useState<Ziel>("klient");
   const [formStandortId, setFormStandortId] = useState("");
   const [richtung, setRichtung] = useState<Richtung>("einzahlung");
-  const [typ, setTyp] = useState<KassenbuchungTyp>("hzl");
+  const [typId, setTypId] = useState("");
   const [unterschrift, setUnterschrift] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
@@ -144,8 +144,22 @@ export function Kassenbuch() {
     api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
     api.standorteListe().then(setStandorte).catch((err) => setFehler(err.message));
     api.benutzerListe().then(setMitarbeitende).catch((err) => setFehler(err.message));
+    api.kassenbuchungTypenListe().then(setTypen).catch((err) => setFehler(err.message));
     ladeBuchungen();
   }, []);
+
+  // Der HZL-Systemtyp (kassenbuchung_typ.ist_hzl) ist der Standard beim
+  // Oeffnen des Formulars fuer eine Klienten-Buchung -- entspricht dem
+  // frueheren festen Default "hzl". Faellt auf den ersten aktiven Typ
+  // zurueck, falls die Liste noch nicht geladen ist.
+  function standardTypId(): string {
+    return typen.find((t) => t.istHzl)?.id ?? typen.find((t) => t.aktiv)?.id ?? "";
+  }
+
+  const gewaehlterTyp = typen.find((t) => t.id === typId);
+  const istHzlTyp = gewaehlterTyp?.istHzl ?? false;
+  const kommentarPflicht = gewaehlterTyp?.kommentarPflicht ?? true;
+  const typenFuerZiel = typen.filter((t) => t.aktiv && (ziel === "klient" || !t.istHzl));
 
   useEffect(() => {
     ladeUebersicht(uebersichtJahr, uebersichtWoche);
@@ -170,7 +184,7 @@ export function Kassenbuch() {
     setVorbelegung({ klientId, isoJahr: uebersichtJahr, isoWoche: uebersichtWoche });
     setZiel("klient");
     setFormStandortId("");
-    setTyp("hzl");
+    setTypId(standardTypId());
     setRichtung("auszahlung");
     setUnterschrift(null);
     setFormFehler(null);
@@ -182,7 +196,9 @@ export function Kassenbuch() {
   // Formular mit unsichtbaren, aber gesetzten ISO-Jahr/Woche-Feldern stehen.
   function zielWaehlen(neu: Ziel) {
     setZiel(neu);
-    if (neu === "standort" && typ === "hzl") setTyp("einzahlung");
+    if (neu === "standort" && istHzlTyp) {
+      setTypId(typen.find((t) => t.aktiv && !t.istHzl)?.id ?? "");
+    }
   }
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
@@ -209,10 +225,10 @@ export function Kassenbuch() {
         standortId: ziel === "standort" ? String(form.get("standortId")) : undefined,
         datum: String(form.get("datum")),
         betragCent,
-        verwendungszweck: String(form.get("verwendungszweck")),
-        typ,
-        isoJahr: typ === "hzl" ? Number(form.get("isoJahr")) : undefined,
-        isoWoche: typ === "hzl" ? Number(form.get("isoWoche")) : undefined,
+        verwendungszweck: String(form.get("verwendungszweck") ?? ""),
+        typId,
+        isoJahr: istHzlTyp ? Number(form.get("isoJahr")) : undefined,
+        isoWoche: istHzlTyp ? Number(form.get("isoWoche")) : undefined,
         unterschriftBase64: unterschrift ?? undefined,
         teilnehmerKlientIds: ziel === "standort" ? form.getAll("teilnehmerKlientIds").map(String) : undefined,
         teilnehmerBenutzerIds: ziel === "standort" ? form.getAll("teilnehmerBenutzerIds").map(String) : undefined,
@@ -335,7 +351,7 @@ export function Kassenbuch() {
             setVorbelegung(null);
             setZiel("klient");
             setFormStandortId("");
-            setTyp("hzl");
+            setTypId(standardTypId());
             setRichtung("einzahlung");
             setUnterschrift(null);
             setFormFehler(null);
@@ -456,11 +472,13 @@ export function Kassenbuch() {
 
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Typ</label>
-                <select name="typ" value={typ} onChange={(e) => setTyp(e.target.value as KassenbuchungTyp)}>
-                  {ziel === "klient" && <option value="hzl">HZL</option>}
-                  <option value="einzahlung">Einzahlung</option>
-                  <option value="sonstiges">Sonstiges</option>
+                <label htmlFor="kassenbuch-typ">Typ</label>
+                <select id="kassenbuch-typ" name="typId" value={typId} onChange={(e) => setTypId(e.target.value)}>
+                  {typenFuerZiel.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.bezeichnung}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="zv-field">
@@ -472,7 +490,7 @@ export function Kassenbuch() {
               </div>
             </div>
 
-            {typ === "hzl" && ziel === "klient" && (
+            {istHzlTyp && ziel === "klient" && (
               <div className="zv-field-row">
                 <div className="zv-field">
                   <label>ISO-Jahr</label>
@@ -498,8 +516,10 @@ export function Kassenbuch() {
                 <input name="betrag" type="text" inputMode="decimal" placeholder="20,00" required />
               </div>
               <div className="zv-field">
-                <label>Verwendungszweck</label>
-                <input name="verwendungszweck" required />
+                <label htmlFor="kassenbuch-verwendungszweck">
+                  {kommentarPflicht ? "Verwendungszweck" : "Kommentar"}
+                </label>
+                <input id="kassenbuch-verwendungszweck" name="verwendungszweck" required={kommentarPflicht} />
               </div>
             </div>
 
@@ -673,7 +693,7 @@ export function Kassenbuch() {
               </span>
               <span className="zv-liste-zelle" data-label="Typ">
                 <strong>
-                  {KASSENBUCHUNG_TYP_LABEL[b.typ]}
+                  {b.typBezeichnung}
                   {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
                 </strong>
               </span>
@@ -814,7 +834,7 @@ export function Kassenbuch() {
                 <strong>{b.verwendungszweck}</strong>
               </span>
               <span className="zv-liste-zelle" data-label="Typ">
-                <strong>{KASSENBUCHUNG_TYP_LABEL[b.typ]}</strong>
+                <strong>{b.typBezeichnung}</strong>
               </span>
               <span className="zv-liste-zelle" data-label="Mitarbeiter">
                 {b.gebuchtVonName ?? "–"}

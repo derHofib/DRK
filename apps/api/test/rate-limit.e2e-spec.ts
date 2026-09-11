@@ -57,6 +57,7 @@ describe("Raten-Schranke auf /auth/login", () => {
   afterAll(async () => {
     delete process.env.RATE_LIMIT_TESTEN;
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();

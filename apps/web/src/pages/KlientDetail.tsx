@@ -12,7 +12,7 @@ import type {
   TagesberichtDto,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
-import { HZL_RHYTHMUS_LABEL, KASSENBUCHUNG_TYP_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
+import { HZL_RHYTHMUS_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
@@ -1202,7 +1202,7 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
                 </strong>
               </span>
               <span className="zv-liste-zelle" data-label="Typ">
-                {KASSENBUCHUNG_TYP_LABEL[b.typ]}
+                {b.typBezeichnung}
               </span>
               <span className="zv-liste-zelle" data-label="Status">
                 {b.storniert ? (

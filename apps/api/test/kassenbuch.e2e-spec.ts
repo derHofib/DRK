@@ -28,6 +28,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
   let klientMonatlich: string;
   let standortHaus: string;
   let mitarbeiterTeilnehmerId: string;
+  let typIds: Record<string, string>; // Bezeichnung ("HZL"/"Einzahlung"/"Sonstiges") -> id
 
   const passwort = "correct horse battery staple";
 
@@ -78,6 +79,15 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     mitarbeiterTeilnehmerId = mitarbeiterRows[0].id;
 
+    // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
+    // (siehe migrations/0035_kassenbuchung_typ.sql) -- hier nur nachgeschlagen,
+    // weil "typ" seitdem eine mandantenscoped id ist, kein fester String mehr.
+    const { rows: typRows } = await admin.query<{ id: string; bezeichnung: string }>(
+      "SELECT id, bezeichnung FROM kassenbuchung_typ WHERE mandant_id = $1",
+      [mandantId]
+    );
+    typIds = Object.fromEntries(typRows.map((r) => [r.bezeichnung, r.id])) as Record<string, string>;
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -102,6 +112,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();
@@ -120,7 +131,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-17",
       betragCent: -2000,
       verwendungszweck: "HZL",
-      typ: "hzl",
+      typId: typIds["HZL"],
       isoJahr: 2026,
       isoWoche: 34,
     });
@@ -133,7 +144,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-17",
       betragCent: -2000,
       verwendungszweck: "HZL",
-      typ: "hzl",
+      typId: typIds["HZL"],
       isoJahr: 2026,
       isoWoche: 34,
       unterschriftBase64: TEST_PNG_BASE64,
@@ -153,7 +164,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-01",
       betragCent: 5000,
       verwendungszweck: "Einzahlung Taschengeldkonto",
-      typ: "einzahlung",
+      typId: typIds["Einzahlung"],
     });
     expect(res.status).toBe(201);
     expect(res.body.hatUnterschrift).toBe(false);
@@ -172,7 +183,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-05",
       betragCent: 0,
       verwendungszweck: "Sollte scheitern",
-      typ: "einzahlung",
+      typId: typIds["Einzahlung"],
     });
     expect(nullBetrag.status).toBe(400);
 
@@ -181,7 +192,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-05",
       betragCent: 99_999_999_999,
       verwendungszweck: "Sollte scheitern",
-      typ: "einzahlung",
+      typId: typIds["Einzahlung"],
     });
     expect(overflow.status).toBe(400);
 
@@ -201,7 +212,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-05",
       betragCent: 1000,
       verwendungszweck: "     ",
-      typ: "einzahlung",
+      typId: typIds["Einzahlung"],
     });
     expect(res.status).toBe(400);
   });
@@ -212,7 +223,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-19",
       betragCent: -2000,
       verwendungszweck: "HZL nochmal",
-      typ: "hzl",
+      typId: typIds["HZL"],
       isoJahr: 2026,
       isoWoche: 34,
       unterschriftBase64: TEST_PNG_BASE64,
@@ -231,7 +242,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
   it("nach Storno ist die Woche wieder frei für eine neue HZL-Buchung", async () => {
     const liste = await get(`/kassenbuchungen?klientId=${klientWoechentlich}`);
-    const offeneHzl = liste.body.find((b: { typ: string; storniert: boolean }) => b.typ === "hzl" && !b.storniert);
+    const offeneHzl = liste.body.find((b: { istHzl: boolean; storniert: boolean }) => b.istHzl && !b.storniert);
 
     // Bereichsleitung beantragt und bewilligt sich damit im selben Zug
     // selbst (siehe kassenbuchung.service.ts, stornoBeantragen()).
@@ -249,7 +260,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       datum: "2026-08-20",
       betragCent: -2000,
       verwendungszweck: "HZL korrigiert",
-      typ: "hzl",
+      typId: typIds["HZL"],
       isoJahr: 2026,
       isoWoche: 34,
       unterschriftBase64: TEST_PNG_BASE64,
@@ -279,7 +290,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-21",
         betragCent: 1000,
         verwendungszweck: "weder noch",
-        typ: "sonstiges",
+        typId: typIds["Sonstiges"],
       });
       expect(res.status).toBe(400);
     });
@@ -291,7 +302,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-21",
         betragCent: 1000,
         verwendungszweck: "beides",
-        typ: "sonstiges",
+        typId: typIds["Sonstiges"],
       });
       expect(res.status).toBe(400);
     });
@@ -302,7 +313,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-21",
         betragCent: 2000,
         verwendungszweck: "HZL für alle?",
-        typ: "hzl",
+        typId: typIds["HZL"],
       });
       expect(res.status).toBe(400);
     });
@@ -313,7 +324,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-21",
         betragCent: 8000,
         verwendungszweck: "Grillfest im Garten",
-        typ: "einzahlung",
+        typId: typIds["Einzahlung"],
         teilnehmerKlientIds: [klientWoechentlich, klientMonatlich],
         teilnehmerBenutzerIds: [mitarbeiterTeilnehmerId],
       });
@@ -335,7 +346,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-21",
         betragCent: 500,
         verwendungszweck: "sollte scheitern",
-        typ: "sonstiges",
+        typId: typIds["Sonstiges"],
         teilnehmerKlientIds: [randomUUID()],
       });
       expect(res.status).toBe(404);
@@ -347,7 +358,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-22",
         betragCent: -3000,
         verwendungszweck: "Kino-Ausflug",
-        typ: "sonstiges",
+        typId: typIds["Sonstiges"],
       });
       expect(ohne.status).toBe(400);
 
@@ -356,7 +367,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         datum: "2026-08-22",
         betragCent: -3000,
         verwendungszweck: "Kino-Ausflug",
-        typ: "sonstiges",
+        typId: typIds["Sonstiges"],
         unterschriftBase64: TEST_PNG_BASE64,
       });
       expect(mit.status).toBe(201);
@@ -416,18 +427,18 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         await alsMandant(async () => {
           await expect(
             appRolle.query(
-              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
-               VALUES ($1, NULL, NULL, '2026-08-23', 100, 'weder noch', 'sonstiges')`,
-              [mandantId]
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id)
+               VALUES ($1, NULL, NULL, '2026-08-23', 100, 'weder noch', $2)`,
+              [mandantId, typIds["Sonstiges"]]
             )
           ).rejects.toThrow(/check constraint/i);
         });
         await alsMandant(async () => {
           await expect(
             appRolle.query(
-              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
-               VALUES ($1, $2, $3, '2026-08-23', 100, 'beides', 'sonstiges')`,
-              [mandantId, klientMonatlich, standortHaus]
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id)
+               VALUES ($1, $2, $3, '2026-08-23', 100, 'beides', $4)`,
+              [mandantId, klientMonatlich, standortHaus, typIds["Sonstiges"]]
             )
           ).rejects.toThrow(/check constraint/i);
         });
@@ -437,9 +448,9 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
         await alsMandant(async () => {
           await expect(
             appRolle.query(
-              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ)
-               VALUES ($1, NULL, $2, '2026-08-23', 100, 'HZL ohne Klient', 'hzl')`,
-              [mandantId, standortHaus]
+              `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id, ist_hzl)
+               VALUES ($1, NULL, $2, '2026-08-23', 100, 'HZL ohne Klient', $3, true)`,
+              [mandantId, standortHaus, typIds["HZL"]]
             )
           ).rejects.toThrow(/check constraint/i);
         });

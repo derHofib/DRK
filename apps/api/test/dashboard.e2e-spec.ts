@@ -90,6 +90,14 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     );
     fremderStandortId = fremdStandortRows[0].id;
 
+    // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
+    // (siehe migrations/0035_kassenbuchung_typ.sql) -- hier nur nachgeschlagen.
+    const { rows: typRows } = await admin.query<{ id: string; bezeichnung: string }>(
+      "SELECT id, bezeichnung FROM kassenbuchung_typ WHERE mandant_id = $1",
+      [mandantId]
+    );
+    const typIds = Object.fromEntries(typRows.map((r) => [r.bezeichnung, r.id])) as Record<string, string>;
+
     await admin.query(
       "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
       [mandantId, einrichtungsleitungS1Id, standort1]
@@ -149,26 +157,26 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
 
     // HZL: klient1 diese Woche bezahlt, klient2 nicht.
     await admin.query(
-      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, iso_jahr, iso_woche, gebucht_von)
-       VALUES ($1, $2, CURRENT_DATE, -2000, 'HZL', 'hzl', $3, $4, NULL)`,
-      [mandantId, klient1, jahr, woche]
+      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ_id, ist_hzl, iso_jahr, iso_woche, gebucht_von)
+       VALUES ($1, $2, CURRENT_DATE, -2000, 'HZL', $3, true, $4, $5, NULL)`,
+      [mandantId, klient1, typIds["HZL"], jahr, woche]
     );
 
     // Storno-Antraege: einer fuer klient1 (Standort 1), einer fuer klient2
     // (Standort 2) -- fuer die S1-Leitung darf nur der erste sichtbar sein.
     const { rows: stornoBuchung1 } = await admin.query<{ id: string }>(
-      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, gebucht_von)
-       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S1', 'sonstiges', $3) RETURNING id`,
-      [mandantId, klient1, bereichsleitungRows[0].id]
+      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ_id, gebucht_von)
+       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S1', $3, $4) RETURNING id`,
+      [mandantId, klient1, typIds["Sonstiges"], bereichsleitungRows[0].id]
     );
     await admin.query(
       "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S1', $3)",
       [mandantId, stornoBuchung1[0].id, bereichsleitungRows[0].id]
     );
     const { rows: stornoBuchung2 } = await admin.query<{ id: string }>(
-      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ, gebucht_von)
-       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S2', 'sonstiges', $3) RETURNING id`,
-      [mandantId, klient2, bereichsleitungRows[0].id]
+      `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ_id, gebucht_von)
+       VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S2', $3, $4) RETURNING id`,
+      [mandantId, klient2, typIds["Sonstiges"], bereichsleitungRows[0].id]
     );
     await admin.query(
       "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S2', $3)",
@@ -277,8 +285,10 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE id = $1", [fremderStandortId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [fremdMandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [fremdMandantId]);
     await admin.end();
     await app.close();

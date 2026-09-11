@@ -10,19 +10,21 @@ import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { Sicherheit } from "./Sicherheit";
 import { Standorte } from "./Standorte";
+import { KassenbuchTypen } from "./KassenbuchTypen";
 import {
   IBestaetigen,
   IDarstellung,
   IEinklappen,
   IErfolg,
   IFehler,
+  IKassenbuch,
   ISicherheit,
   ISpeichern,
   IStandort,
   IZuruecksetzen,
 } from "../components/icons";
 
-type Bereich = "darstellung" | "standorte" | "sicherheit";
+type Bereich = "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
 
 export function Einstellungen({
   mandant,
@@ -55,6 +57,13 @@ export function Einstellungen({
           Standorte
         </button>
         <button
+          className={bereich === "kassenbuch" ? "active" : ""}
+          onClick={() => setBereich("kassenbuch")}
+        >
+          <IKassenbuch />
+          Kassenbuch
+        </button>
+        <button
           className={bereich === "sicherheit" ? "active" : ""}
           onClick={() => setBereich("sicherheit")}
         >
@@ -72,6 +81,7 @@ export function Einstellungen({
         />
       )}
       {bereich === "standorte" && <Standorte />}
+      {bereich === "kassenbuch" && <KassenbuchTypen />}
       {bereich === "sicherheit" && <Sicherheit />}
     </div>
   );

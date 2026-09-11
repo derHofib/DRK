@@ -27,11 +27,13 @@ const anlegenSchema = z
       .min(-2147483648)
       .max(2147483647)
       .refine((v) => v !== 0, { message: "Der Betrag darf nicht 0 sein." }),
-    // .trim() VOR .min(1): sonst zaehlt reines Leerraum-Padding
-    // ("   ") als gueltiger Inhalt und legt einen fachlich leeren
-    // Kassenbucheintrag an.
-    verwendungszweck: z.string().trim().min(1, "Verwendungszweck darf nicht leer sein."),
-    typ: z.enum(["hzl", "einzahlung", "sonstiges"]),
+    // Ob das Feld ueberhaupt Pflicht ist (und "Verwendungszweck" oder
+    // "Kommentar" heisst) haengt seit Migration 0035 am gewaehlten Typ
+    // (kassenbuchung_typ.kommentar_pflicht) -- das kann eine statische
+    // Zod-Regel nicht mehr wissen, deshalb hier nur noch optional und die
+    // eigentliche Pruefung in kassenbuchung.service.ts::anlegen().
+    verwendungszweck: z.string().trim().optional(),
+    typId: z.string().uuid(),
     isoJahr: z.number().int().min(2000).max(2100).optional(),
     isoWoche: z.number().int().min(1).max(53).optional(),
     unterschriftBase64: z.string().optional(),
@@ -40,9 +42,6 @@ const anlegenSchema = z
   })
   .refine((v) => Boolean(v.klientId) !== Boolean(v.standortId), {
     message: "Entweder klientId oder standortId angeben, nicht beides und nicht keins.",
-  })
-  .refine((v) => v.typ !== "hzl" || Boolean(v.klientId), {
-    message: "HZL ist ausschließlich für einen einzelnen Klienten möglich.",
   });
 
 const stornoBeantragenSchema = z.object({

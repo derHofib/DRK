@@ -105,6 +105,7 @@ describe("Zimmer und Standort: bearbeiten, deaktivieren", () => {
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();

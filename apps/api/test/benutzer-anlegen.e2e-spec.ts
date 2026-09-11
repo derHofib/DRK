@@ -97,6 +97,7 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
 
   afterAll(async () => {
     await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
     await admin.query("DELETE FROM mandant WHERE id = ANY($1)", [[mandantAId, mandantBId]]);
     await admin.end();
     await app.close();

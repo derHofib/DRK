@@ -163,7 +163,7 @@ export class DashboardService {
         count(*) AS gesamt
       FROM klient k
       LEFT JOIN kassenbuchung b
-        ON b.klient_id = k.id AND b.typ = 'hzl' AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
+        ON b.klient_id = k.id AND b.ist_hzl AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
       WHERE k.hzl_rhythmus = 'woechentlich' AND k.anonymisiert_am IS NULL AND ${standortBedingung}
       `,
       params

@@ -105,6 +105,10 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
       mandantA.mandantId,
       mandantB.mandantId,
     ]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [
+      mandantA.mandantId,
+      mandantB.mandantId,
+    ]);
     await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [
       mandantA.mandantId,
       mandantB.mandantId,

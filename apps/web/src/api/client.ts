@@ -7,7 +7,7 @@ import type {
   BenutzerRolle,
   DashboardDto,
   KassenbuchungDto,
-  KassenbuchungTyp,
+  KassenbuchungTypDto,
   KlientDetailDto,
   KlientKontaktDto,
   KlientListEintragDto,
@@ -243,14 +243,26 @@ export const api = {
     standortId?: string;
     datum: string;
     betragCent: number;
-    verwendungszweck: string;
-    typ: KassenbuchungTyp;
+    verwendungszweck?: string;
+    typId: string;
     isoJahr?: number;
     isoWoche?: number;
     unterschriftBase64?: string;
     teilnehmerKlientIds?: string[];
     teilnehmerBenutzerIds?: string[];
   }) => request<KassenbuchungDto>("/kassenbuchungen", { method: "POST", body: JSON.stringify(payload) }),
+
+  kassenbuchungTypenListe: () => request<KassenbuchungTypDto[]>("/kassenbuchungstypen"),
+  kassenbuchungTypAnlegen: (payload: { bezeichnung: string; kommentarPflicht: boolean }) =>
+    request<KassenbuchungTypDto>("/kassenbuchungstypen", { method: "POST", body: JSON.stringify(payload) }),
+  kassenbuchungTypAktualisieren: (
+    id: string,
+    payload: { bezeichnung?: string; kommentarPflicht?: boolean; aktiv?: boolean }
+  ) =>
+    request<KassenbuchungTypDto>(`/kassenbuchungstypen/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   kassenbuchungStornoBeantragen: (id: string, grund: string) =>
     request<KassenbuchungDto>(`/kassenbuchungen/${id}/storno-antrag`, {
       method: "POST",

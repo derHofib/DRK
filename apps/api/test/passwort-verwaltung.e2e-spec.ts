@@ -82,6 +82,7 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
   afterAll(async () => {
     await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
     await admin.query("DELETE FROM mandant WHERE id = ANY($1)", [[mandantAId, mandantBId]]);
     await admin.end();
     await app.close();

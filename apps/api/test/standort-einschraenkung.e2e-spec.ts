@@ -51,6 +51,9 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
 
   let rechnung2: string;
 
+  let einzahlungTypId: string;
+  let sonstigesTypId: string;
+
   const passwort = "correct horse battery staple";
 
   beforeAll(async () => {
@@ -131,6 +134,15 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       [mandantId, zimmer2, klient2]
     );
 
+    // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
+    // (siehe migrations/0035_kassenbuchung_typ.sql).
+    const { rows: typRows } = await admin.query<{ id: string; bezeichnung: string }>(
+      "SELECT id, bezeichnung FROM kassenbuchung_typ WHERE mandant_id = $1",
+      [mandantId]
+    );
+    einzahlungTypId = typRows.find((t) => t.bezeichnung === "Einzahlung")!.id;
+    sonstigesTypId = typRows.find((t) => t.bezeichnung === "Sonstiges")!.id;
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -153,7 +165,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       datum: "2026-01-01",
       betragCent: 5000,
       verwendungszweck: "Einzahlung S1",
-      typ: "einzahlung",
+      typId: einzahlungTypId,
     });
     buchung1 = b1.body.id;
 
@@ -162,7 +174,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       datum: "2026-01-01",
       betragCent: 5000,
       verwendungszweck: "Einzahlung S2",
-      typ: "einzahlung",
+      typId: einzahlungTypId,
     });
     buchung2 = b2.body.id;
 
@@ -171,7 +183,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       datum: "2026-01-02",
       betragCent: -1000,
       verwendungszweck: "Auszahlung S2",
-      typ: "sonstiges",
+      typId: sonstigesTypId,
       unterschriftBase64: TEST_PNG_BASE64,
     });
     auszahlung2 = a2.body.id;
@@ -198,7 +210,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       datum: "2026-01-03",
       betragCent: 5000,
       verwendungszweck: "Grillfest S1",
-      typ: "einzahlung",
+      typId: einzahlungTypId,
     });
     standortBuchung1 = sb1.body.id;
 
@@ -207,7 +219,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
       datum: "2026-01-03",
       betragCent: 5000,
       verwendungszweck: "Grillfest S2",
-      typ: "einzahlung",
+      typId: einzahlungTypId,
     });
     standortBuchung2 = sb2.body.id;
   });
@@ -229,6 +241,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();
@@ -288,7 +301,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
         datum: "2026-01-03",
         betragCent: 100,
         verwendungszweck: "sollte scheitern",
-        typ: "sonstiges",
+        typId: sonstigesTypId,
       });
       expect(res.status).toBe(404);
     });
@@ -326,7 +339,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
         datum: "2026-01-04",
         betragCent: 1000,
         verwendungszweck: "sollte klappen",
-        typ: "sonstiges",
+        typId: sonstigesTypId,
       });
       expect(eigener.status).toBe(201);
 
@@ -335,7 +348,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
         datum: "2026-01-04",
         betragCent: 1000,
         verwendungszweck: "sollte scheitern",
-        typ: "sonstiges",
+        typId: sonstigesTypId,
       });
       expect(fremder.status).toBe(404);
     });

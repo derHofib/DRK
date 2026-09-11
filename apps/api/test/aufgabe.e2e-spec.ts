@@ -136,6 +136,7 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
     await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
     await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [mandantId, mandantBId]);
     await admin.end();
     await app.close();

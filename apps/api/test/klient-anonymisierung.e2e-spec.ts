@@ -69,6 +69,14 @@ describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
     );
     klientId = klientRows[0].id;
 
+    // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
+    // (siehe migrations/0035_kassenbuchung_typ.sql).
+    const { rows: hzlTypRows } = await admin.query<{ id: string }>(
+      "SELECT id FROM kassenbuchung_typ WHERE mandant_id = $1 AND bezeichnung = 'HZL'",
+      [mandantId]
+    );
+    const hzlTypId = hzlTypRows[0].id;
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -84,7 +92,7 @@ describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
     const buchung = await request(app.getHttpServer())
       .post("/kassenbuchungen")
       .set("Authorization", `Bearer ${tokenBereichsleitung}`)
-      .send({ klientId, datum: "2026-01-01", betragCent: 5000, verwendungszweck: "HZL Januar", typ: "hzl" });
+      .send({ klientId, datum: "2026-01-01", betragCent: 5000, verwendungszweck: "HZL Januar", typId: hzlTypId });
     buchungId = buchung.body.id;
 
     const rechnung = await request(app.getHttpServer())
@@ -100,6 +108,7 @@ describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
     await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.end();
     await app.close();

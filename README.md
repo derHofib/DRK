@@ -664,6 +664,76 @@ drei vom Fix abhängigen Tests wurden rot (`404` statt `200`/`201`), die
 Negativprobe blieb grün, wiederhergestellt, wieder alle 257 API-Tests grün.
 `pnpm build` sauber.
 
+**Nachtrag — frei definierbare Kassenbuch-Typen statt fester Dreier-Auswahl.**
+Der Typ einer Kassenbuchung war bislang ein Postgres-ENUM mit genau drei
+Werten (HZL/Einzahlung/Sonstiges). Auf Wunsch der Leitung sind Typen jetzt
+pro Träger frei definierbar, und ob eine Buchung dieses Typs einen
+Verwendungszweck braucht, ist je Typ einstellbar:
+- **ENUM → echte Tabelle** (`kassenbuchung_typ`,
+  `migrations/0035_kassenbuchung_typ.sql`): mandantenscoped wie jede andere
+  Tabelle (RLS `ENABLE`+`FORCE`), mit `bezeichnung`, `kommentar_pflicht` und
+  `ist_hzl`. Die alte ENUM-Spalte wird per `CASE`-Mapping auf die drei
+  Standardtypen zurückgeführt und dann gelöscht.
+- **Jeder Mandant bekommt die drei Standardtypen automatisch** — nicht per
+  Anwendungscode, sondern per `AFTER INSERT ON mandant`-Trigger
+  (`mandant_kassenbuchung_typ_standard`). Diese App hat bewusst keinen
+  öffentlichen Registrierungs-Endpunkt (siehe CLAUDE.md) — ein neuer Mandant
+  entsteht immer per manuellem `INSERT`, an dem kein Anwendungscode beteiligt
+  ist. Ein „lege drei Zeilen an, wenn ein Mandant angelegt wird" muss deshalb
+  in der Datenbank selbst passieren.
+- **HZL bleibt ein geschützter Systemtyp** — weder umbenennbar noch
+  deaktivierbar, auch nicht für die Leitung (`BadRequestException` in
+  `kassenbuchung-typ.service.ts`, `aktualisieren()`). Daran hängt die
+  HZL-Wochenübersicht und die Sperre gegen doppelte Auszahlung je
+  Klient/Kalenderwoche. Weil eine partielle Unique-Index-Bedingung keinen
+  Join auf eine andere Tabelle erlaubt, wurde `ist_hzl` zusätzlich auf
+  `kassenbuchung` selbst denormalisiert, damit `hzl_einmal_je_woche`
+  weiterhin ein einfaches Boolean-Prädikat prüfen kann. Einzahlung und
+  Sonstiges sind dagegen normale, von der Leitung frei umbenennbare und
+  deaktivierbare Einträge.
+- **„Verwendungszweck" heißt „Kommentar", wenn er für diesen Typ nicht
+  Pflicht ist** — sowohl in der Typverwaltung als auch im Kassenbuch-
+  Formular selbst liest das Feldlabel `kommentarPflicht` des gewählten Typs.
+  HZL hat bewusst `kommentar_pflicht = false` (Nutzervorgabe: „HZL kann so
+  bleiben, dabei wird aus Verwendungszweck Kommentar").
+- **Validierung wandert vom Controller in den Service:** Ob ein
+  Verwendungszweck Pflicht ist, hängt vom gewählten Typ ab (Datenbankstand),
+  nicht von einer statischen Form — ein zod-Schema kann das nicht prüfen.
+  `kassenbuchung.service.ts` liest den Typ innerhalb der Transaktion und
+  prüft `aktiv`/`kommentar_pflicht`/`ist_hzl` dort.
+- **Deaktivieren statt Löschen** — dieselbe Philosophie wie bei Standorten:
+  ein deaktivierter Typ verschwindet nur aus der Auswahl beim Anlegen neuer
+  Buchungen, bestehende Buchungen mit diesem Typ bleiben unangetastet
+  (`kassenbuchung` ist ohnehin Append-only).
+- **Rollenprüfung**: Kassenbuch-Typen anlegen/bearbeiten ist leitenden
+  Positionen vorbehalten (`bereichsleitung`/`einrichtungsleitung`) — eine
+  trägerweite Festlegung, keine persönliche Einstellung.
+
+Geprüft: 10 neue e2e-Tests (`kassenbuch-typen.e2e-spec.ts`) — automatische
+Standardtypen bei Mandantenanlage, Anlegen/Umbenennen/Pflicht-Umschalten/
+Deaktivieren durch die Leitung, `403` für andere Rollen, `409` bei doppelter
+Bezeichnung je Mandant, HZL-Schutz (`400` bei Umbenennen/Deaktivieren, auch
+für die Leitung), `kommentarPflicht` durchgesetzt beim Anlegen einer Buchung
+(`400` ohne Pflichtfeld, `201` mit leerem optionalem Feld), `400` bei
+deaktiviertem Typ, `404` bei unbekannter `typId`, sowie Mandantentrennung.
+Alle 267 API-Tests grün (23 Suiten), inklusive Anpassung von 17 weiteren
+Testdateien, die einen Mandanten anlegen: die neue Trigger-Zeile in
+`kassenbuchung_typ` musste vor dem `DELETE FROM mandant` in jedem `afterAll`
+mit aufgeräumt werden, sonst schlägt die Fremdschlüssel-Prüfung fehl. Drei
+Gegenproben durchgeführt: Rollenprüfung in `anlegen()` auskommentiert → genau
+der 403-Test wurde rot (`201` statt `403`); Rollenprüfung in
+`aktualisieren()` auskommentiert → derselbe Test wurde rot, diesmal `400`
+(die HZL-Schutzprüfung dahinter greift weiterhin) statt `403`; HZL-Schutz
+auskommentiert → der Systemtyp-Test wurde rot (`200` statt `400` bei
+Umbenennen). Alle drei nach Wiederherstellung erneut grün. `pnpm build`
+(shared + api + web) sauber. Live im Browser geprüft (Hell- und
+Dunkelmodus): Einstellungen → Kassenbuch zeigt die drei Standardtypen mit
+HZL als „Systemtyp" ohne Bearbeiten-Aktion, ein neuer Typ mit abgewählter
+Pflicht erscheint korrekt als „Kommentar (optional)", und im
+Kassenbuch-Buchungsformular wechselt das Feldlabel abhängig vom gewählten
+Typ live zwischen „Verwendungszweck" und „Kommentar" — Testmandant danach
+wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

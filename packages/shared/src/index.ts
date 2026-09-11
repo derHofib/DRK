@@ -266,7 +266,21 @@ export const HZL_RHYTHMUS_LABEL: Record<HzlRhythmus, string> = {
   woechentlich: "Wöchentlich",
 };
 
-export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
+/**
+ * Frei durch die Leitung verwaltbar (siehe migrations/0035_kassenbuchung_typ.sql)
+ * -- kein fester ENUM mehr. "kommentarPflicht" steuert zugleich, ob das
+ * Feld an einer Buchung "Verwendungszweck" (Pflicht) oder "Kommentar"
+ * (optional) heisst. "istHzl" markiert den einen Systemtyp je Mandant, an
+ * dem die Wochenuebersicht und die Sperre gegen doppelte Auszahlung
+ * haengen -- weder umbenennbar noch deaktivierbar.
+ */
+export interface KassenbuchungTypDto {
+  id: string;
+  bezeichnung: string;
+  kommentarPflicht: boolean;
+  istHzl: boolean;
+  aktiv: boolean;
+}
 
 export interface KassenbuchungTeilnehmerDto {
   klientId: string | null;
@@ -296,7 +310,9 @@ export interface KassenbuchungDto {
   datum: string;
   betragCent: number;
   verwendungszweck: string;
-  typ: KassenbuchungTyp;
+  typId: string;
+  typBezeichnung: string;
+  istHzl: boolean;
   isoJahr: number | null;
   isoWoche: number | null;
   storniert: boolean;
@@ -315,12 +331,6 @@ export interface WochenuebersichtEintragDto {
   betragCent: number | null;
   datum: string | null;
 }
-
-export const KASSENBUCHUNG_TYP_LABEL: Record<KassenbuchungTyp, string> = {
-  hzl: "HZL",
-  einzahlung: "Einzahlung",
-  sonstiges: "Sonstiges",
-};
 
 export interface KostenuebernahmeDto {
   id: string;

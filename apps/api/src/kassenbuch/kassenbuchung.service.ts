@@ -24,8 +24,6 @@ const UNIQUE_VIOLATION = "23505";
 // das), aber nicht selbst bewilligen -- das entscheidet stornoEntscheiden().
 const ROLLEN_MIT_STORNO_ENTSCHEIDEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
-export type KassenbuchungTyp = "hzl" | "einzahlung" | "sonstiges";
-
 export interface OffenerStornoantragDto {
   id: string;
   grund: string;
@@ -48,7 +46,9 @@ export interface KassenbuchungDto {
   datum: string;
   betragCent: number;
   verwendungszweck: string;
-  typ: KassenbuchungTyp;
+  typId: string;
+  typBezeichnung: string;
+  istHzl: boolean;
   isoJahr: number | null;
   isoWoche: number | null;
   storniert: boolean;
@@ -76,7 +76,8 @@ export interface WochenuebersichtEintrag {
 // kassenbuchung_klient_xor_standort), daher LEFT statt INNER JOIN.
 const BUCHUNG_SELECT = `
   SELECT b.id, b.klient_id, k.vorname, k.nachname, b.standort_id, s.name AS standort_name,
-         b.datum, b.betrag_cent, b.verwendungszweck, b.typ, b.iso_jahr, b.iso_woche,
+         b.datum, b.betrag_cent, b.verwendungszweck, b.typ_id, t.bezeichnung AS typ_bezeichnung,
+         b.ist_hzl, b.iso_jahr, b.iso_woche,
          b.storniert, b.storno_grund,
          (u.id IS NOT NULL) AS hat_unterschrift, mb.name AS gebucht_von_name,
          sa.id AS storno_antrag_id, sa.grund AS storno_antrag_grund,
@@ -84,6 +85,7 @@ const BUCHUNG_SELECT = `
   FROM kassenbuchung b
   LEFT JOIN klient k ON k.id = b.klient_id
   LEFT JOIN standort s ON s.id = b.standort_id
+  JOIN kassenbuchung_typ t ON t.id = b.typ_id
   LEFT JOIN unterschrift u ON u.kassenbuchung_id = b.id
   LEFT JOIN benutzer mb ON mb.id = b.gebucht_von
   LEFT JOIN kassenbuchung_stornoantrag sa ON sa.kassenbuchung_id = b.id AND sa.status = 'beantragt'
@@ -114,8 +116,8 @@ export class KassenbuchungService {
     standortId?: string;
     datum: string;
     betragCent: number;
-    verwendungszweck: string;
-    typ: KassenbuchungTyp;
+    verwendungszweck?: string;
+    typId: string;
     isoJahr?: number;
     isoWoche?: number;
     unterschriftBase64?: string;
@@ -124,6 +126,7 @@ export class KassenbuchungService {
   }): Promise<KassenbuchungDto> {
     const { mandantId, benutzerId } = requireTenantContext();
     const istAuszahlung = input.betragCent < 0;
+    const verwendungszweck = input.verwendungszweck?.trim() ?? "";
 
     if (istAuszahlung && !input.unterschriftBase64) {
       throw new BadRequestException("Auszahlungen müssen mit einer Unterschrift bestätigt werden.");
@@ -131,15 +134,36 @@ export class KassenbuchungService {
     if (Boolean(input.klientId) === Boolean(input.standortId)) {
       throw new BadRequestException("Entweder klientId oder standortId angeben, nicht beides und nicht keins.");
     }
-    if (input.typ === "hzl" && !input.klientId) {
-      throw new BadRequestException("HZL ist ausschließlich für einen einzelnen Klienten möglich.");
-    }
 
     const teilnehmerKlientIds = [...new Set(input.teilnehmerKlientIds ?? [])];
     const teilnehmerBenutzerIds = [...new Set(input.teilnehmerBenutzerIds ?? [])];
 
     try {
       return await this.db.withTenant(async (client) => {
+        // Ob "Verwendungszweck" Pflicht ist (und wie das Feld heisst) haengt
+        // seit Migration 0035 am gewaehlten Typ, nicht mehr an einer festen
+        // Zod-Regel -- deshalb hier statt im Controller geprueft. RLS
+        // sorgt nebenbei dafuer, dass eine typId aus einem fremden
+        // Mandanten hier schlicht nicht gefunden wird.
+        const { rows: typRows } = await client.query<{
+          kommentar_pflicht: boolean;
+          ist_hzl: boolean;
+          aktiv: boolean;
+        }>("SELECT kommentar_pflicht, ist_hzl, aktiv FROM kassenbuchung_typ WHERE id = $1", [input.typId]);
+        if (typRows.length === 0) {
+          throw new NotFoundException("Kassenbuch-Typ nicht gefunden.");
+        }
+        const typ = typRows[0];
+        if (!typ.aktiv) {
+          throw new BadRequestException("Dieser Kassenbuch-Typ ist deaktiviert.");
+        }
+        if (typ.kommentar_pflicht && !verwendungszweck) {
+          throw new BadRequestException("Verwendungszweck darf nicht leer sein.");
+        }
+        if (typ.ist_hzl && !input.klientId) {
+          throw new BadRequestException("HZL ist ausschließlich für einen einzelnen Klienten möglich.");
+        }
+
         if (input.klientId) {
           if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
             throw new NotFoundException("Klient nicht gefunden.");
@@ -164,8 +188,8 @@ export class KassenbuchungService {
         }
 
         const { rows } = await client.query(
-          `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ, iso_jahr, iso_woche, gebucht_von)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id, ist_hzl, iso_jahr, iso_woche, gebucht_von)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
             mandantId,
@@ -173,8 +197,9 @@ export class KassenbuchungService {
             input.standortId ?? null,
             input.datum,
             input.betragCent,
-            input.verwendungszweck,
-            input.typ,
+            verwendungszweck,
+            input.typId,
+            typ.ist_hzl,
             input.isoJahr ?? null,
             input.isoWoche ?? null,
             benutzerId,
@@ -386,7 +411,7 @@ export class KassenbuchungService {
                b.id AS buchung_id, b.betrag_cent, b.datum
         FROM klient k
         LEFT JOIN kassenbuchung b
-          ON b.klient_id = k.id AND b.typ = 'hzl' AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
+          ON b.klient_id = k.id AND b.ist_hzl AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
         WHERE k.hzl_rhythmus = 'woechentlich' AND ${standortBedingung}
         ORDER BY k.nachname, k.vorname
         `,
@@ -461,7 +486,9 @@ function zuDto(r: any, teilnehmer: KassenbuchungTeilnehmerDto[]): KassenbuchungD
     datum: r.datum,
     betragCent: r.betrag_cent,
     verwendungszweck: r.verwendungszweck,
-    typ: r.typ,
+    typId: r.typ_id,
+    typBezeichnung: r.typ_bezeichnung,
+    istHzl: r.ist_hzl,
     isoJahr: r.iso_jahr,
     isoWoche: r.iso_woche,
     storniert: r.storniert,
