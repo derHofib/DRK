@@ -245,7 +245,7 @@ export function Dashboard() {
                   {daten.unzugewieseneZimmeraufgaben.length === 0 ? (
                     <Leerzustand icon={ILeerAufgaben}>Jede offene Zimmer-Aufgabe ist bereits zugewiesen.</Leerzustand>
                   ) : (
-                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.6fr 1fr 1fr" } as CSSProperties}>
+                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.3fr 0.8fr 1.3fr" } as CSSProperties}>
                       <div className="zv-liste-kopf">
                         <span>Aufgabe</span>
                         <span>Priorität</span>
@@ -270,7 +270,9 @@ export function Dashboard() {
                             </span>
                             <span className="zv-liste-zelle" data-label="Fälligkeit">
                               {faelligkeit ? (
-                                <span className={`zv-pill ${faelligkeit.klasse}`}>{faelligkeit.text}</span>
+                                <span className={`zv-pill ${faelligkeit.klasse}`}>
+                                  <span className="zv-pill-text">{faelligkeit.text}</span>
+                                </span>
                               ) : (
                                 <span className="zv-sub-inline">ohne Termin</span>
                               )}
@@ -293,7 +295,7 @@ export function Dashboard() {
                   {daten.meineOffenenAufgaben.length === 0 ? (
                     <Leerzustand icon={ILeerAufgaben}>Dir sind aktuell keine offenen Aufgaben zugewiesen.</Leerzustand>
                   ) : (
-                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.6fr 1fr 1fr" } as CSSProperties}>
+                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.3fr 0.8fr 1.3fr" } as CSSProperties}>
                       <div className="zv-liste-kopf">
                         <span>Aufgabe</span>
                         <span>Priorität</span>
@@ -318,7 +320,9 @@ export function Dashboard() {
                             </span>
                             <span className="zv-liste-zelle" data-label="Fälligkeit">
                               {faelligkeit ? (
-                                <span className={`zv-pill ${faelligkeit.klasse}`}>{faelligkeit.text}</span>
+                                <span className={`zv-pill ${faelligkeit.klasse}`}>
+                                  <span className="zv-pill-text">{faelligkeit.text}</span>
+                                </span>
                               ) : (
                                 <span className="zv-sub-inline">ohne Termin</span>
                               )}
@@ -340,7 +344,7 @@ export function Dashboard() {
                   {daten.kostenuebernahmenBaldEndend.length === 0 ? (
                     <Leerzustand icon={ILeerKostenuebernahmen}>Keine Kostenübernahme läuft in den nächsten 30 Tagen aus.</Leerzustand>
                   ) : (
-                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.6fr 1fr 1fr" } as CSSProperties}>
+                    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.3fr 0.8fr 1.3fr" } as CSSProperties}>
                       <div className="zv-liste-kopf">
                         <span>Klient</span>
                         <span>Bis</span>

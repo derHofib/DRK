@@ -2,6 +2,7 @@ import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { Seitenpanel } from "../components/Seitenpanel";
@@ -190,7 +191,9 @@ export function Klienten() {
               </span>
               {ansicht === "archiv" ? (
                 <span className="zv-liste-zelle" data-label="Archiviert am">
-                  <span className="zv-pill zv-pill-neutral">{k.archiviertAm?.slice(0, 10)}</span>
+                  <span className="zv-pill zv-pill-neutral">
+                    {k.archiviertAm ? formatDatum(k.archiviertAm.slice(0, 10)) : ""}
+                  </span>
                 </span>
               ) : (
                 <span className="zv-liste-zelle" data-label="Zimmer">

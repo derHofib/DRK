@@ -176,7 +176,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
             {klient.anonymisiertAm ? (
               <span className="zv-pill zv-pill-vergeben">
                 <ILoeschen />
-                Anonymisiert am {klient.anonymisiertAm.slice(0, 10)}
+                Anonymisiert am {formatDatum(klient.anonymisiertAm.slice(0, 10))}
               </span>
             ) : (
               darfAnonymisieren && (
@@ -203,7 +203,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
               {klient.archiviertAm ? (
                 <span className="zv-pill zv-pill-neutral">
                   <IArchivieren />
-                  Archiviert am {klient.archiviertAm.slice(0, 10)}
+                  Archiviert am {formatDatum(klient.archiviertAm.slice(0, 10))}
                   {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
                 </span>
               ) : (
@@ -226,7 +226,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
                 {klient.archivPdfs.map((pdf) => (
                   <button key={pdf.id} className="zv-link-btn" onClick={() => archivPdfHerunterladen(pdf.id)}>
                     <IHerunterladen />
-                    Aktenauszug {pdf.erstelltAm.slice(0, 10)}
+                    Aktenauszug {formatDatum(pdf.erstelltAm.slice(0, 10))}
                   </button>
                 ))}
               </div>
@@ -437,7 +437,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
           {aktuelleKostenuebernahme === undefined
             ? "…"
             : aktuelleKostenuebernahme
-              ? `${aktuelleKostenuebernahme.amt}, seit ${aktuelleKostenuebernahme.von}`
+              ? `${aktuelleKostenuebernahme.amt}, seit ${formatDatum(aktuelleKostenuebernahme.von)}`
               : "Kein offener Zeitraum"}
         </div>
         <div style={{ color: "var(--zv-text-muted)" }}>Aufnahme am</div>
@@ -1080,6 +1080,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
                     <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => beenden(e, k.id)}>
                       <input name="bis" type="date" required style={eingabeFeldStil} />
                       <button className="zv-link-btn" type="submit">
+                        <ISpeichern />
                         Speichern
                       </button>
                     </form>
@@ -1465,7 +1466,7 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
           }}
         >
           <INeu />
-          Neuer Bericht
+          Neuer Tagesbericht
         </button>
       </div>
 

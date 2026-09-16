@@ -1122,6 +1122,27 @@
   min-width: 0;
 }
 
+/* Ein .zv-pill ist inline-flex und richtet sich sonst nach seinem Inhalt --
+   in einer schmalen Grid-Spalte (z.B. Dashboard-Faelligkeitshinweis mit
+   dynamischer Laenge wie "ueberfaellig seit DD.MM.YYYY") lief der Text
+   dadurch ueber den Kartenrand hinaus und wurde vom "overflow: hidden" der
+   .zv-karten-liste hart abgeschnitten statt sichtbar gekuerzt. */
+.zv-liste-zelle .zv-pill {
+  max-width: 100%;
+}
+
+/* text-overflow wirkt laut Spezifikation nicht auf den Flex-Container
+   .zv-pill selbst, sondern nur auf Block-/Inline-Block-Elemente -- deshalb
+   ein eigenes inneres Element fuer Pill-Text, dessen Laenge variieren und
+   damit ueberlaufen kann (z.B. der Faelligkeits-Hinweis). min-width:0 ist
+   noetig, weil Flex-Items sonst nicht unter ihre Inhaltsbreite schrumpfen. */
+.zv-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .zv-liste-zelle strong {
   color: var(--zv-text);
   font-weight: var(--zv-weight-medium);
@@ -1172,8 +1193,12 @@
   margin-left: 0;
 }
 
+/* white-space: nowrap, weil Bindestriche in Kennungen (Aktenzeichen wie
+   "AZ-2026-001") sonst regulaere Umbruchpunkte sind und der Text in
+   schmalen Spalten mitten im Wort umbricht. */
 .zv-mono {
   font-family: var(--zv-font-mono);
+  white-space: nowrap;
 }
 
 /* Seitenkopf: Titel links, Aktion rechts. Loest vier gleichlautende

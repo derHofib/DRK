@@ -1,5 +1,6 @@
 import type { AufgabeDto, BenutzerListEintragDto, BenutzerRolle } from "@zimmerakte/shared";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
+import { formatDatum } from "../format";
 import { IGenehmigen, ILoeschen, IPrioritaetHoch, IPrioritaetNiedrig, IPrioritaetNormal } from "./icons";
 
 // Exportiert, damit andere Stellen (z.B. Dashboard.tsx) dieselbe Zuordnung
@@ -34,9 +35,9 @@ function darfBearbeiten(aufgabe: AufgabeDto, benutzerId: string | null, rolle: B
 export function faelligkeitsHinweis(faelligAm: string | null): { text: string; klasse: string } | null {
   if (!faelligAm) return null;
   const heute = new Date().toISOString().slice(0, 10);
-  if (faelligAm < heute) return { text: `überfällig seit ${faelligAm}`, klasse: "zv-pill-danger" };
+  if (faelligAm < heute) return { text: `überfällig seit ${formatDatum(faelligAm)}`, klasse: "zv-pill-danger" };
   if (faelligAm === heute) return { text: "heute fällig", klasse: "zv-pill-offen" };
-  return { text: `fällig am ${faelligAm}`, klasse: "zv-pill-vergeben" };
+  return { text: `fällig am ${formatDatum(faelligAm)}`, klasse: "zv-pill-vergeben" };
 }
 
 export function AufgabeZeile({
@@ -85,7 +86,9 @@ export function AufgabeZeile({
       </span>
       <span className="zv-liste-zelle" data-label="Fälligkeit">
         {faelligkeit ? (
-          <span className={`zv-pill ${faelligkeit.klasse}`}>{faelligkeit.text}</span>
+          <span className={`zv-pill ${faelligkeit.klasse}`}>
+            <span className="zv-pill-text">{faelligkeit.text}</span>
+          </span>
         ) : (
           <span className="zv-sub-inline">ohne Termin</span>
         )}
@@ -93,7 +96,7 @@ export function AufgabeZeile({
       <span className="zv-liste-zelle" data-label="Zugewiesen">
         {aufgabe.erledigtAm ? (
           <span className="zv-sub-inline">
-            erledigt von {aufgabe.erledigtVonName} am {aufgabe.erledigtAm.slice(0, 10)}
+            erledigt von {aufgabe.erledigtVonName} am {formatDatum(aufgabe.erledigtAm.slice(0, 10))}
           </span>
         ) : (
           <select

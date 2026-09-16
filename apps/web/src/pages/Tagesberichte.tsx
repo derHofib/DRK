@@ -2,6 +2,7 @@ import { ChangeEvent, CSSProperties, FormEvent, useEffect, useState } from "reac
 import type { KlientListEintragDto, TagDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
+import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { IAbbrechen, IDokument, IFehler, ILeerTagesberichte, INeu, ISpeichern, ITag } from "../components/icons";
@@ -58,10 +59,10 @@ export function TagesberichtZeile({
 
   return (
     <div className="zv-info-karte">
-      <span className="zv-liste-zelle-titel">{zeigeKlient ? bericht.klientName : bericht.datum}</span>
+      <span className="zv-liste-zelle-titel">{zeigeKlient ? bericht.klientName : formatDatum(bericht.datum)}</span>
       {zeigeKlient && (
         <span className="zv-liste-zelle" data-label="Datum">
-          <strong>{bericht.datum}</strong>
+          <strong>{formatDatum(bericht.datum)}</strong>
         </span>
       )}
       <span className="zv-liste-zelle" data-label="Bericht">
@@ -259,7 +260,7 @@ export function Tagesberichte() {
           }}
         >
           <INeu />
-          Neuer Bericht
+          Neuer Tagesbericht
         </button>
       </div>
 

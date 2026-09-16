@@ -70,6 +70,8 @@ import {
   PenLine,
   Pencil,
   Plus,
+  Power,
+  PowerOff,
   Receipt,
   ReceiptText,
   RotateCcw,
@@ -174,6 +176,8 @@ export const IEinklappen = baue(PanelLeftClose);
 export const IAusklappen = baue(PanelLeftOpen);
 export const IAnpassen = baue(SlidersHorizontal);
 export const IKapazitaet = baue(BedDouble);
+export const IAktivieren = baue(Power);
+export const IDeaktivieren = baue(PowerOff);
 
 /**
  * Prioritaet: Signalstaerken-Symbole statt reiner Farbe -- WCAG 1.4.1

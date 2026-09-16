@@ -5,7 +5,9 @@ import { Modal } from "../components/Modal";
 import { Leerzustand } from "../components/Leerzustand";
 import {
   IAbbrechen,
+  IAktivieren,
   IBearbeiten,
+  IDeaktivieren,
   IFehler,
   IKassenbuch,
   ILeerKassenbuch,
@@ -160,7 +162,17 @@ export function KassenbuchTypen() {
                       Bearbeiten
                     </button>
                     <button className="zv-link-btn" onClick={() => aktivSchalten(t)}>
-                      {t.aktiv ? "Deaktivieren" : "Aktivieren"}
+                      {t.aktiv ? (
+                        <>
+                          <IDeaktivieren />
+                          Deaktivieren
+                        </>
+                      ) : (
+                        <>
+                          <IAktivieren />
+                          Aktivieren
+                        </>
+                      )}
                     </button>
                   </>
                 )}

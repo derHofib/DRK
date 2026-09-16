@@ -5,7 +5,9 @@ import { Modal } from "../components/Modal";
 import { Leerzustand } from "../components/Leerzustand";
 import {
   IAbbrechen,
+  IAktivieren,
   IBearbeiten,
+  IDeaktivieren,
   IFehler,
   ILeerStandorte,
   INeu,
@@ -136,7 +138,17 @@ export function Standorte() {
                   Bearbeiten
                 </button>
                 <button className="zv-link-btn" onClick={() => aktivSchalten(s)}>
-                  {s.aktiv ? "Deaktivieren" : "Aktivieren"}
+                  {s.aktiv ? (
+                    <>
+                      <IDeaktivieren />
+                      Deaktivieren
+                    </>
+                  ) : (
+                    <>
+                      <IAktivieren />
+                      Aktivieren
+                    </>
+                  )}
                 </button>
               </span>
             </div>

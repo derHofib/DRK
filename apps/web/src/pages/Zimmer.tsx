@@ -12,6 +12,7 @@ import type {
 } from "@zimmerakte/shared";
 import { BENUTZER_ROLLE_LABEL, ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId, tokenRolle } from "../api/client";
+import { formatDatum } from "../format";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
@@ -23,6 +24,7 @@ import {
   IAufklappen,
   IAuszug,
   IBearbeiten,
+  IDeaktivieren,
   IEinziehen,
   IFehler,
   IGenehmigen,
@@ -471,7 +473,9 @@ export function Zimmer() {
                           >
                             <span className="zv-room-klient" style={{ margin: 0 }}>
                               {bew.name}
-                              <span className="zv-sub-inline">seit {bew.einzug}</span>
+                              <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
+                                seit {formatDatum(bew.einzug)}
+                              </span>
                             </span>
                             <button
                               className="zv-link-btn"
@@ -572,6 +576,7 @@ export function Zimmer() {
                       )}
                       {darfStammdatenBearbeiten && z.bewohner.length === 0 && (
                         <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
+                          <IDeaktivieren />
                           Deaktivieren
                         </button>
                       )}
@@ -582,8 +587,8 @@ export function Zimmer() {
                         {verlauf.map((v) => (
                           <li key={v.id}>
                             <strong>{v.name}</strong>
-                            <span className="zv-sub-inline">
-                              {v.einzug} – {v.auszug ?? "heute"}
+                            <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
+                              {formatDatum(v.einzug)} – {v.auszug ? formatDatum(v.auszug) : "heute"}
                             </span>
                           </li>
                         ))}
