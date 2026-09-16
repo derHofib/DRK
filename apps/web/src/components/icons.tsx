@@ -15,6 +15,8 @@
  * brauchen daher zwingend ein eigenes aria-label am <button>.
  */
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Ban,
   Banknote,
@@ -36,6 +38,7 @@ import {
   Copy,
   DoorClosed,
   DoorOpen,
+  Download,
   Eraser,
   Eye,
   EyeOff,
@@ -155,6 +158,9 @@ export const IVerkleinern = baue(Minimize2);
 export const IDokument = baue(FileText);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);
+export const IArchivieren = baue(Archive);
+export const IEntarchivieren = baue(ArchiveRestore);
+export const IHerunterladen = baue(Download);
 export const IVerlauf = baue(History);
 export const IZurueck = baue(ArrowLeft);
 export const IKopieren = baue(Copy);
@@ -227,6 +233,7 @@ export const ILeerVerlauf = baueLeer(History);
 export const ILeerStandorte = baueLeer(MapPinOff);
 export const ILeerTagesberichte = baueLeer(BookX);
 export const ILeerAufgaben = baueLeer(ListTodo);
+export const ILeerArchiv = baueLeer(Archive);
 export const ILeerKontakte = baueLeer(Contact);
 
 /* Sonstiges */

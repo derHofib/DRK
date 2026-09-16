@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { KlientService } from "./klient.service";
 import { KlientStammdatenService } from "./klient-stammdaten.service";
+import { KlientArchivService } from "./klient-archiv.service";
 
 const anlegenSchema = z.object({
   vorname: z.string().min(1),
@@ -82,12 +84,13 @@ const kontaktAktualisierenSchema = z.object({
 export class KlientController {
   constructor(
     private readonly klienten: KlientService,
-    private readonly stammdaten: KlientStammdatenService
+    private readonly stammdaten: KlientStammdatenService,
+    private readonly archiv: KlientArchivService
   ) {}
 
   @Get()
-  async list() {
-    return this.klienten.findeAlle();
+  async list(@Query("archiviert") archiviert?: string) {
+    return this.klienten.findeAlle(archiviert === "true");
   }
 
   @Post()
@@ -124,5 +127,32 @@ export class KlientController {
   async kontaktLoeschen(@Param("id") id: string, @Param("kontaktId") kontaktId: string) {
     await this.stammdaten.kontaktLoeschen(id, kontaktId);
     return { ok: true };
+  }
+
+  @Patch(":id/archivieren")
+  async archivieren(@Param("id") id: string) {
+    await this.archiv.archivieren(id);
+    return this.klienten.findeEinen(id);
+  }
+
+  @Patch(":id/entarchivieren")
+  async entarchivieren(@Param("id") id: string) {
+    await this.archiv.entarchivieren(id);
+    return this.klienten.findeEinen(id);
+  }
+
+  @Get(":id/archiv/:archivId/pdf")
+  async archivPdf(
+    @Param("id") id: string,
+    @Param("archivId") archivId: string,
+    @Res({ passthrough: false }) res: Response
+  ) {
+    const ergebnis = await this.archiv.pdfHerunterladen(id, archivId);
+    if (!ergebnis) throw new NotFoundException("Kein Archiv-PDF mit dieser ID für diesen Klienten gefunden.");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(ergebnis.dateiname)}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Datei-Hash", ergebnis.hash);
+    res.send(ergebnis.pdf);
   }
 }

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { klientIstErlaubt } from "../common/standort-restriction";
+import { klientIstArchiviert, klientIstErlaubt } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
 
 // SQLSTATE-Codes, siehe
@@ -58,6 +58,9 @@ export class KostenuebernahmeService {
         if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
           throw new NotFoundException("Klient nicht gefunden.");
         }
+        if (await klientIstArchiviert(client, input.klientId)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+        }
         const { rows } = await client.query(
           `INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis, erstellt_von)
            VALUES ($1, $2, $3, $4, $5, $6)
@@ -85,6 +88,9 @@ export class KostenuebernahmeService {
         ]);
         if (bestehend.length === 0 || !(await klientIstErlaubt(client, benutzerId, bestehend[0].klient_id))) {
           throw new NotFoundException("Keine offene Kostenübernahme mit dieser ID gefunden.");
+        }
+        if (await klientIstArchiviert(client, bestehend[0].klient_id)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
         }
         // Derselbe Vergleich wie beim Anlegen (kostenuebernahme.controller.ts),
         // hier aber erst nach diesem Lookup moeglich, weil "von" vorher nicht

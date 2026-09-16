@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { ermittleErlaubteStandortIds, klientIstArchiviert } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
 
 // Postgres-Fehlercode fuer eine verletzte EXCLUDE-Constraint. Kein String,
@@ -57,6 +57,9 @@ export class BelegungService {
             throw new NotFoundException("Zimmer nicht gefunden.");
           }
         }
+        if (await klientIstArchiviert(client, input.klientId)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+        }
 
         const { rows } = await client.query(
           `INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug, gebucht_von)
@@ -82,14 +85,18 @@ export class BelegungService {
     try {
       return await this.db.withTenant(async (client) => {
         const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
-        if (erlaubteStandorte) {
-          const { rows: bRows } = await client.query(
-            "SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
-            [id]
-          );
-          if (bRows.length === 0 || !erlaubteStandorte.includes(bRows[0].standort_id)) {
-            throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
-          }
+        const { rows: belegungRows } = await client.query(
+          "SELECT z.standort_id, b.klient_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
+          [id]
+        );
+        if (belegungRows.length === 0) {
+          throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
+        }
+        if (erlaubteStandorte && !erlaubteStandorte.includes(belegungRows[0].standort_id)) {
+          throw new NotFoundException("Keine offene Belegung mit dieser ID gefunden.");
+        }
+        if (await klientIstArchiviert(client, belegungRows[0].klient_id)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
         }
 
         const { rows } = await client.query(

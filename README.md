@@ -734,6 +734,89 @@ Kassenbuch-Buchungsformular wechselt das Feldlabel abhängig vom gewählten
 Typ live zwischen „Verwendungszweck" und „Kommentar" — Testmandant danach
 wieder entfernt.
 
+**Nachtrag — Klient archivieren mit PDF-Aktenauszug.** Wenn ein Klient
+auszieht und nicht mehr Teil der Einrichtung ist, kann die Leitung ihn
+archivieren: es entsteht ein vollständiger, strukturierter PDF-Aktenauszug
+(Stammdaten, Kontakte, Unterbringungshistorie, Kassenbuch,
+Kostenübernahmen, Rechnungen, Tagesberichte — inklusive aller
+hochgeladenen Fotos/Dokumente, vollständig eingebettet statt nur
+referenziert), der Klient wird eingefroren und aus der Standardliste
+ausgeblendet. Reversibel — anders als die Anonymisierung (Art. 17 DSGVO,
+siehe oben) ist das keine Löschung, sondern eine operative
+Statusänderung.
+- **Migration 0036**: `klient.archiviert_am`/`archiviert_von` (gleiches
+  Muster wie `anonymisiert_am`, spaltenscharf freigegeben) plus neue
+  Tabelle `klient_archiv_pdf` — ein Snapshot pro Archivierungsvorgang,
+  append-only wie `tagesbericht_dokument`/`rechnung_dokument`. Bewusst
+  ohne `UNIQUE(klient_id)`: Archivieren → Entarchivieren → erneutes
+  Archivieren erzeugt einen weiteren, unabhängigen Snapshot, keiner wird
+  überschrieben — alle bleiben als Beleg herunterladbar.
+- **„Eingefroren" ist zweifach durchgesetzt.** Serverseitig prüft eine
+  neue Funktion `klientIstArchiviert()` (`common/standort-restriction.ts`,
+  bewusst getrennt von `klientIstErlaubt()` — Sichtbarkeit und
+  Schreibbarkeit sind unterschiedliche Achsen) an 16 Schreibpfaden über
+  sechs Services (Tagesberichte, Rechnungen, Kostenübernahmen,
+  Kassenbuch, Stammdaten/Kontakte, Zimmer-Ein-/Auszug). Frontend-seitig
+  steht das gesamte Tab-Inhaltsgebiet in `KlientDetail.tsx` in einem
+  einzigen `<fieldset disabled={...}>` — deaktiviert automatisch jeden
+  verschachtelten Button/Input/Select/Textarea (auch die Knöpfe, die ein
+  Bearbeiten-Modal erst öffnen), ohne dass jede einzelne Schreibaktion
+  separat verdrahtet werden musste. Reine Lese-Links bleiben unberührt,
+  `<a>` ist kein „listed" Formularelement. `.zv-link-btn` bekam dabei
+  einen fehlenden `:disabled`-Stil nachgerüstet (sonst sah ein
+  eingefrorener Link-Knopf identisch zu einem aktiven aus).
+- **PDF-Erzeugung mit `pdf-lib`** (neue Abhängigkeit, reines JS, keine
+  nativen Bindings). Zweistufiger Aufbau, weil Seitenzahlen fürs
+  Inhaltsverzeichnis erst nach dem vollständigen Aufbau feststehen
+  (eingebettete Fotos/PDF-Anhänge verschieben nachfolgende Kapitel um eine
+  vorab unbekannte Seitenzahl): zuerst wird der komplette Inhalt in ein
+  eigenständiges Dokument gebaut, das dabei mitzählt, auf welcher Seite
+  jedes Kapitel beginnt; erst danach entsteht das finale Dokument mit
+  Deckblatt und Inhaltsverzeichnis davor, dessen Seitenzahlen jetzt
+  bekannt sind. Kassenbuch/Rechnungen/Tagesberichte werden ab zwei
+  Kalenderjahren automatisch nach Jahr gruppiert, damit das
+  Inhaltsverzeichnis bei langen Aufenthalten nicht unlesbar wird.
+  Hochgeladene PDF-Dokumente werden direkt hinter ihrem Eintrag per
+  `copyPages()` eingehängt, Fotos (PNG/JPEG) auf einer eigenen Seite
+  eingebettet — WebP (ebenfalls erlaubter Upload-Mimetyp) kann `pdf-lib`
+  nicht einbetten, dafür steht ein Verweistext im PDF, das Original
+  bleibt über die normale Dokumentenansicht der Akte weiterhin abrufbar.
+- **DSGVO/Anonymisierung bleiben unabhängig.** `KlientService.anonymisieren()`
+  prüft bewusst nicht auf Archivierung — das Recht auf Löschung darf nicht
+  durch einen operativen Status blockierbar sein.
+- **`GET /klienten` filtert jetzt standardmäßig** auf `archiviert_am IS
+  NULL`, mit `?archiviert=true` für den neuen Archiv-Reiter. Das ist
+  zugleich der zentrale Hebel gegen versehentliche Aktionen: jede
+  Klient-Auswahl im Frontend, die aus dieser Liste speist (Kassenbuch-,
+  Tagesbericht-, Rechnungs-Formular), schließt archivierte Klient:innen
+  damit automatisch aus — die 16 Schreibsperren oben sind die zweite
+  Verteidigungslinie für eine schon offene `KlientDetail`-Seite.
+
+Geprüft: 8 neue e2e-Tests (`klient-archivierung.e2e-spec.ts`) — Rollen-Gate
+für Archivieren/Entarchivieren (`403`, Zustand bleibt nachweislich
+unverändert), PDF-Snapshot entsteht und ist mit korrekten Headern
+(`Content-Type`, `Content-Disposition: attachment`, `X-Datei-Hash`)
+herunterladbar und beginnt mit `%PDF-`, `409` bei doppeltem Archivieren
+bzw. Entarchivieren eines nicht archivierten Klienten, `400` an allen
+sechs betroffenen Schreibpfaden, Sichtbarkeitsfilter in beide Richtungen,
+Entarchivieren stellt Schreibbarkeit wieder her bei erhaltenem
+PDF-Snapshot, Mandantentrennung. Alle 275 API-Tests grün (24 Suiten). Zwei
+Gegenproben: Rollenprüfung in `archivieren()` auskommentiert → der
+403-Test wurde rot (und zwei weitere kaskadierend, weil der unautorisierte
+Archivierungsversuch den Zustand tatsächlich verändert hatte); Prüfung
+wiederhergestellt, wieder grün. `klientIstArchiviert()`-Guard an einer
+repräsentativen Stelle (`rechnung.service.ts`, `anlegen()`) auskommentiert
+→ genau der zugehörige 400-Test wurde rot (`201` statt `400`);
+wiederhergestellt, wieder grün — nicht an allen 16 Stellen einzeln
+geprüft, da das Muster überall identisch ist. `pnpm build` (shared + api +
+web) sauber. Live im Browser geprüft (Hell- und Dunkelmodus): Tagesbericht
+vor dem Archivieren anlegen, archivieren, „schreibgeschützt"-Hinweis und
+sichtbar deaktivierte Knöpfe prüfen, echten PDF-Download auslösen und den
+Inhalt verifiziert (Deckblatt, Inhaltsverzeichnis mit korrekten
+Seitenzahlen, der zuvor angelegte Tagesbericht erscheint im PDF),
+entarchivieren, erneut archivieren → zweiter, unabhängiger Snapshot in der
+Liste — Testmandant danach wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

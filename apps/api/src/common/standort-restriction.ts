@@ -112,6 +112,21 @@ export async function klientIstErlaubt(
 }
 
 /**
+ * Ein anderer Zugriffsaspekt als klientIstErlaubt() oben -- dort geht es um
+ * SICHTBARKEIT (welcher Standort), hier um SCHREIBBARKEIT (ist der Klient
+ * archiviert). Bewusst getrennt: ein archivierter Klient bleibt fuer
+ * Leseanfragen (Akte ansehen, Archiv-PDF herunterladen) weiterhin
+ * erreichbar, nur neue Schreiboperationen werden abgelehnt (siehe
+ * migrations/0036_klient_archivierung.sql und KlientArchivService).
+ */
+export async function klientIstArchiviert(client: PoolClient, klientId: string): Promise<boolean> {
+  const { rows } = await client.query("SELECT 1 FROM klient WHERE id = $1 AND archiviert_am IS NOT NULL", [
+    klientId,
+  ]);
+  return rows.length > 0;
+}
+
+/**
  * SQL-Bedingung fuer eine Zeile, die DIREKT eine standort_id traegt (z.B.
  * kassenbuchung.standort_id bei einer Standort-Buchung) -- anders als
  * klientStandortBedingung() gibt es hier keinen Umweg ueber eine offene

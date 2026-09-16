@@ -187,6 +187,11 @@ export interface KlientListEintragDto {
   hzlRhythmus: HzlRhythmus;
   aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
   anonymisiertAm: string | null;
+  // Siehe migrations/0036_klient_archivierung.sql -- ein archivierter Klient
+  // ist eingefroren (keine neuen Tagesberichte/Buchungen/... mehr moeglich,
+  // siehe klientIstArchiviert()) und aus der Standardliste ausgeblendet,
+  // aber reversibel (anders als anonymisiertAm).
+  archiviertAm: string | null;
 }
 
 export interface KlientDetailDto extends KlientListEintragDto {
@@ -195,6 +200,11 @@ export interface KlientDetailDto extends KlientListEintragDto {
   entlassenAm: string | null;
   stammdaten: KlientStammdatenDto | null;
   kontakte: KlientKontaktDto[];
+  archiviertVonName: string | null;
+  // Ein Eintrag pro Archivierungsvorgang (append-only, siehe
+  // klient_archiv_pdf) -- auch nach dem Entarchivieren bleiben fruehere
+  // Snapshots herunterladbar.
+  archivPdfs: { id: string; erstelltAm: string; erstelltVonName: string | null }[];
 }
 
 /**

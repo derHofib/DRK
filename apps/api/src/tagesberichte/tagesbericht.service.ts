@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
-import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
+import {
+  ermittleErlaubteStandortIds,
+  klientIstArchiviert,
+  klientIstErlaubt,
+  klientStandortBedingung,
+} from "../common/standort-restriction";
 
 export interface TagDto {
   id: string;
@@ -100,6 +105,9 @@ export class TagesberichtService {
       if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
       }
+      if (await klientIstArchiviert(client, input.klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+      }
       const { rows } = await client.query(
         `INSERT INTO tagesbericht (mandant_id, klient_id, autor_id, datum, text)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -133,6 +141,9 @@ export class TagesberichtService {
       const klientId = await klientIdDesBerichts(client, tagesberichtId);
       if (!klientId || !(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Tagesbericht nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
       return ladeEinen(client, tagesberichtId);
@@ -177,6 +188,9 @@ export class TagesberichtService {
       if (!klientId || !(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Tagesbericht nicht gefunden.");
       }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+      }
       await tagZuweisen(client, mandantId, tagesberichtId, name);
       return ladeEinen(client, tagesberichtId);
     });
@@ -188,6 +202,9 @@ export class TagesberichtService {
       const klientId = await klientIdDesBerichts(client, tagesberichtId);
       if (!klientId || !(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Tagesbericht nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       await client.query("DELETE FROM tagesbericht_tag WHERE tagesbericht_id = $1 AND tag_id = $2", [
         tagesberichtId,

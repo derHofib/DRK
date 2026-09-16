@@ -20,14 +20,17 @@ import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
   IAblehnen,
+  IArchivieren,
   IAuszahlen,
   IAuszug,
   IBearbeiten,
   IBeenden,
   IDokument,
   IEinziehen,
+  IEntarchivieren,
   IFehler,
   IGenehmigen,
+  IHerunterladen,
   IKassenbuch,
   IKostenuebernahme,
   ILeerKassenbuch,
@@ -62,6 +65,9 @@ const eingabeFeldStil = {
 };
 
 const ROLLEN_MIT_ANONYMISIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
+// Gleiches Rollenpaar wie bei der Anonymisierung -- Archivieren ist eine
+// traegerweite Statusaenderung, keine alltaegliche Betreuungsaktion.
+const ROLLEN_MIT_ARCHIVIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
 
 export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
@@ -69,10 +75,14 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   const [fehler, setFehler] = useState<string | null>(null);
   const [anonymisierenOffen, setAnonymisierenOffen] = useState(false);
   const [wirdAnonymisiert, setWirdAnonymisiert] = useState(false);
+  const [archivierenOffen, setArchivierenOffen] = useState(false);
+  const [entarchivierenOffen, setEntarchivierenOffen] = useState(false);
+  const [wirdArchiviert, setWirdArchiviert] = useState(false);
 
   // Nur ein Anzeige-Hinweis, der den Knopf ausblendet -- der Server prueft
   // dieselbe Rolle nochmal in KlientService.anonymisieren() (siehe tokenRolle()).
   const darfAnonymisieren = ROLLEN_MIT_ANONYMISIERUNG.has(tokenRolle() ?? "");
+  const darfArchivieren = ROLLEN_MIT_ARCHIVIERUNG.has(tokenRolle() ?? "");
 
   function laden() {
     api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
@@ -91,6 +101,48 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setFehler(err instanceof Error ? err.message : "Klient konnte nicht anonymisiert werden.");
     } finally {
       setWirdAnonymisiert(false);
+    }
+  }
+
+  async function archivieren() {
+    setFehler(null);
+    setWirdArchiviert(true);
+    try {
+      await api.klientArchivieren(klientId);
+      setArchivierenOffen(false);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Klient konnte nicht archiviert werden.");
+    } finally {
+      setWirdArchiviert(false);
+    }
+  }
+
+  async function entarchivieren() {
+    setFehler(null);
+    setWirdArchiviert(true);
+    try {
+      await api.klientEntarchivieren(klientId);
+      setEntarchivierenOffen(false);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Klient konnte nicht entarchiviert werden.");
+    } finally {
+      setWirdArchiviert(false);
+    }
+  }
+
+  async function archivPdfHerunterladen(archivId: string) {
+    if (!klient) return;
+    setFehler(null);
+    try {
+      await api.klientArchivPdfHerunterladen(
+        klientId,
+        archivId,
+        `Aktenauszug_${klient.nachname}_${klient.vorname}.pdf`
+      );
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Aktenauszug konnte nicht heruntergeladen werden.");
     }
   }
 
@@ -135,6 +187,51 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
               )
             )}
           </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: "1px solid var(--zv-border)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {klient.archiviertAm ? (
+                <span className="zv-pill zv-pill-neutral">
+                  <IArchivieren />
+                  Archiviert am {klient.archiviertAm.slice(0, 10)}
+                  {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
+                </span>
+              ) : (
+                darfArchivieren && (
+                  <button className="zv-link-btn" onClick={() => setArchivierenOffen(true)}>
+                    <IArchivieren />
+                    Klient archivieren
+                  </button>
+                )
+              )}
+              {klient.archiviertAm && darfArchivieren && (
+                <button className="zv-link-btn" onClick={() => setEntarchivierenOffen(true)}>
+                  <IEntarchivieren />
+                  Entarchivieren
+                </button>
+              )}
+            </div>
+            {klient.archivPdfs.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {klient.archivPdfs.map((pdf) => (
+                  <button key={pdf.id} className="zv-link-btn" onClick={() => archivPdfHerunterladen(pdf.id)}>
+                    <IHerunterladen />
+                    Aktenauszug {pdf.erstelltAm.slice(0, 10)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -148,6 +245,35 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           <button className="zv-btn zv-btn-gefahr zv-btn-block" onClick={anonymisieren} disabled={wirdAnonymisiert}>
             <ILoeschen />
             {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient jetzt anonymisieren"}
+          </button>
+        </Modal>
+      )}
+
+      {archivierenOffen && (
+        <Modal titel="Klient archivieren" onClose={() => setArchivierenOffen(false)}>
+          <p style={{ marginTop: 0 }}>
+            Es wird ein vollständiger PDF-Aktenauszug erzeugt (Stammdaten, Kontakte, Unterbringungshistorie,
+            Kassenbuch, Kostenübernahmen, Rechnungen, Tagesberichte samt Anhängen) und dauerhaft gespeichert. Der
+            Klient wird anschließend eingefroren -- keine neuen Tagesberichte, Buchungen, Rechnungen oder
+            Änderungen mehr möglich -- und aus der Klientenliste ausgeblendet. Das lässt sich jederzeit wieder
+            aufheben.
+          </p>
+          <button className="zv-btn zv-btn-block" onClick={archivieren} disabled={wirdArchiviert}>
+            <IArchivieren />
+            {wirdArchiviert ? "Wird archiviert…" : "Klient jetzt archivieren"}
+          </button>
+        </Modal>
+      )}
+
+      {entarchivierenOffen && (
+        <Modal titel="Klient entarchivieren" onClose={() => setEntarchivierenOffen(false)}>
+          <p style={{ marginTop: 0 }}>
+            Der Klient ist danach wieder normal bearbeitbar und erscheint wieder in der aktiven Klientenliste. Die
+            bereits erzeugten Aktenauszüge bleiben unverändert erhalten.
+          </p>
+          <button className="zv-btn zv-btn-block" onClick={entarchivieren} disabled={wirdArchiviert}>
+            <IEntarchivieren />
+            {wirdArchiviert ? "Wird entarchiviert…" : "Klient jetzt entarchivieren"}
           </button>
         </Modal>
       )}
@@ -175,11 +301,32 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </button>
       </div>
 
-      {tab === "uebersicht" && klient && <UebersichtTab klient={klient} onGeaendert={laden} />}
-      {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
-      {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
-      {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
-      {tab === "tagesberichte" && <TagesberichteTab klientId={klientId} />}
+      {klient?.archiviertAm && (
+        <div className="zv-hinweis zv-hinweis-info" style={{ marginBottom: 16 }}>
+          <IArchivieren />
+          Dieser Klient ist archiviert und schreibgeschützt -- neue Einträge sind erst nach dem Entarchivieren
+          wieder möglich.
+        </div>
+      )}
+
+      {/* fieldset[disabled] deaktiviert automatisch JEDEN verschachtelten
+          Button/Input/Select/Textarea in allen fuenf Tabs -- inklusive der
+          Knoepfe, die ein Bearbeiten-Modal erst OEFFNEN -- ohne dass jede
+          einzelne Schreibaktion separat verdrahtet werden muesste. Reine
+          Lese-Links (z.B. "Dokument oeffnen") sind davon bewusst nicht
+          betroffen, <a> ist kein "listed" Formularelement. Serverseitig
+          durchgesetzt ueber klientIstArchiviert() -- dies hier ist nur die
+          UI-Spiegelung davon. */}
+      <fieldset
+        disabled={!!klient?.archiviertAm}
+        style={{ border: 0, padding: 0, margin: 0, minInlineSize: "auto" }}
+      >
+        {tab === "uebersicht" && klient && <UebersichtTab klient={klient} onGeaendert={laden} />}
+        {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
+        {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
+        {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
+        {tab === "tagesberichte" && <TagesberichteTab klientId={klientId} />}
+      </fieldset>
     </div>
   );
 }

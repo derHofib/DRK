@@ -6,6 +6,7 @@ import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import {
   ermittleErlaubteStandortIds,
+  klientIstArchiviert,
   klientIstErlaubt,
   klientStandortBedingung,
   standortIdBedingung,
@@ -168,6 +169,9 @@ export class KassenbuchungService {
           if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
             throw new NotFoundException("Klient nicht gefunden.");
           }
+          if (await klientIstArchiviert(client, input.klientId)) {
+            throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+          }
         } else {
           if (!(await standortIstErlaubt(client, benutzerId, input.standortId!))) {
             throw new NotFoundException("Standort nicht gefunden.");
@@ -267,6 +271,9 @@ export class KassenbuchungService {
         : await standortIstErlaubt(client, benutzerId, standort_id);
       if (!erlaubt) {
         throw new NotFoundException("Buchung nicht gefunden.");
+      }
+      if (klient_id && (await klientIstArchiviert(client, klient_id))) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
 
       let antragQuery;

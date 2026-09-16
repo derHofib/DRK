@@ -130,6 +130,27 @@ async function blobUrl(path: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+// Anders als blobUrl() oben (fuer "im Browser anzeigen") stoesst das hier
+// einen echten Datei-Download mit eigenem Dateinamen an -- dafuer gab es
+// bisher kein Muster im Projekt (alle bisherigen Downloads waren "in neuem
+// Tab oeffnen"). Ein kurzlebiges <a download> ist der uebliche Weg dafuer.
+async function dateiHerunterladen(path: string, dateiname: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Datei konnte nicht geladen werden (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = dateiname;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   dashboard: (standortId?: string) => request<DashboardDto>(`/dashboard${standortId ? `?standortId=${standortId}` : ""}`),
 
@@ -197,7 +218,8 @@ export const api = {
   belegungsverlauf: (zimmerId: string) =>
     request<BelegungsverlaufEintragDto[]>(`/zimmer/${zimmerId}/belegungsverlauf`),
 
-  klientenListe: () => request<KlientListEintragDto[]>("/klienten"),
+  klientenListe: (archiviert = false) =>
+    request<KlientListEintragDto[]>(`/klienten${archiviert ? "?archiviert=true" : ""}`),
   klient: (id: string) => request<KlientDetailDto>(`/klienten/${id}`),
   klientAnlegen: (payload: {
     vorname: string;
@@ -208,6 +230,11 @@ export const api = {
     hzlRhythmus: "monatlich" | "woechentlich";
   }) => request<KlientDetailDto>("/klienten", { method: "POST", body: JSON.stringify(payload) }),
   klientAnonymisieren: (id: string) => request<KlientDetailDto>(`/klienten/${id}/anonymisieren`, { method: "PATCH" }),
+  klientArchivieren: (id: string) => request<KlientDetailDto>(`/klienten/${id}/archivieren`, { method: "PATCH" }),
+  klientEntarchivieren: (id: string) =>
+    request<KlientDetailDto>(`/klienten/${id}/entarchivieren`, { method: "PATCH" }),
+  klientArchivPdfHerunterladen: (klientId: string, archivId: string, dateiname: string) =>
+    dateiHerunterladen(`/klienten/${klientId}/archiv/${archivId}/pdf`, dateiname),
 
   // Alle Felder optional und einzeln uebergebbar: das Formular speichert pro
   // Datenblatt-Abschnitt, ein leerer String loescht ein Feld bewusst (siehe

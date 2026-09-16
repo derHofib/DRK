@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { klientIstErlaubt } from "../common/standort-restriction";
+import { klientIstArchiviert, klientIstErlaubt } from "../common/standort-restriction";
 import { KlientKontakt, KlientStammdaten, zuKontaktDto, zuStammdatenDto } from "./klient.service";
 
 export interface KlientStammdatenInput {
@@ -72,6 +72,9 @@ export class KlientStammdatenService {
     return this.db.withTenant(async (client) => {
       if (!(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       if (input.bezugsbetreuerId) {
         const { rows } = await client.query("SELECT 1 FROM benutzer WHERE id = $1", [input.bezugsbetreuerId]);
@@ -153,6 +156,9 @@ export class KlientStammdatenService {
       if (!(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
       }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+      }
       const { rows } = await client.query(
         `INSERT INTO klient_kontakt (mandant_id, klient_id, beziehung, name, adresse, email, telefon, erstellt_von)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -177,6 +183,9 @@ export class KlientStammdatenService {
     return this.db.withTenant(async (client) => {
       if (!(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       const { rows } = await client.query(
         `UPDATE klient_kontakt
@@ -204,6 +213,9 @@ export class KlientStammdatenService {
     return this.db.withTenant(async (client) => {
       if (!(await klientIstErlaubt(client, benutzerId, klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       const { rowCount } = await client.query("DELETE FROM klient_kontakt WHERE id = $1 AND klient_id = $2", [
         kontaktId,

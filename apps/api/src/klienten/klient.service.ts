@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientStandortBedingung } from "../common/standort-restriction";
+import type { KlientArchivPdfEintrag } from "./klient-archiv.service";
 
 // Ein anonymisierter Klient bleibt als Zeile (und damit als Ziel jeder
 // Fremdschluessel-Kette aus Belegung/Kassenbuch/Rechnung) bestehen -- nur
@@ -20,6 +21,7 @@ export interface KlientListEintrag {
   hzlRhythmus: "monatlich" | "woechentlich";
   aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
   anonymisiertAm: string | null;
+  archiviertAm: string | null;
 }
 
 export interface KlientStammdaten {
@@ -79,29 +81,44 @@ export interface KlientDetail extends KlientListEintrag {
   entlassenAm: string | null;
   stammdaten: KlientStammdaten | null;
   kontakte: KlientKontakt[];
+  archiviertVonName: string | null;
+  archivPdfs: KlientArchivPdfEintrag[];
 }
 
 @Injectable()
 export class KlientService {
   constructor(private readonly db: DatabaseService) {}
 
-  async findeAlle(): Promise<KlientListEintrag[]> {
+  /**
+   * archiviert=false (Standard): nur aktive Klient:innen -- die allgemeine
+   * Liste soll nicht mit Jahren an ausgezogenen/archivierten Akten
+   * zuwachsen. archiviert=true: nur archivierte, fuer den Archiv-Reiter.
+   * Dieser Filter ist zugleich der zentrale Hebel gegen versehentliche
+   * Aktionen auf archivierten Klient:innen -- jede Klient-Auswahl im
+   * Frontend, die von dieser Liste speist, schliesst sie damit automatisch
+   * aus (siehe common/standort-restriction.ts::klientIstArchiviert() fuer
+   * die serverseitige zweite Verteidigungslinie).
+   */
+  async findeAlle(archiviert = false): Promise<KlientListEintrag[]> {
     const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
       const params: unknown[] = [];
-      const bedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+      const bedingungen = [
+        klientStandortBedingung(erlaubteStandorte, "k", params),
+        archiviert ? "k.archiviert_am IS NOT NULL" : "k.archiviert_am IS NULL",
+      ];
 
       const { rows } = await client.query(
         `
         SELECT
-          k.id, k.vorname, k.nachname, k.aktenzeichen, k.amt, k.hzl_rhythmus, k.anonymisiert_am,
+          k.id, k.vorname, k.nachname, k.aktenzeichen, k.amt, k.hzl_rhythmus, k.anonymisiert_am, k.archiviert_am,
           z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
         FROM klient k
         LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
         LEFT JOIN standort s ON s.id = z.standort_id
-        WHERE ${bedingung}
+        WHERE ${bedingungen.join(" AND ")}
         ORDER BY k.nachname, k.vorname
         `,
         params
@@ -131,10 +148,13 @@ export class KlientService {
         hzlRhythmus: rows[0].hzl_rhythmus,
         aktuellesZimmer: null,
         anonymisiertAm: null,
+        archiviertAm: null,
         aufnahmeAm: null,
         entlassenAm: null,
         stammdaten: null,
         kontakte: [],
+        archiviertVonName: null,
+        archivPdfs: [],
       };
     });
   }
@@ -192,8 +212,10 @@ export class KlientService {
       `
       SELECT
         k.id, k.vorname, k.nachname, k.geburtsdatum, k.aktenzeichen, k.amt, k.hzl_rhythmus, k.anonymisiert_am,
+        k.archiviert_am, ab.name AS archiviert_von_name,
         z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
       FROM klient k
+      LEFT JOIN benutzer ab ON ab.id = k.archiviert_von
       LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
       LEFT JOIN zimmer z ON z.id = b.zimmer_id
       LEFT JOIN standort s ON s.id = z.standort_id
@@ -235,6 +257,15 @@ export class KlientService {
       [id]
     );
 
+    const { rows: archivRows } = await client.query(
+      `SELECT a.id, a.erstellt_am, b.name AS erstellt_von_name
+       FROM klient_archiv_pdf a
+       LEFT JOIN benutzer b ON b.id = a.erstellt_von
+       WHERE a.klient_id = $1
+       ORDER BY a.erstellt_am DESC`,
+      [id]
+    );
+
     return {
       ...zuListEintrag(rows[0]),
       geburtsdatum: rows[0].geburtsdatum,
@@ -242,6 +273,8 @@ export class KlientService {
       entlassenAm: zeitraumRows[0].entlassen_am,
       stammdaten: stammdatenRows.length > 0 ? zuStammdatenDto(stammdatenRows[0]) : null,
       kontakte: kontaktRows.map(zuKontaktDto),
+      archiviertVonName: rows[0].archiviert_von_name,
+      archivPdfs: archivRows.map((r) => ({ id: r.id, erstelltAm: r.erstellt_am, erstelltVonName: r.erstellt_von_name })),
     };
   }
 }
@@ -258,6 +291,7 @@ function zuListEintrag(r: any): KlientListEintrag {
       ? { id: r.zimmer_id, nummer: r.zimmer_nummer, standortName: r.standort_name, belegungId: r.belegung_id }
       : null,
     anonymisiertAm: r.anonymisiert_am,
+    archiviertAm: r.archiviert_am,
   };
 }
 

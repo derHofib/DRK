@@ -707,10 +707,19 @@
   border-radius: var(--zv-radius-s);
 }
 
-.zv-link-btn:hover {
+.zv-link-btn:hover:not(:disabled) {
   color: var(--zv-accent-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Gleiche Behandlung wie .zv-btn:disabled -- sonst sieht ein per
+   fieldset[disabled] eingefrorener Link-Knopf (Klient archiviert, siehe
+   KlientDetail.tsx) exakt wie ein normaler, klickbarer Knopf aus. */
+.zv-link-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--zv-text-muted);
 }
 
 /* Rein ikonische Knoepfe -- brauchen immer ein aria-label am Element. */

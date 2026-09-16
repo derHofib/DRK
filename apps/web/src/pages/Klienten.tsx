@@ -5,10 +5,11 @@ import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { Seitenpanel } from "../components/Seitenpanel";
-import { IFehler, ILeerKlienten, INeu, ISpeichern } from "../components/icons";
+import { IArchivieren, IFehler, IKlienten, ILeerArchiv, ILeerKlienten, INeu, ISpeichern } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 
 export function Klienten() {
+  const [ansicht, setAnsicht] = useState<"aktiv" | "archiv">("aktiv");
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);
@@ -16,10 +17,13 @@ export function Klienten() {
   const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(null);
 
   function laden() {
-    api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
+    api
+      .klientenListe(ansicht === "archiv")
+      .then(setKlienten)
+      .catch((err) => setFehler(err.message));
   }
 
-  useEffect(laden, []);
+  useEffect(laden, [ansicht]);
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,15 +60,40 @@ export function Klienten() {
 
       <div className="zv-seiten-kopf">
         <h2>Klienten</h2>
+        {ansicht === "aktiv" && (
+          <button
+            className="zv-btn"
+            onClick={() => {
+              setFormFehler(null);
+              setFormularOffen(true);
+            }}
+          >
+            <INeu />
+            Neuer Klient
+          </button>
+        )}
+      </div>
+
+      <div className="zv-segmented" role="radiogroup" aria-label="Ansicht" style={{ marginBottom: 16 }}>
         <button
-          className="zv-btn"
-          onClick={() => {
-            setFormFehler(null);
-            setFormularOffen(true);
-          }}
+          type="button"
+          role="radio"
+          aria-checked={ansicht === "aktiv"}
+          className={ansicht === "aktiv" ? "active" : ""}
+          onClick={() => setAnsicht("aktiv")}
         >
-          <INeu />
-          Neuer Klient
+          <IKlienten />
+          Aktiv
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={ansicht === "archiv"}
+          className={ansicht === "archiv" ? "active" : ""}
+          onClick={() => setAnsicht("archiv")}
+        >
+          <IArchivieren />
+          Archiv
         </button>
       </div>
 
@@ -119,7 +148,11 @@ export function Klienten() {
       )}
 
       {klienten.length === 0 ? (
-        <Leerzustand icon={ILeerKlienten}>Keine Klienten erfasst.</Leerzustand>
+        ansicht === "archiv" ? (
+          <Leerzustand icon={ILeerArchiv}>Keine archivierten Klienten.</Leerzustand>
+        ) : (
+          <Leerzustand icon={ILeerKlienten}>Keine Klienten erfasst.</Leerzustand>
+        )
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.3fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
@@ -127,7 +160,7 @@ export function Klienten() {
             <span>Aktenzeichen</span>
             <span>Amt</span>
             <span>HZL</span>
-            <span>Zimmer</span>
+            <span>{ansicht === "archiv" ? "Archiviert am" : "Zimmer"}</span>
           </div>
           {klienten.map((k) => (
             <div
@@ -155,15 +188,21 @@ export function Klienten() {
               <span className="zv-liste-zelle" data-label="HZL">
                 <strong>{HZL_RHYTHMUS_LABEL[k.hzlRhythmus]}</strong>
               </span>
-              <span className="zv-liste-zelle" data-label="Zimmer">
-                {k.aktuellesZimmer ? (
-                  <span className="zv-pill zv-pill-vergeben">
-                    {k.aktuellesZimmer.nummer} · {k.aktuellesZimmer.standortName}
-                  </span>
-                ) : (
-                  <span className="zv-sub-inline">Kein Zimmer</span>
-                )}
-              </span>
+              {ansicht === "archiv" ? (
+                <span className="zv-liste-zelle" data-label="Archiviert am">
+                  <span className="zv-pill zv-pill-neutral">{k.archiviertAm?.slice(0, 10)}</span>
+                </span>
+              ) : (
+                <span className="zv-liste-zelle" data-label="Zimmer">
+                  {k.aktuellesZimmer ? (
+                    <span className="zv-pill zv-pill-vergeben">
+                      {k.aktuellesZimmer.nummer} · {k.aktuellesZimmer.standortName}
+                    </span>
+                  ) : (
+                    <span className="zv-sub-inline">Kein Zimmer</span>
+                  )}
+                </span>
+              )}
             </div>
           ))}
         </div>

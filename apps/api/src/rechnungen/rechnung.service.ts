@@ -3,7 +3,12 @@ import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
 import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
-import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
+import {
+  ermittleErlaubteStandortIds,
+  klientIstArchiviert,
+  klientIstErlaubt,
+  klientStandortBedingung,
+} from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
 
 // SQLSTATE-Codes, siehe
@@ -106,6 +111,9 @@ export class RechnungService {
       if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");
       }
+      if (await klientIstArchiviert(client, input.klientId)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+      }
 
       const { rows } = await client.query(
         `INSERT INTO rechnung (mandant_id, klient_id, betrag_cent, beschreibung, erstellt_von)
@@ -159,6 +167,9 @@ export class RechnungService {
         const { rows: bestehend } = await client.query("SELECT klient_id FROM rechnung WHERE id = $1", [id]);
         if (bestehend.length === 0 || !(await klientIstErlaubt(client, benutzerId, bestehend[0].klient_id))) {
           throw new NotFoundException("Rechnung nicht gefunden.");
+        }
+        if (await klientIstArchiviert(client, bestehend[0].klient_id)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
         }
 
         await client.query(
