@@ -13,6 +13,11 @@ const ausziehenSchema = z.object({
   auszug: z.string().date(),
 });
 
+const bearbeitenSchema = z.object({
+  einzug: z.string().date(),
+  auszug: z.string().date().nullable(),
+});
+
 @Controller("belegungen")
 @Authenticated()
 export class BelegungController {
@@ -27,5 +32,10 @@ export class BelegungController {
   async ausziehen(@Param("id") id: string, @Body() body: unknown) {
     const { auszug } = ausziehenSchema.parse(body);
     return this.belegungen.ausziehen(id, auszug);
+  }
+
+  @Patch(":id/bearbeiten")
+  async bearbeiten(@Param("id") id: string, @Body() body: unknown) {
+    return this.belegungen.bearbeiten(id, bearbeitenSchema.parse(body));
   }
 }

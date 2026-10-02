@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { ZimmerService } from "./zimmer.service";
@@ -69,5 +69,16 @@ export class ZimmerController {
   @Get(":id/belegungsverlauf")
   async belegungsverlauf(@Param("id") id: string) {
     return this.zimmer.belegungsverlauf(id);
+  }
+
+  @Post(":id/warteliste")
+  async wartelisteHinzufuegen(@Param("id") id: string, @Body() body: unknown) {
+    const { klientId } = z.object({ klientId: z.string().uuid() }).parse(body);
+    return this.zimmer.wartelisteHinzufuegen(id, klientId);
+  }
+
+  @Delete(":id/warteliste/:eintragId")
+  async wartelisteEntfernen(@Param("id") id: string, @Param("eintragId") eintragId: string) {
+    return this.zimmer.wartelisteEntfernen(id, eintragId);
   }
 }

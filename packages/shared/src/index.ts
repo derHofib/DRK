@@ -139,6 +139,11 @@ export interface ZimmerBewohnerDto {
   id: string;
   name: string;
   einzug: string;
+  // Gesetzt, wenn der Auszug schon geplant, aber noch nicht eingetreten ist
+  // (sonst waere die Person gar kein aktueller Bewohner mehr, siehe
+  // zimmer.service.ts: ladeBewohner()). Zeigt sich in der Oberflaeche als
+  // "Auszug geplant am ..."-Hinweis.
+  auszug: string | null;
   belegungId: string;
 }
 
@@ -157,6 +162,20 @@ export interface OffenerKapazitaetsantragDto {
   beantragtAm: string;
 }
 
+/**
+ * Warteliste je Zimmer (siehe migrations/0038_zimmer_warteliste.sql):
+ * bewusst ohne Datum, nur Reihenfolge nach eingetragenAm -- druckt eine
+ * Absicht/Reihenfolge aus ("sobald ein Platz frei wird"), kein festes
+ * Versprechen. Das feste Datum entsteht erst beim tatsaechlichen Einzug.
+ */
+export interface ZimmerWartelisteEintragDto {
+  id: string;
+  klientId: string;
+  klientName: string;
+  eingetragenAm: string;
+  eingetragenVonName: string | null;
+}
+
 export interface ZimmerListEintragDto {
   id: string;
   nummer: string;
@@ -166,6 +185,7 @@ export interface ZimmerListEintragDto {
   kapazitaet: number;
   status: Zimmerstatus;
   bewohner: ZimmerBewohnerDto[];
+  warteliste: ZimmerWartelisteEintragDto[];
   offenerKapazitaetsantrag: OffenerKapazitaetsantragDto | null;
 }
 
@@ -176,6 +196,9 @@ export interface BelegungsverlaufEintragDto {
   einzug: string;
   auszug: string | null;
   istAktuell: boolean;
+  // Einzug liegt noch in der Zukunft -- noch nicht begonnen, fuer die
+  // "Geplant"-Kennzeichnung in der Oberflaeche.
+  geplant: boolean;
 }
 
 export interface KlientListEintragDto {
@@ -185,7 +208,9 @@ export interface KlientListEintragDto {
   aktenzeichen: string;
   amt: string;
   hzlRhythmus: HzlRhythmus;
-  aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
+  aktuellesZimmer:
+    | { id: string; nummer: string; standortName: string; belegungId: string; einzug: string; auszug: string | null }
+    | null;
   anonymisiertAm: string | null;
   // Siehe migrations/0036_klient_archivierung.sql -- ein archivierter Klient
   // ist eingefroren (keine neuen Tagesberichte/Buchungen/... mehr moeglich,
@@ -205,6 +230,10 @@ export interface KlientDetailDto extends KlientListEintragDto {
   // klient_archiv_pdf) -- auch nach dem Entarchivieren bleiben fruehere
   // Snapshots herunterladbar.
   archivPdfs: { id: string; erstelltAm: string; erstelltVonName: string | null }[];
+  // Zimmer, fuer die dieser Klient auf der Warteliste steht (siehe
+  // migrations/0038_zimmer_warteliste.sql) -- rein informativ, Hinzufuegen/
+  // Entfernen laufen ueber die Zimmer-Route (ZimmerListEintragDto.warteliste).
+  wartelisten: { eintragId: string; zimmerId: string; zimmerNummer: string; standortName: string; eingetragenAm: string }[];
 }
 
 /**

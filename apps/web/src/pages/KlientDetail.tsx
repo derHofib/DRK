@@ -30,6 +30,7 @@ import {
   IEntarchivieren,
   IFehler,
   IGenehmigen,
+  IGeplant,
   IHerunterladen,
   IKassenbuch,
   IKostenuebernahme,
@@ -47,6 +48,7 @@ import {
   ISpeichern,
   ITagesberichte,
   IUebersicht,
+  IWarteliste,
   IZurueck,
 } from "../components/icons";
 import { dateiZuBase64 } from "../datei";
@@ -339,6 +341,9 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
   const [zuweisungOffen, setZuweisungOffen] = useState(false);
   const [auszugOffen, setAuszugOffen] = useState(false);
+  const [belegungBearbeitenOffen, setBelegungBearbeitenOffen] = useState(false);
+  const [wartelisteOffen, setWartelisteOffen] = useState(false);
+  const [alleZimmer, setAlleZimmer] = useState<ZimmerListEintragDto[]>([]);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
@@ -349,8 +354,10 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
   }, [klient.id]);
 
   useEffect(() => {
-    if (klient.aktuellesZimmer) return;
-    api.zimmerListe().then((liste) => setFreieZimmer(liste.filter((z) => z.bewohner.length < z.kapazitaet)));
+    api.zimmerListe().then((liste) => {
+      setAlleZimmer(liste);
+      if (!klient.aktuellesZimmer) setFreieZimmer(liste.filter((z) => z.bewohner.length < z.kapazitaet));
+    });
   }, [klient.id, klient.aktuellesZimmer]);
 
   // Fuer das Bezugsbetreuer-Dropdown in den Stammdaten -- einmal fuer die
@@ -396,6 +403,52 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     }
   }
 
+  async function belegungBearbeiten(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!klient.aktuellesZimmer) return;
+    const form = new FormData(e.currentTarget);
+    setFormFehler(null);
+    setWirdGespeichert(true);
+    try {
+      const auszug = String(form.get("auszug"));
+      await api.belegungBearbeiten(klient.aktuellesZimmer.belegungId, {
+        einzug: String(form.get("einzug")),
+        auszug: auszug === "" ? null : auszug,
+      });
+      setBelegungBearbeitenOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Belegung konnte nicht geändert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function wartelisteHinzufuegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setFormFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.zimmerWartelisteHinzufuegen(String(form.get("zimmerId")), klient.id);
+      setWartelisteOffen(false);
+      onGeaendert();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Klient konnte nicht auf die Warteliste gesetzt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function wartelisteEntfernen(zimmerId: string, eintragId: string) {
+    try {
+      await api.zimmerWartelisteEntfernen(zimmerId, eintragId);
+      onGeaendert();
+    } catch (err) {
+      setFormFehler(err instanceof Error ? err.message : "Eintrag konnte nicht entfernt werden.");
+    }
+  }
+
   return (
     <div>
     <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
@@ -405,6 +458,12 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
           {klient.aktuellesZimmer ? (
             <>
               {klient.aktuellesZimmer.nummer} · {klient.aktuellesZimmer.standortName}{" "}
+              {klient.aktuellesZimmer.auszug && (
+                <span className="zv-pill zv-pill-info">
+                  <IGeplant />
+                  Auszug geplant {formatDatum(klient.aktuellesZimmer.auszug)}
+                </span>
+              )}{" "}
               <button
                 className="zv-link-btn"
                 onClick={() => {
@@ -414,6 +473,16 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
               >
                 <IAuszug />
                 Auszug eintragen
+              </button>{" "}
+              <button
+                className="zv-link-btn"
+                onClick={() => {
+                  setFormFehler(null);
+                  setBelegungBearbeitenOffen(true);
+                }}
+              >
+                <IBearbeiten />
+                Bearbeiten
               </button>
             </>
           ) : (
@@ -444,6 +513,35 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
         <div>{klient.aufnahmeAm ? formatDatum(klient.aufnahmeAm) : "–"}</div>
         <div style={{ color: "var(--zv-text-muted)" }}>Entlassen am</div>
         <div>{klient.entlassenAm ? formatDatum(klient.entlassenAm) : "–"}</div>
+        <div style={{ color: "var(--zv-text-muted)" }}>Wartelisten</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {klient.wartelisten.length === 0 ? (
+            <span className="zv-sub-inline">Auf keiner Warteliste</span>
+          ) : (
+            klient.wartelisten.map((w) => (
+              <span key={w.eintragId} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span className="zv-pill zv-pill-info">
+                  <IWarteliste />
+                  {w.standortName} · Zimmer {w.zimmerNummer}
+                </span>
+                <button className="zv-link-btn" onClick={() => wartelisteEntfernen(w.zimmerId, w.eintragId)}>
+                  <ILoeschen />
+                  Entfernen
+                </button>
+              </span>
+            ))
+          )}
+          <button
+            className="zv-link-btn"
+            onClick={() => {
+              setFormFehler(null);
+              setWartelisteOffen(true);
+            }}
+          >
+            <IWarteliste />
+            Auf Warteliste setzen
+          </button>
+        </div>
       </div>
 
       {zuweisungOffen && (
@@ -513,6 +611,84 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
               {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {belegungBearbeitenOffen && klient.aktuellesZimmer && (
+        <Modal titel="Belegung bearbeiten" onClose={() => setBelegungBearbeitenOffen(false)}>
+          <form onSubmit={belegungBearbeiten}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ margin: "0 0 12px" }}>
+              Nutzen, wenn sich ein Einzug oder Auszug verzögert oder sich geändert hat.
+            </p>
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="klient-belegung-einzug">Einzugsdatum</label>
+                <input
+                  id="klient-belegung-einzug"
+                  name="einzug"
+                  type="date"
+                  required
+                  autoFocus
+                  defaultValue={klient.aktuellesZimmer.einzug}
+                />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="klient-belegung-auszug">Auszugsdatum (optional)</label>
+                <input
+                  id="klient-belegung-auszug"
+                  name="auszug"
+                  type="date"
+                  defaultValue={klient.aktuellesZimmer.auszug ?? ""}
+                />
+              </div>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {wartelisteOffen && (
+        <Modal titel="Auf Warteliste setzen" onClose={() => setWartelisteOffen(false)}>
+          <form onSubmit={wartelisteHinzufuegen}>
+            {formFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {formFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="klient-warteliste-zimmer">Zimmer</label>
+              <select id="klient-warteliste-zimmer" name="zimmerId" required autoFocus defaultValue="">
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
+                {alleZimmer
+                  .filter(
+                    (z) =>
+                      z.id !== klient.aktuellesZimmer?.id &&
+                      !klient.wartelisten.some((w) => w.zimmerId === z.id)
+                  )
+                  .map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.nummer} · {z.standortName}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IWarteliste />
+              {wirdGespeichert ? "Speichert…" : "Eintragen"}
             </button>
           </form>
         </Modal>

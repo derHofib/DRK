@@ -24,6 +24,7 @@ import {
   BookX,
   Building2,
   CalendarCheck,
+  CalendarClock,
   CalendarX2,
   Check,
   ChevronDown,
@@ -46,6 +47,7 @@ import {
   FileText,
   HandCoins,
   History,
+  Hourglass,
   IdCard,
   Info,
   KeyRound,
@@ -178,6 +180,10 @@ export const IAnpassen = baue(SlidersHorizontal);
 export const IKapazitaet = baue(BedDouble);
 export const IAktivieren = baue(Power);
 export const IDeaktivieren = baue(PowerOff);
+// "Geplant" -- kuenftiger Einzug/Auszug, der schon eingetragen, aber noch
+// nicht eingetreten ist (vorausschauende Planung).
+export const IGeplant = baue(CalendarClock);
+export const IWarteliste = baue(Hourglass);
 
 /**
  * Prioritaet: Signalstaerken-Symbole statt reiner Farbe -- WCAG 1.4.1

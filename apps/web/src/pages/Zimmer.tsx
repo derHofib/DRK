@@ -28,15 +28,18 @@ import {
   IEinziehen,
   IFehler,
   IGenehmigen,
+  IGeplant,
   IKapazitaet,
   ILeerVerlauf,
   ILeerZimmer,
+  ILoeschen,
   INeu,
   ISpeichern,
   ISVergeben,
   ISZugeordnet,
   IStandort,
   IVerlauf,
+  IWarteliste,
   IZuklappen,
 } from "../components/icons";
 
@@ -86,10 +89,20 @@ export function Zimmer() {
 
   const [zuweisungsZimmer, setZuweisungsZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
+  // Gesetzt, wenn "Klient zuweisen" von einer Warteliste aus geoeffnet wurde
+  // -- dann ist der Klient schon festgelegt, kein Dropdown noetig.
+  const [wartelistenKlient, setWartelistenKlient] = useState<{ id: string; name: string } | null>(null);
+
+  const [offeneWarteliste, setOffeneWarteliste] = useState<string | null>(null);
+  const [wartelisteZimmer, setWartelisteZimmer] = useState<ZimmerListEintragDto | null>(null);
+  const [wartelisteFehler, setWartelisteFehler] = useState<string | null>(null);
   const [auszugBewohner, setAuszugBewohner] = useState<{ zimmer: ZimmerListEintragDto; bewohner: ZimmerBewohnerDto } | null>(
     null
   );
   const [auszugFehler, setAuszugFehler] = useState<string | null>(null);
+
+  const [bearbeiteteBelegung, setBearbeiteteBelegung] = useState<BelegungsverlaufEintragDto | null>(null);
+  const [belegungBearbeitenFehler, setBelegungBearbeitenFehler] = useState<string | null>(null);
 
   const [kapazitaetZimmer, setKapazitaetZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [kapazitaetFehler, setKapazitaetFehler] = useState<string | null>(null);
@@ -211,16 +224,43 @@ export function Zimmer() {
     try {
       await api.belegungEinziehen({
         zimmerId: zuweisungsZimmer.id,
-        klientId: String(form.get("klientId")),
+        klientId: wartelistenKlient?.id ?? String(form.get("klientId")),
         einzug: String(form.get("einzug")),
       });
       setZuweisungsZimmer(null);
+      setWartelistenKlient(null);
       ladeZimmer();
       ladeKlienten();
     } catch (err) {
       setZuweisungFehler(err instanceof Error ? err.message : "Klient konnte nicht zugewiesen werden.");
     } finally {
       setWirdGespeichert(false);
+    }
+  }
+
+  async function wartelisteHinzufuegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!wartelisteZimmer) return;
+    const form = new FormData(e.currentTarget);
+    setWartelisteFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.zimmerWartelisteHinzufuegen(wartelisteZimmer.id, String(form.get("klientId")));
+      setWartelisteZimmer(null);
+      ladeZimmer();
+    } catch (err) {
+      setWartelisteFehler(err instanceof Error ? err.message : "Klient konnte nicht auf die Warteliste gesetzt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function wartelisteEntfernen(zimmerId: string, eintragId: string) {
+    try {
+      await api.zimmerWartelisteEntfernen(zimmerId, eintragId);
+      ladeZimmer();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Eintrag konnte nicht entfernt werden.");
     }
   }
 
@@ -237,6 +277,29 @@ export function Zimmer() {
       ladeKlienten();
     } catch (err) {
       setAuszugFehler(err instanceof Error ? err.message : "Auszug konnte nicht eingetragen werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function belegungBearbeiten(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!bearbeiteteBelegung) return;
+    const form = new FormData(e.currentTarget);
+    setBelegungBearbeitenFehler(null);
+    setWirdGespeichert(true);
+    try {
+      const auszug = String(form.get("auszug"));
+      await api.belegungBearbeiten(bearbeiteteBelegung.id, {
+        einzug: String(form.get("einzug")),
+        auszug: auszug === "" ? null : auszug,
+      });
+      setBearbeiteteBelegung(null);
+      ladeZimmer();
+      ladeKlienten();
+      if (offenesZimmer) setVerlauf(await api.belegungsverlauf(offenesZimmer));
+    } catch (err) {
+      setBelegungBearbeitenFehler(err instanceof Error ? err.message : "Belegung konnte nicht geändert werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -476,6 +539,12 @@ export function Zimmer() {
                               <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
                                 seit {formatDatum(bew.einzug)}
                               </span>
+                              {bew.auszug && (
+                                <span className="zv-pill zv-pill-info" style={{ marginLeft: 6 }}>
+                                  <IGeplant />
+                                  Auszug geplant {formatDatum(bew.auszug)}
+                                </span>
+                              )}
                             </span>
                             <button
                               className="zv-link-btn"
@@ -538,6 +607,16 @@ export function Zimmer() {
                         {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
                         {offenesZimmer !== z.id && <IAufklappen />}
                       </button>
+                      <button
+                        className="zv-link-btn"
+                        onClick={() => setOffeneWarteliste(offeneWarteliste === z.id ? null : z.id)}
+                      >
+                        {offeneWarteliste === z.id ? <IZuklappen /> : <IWarteliste />}
+                        {offeneWarteliste === z.id
+                          ? "Warteliste ausblenden"
+                          : `Warteliste${z.warteliste.length ? ` (${z.warteliste.length})` : ""}`}
+                        {offeneWarteliste !== z.id && <IAufklappen />}
+                      </button>
                       {darfStammdatenBearbeiten && (
                         <button
                           className="zv-link-btn"
@@ -588,11 +667,81 @@ export function Zimmer() {
                           <li key={v.id}>
                             <strong>{v.name}</strong>
                             <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
-                              {formatDatum(v.einzug)} – {v.auszug ? formatDatum(v.auszug) : "heute"}
+                              {v.geplant ? (
+                                <>Geplant ab {formatDatum(v.einzug)}</>
+                              ) : (
+                                <>
+                                  {formatDatum(v.einzug)} – {v.istAktuell ? "heute" : formatDatum(v.auszug!)}
+                                </>
+                              )}
                             </span>
+                            {(v.geplant || (v.istAktuell && v.auszug)) && (
+                              <span className="zv-pill zv-pill-info" style={{ marginLeft: 6 }}>
+                                <IGeplant />
+                                {v.geplant ? "Geplant" : `Auszug geplant ${formatDatum(v.auszug!)}`}
+                              </span>
+                            )}
+                            <button
+                              className="zv-link-btn"
+                              onClick={() => {
+                                setBelegungBearbeitenFehler(null);
+                                setBearbeiteteBelegung(v);
+                              }}
+                            >
+                              <IBearbeiten />
+                              Bearbeiten
+                            </button>
                           </li>
                         ))}
                         {verlauf.length === 0 && <li className="zv-sub-inline">Noch keine Belegung erfasst.</li>}
+                      </ul>
+                    )}
+
+                    {offeneWarteliste === z.id && (
+                      <ul className="zv-verlauf-liste">
+                        {z.warteliste.map((w, i) => (
+                          <li key={w.id}>
+                            <strong>
+                              {i + 1}. {w.klientName}
+                            </strong>
+                            <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
+                              seit {formatDatum(w.eingetragenAm.slice(0, 10))}
+                              {w.eingetragenVonName ? ` · ${w.eingetragenVonName}` : ""}
+                            </span>
+                            <span style={{ display: "flex", gap: 8 }}>
+                              <button
+                                className="zv-link-btn"
+                                onClick={() => {
+                                  setZuweisungFehler(null);
+                                  setWartelistenKlient({ id: w.klientId, name: w.klientName });
+                                  setZuweisungsZimmer(z);
+                                }}
+                              >
+                                <IEinziehen />
+                                Einziehen
+                              </button>
+                              <button className="zv-link-btn" onClick={() => wartelisteEntfernen(z.id, w.id)}>
+                                <ILoeschen />
+                                Entfernen
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                        {z.warteliste.length === 0 && (
+                          <li className="zv-sub-inline">Noch niemand auf der Warteliste.</li>
+                        )}
+                        <li>
+                          <button
+                            className="zv-link-btn"
+                            onClick={() => {
+                              setWartelisteFehler(null);
+                              setWartelisteZimmer(z);
+                            }}
+                          >
+                            <INeu />
+                            Zur Warteliste hinzufügen
+                          </button>
+                        </li>
                       </ul>
                     )}
 
@@ -787,7 +936,13 @@ export function Zimmer() {
       )}
 
       {zuweisungsZimmer && (
-        <Modal titel={`Klient zuweisen — Zimmer ${zuweisungsZimmer.nummer}`} onClose={() => setZuweisungsZimmer(null)}>
+        <Modal
+          titel={`Klient zuweisen — Zimmer ${zuweisungsZimmer.nummer}`}
+          onClose={() => {
+            setZuweisungsZimmer(null);
+            setWartelistenKlient(null);
+          }}
+        >
           <form onSubmit={klientZuweisen}>
             {zuweisungFehler && (
               <div className="zv-hinweis zv-hinweis-fehler">
@@ -795,24 +950,33 @@ export function Zimmer() {
                 {zuweisungFehler}
               </div>
             )}
-            <div className="zv-field">
-              <label htmlFor="zuweisung-klient">Klient</label>
-              <select id="zuweisung-klient" name="klientId" required autoFocus defaultValue="">
-                <option value="" disabled>
-                  Bitte wählen
-                </option>
-                {klienten
-                  .filter((k) => k.aktuellesZimmer === null)
-                  .map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.vorname} {k.nachname}
-                    </option>
-                  ))}
-              </select>
-              {klienten.filter((k) => k.aktuellesZimmer === null).length === 0 && (
-                <span className="zv-sub-inline">Alle Klienten haben bereits ein Zimmer.</span>
-              )}
-            </div>
+            {wartelistenKlient ? (
+              <div className="zv-field">
+                <label>Klient</label>
+                <p className="zv-sub" style={{ margin: 0 }}>
+                  {wartelistenKlient.name} (von der Warteliste)
+                </p>
+              </div>
+            ) : (
+              <div className="zv-field">
+                <label htmlFor="zuweisung-klient">Klient</label>
+                <select id="zuweisung-klient" name="klientId" required autoFocus defaultValue="">
+                  <option value="" disabled>
+                    Bitte wählen
+                  </option>
+                  {klienten
+                    .filter((k) => k.aktuellesZimmer === null)
+                    .map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.vorname} {k.nachname}
+                      </option>
+                    ))}
+                </select>
+                {klienten.filter((k) => k.aktuellesZimmer === null).length === 0 && (
+                  <span className="zv-sub-inline">Alle Klienten haben bereits ein Zimmer.</span>
+                )}
+              </div>
+            )}
             <div className="zv-field">
               <label htmlFor="zuweisung-einzug">Einzugsdatum</label>
               <input
@@ -826,6 +990,45 @@ export function Zimmer() {
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IEinziehen />
               {wirdGespeichert ? "Speichert…" : "Einziehen"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {wartelisteZimmer && (
+        <Modal
+          titel={`Zur Warteliste — Zimmer ${wartelisteZimmer.nummer}`}
+          onClose={() => setWartelisteZimmer(null)}
+        >
+          <form onSubmit={wartelisteHinzufuegen}>
+            {wartelisteFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {wartelisteFehler}
+              </div>
+            )}
+            <div className="zv-field">
+              <label htmlFor="warteliste-klient">Klient</label>
+              <select id="warteliste-klient" name="klientId" required autoFocus defaultValue="">
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
+                {klienten
+                  .filter(
+                    (k) =>
+                      k.aktuellesZimmer?.id !== wartelisteZimmer.id &&
+                      !wartelisteZimmer.warteliste.some((w) => w.klientId === k.id)
+                  )
+                  .map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.vorname} {k.nachname}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <IWarteliste />
+              {wirdGespeichert ? "Speichert…" : "Eintragen"}
             </button>
           </form>
         </Modal>
@@ -860,6 +1063,48 @@ export function Zimmer() {
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
               {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {bearbeiteteBelegung && (
+        <Modal titel={`Belegung bearbeiten — ${bearbeiteteBelegung.name}`} onClose={() => setBearbeiteteBelegung(null)}>
+          <form onSubmit={belegungBearbeiten}>
+            {belegungBearbeitenFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {belegungBearbeitenFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ margin: "0 0 12px" }}>
+              Nutzen, wenn sich ein Einzug oder Auszug verzögert oder sich geändert hat.
+            </p>
+            <div className="zv-field-row">
+              <div className="zv-field">
+                <label htmlFor="belegung-bearbeiten-einzug">Einzugsdatum</label>
+                <input
+                  id="belegung-bearbeiten-einzug"
+                  name="einzug"
+                  type="date"
+                  required
+                  autoFocus
+                  defaultValue={bearbeiteteBelegung.einzug}
+                />
+              </div>
+              <div className="zv-field">
+                <label htmlFor="belegung-bearbeiten-auszug">Auszugsdatum (optional)</label>
+                <input
+                  id="belegung-bearbeiten-auszug"
+                  name="auszug"
+                  type="date"
+                  defaultValue={bearbeiteteBelegung.auszug ?? ""}
+                />
+              </div>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
+              <ISpeichern />
+              {wirdGespeichert ? "Speichert…" : "Speichern"}
             </button>
           </form>
         </Modal>

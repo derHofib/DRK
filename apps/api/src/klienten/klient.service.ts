@@ -19,9 +19,19 @@ export interface KlientListEintrag {
   aktenzeichen: string;
   amt: string;
   hzlRhythmus: "monatlich" | "woechentlich";
-  aktuellesZimmer: { id: string; nummer: string; standortName: string; belegungId: string } | null;
+  aktuellesZimmer:
+    | { id: string; nummer: string; standortName: string; belegungId: string; einzug: string; auszug: string | null }
+    | null;
   anonymisiertAm: string | null;
   archiviertAm: string | null;
+}
+
+export interface KlientWartelisteEintrag {
+  eintragId: string;
+  zimmerId: string;
+  zimmerNummer: string;
+  standortName: string;
+  eingetragenAm: string;
 }
 
 export interface KlientStammdaten {
@@ -83,6 +93,7 @@ export interface KlientDetail extends KlientListEintrag {
   kontakte: KlientKontakt[];
   archiviertVonName: string | null;
   archivPdfs: KlientArchivPdfEintrag[];
+  wartelisten: KlientWartelisteEintrag[];
 }
 
 @Injectable()
@@ -113,9 +124,11 @@ export class KlientService {
         `
         SELECT
           k.id, k.vorname, k.nachname, k.aktenzeichen, k.amt, k.hzl_rhythmus, k.anonymisiert_am, k.archiviert_am,
-          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
+          z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id,
+          b.einzug, b.auszug
         FROM klient k
-        LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+        LEFT JOIN belegung b ON b.klient_id = k.id
+          AND b.einzug <= CURRENT_DATE AND (b.auszug IS NULL OR b.auszug > CURRENT_DATE)
         LEFT JOIN zimmer z ON z.id = b.zimmer_id
         LEFT JOIN standort s ON s.id = z.standort_id
         WHERE ${bedingungen.join(" AND ")}
@@ -155,6 +168,7 @@ export class KlientService {
         kontakte: [],
         archiviertVonName: null,
         archivPdfs: [],
+        wartelisten: [],
       };
     });
   }
@@ -213,10 +227,12 @@ export class KlientService {
       SELECT
         k.id, k.vorname, k.nachname, k.geburtsdatum, k.aktenzeichen, k.amt, k.hzl_rhythmus, k.anonymisiert_am,
         k.archiviert_am, ab.name AS archiviert_von_name,
-        z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id
+        z.id AS zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, b.id AS belegung_id,
+        b.einzug, b.auszug
       FROM klient k
       LEFT JOIN benutzer ab ON ab.id = k.archiviert_von
-      LEFT JOIN belegung b ON b.klient_id = k.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+      LEFT JOIN belegung b ON b.klient_id = k.id
+        AND b.einzug <= CURRENT_DATE AND (b.auszug IS NULL OR b.auszug > CURRENT_DATE)
       LEFT JOIN zimmer z ON z.id = b.zimmer_id
       LEFT JOIN standort s ON s.id = z.standort_id
       WHERE k.id = $1 AND ${bedingung}
@@ -227,17 +243,38 @@ export class KlientService {
 
     // Aufnahme-/Entlassungsdatum werden bewusst nicht gespeichert, sondern
     // aus den Belegungen abgeleitet (siehe migrations/0034_klient_stammdaten.sql):
-    // Aufnahme = fruehester jemals erfasster Einzug, Entlassung = spaetester
-    // Auszug, aber nur wenn AKTUELL kein offener Aufenthalt mehr besteht --
-    // sonst wuerde ein fruehstes abgeschlossenes Intervall faelschlich als
-    // "entlassen" angezeigt, obwohl der Klient laengst wieder da ist.
+    // Aufnahme = fruehester jemals erfasster Einzug (auch ein rein kuenftig
+    // geplanter Einzug darf hier erscheinen), Entlassung = spaetester
+    // ABGESCHLOSSENER Auszug, aber nur wenn AKTUELL kein laufender Aufenthalt
+    // mehr besteht -- "laufend" heisst: Einzug schon erreicht UND (kein
+    // Auszug gesetzt ODER der gesetzte Auszug liegt noch in der Zukunft).
+    // Ohne den zweiten Teil wuerde ein heute schon eingetragener, aber erst
+    // kuenftig faelliger Auszug den Klienten faelschlich sofort als
+    // "entlassen" zeigen.
     const { rows: zeitraumRows } = await client.query(
       `
       SELECT
         MIN(einzug) AS aufnahme_am,
-        CASE WHEN bool_or(auszug IS NULL AND einzug <= CURRENT_DATE) THEN NULL ELSE MAX(auszug) END AS entlassen_am
+        CASE
+          WHEN bool_or(einzug <= CURRENT_DATE AND (auszug IS NULL OR auszug > CURRENT_DATE)) THEN NULL
+          ELSE MAX(auszug) FILTER (WHERE auszug <= CURRENT_DATE)
+        END AS entlassen_am
       FROM belegung
       WHERE klient_id = $1
+      `,
+      [id]
+    );
+
+    // Wartelisten-Eintraege dieses Klienten (siehe migrations/0038) -- rein
+    // informativ, Hinzufuegen/Entfernen laufen ueber die Zimmer-Route.
+    const { rows: wartelisteRows } = await client.query(
+      `
+      SELECT w.id, w.zimmer_id, z.nummer AS zimmer_nummer, s.name AS standort_name, w.eingetragen_am
+      FROM zimmer_warteliste w
+      JOIN zimmer z ON z.id = w.zimmer_id
+      JOIN standort s ON s.id = z.standort_id
+      WHERE w.klient_id = $1
+      ORDER BY w.eingetragen_am
       `,
       [id]
     );
@@ -275,6 +312,13 @@ export class KlientService {
       kontakte: kontaktRows.map(zuKontaktDto),
       archiviertVonName: rows[0].archiviert_von_name,
       archivPdfs: archivRows.map((r) => ({ id: r.id, erstelltAm: r.erstellt_am, erstelltVonName: r.erstellt_von_name })),
+      wartelisten: wartelisteRows.map((r) => ({
+        eintragId: r.id,
+        zimmerId: r.zimmer_id,
+        zimmerNummer: r.zimmer_nummer,
+        standortName: r.standort_name,
+        eingetragenAm: r.eingetragen_am,
+      })),
     };
   }
 }
@@ -288,7 +332,14 @@ function zuListEintrag(r: any): KlientListEintrag {
     amt: r.amt,
     hzlRhythmus: r.hzl_rhythmus,
     aktuellesZimmer: r.zimmer_id
-      ? { id: r.zimmer_id, nummer: r.zimmer_nummer, standortName: r.standort_name, belegungId: r.belegung_id }
+      ? {
+          id: r.zimmer_id,
+          nummer: r.zimmer_nummer,
+          standortName: r.standort_name,
+          belegungId: r.belegung_id,
+          einzug: r.einzug,
+          auszug: r.auszug,
+        }
       : null,
     anonymisiertAm: r.anonymisiert_am,
     archiviertAm: r.archiviert_am,

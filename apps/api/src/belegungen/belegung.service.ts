@@ -117,6 +117,55 @@ export class BelegungService {
       throw err;
     }
   }
+
+  /**
+   * Nachtraegliche Korrektur, falls sich ein Einzug oder Auszug verzoegert
+   * -- anders als ausziehen() (einmaliger Weg fuer den haeufigen Fall "jetzt
+   * ausziehen") immer BEIDE Felder, damit nie unklar ist, ob ein fehlendes
+   * Feld "unveraendert lassen" oder "auf null setzen" bedeutet. Offen fuer
+   * alle Rollen -- wie einziehen()/ausziehen() schon heute (operatives
+   * Tagesgeschaeft, siehe Kommentar in zimmer.service.ts).
+   */
+  async bearbeiten(id: string, input: { einzug: string; auszug: string | null }): Promise<BelegungDto> {
+    const { benutzerId } = requireTenantContext();
+    try {
+      return await this.db.withTenant(async (client) => {
+        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+        const { rows: belegungRows } = await client.query(
+          "SELECT z.standort_id, b.klient_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id WHERE b.id = $1",
+          [id]
+        );
+        if (belegungRows.length === 0) {
+          throw new NotFoundException("Belegung nicht gefunden.");
+        }
+        if (erlaubteStandorte && !erlaubteStandorte.includes(belegungRows[0].standort_id)) {
+          throw new NotFoundException("Belegung nicht gefunden.");
+        }
+        if (await klientIstArchiviert(client, belegungRows[0].klient_id)) {
+          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+        }
+
+        const { rows } = await client.query(
+          `UPDATE belegung SET einzug = $1, auszug = $2
+           WHERE id = $3
+           RETURNING id, zimmer_id, klient_id, einzug, auszug`,
+          [input.einzug, input.auszug, id]
+        );
+        return zuDto(rows[0]);
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === KAPAZITAET_UEBERSCHRITTEN) {
+        throw new ConflictException("Dieses Zimmer hat im gewählten Zeitraum keine freien Plätze mehr.");
+      }
+      if (isPgError(err) && err.code === EXCLUSION_VIOLATION) {
+        throw new ConflictException("Dieser Klient ist im gewählten Zeitraum bereits einem anderen Zimmer zugeordnet.");
+      }
+      if (isPgError(err) && err.code === CHECK_VIOLATION) {
+        throw new BadRequestException("Das Auszugsdatum muss nach dem Einzugsdatum liegen.");
+      }
+      throw err;
+    }
+  }
 }
 
 function zuDto(r: any): BelegungDto {

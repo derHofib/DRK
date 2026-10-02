@@ -217,6 +217,13 @@ export const api = {
     }),
   belegungsverlauf: (zimmerId: string) =>
     request<BelegungsverlaufEintragDto[]>(`/zimmer/${zimmerId}/belegungsverlauf`),
+  zimmerWartelisteHinzufuegen: (zimmerId: string, klientId: string) =>
+    request<ZimmerListEintragDto>(`/zimmer/${zimmerId}/warteliste`, {
+      method: "POST",
+      body: JSON.stringify({ klientId }),
+    }),
+  zimmerWartelisteEntfernen: (zimmerId: string, eintragId: string) =>
+    request<ZimmerListEintragDto>(`/zimmer/${zimmerId}/warteliste/${eintragId}`, { method: "DELETE" }),
 
   klientenListe: (archiviert = false) =>
     request<KlientListEintragDto[]>(`/klienten${archiviert ? "?archiviert=true" : ""}`),
@@ -262,6 +269,8 @@ export const api = {
     request("/belegungen", { method: "POST", body: JSON.stringify(payload) }),
   belegungAusziehen: (id: string, auszug: string) =>
     request(`/belegungen/${id}`, { method: "PATCH", body: JSON.stringify({ auszug }) }),
+  belegungBearbeiten: (id: string, payload: { einzug: string; auszug: string | null }) =>
+    request(`/belegungen/${id}/bearbeiten`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   kassenbuchungenListe: (klientId?: string) =>
     request<KassenbuchungDto[]>(`/kassenbuchungen${klientId ? `?klientId=${klientId}` : ""}`),

@@ -817,6 +817,79 @@ Seitenzahlen, der zuvor angelegte Tagesbericht erscheint im PDF),
 entarchivieren, erneut archivieren → zweiter, unabhängiger Snapshot in der
 Liste — Testmandant danach wieder entfernt.
 
+**Nachtrag — Ein-/Auszüge vorausschauend planen + Zimmer-Warteliste.**
+Zwei Lücken schlossen sich zusammen: ein Auszug ließ sich zwar mit
+beliebigem Datum eintragen, aber die Oberfläche behandelte jeden
+gesetzten Auszug sofort als „schon ausgezogen" — auch wenn das Datum noch
+in der Zukunft lag. Wer vorausschauend plante, sah den Bewohner und das
+Zimmer sofort als frei, obwohl niemand ausgezogen war. Dazu kam: ein
+einmal eingetragener Ein- oder Auszug ließ sich nicht mehr korrigieren,
+wenn sich ein Termin verschob.
+- **Bugfix „noch wohnhaft" statt „kein Auszug gesetzt".** Die drei
+  Stellen, die daraus den aktuellen Bewohner ableiten
+  (`zimmer.service.ts: ladeBewohner()`, `klient.service.ts: findeAlle()`/
+  `holeDetail()`), prüfen jetzt `einzug <= heute AND (auszug IS NULL OR
+  auszug > heute)` statt nur `auszug IS NULL`. Ein geplanter künftiger
+  Auszug wird jetzt als „Auszug geplant am …"-Hinweis neben dem Namen
+  angezeigt, statt den Bewohner verschwinden zu lassen; `entlassenAm`
+  bleibt entsprechend `null`, solange der Aufenthalt noch läuft.
+- **Belegung nachträglich korrigieren** (Migration 0037): die App-Rolle
+  darf jetzt neben `auszug` auch `einzug` ändern (vorher für immer fest,
+  siehe 0020). Neue Route `PATCH /belegungen/:id/bearbeiten` nimmt immer
+  beide Felder entgegen (kein Partial-Update — sonst wäre unklar, ob ein
+  fehlendes Feld „unverändert" oder „auf null setzen" bedeutet); `auszug:
+  null` nimmt einen irrtümlich eingetragenen Auszug wieder zurück. Die
+  bestehenden Überlappungs-/Kapazitätsprüfungen (0010, 0032) greifen
+  automatisch auch bei diesem `UPDATE`, eine Korrektur, die mit einer
+  anderen Belegung kollidiert, wird genauso mit `409` abgelehnt wie ein
+  neuer Einzug. Offen für alle Rollen, wie `einziehen()`/`ausziehen()`
+  selbst — operatives Tagesgeschäft, kein Zimmer-Stammdaten-Fall.
+- **Zimmer-Warteliste** (Migration 0038, neue Tabelle
+  `zimmer_warteliste`): für den Fall, dass ein Zimmer voll ist, aber ein
+  zugesagter neuer Klient oder ein bestehender Bewohner, der umziehen
+  möchte, schon vorgemerkt werden soll, sobald ein Platz frei wird.
+  Bewusst **ohne Datum** — nur eine Reihenfolge nach Eintragungszeitpunkt,
+  kein festes Versprechen. Ein Klient kann gleichzeitig auf mehreren
+  Wartelisten stehen; sobald er **irgendwo** tatsächlich einzieht,
+  verschwindet er automatisch von **allen** — durchgesetzt per Trigger
+  `zimmer_warteliste_aufraeumen()` (`AFTER INSERT ON belegung`), nicht im
+  Anwendungscode, damit das unabhängig vom Aufrufer garantiert passiert.
+  „Einziehen" direkt aus der Warteliste öffnet denselben Zuweisen-Dialog
+  wie sonst, nur mit festgelegtem statt wählbarem Klienten.
+- **Auf beiden Seiten sichtbar und bearbeitbar**, wie gefordert: die
+  Zimmerkarte zeigt Warteliste, Belegungsverlauf (jetzt mit „Geplant"-Pille
+  für noch nicht begonnene Einträge) und eine Bearbeiten-Aktion je Eintrag;
+  die Klientenakte zeigt denselben Auszug-geplant-Hinweis, eine
+  Bearbeiten-Aktion für die laufende Belegung und eine neue
+  „Wartelisten"-Zeile mit allen Zimmern, für die der Klient vorgemerkt ist.
+
+Geprüft: zwei neue e2e-Spec-Dateien — `belegung-bearbeiten.e2e-spec.ts`
+(Korrektur beider Datumsfelder, Zurücksetzen von `auszug` auf `null`,
+Kollision mit bestehender Belegung → `409`, Auszug vor Einzug → `400`,
+Standort-Sichtbarkeit, archivierter Klient → `400`, sowie der zentrale
+Regressionstest: ein künftig geplanter Auszug lässt Zimmerstatus,
+Bewohnerliste, `aktuellesZimmer` und `entlassenAm` unverändert aktuell)
+und `zimmer-warteliste.e2e-spec.ts` (Hinzufügen, doppeltes Hinzufügen →
+`409`, Entfernen, mehrere gleichzeitige Wartelisten, archivierter Klient
+→ `400`, Standort-Sichtbarkeit, und als Kernaussage: Einzug in ein
+drittes, unbeteiligtes Zimmer entfernt den Klienten von allen
+Wartelisten). Alle 290 API-Tests grün (26 Suiten). Gegenproben: die
+korrigierte JOIN-Bedingung in `ladeBewohner()` testweise auf die alte
+Fassung zurückgesetzt → sowohl der Korrektur- als auch der
+Regressionstest wurden rot wie erwartet, wiederhergestellt wieder grün;
+der Warteliste-Aufräum-Trigger per `DROP TRIGGER` entfernt → derselbe
+Einzug-in-ein-drittes-Zimmer-Ablauf ließ den Klienten jetzt nachweislich
+fälschlich auf der alten Warteliste stehen, Trigger wiederhergestellt.
+`pnpm build` (shared + api + web) sauber. Live im Browser geprüft: Auszug
+in der Zukunft eintragen → Bewohner bleibt mit „Auszug geplant"-Pille
+sichtbar (Zimmer- und Klientenseite), Belegung nachträglich korrigieren
+über das neue Bearbeiten-Modal, zwei Klient:innen auf die Warteliste
+eines vollen Zimmers setzen, einen davon direkt aus der Warteliste mit
+einem nach dem geplanten Auszug liegenden Datum einziehen lassen → er
+erscheint im Belegungsverlauf als „Geplant ab …", verschwindet aus der
+Warteliste, der aktuelle Bewohner bleibt unberührt. Testmandant danach
+wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
