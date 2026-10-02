@@ -890,6 +890,71 @@ erscheint im Belegungsverlauf als „Geplant ab …", verschwindet aus der
 Warteliste, der aktuelle Bewohner bleibt unberührt. Testmandant danach
 wieder entfernt.
 
+**Nachtrag — Anwärter: abgespeckter Klient für Anfragen.** Bisher begann
+jeder Datensatz als vollständiger Klient mit Aktenzeichen und
+Amtszuordnung — beides Pflichtfelder, eindeutig je Träger. Für eine bloße
+Anfrage (Jugendamt ruft an, Familie meldet sich) gibt es das Aktenzeichen
+aber oft noch nicht, eine Aufnahme ist ja gerade erst in Prüfung. Dafür
+jetzt eine eigene, schlanke Tabelle `anwaerter` (Migration 0039) statt
+optionaler Felder auf `klient` — ein Klient bleibt dadurch immer
+vollständig, nichts im bestehenden Code (Kassenbuch, Rechnungen,
+Zimmerzuweisung) muss einen unvollständigen Klienten vertragen.
+- **Pflichtfelder nur Vor- und Nachname**, dazu optional Telefon, E-Mail,
+  anfragende Stelle (Freitext — Jugendamt, Familie, andere Einrichtung …),
+  Geburtsdatum und eine Notiz. Anlegen/Bearbeiten/Löschen bleibt für alle
+  Rollen offen, solange die Anfrage `offen` ist — reines Tagesgeschäft,
+  kein Stammdaten-Fall.
+- **Status `offen → angenommen/abgelehnt`**, durchgesetzt über
+  CHECK-Constraints nach demselben Muster wie
+  `zimmer_kapazitaetsantrag`/`kassenbuchung_stornoantrag`: `angenommen`
+  verlangt eine gesetzte `klient_id` und verbietet einen Ablehnungsgrund,
+  `abgelehnt` umgekehrt. Eine einmal getroffene Entscheidung ist endgültig
+  — `aktualisieren()`/`loeschen()` greifen per `WHERE status = 'offen'`
+  nicht mehr, ein zweiter Entscheidungsversuch liefert `409`.
+- **„Annehmen" legt in derselben Transaktion einen echten Klienten an**
+  (Vorname/Nachname/Geburtsdatum übernommen, Aktenzeichen/Amt/
+  HZL-Rhythmus werden dabei erstmals erfragt) und verweist vom
+  Anwärter-Datensatz darauf; die Route gibt den fertigen `KlientDetailDto`
+  zurück, damit die Oberfläche direkt in die neue Akte wechseln kann.
+  **Rollengegated auf Bereichs-/Einrichtungsleitung** (wie
+  `ROLLEN_MIT_ARCHIVIERUNG`): eine Aufnahmeentscheidung ist eine
+  strukturelle Entscheidung über die Einrichtung, kein alltägliches
+  Erfassen einer Anfrage. „Ablehnen" verlangt denselben Rollen und ein
+  Pflichtfeld „Grund" (`GrundAbfrage`-Komponente, schon von der
+  Kapazitäts-Ablehnung bekannt).
+- **Kein neuer Sidebar-Eintrag.** Die Anfragen hängen als dritter Reiter
+  „Anwärter" auf der bestehenden Klienten-Seite, mit eigenen Status-
+  Unterreitern (Offen/Angenommen/Abgelehnt) und eigener Tabelle.
+  Annehmen/Ablehnen-Aktionen erscheinen clientseitig nur für die
+  berechtigten Rollen (`tokenRolle()`, wie `darfArchivieren`) — die API
+  lehnt zusätzlich serverseitig ab.
+- Erstes Modul in diesem Repository, das `KlientService` modulübergreifend
+  importiert (`KlientModule` bekam dafür erstmals ein `exports: [...]`),
+  um nach „Annehmen" direkt den fertigen `KlientDetailDto` zu liefern —
+  gleiches Kompositionsmuster wie `KlientController.archivieren()`.
+
+Geprüft: neue `anwaerter.e2e-spec.ts` (Anlegen mit nur Vorname/Nachname,
+Status-Filter, Bearbeiten/Löschen nach Entscheidung → `400`, Annehmen/
+Ablehnen `403` für `betreuer` mit Gegenprobe-Folge-GET auf unverändert
+`offen`, Ablehnen ohne Grund → `400`, erfolgreiches Annehmen mit Prüfung
+der neu angelegten Klientenfelder und der `klientId`-Verknüpfung, doppelte
+Entscheidung → `409`, Mandantentrennung) — 10 neue Tests. Alle 300
+API-Tests grün (27 Suiten). Zwei Gegenproben: Rollenprüfung in
+`annehmen()`/`ablehnen()` auskommentiert → beide `403`-Tests wurden rot,
+wiederhergestellt wieder grün; `WHERE status = 'offen'`-Klausel beim
+Ablehnen entfernt → der 409-Test (zweite Entscheidung) wurde rot (`200`
+statt `409`), wiederhergestellt wieder grün. `pnpm build` (shared + api +
+web) sauber. Live im Browser geprüft: Anfrage mit nur Vor-/Nachnamen
+anlegen, bearbeiten, annehmen → neuer Klient mit korrektem Aktenzeichen
+erscheint und öffnet sich automatisch in der Akte; zweite Anfrage
+ablehnen → Grund sichtbar, Status-Filter zeigt sie unter „Abgelehnt";
+Rollen-Check mit einem `betreuer`-Konto (Annehmen/Ablehnen-Knöpfe fehlen
+clientseitig). Dabei zusätzlich eine unabhängige, vorbestehende Anzeige-
+Lücke gefunden und behoben: das Geburtsdatum in der Kopfzeile der
+Klientenakte erschien unformatiert (`2008-04-12` statt `12.04.2008`), weil
+dort als einzige Stelle im Dateikopf `formatDatum()` fehlte. Testmandant
+danach wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

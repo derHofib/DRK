@@ -9,5 +9,9 @@ import { KlientArchivService } from "./klient-archiv.service";
   imports: [AuthModule],
   controllers: [KlientController],
   providers: [KlientService, KlientStammdatenService, KlientArchivService],
+  // KlientService wird auch vom AnwaerterModule gebraucht -- eine
+  // angenommene Anfrage komponiert ihre Antwort aus dem neu angelegten
+  // Klienten (siehe AnwaerterController.annehmen()).
+  exports: [KlientService],
 })
 export class KlientModule {}

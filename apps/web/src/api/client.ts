@@ -1,4 +1,6 @@
 import type {
+  AnwaerterDto,
+  AnwaerterStatus,
   AufgabeDto,
   AufgabenAnzahlDto,
   AufgabePrioritaet,
@@ -6,6 +8,7 @@ import type {
   BenutzerListEintragDto,
   BenutzerRolle,
   DashboardDto,
+  HzlRhythmus,
   KassenbuchungDto,
   KassenbuchungTypDto,
   KlientDetailDto,
@@ -242,6 +245,34 @@ export const api = {
     request<KlientDetailDto>(`/klienten/${id}/entarchivieren`, { method: "PATCH" }),
   klientArchivPdfHerunterladen: (klientId: string, archivId: string, dateiname: string) =>
     dateiHerunterladen(`/klienten/${klientId}/archiv/${archivId}/pdf`, dateiname),
+
+  anwaerterListe: (status: AnwaerterStatus = "offen") => request<AnwaerterDto[]>(`/anwaerter?status=${status}`),
+  anwaerterAnlegen: (payload: {
+    vorname: string;
+    nachname: string;
+    geburtsdatum?: string;
+    telefon?: string;
+    email?: string;
+    anfragendeStelle?: string;
+    notiz?: string;
+  }) => request<AnwaerterDto>("/anwaerter", { method: "POST", body: JSON.stringify(payload) }),
+  anwaerterAktualisieren: (
+    id: string,
+    payload: Partial<{
+      vorname: string;
+      nachname: string;
+      geburtsdatum: string;
+      telefon: string;
+      email: string;
+      anfragendeStelle: string;
+      notiz: string;
+    }>
+  ) => request<AnwaerterDto>(`/anwaerter/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  anwaerterLoeschen: (id: string) => request<{ ok: true }>(`/anwaerter/${id}`, { method: "DELETE" }),
+  anwaerterAnnehmen: (id: string, payload: { aktenzeichen: string; amt: string; hzlRhythmus: HzlRhythmus }) =>
+    request<KlientDetailDto>(`/anwaerter/${id}/annehmen`, { method: "PATCH", body: JSON.stringify(payload) }),
+  anwaerterAblehnen: (id: string, grund: string) =>
+    request<AnwaerterDto>(`/anwaerter/${id}/ablehnen`, { method: "PATCH", body: JSON.stringify({ grund }) }),
 
   // Alle Felder optional und einzeln uebergebbar: das Formular speichert pro
   // Datenblatt-Abschnitt, ein leerer String loescht ein Feld bewusst (siehe

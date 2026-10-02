@@ -508,3 +508,35 @@ export interface AufgabenAnzahlDto {
   /** offene Aufgaben (Zimmer- oder persoenlich), die dem eigenen Benutzer zugewiesen sind. */
   eigene: number;
 }
+
+/**
+ * Anwärter: eine abgespeckte Vorstufe des Klienten für Anfragen, bevor ein
+ * Aktenzeichen existiert (siehe migrations/0039_anwaerter.sql). "Angenommen"
+ * legt einen echten Klienten an (klientId zeigt darauf), "abgelehnt"
+ * braucht einen Grund und bleibt zur Nachvollziehbarkeit erhalten.
+ */
+export type AnwaerterStatus = "offen" | "angenommen" | "abgelehnt";
+
+export const ANWAERTER_STATUS_LABEL: Record<AnwaerterStatus, string> = {
+  offen: "Offen",
+  angenommen: "Angenommen",
+  abgelehnt: "Abgelehnt",
+};
+
+export interface AnwaerterDto {
+  id: string;
+  vorname: string;
+  nachname: string;
+  geburtsdatum: string | null;
+  telefon: string | null;
+  email: string | null;
+  anfragendeStelle: string | null;
+  notiz: string | null;
+  status: AnwaerterStatus;
+  ablehnungGrund: string | null;
+  klientId: string | null;
+  erstelltAm: string;
+  erstelltVonName: string | null;
+  entschiedenAm: string | null;
+  entschiedenVonName: string | null;
+}

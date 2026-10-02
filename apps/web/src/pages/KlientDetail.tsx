@@ -171,7 +171,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
               </h2>
               <p className="zv-sub" style={{ margin: 0 }}>
                 Aktenzeichen {klient.aktenzeichen} · {klient.amt}
-                {klient.geburtsdatum && <> · geb. {klient.geburtsdatum}</>} · HZL{" "}
+                {klient.geburtsdatum && <> · geb. {formatDatum(klient.geburtsdatum)}</>} · HZL{" "}
                 {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}
               </p>
             </div>

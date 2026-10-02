@@ -49,6 +49,7 @@ import {
   History,
   Hourglass,
   IdCard,
+  Inbox,
   Info,
   KeyRound,
   LayoutDashboard,
@@ -163,6 +164,7 @@ export const IDokument = baue(FileText);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);
 export const IArchivieren = baue(Archive);
+export const IAnwaerter = baue(Inbox);
 export const IEntarchivieren = baue(ArchiveRestore);
 export const IHerunterladen = baue(Download);
 export const IVerlauf = baue(History);
@@ -245,6 +247,7 @@ export const ILeerTagesberichte = baueLeer(BookX);
 export const ILeerAufgaben = baueLeer(ListTodo);
 export const ILeerArchiv = baueLeer(Archive);
 export const ILeerKontakte = baueLeer(Contact);
+export const ILeerAnwaerter = baueLeer(Inbox);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);

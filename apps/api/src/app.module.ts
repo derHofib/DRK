@@ -17,6 +17,7 @@ import { RechnungModule } from "./rechnungen/rechnung.module";
 import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { AufgabeModule } from "./aufgaben/aufgabe.module";
+import { AnwaerterModule } from "./anwaerter/anwaerter.module";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { AufgabeModule } from "./aufgaben/aufgabe.module";
     TagesberichtModule,
     DashboardModule,
     AufgabeModule,
+    AnwaerterModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
