@@ -10,8 +10,6 @@ import { Modal } from "../components/Modal";
 import { Seitenpanel } from "../components/Seitenpanel";
 import {
   IAblehnen,
-  IAnwaerter,
-  IArchivieren,
   IBearbeiten,
   IFehler,
   IGenehmigen,
@@ -26,6 +24,16 @@ import {
 import { KlientDetail } from "./KlientDetail";
 
 const ROLLEN_MIT_ENTSCHEIDUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
+
+// Die Ansicht wird jetzt ausschliesslich ueber die Navigation gewaehlt
+// (Sidebar-Unterpunkte bzw. mobiles Panel, siehe Shell.tsx) -- der
+// Seitentitel hier ist die einzige verbleibende Orientierung, welche
+// Ansicht gerade aktiv ist.
+const ANSICHT_TITEL: Record<KlientenAnsicht, string> = {
+  aktiv: "Klienten",
+  archiv: "Archiv",
+  anwaerter: "Anwärter",
+};
 
 export function Klienten({
   ansicht,
@@ -189,7 +197,7 @@ export function Klienten({
       )}
 
       <div className="zv-seiten-kopf">
-        <h2>Klienten</h2>
+        <h2>{ANSICHT_TITEL[ansicht]}</h2>
         {ansicht === "aktiv" && (
           <button
             className="zv-btn"
@@ -214,39 +222,6 @@ export function Klienten({
             Neue Anfrage
           </button>
         )}
-      </div>
-
-      <div className="zv-segmented" role="radiogroup" aria-label="Ansicht" style={{ marginBottom: 16 }}>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={ansicht === "aktiv"}
-          className={ansicht === "aktiv" ? "active" : ""}
-          onClick={() => setAnsicht("aktiv")}
-        >
-          <IKlienten />
-          Aktiv
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={ansicht === "archiv"}
-          className={ansicht === "archiv" ? "active" : ""}
-          onClick={() => setAnsicht("archiv")}
-        >
-          <IArchivieren />
-          Archiv
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={ansicht === "anwaerter"}
-          className={ansicht === "anwaerter" ? "active" : ""}
-          onClick={() => setAnsicht("anwaerter")}
-        >
-          <IAnwaerter />
-          Anwärter
-        </button>
       </div>
 
       {formularOffen && (

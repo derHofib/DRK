@@ -1004,6 +1004,42 @@ einen Reload, „Standardreihenfolge wiederherstellen" setzt sie zurück;
 eingeklapptes Menüband zeigt erwartungsgemäß weder Pfeil noch Unterpunkte,
 „Klienten" bleibt klickbar. Testmandant danach wieder entfernt.
 
+**Nachtrag — Klienten-Reiterleiste entfernt, Archiv als zweiter
+Sidebar-Unterpunkt.** Die eben eingeführten Sidebar-Unterpunkte sollten
+die komplette Navigation übernehmen — die „Aktiv / Archiv / Anwärter"-
+Reiterleiste *auf* der Klienten-Seite selbst war dann nur noch doppelt
+gemoppelt und sollte ganz verschwinden.
+- **`KLIENTEN_UNTERPUNKTE`** in `Shell.tsx` zeigt jetzt genau die zwei
+  Unterpunkte „Anwärter" und „Archiv" (vorher stand "Klienten" dort
+  zusätzlich doppelt neben dem Hauptknopf). Der Hauptknopf „Klienten"
+  navigiert weiterhin direkt auf die Standardansicht.
+- **`Klienten.tsx` zeigt keine eigene Reiterleiste mehr** — die
+  `zv-segmented`-Gruppe mit den drei Ansichts-Knöpfen ist komplett
+  entfernt. Die Seitenüberschrift zeigt stattdessen die aktive Ansicht
+  („Klienten"/„Archiv"/„Anwärter") als einzige verbleibende Orientierung.
+  Der Status-Filter *innerhalb* der Anwärter-Ansicht (Offen/Angenommen/
+  Abgelehnt) bleibt unverändert, das war nicht gemeint.
+- **Mobile Navigation nachgezogen**, sonst hätte es auf dem Handy (keine
+  Sidebar vorhanden) gar keinen Weg mehr zu Archiv/Anwärter gegeben: ein
+  Tap auf „Klienten" in der unteren Reiterleiste öffnet dort jetzt ein
+  eigenes Panel mit allen drei Ansichten (`Klienten`/`Anwärter`/`Archiv`),
+  nach demselben Muster wie das bestehende „Mehr"-Sammelmenü (gleiche
+  `.zv-sammelmenue`-Optik, Escape/Außenklick/Tab-Fokusfalle). Der bisherige
+  `mehrOffen`-Boolean wurde dafür zu einem gemeinsamen
+  `offenesPanel: "mehr" | "klienten" | null` verallgemeinert, damit nie
+  beide Panels gleichzeitig offen sind — unabhängig davon, ob „Klienten"
+  gerade in der sichtbaren Reiterleiste steht oder (nach einer eigenen
+  Umsortierung) im „Mehr"-Menü gelandet ist.
+
+Geprüft: `pnpm --filter @zimmerakte/web build` sauber, `pnpm test:api`
+weiterhin 300/300 grün (reine Frontend-Änderung). Live im Browser
+geprüft (Playwright, Desktop- und 390px-Mobilbreite): Klick auf „Klienten"
+landet auf der Seite ohne jede Reiterleiste; die Sidebar-Unterpunkte
+zeigen „Anwärter"/„Archiv", ein Klick wechselt die Ansicht und die
+Überschrift korrekt; auf dem Handy öffnet ein Tap auf „Klienten" das neue
+Panel mit allen drei Ansichten, eine Auswahl schließt es und wechselt
+sauber, Escape schließt es ebenfalls. Testmandant danach wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

@@ -6,6 +6,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
   IAnwaerter,
+  IArchivieren,
   IAufklappen,
   IAusklappen,
   IEinklappen,
@@ -36,14 +37,26 @@ type Tab = HauptReiter;
 const MOBIL_SICHTBAR_ANZAHL = 4;
 
 /**
- * Die Unterpunkte von "Klienten" in der Sidebar -- fuehren beide auf
- * dieselbe Seite, nur direkt auf die jeweilige Ansicht statt ueber den
- * Reiter dort (siehe Klienten.tsx). Nur hier verdrahtet, nicht Teil der
- * frei sortierbaren Hauptreihenfolge in navigation.ts.
+ * Die Unterpunkte von "Klienten" in der Sidebar -- der Hauptknopf
+ * navigiert direkt auf die Standardansicht (aktive Klienten), die
+ * Unterpunkte fuehren auf die beiden anderen Ansichten (siehe
+ * Klienten.tsx, das selbst keine eigene Reiterleiste mehr zeigt). Nur hier
+ * verdrahtet, nicht Teil der frei sortierbaren Hauptreihenfolge in
+ * navigation.ts.
  */
 const KLIENTEN_UNTERPUNKTE: { ansicht: KlientenAnsicht; label: string; icon: typeof IKlienten }[] = [
-  { ansicht: "aktiv", label: "Klienten", icon: IKlienten },
   { ansicht: "anwaerter", label: "Anwärter", icon: IAnwaerter },
+  { ansicht: "archiv", label: "Archiv", icon: IArchivieren },
+];
+
+/**
+ * Fuer das mobile Panel (kein Hauptknopf/Pfeil wie in der Sidebar, ein
+ * einzelner Tastendruck muss alle drei Ansichten erreichen) -- "Klienten"
+ * selbst kommt hier als erster Eintrag mit dazu.
+ */
+const KLIENTEN_MOBIL_PANEL: { ansicht: KlientenAnsicht; label: string; icon: typeof IKlienten }[] = [
+  { ansicht: "aktiv", label: "Klienten", icon: IKlienten },
+  ...KLIENTEN_UNTERPUNKTE,
 ];
 
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
@@ -119,42 +132,65 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   );
   useEffect(() => speichereMenuReihenfolge(menuReihenfolge), [menuReihenfolge]);
 
-  // Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe app.css. Die
-  // Sidebar (Desktop) kennt dieses Konzept nicht, sie zeigt immer alle
-  // Eintraege direkt.
-  const [mehrOffen, setMehrOffen] = useState(false);
+  // Ueberlagerndes Panel auf dem Handy -- entweder das Sammelmenue ("Mehr")
+  // oder, seit Klienten.tsx keine eigene Reiterleiste mehr zeigt, das
+  // Ansichten-Panel von "Klienten" (Aktiv/Anwärter/Archiv). Ein
+  // gemeinsamer Zustand statt zwei Booleans, damit nie beide gleichzeitig
+  // offen sind. Die Sidebar (Desktop) kennt dieses Konzept nicht, sie
+  // zeigt immer alle Eintraege direkt.
+  const [offenesPanel, setOffenesPanel] = useState<"mehr" | "klienten" | null>(null);
   const mehrKnopfRef = useRef<HTMLButtonElement>(null);
   const mehrPanelRef = useRef<HTMLDivElement>(null);
+  const klientenKnopfRef = useRef<HTMLButtonElement>(null);
+  const klientenPanelRef = useRef<HTMLDivElement>(null);
   const aktuelleRouteImMehr = REITER_MOBIL_MEHR.some((r) => r.wert === tab);
 
-  function mehrSchliessen() {
-    setMehrOffen(false);
-    mehrKnopfRef.current?.focus();
+  function panelSchliessen() {
+    const vorheriges = offenesPanel;
+    setOffenesPanel(null);
+    if (vorheriges === "mehr") mehrKnopfRef.current?.focus();
+    if (vorheriges === "klienten") klientenKnopfRef.current?.focus();
   }
 
   function tabWaehlen(wert: Tab) {
     setTab(wert);
-    if (mehrOffen) mehrSchliessen();
+    if (offenesPanel) panelSchliessen();
+  }
+
+  /**
+   * Klick auf einen Reiter in der mobilen Leiste/im Sammelmenue --
+   * "Klienten" oeffnet dort (anders als in der Sidebar, die einen Pfeil
+   * dafuer hat) direkt sein eigenes Ansichten-Panel statt sofort zu
+   * navigieren, weil ein einzelner Tastendruck sonst keinen Weg zu
+   * Archiv/Anwärter haette.
+   */
+  function reiterKlick(wert: Tab) {
+    if (wert === "klienten") {
+      setOffenesPanel((p) => (p === "klienten" ? null : "klienten"));
+    } else {
+      tabWaehlen(wert);
+    }
   }
 
   // Escape schliesst, Klick ausserhalb schliesst, Tab haelt den Fokus im
-  // Panel gefangen, solange es offen ist -- alles nur aktiv, waehrend
-  // mehrOffen true ist, damit ausserhalb davon kein Listener herumhaengt.
+  // Panel gefangen, solange eins offen ist.
   useEffect(() => {
-    if (!mehrOffen) return;
-    mehrPanelRef.current?.querySelector<HTMLElement>("button")?.focus();
+    if (!offenesPanel) return;
+    const panelRef = offenesPanel === "mehr" ? mehrPanelRef : klientenPanelRef;
+    const knopfRef = offenesPanel === "mehr" ? mehrKnopfRef : klientenKnopfRef;
+    panelRef.current?.querySelector<HTMLElement>("button")?.focus();
 
     function beiEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") mehrSchliessen();
+      if (e.key === "Escape") panelSchliessen();
     }
     function beiAussenklick(e: MouseEvent) {
       const ziel = e.target as Node;
-      if (mehrPanelRef.current?.contains(ziel) || mehrKnopfRef.current?.contains(ziel)) return;
-      setMehrOffen(false);
+      if (panelRef.current?.contains(ziel) || knopfRef.current?.contains(ziel)) return;
+      setOffenesPanel(null);
     }
     function beiTab(e: KeyboardEvent) {
-      if (e.key !== "Tab" || !mehrPanelRef.current) return;
-      const fokussierbar = mehrPanelRef.current.querySelectorAll<HTMLElement>("button");
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const fokussierbar = panelRef.current.querySelectorAll<HTMLElement>("button");
       if (fokussierbar.length === 0) return;
       const erster = fokussierbar[0];
       const letzter = fokussierbar[fokussierbar.length - 1];
@@ -175,7 +211,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
       document.removeEventListener("keydown", beiTab);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mehrOffen]);
+  }, [offenesPanel]);
 
   useEffect(() => {
     api
@@ -348,7 +384,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         </div>
 
-        {mehrOffen && (
+        {offenesPanel === "mehr" && (
           <div
             id="zv-sammelmenue-panel"
             className="zv-sammelmenue"
@@ -359,13 +395,44 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
             {REITER_MOBIL_MEHR.map(({ wert, label, icon: Icon }) => (
               <button
                 key={wert}
+                ref={wert === "klienten" ? klientenKnopfRef : undefined}
                 role="menuitem"
                 className={tab === wert ? "active" : ""}
-                onClick={() => tabWaehlen(wert)}
+                onClick={() => reiterKlick(wert)}
                 aria-current={tab === wert ? "page" : undefined}
+                // In diesem Zweig ist offenesPanel immer "mehr" (TS narrowt das),
+                // das Klienten-Panel also nie gleichzeitig offen -- daher hier
+                // schlicht false statt eines Vergleichs mit demselben Ergebnis.
+                aria-expanded={wert === "klienten" ? false : undefined}
               >
                 <Icon />
                 {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {offenesPanel === "klienten" && (
+          <div
+            id="zv-klienten-panel"
+            className="zv-sammelmenue"
+            ref={klientenPanelRef}
+            role="menu"
+            aria-label="Klienten-Ansichten"
+          >
+            {KLIENTEN_MOBIL_PANEL.map((u) => (
+              <button
+                key={u.ansicht}
+                role="menuitem"
+                className={tab === "klienten" && klientenAnsicht === u.ansicht ? "active" : ""}
+                onClick={() => {
+                  tabWaehlen("klienten");
+                  setKlientenAnsicht(u.ansicht);
+                }}
+                aria-current={tab === "klienten" && klientenAnsicht === u.ansicht ? "page" : undefined}
+              >
+                <u.icon />
+                {u.label}
               </button>
             ))}
           </div>
@@ -375,9 +442,11 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {REITER_MOBIL_SICHTBAR.map(({ wert, label, icon: Icon }) => (
             <button
               key={wert}
+              ref={wert === "klienten" ? klientenKnopfRef : undefined}
               className={tab === wert ? "active" : ""}
-              onClick={() => tabWaehlen(wert)}
+              onClick={() => reiterKlick(wert)}
               aria-current={tab === wert ? "page" : undefined}
+              aria-expanded={wert === "klienten" ? offenesPanel === "klienten" : undefined}
             >
               <Icon />
               {label}
@@ -386,10 +455,10 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           <button
             ref={mehrKnopfRef}
             className={aktuelleRouteImMehr ? "active" : ""}
-            aria-expanded={mehrOffen}
+            aria-expanded={offenesPanel === "mehr"}
             aria-controls="zv-sammelmenue-panel"
             aria-current={aktuelleRouteImMehr ? "page" : undefined}
-            onClick={() => setMehrOffen((v) => !v)}
+            onClick={() => setOffenesPanel((p) => (p === "mehr" ? null : "mehr"))}
           >
             <IMehr />
             Mehr
