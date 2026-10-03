@@ -276,6 +276,38 @@
   color: var(--zv-accent-strong);
 }
 
+/* "Klienten" mit aufklappbarem Unterpunkt "Anwärter" (Shell.tsx). Nur im
+   ausgeklappten Menueband sichtbar -- siehe Regel bei
+   data-eingeklappt="true" unten; im eingeklappten Zustand bleibt Anwärter
+   ueber den Reiter in der Klienten-Seite selbst erreichbar. */
+.zv-sidebar-gruppe-zeile {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zv-sidebar-gruppe-zeile button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-sidebar-gruppe-pfeil {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.zv-sidebar-unterpunkte {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px var(--zv-space-4);
+}
+
+.zv-sidebar-unterpunkte button {
+  font-size: var(--zv-text-s);
+}
+
 .zv-sidebar-foot {
   margin-top: auto;
   padding-top: var(--zv-space-4);
@@ -329,6 +361,11 @@
 
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot-icons {
   flex-direction: column;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-gruppe-pfeil,
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-unterpunkte {
+  display: none;
 }
 
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot .zv-btn {
@@ -1463,6 +1500,60 @@
   font-size: var(--zv-text-l);
   font-weight: var(--zv-weight-semibold);
   margin: 0 0 var(--zv-space-1);
+}
+
+/* Reihenfolge der Hauptmenuepunkte (Einstellungen > Darstellung) -- Zeilen
+   sind per Drag & Drop sortierbar, die Pfeil-Knoepfe daneben sind kein
+   Fallback, sondern gleichwertig (siehe Kommentar in Einstellungen.tsx). */
+.zv-reihenfolge-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--zv-space-3) 0;
+  padding: 0;
+  list-style: none;
+  max-width: 420px;
+}
+
+.zv-reihenfolge-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  border: 1px solid transparent;
+  cursor: grab;
+}
+
+.zv-reihenfolge-zieht {
+  opacity: 0.5;
+}
+
+.zv-reihenfolge-ziel {
+  border-color: var(--zv-accent);
+}
+
+.zv-reihenfolge-griff {
+  display: inline-flex;
+  color: var(--zv-text-faint);
+}
+
+.zv-reihenfolge-label {
+  flex: 1;
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-reihenfolge-aktionen {
+  display: flex;
+  gap: 2px;
+}
+
+.zv-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: none;
+  color: var(--zv-text-muted);
 }
 
 /* ==================================================================

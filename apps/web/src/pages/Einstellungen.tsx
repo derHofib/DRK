@@ -12,6 +12,7 @@ import { Sicherheit } from "./Sicherheit";
 import { Standorte } from "./Standorte";
 import { KassenbuchTypen } from "./KassenbuchTypen";
 import {
+  IAnpassen,
   IBestaetigen,
   IDarstellung,
   IEinklappen,
@@ -21,8 +22,12 @@ import {
   ISicherheit,
   ISpeichern,
   IStandort,
+  IVerschiebenHoch,
+  IVerschiebenRunter,
+  IZiehen,
   IZuruecksetzen,
 } from "../components/icons";
+import { STANDARD_REITER, reiterNachReihenfolge, type HauptReiter } from "../navigation";
 
 type Bereich = "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
 
@@ -31,11 +36,15 @@ export function Einstellungen({
   onMandantAktualisiert,
   hoverAusklappen,
   onHoverAusklappenAendern,
+  menuReihenfolge,
+  onMenuReihenfolgeAendern,
 }: {
   mandant: MandantDto | null;
   onMandantAktualisiert: (m: MandantDto) => void;
   hoverAusklappen: boolean;
   onHoverAusklappenAendern: (wert: boolean) => void;
+  menuReihenfolge: HauptReiter[];
+  onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
   const [bereich, setBereich] = useState<Bereich>("darstellung");
 
@@ -78,6 +87,8 @@ export function Einstellungen({
           onMandantAktualisiert={onMandantAktualisiert}
           hoverAusklappen={hoverAusklappen}
           onHoverAusklappenAendern={onHoverAusklappenAendern}
+          menuReihenfolge={menuReihenfolge}
+          onMenuReihenfolgeAendern={onMenuReihenfolgeAendern}
         />
       )}
       {bereich === "standorte" && <Standorte />}
@@ -92,11 +103,15 @@ function Darstellung({
   onMandantAktualisiert,
   hoverAusklappen,
   onHoverAusklappenAendern,
+  menuReihenfolge,
+  onMenuReihenfolgeAendern,
 }: {
   mandant: MandantDto | null;
   onMandantAktualisiert: (m: MandantDto) => void;
   hoverAusklappen: boolean;
   onHoverAusklappenAendern: (wert: boolean) => void;
+  menuReihenfolge: HauptReiter[];
+  onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
   // Nur ein Anzeige-Hinweis -- der Server entscheidet (siehe tokenRolle()).
   const darfBranding = tokenRolle() === "bereichsleitung";
@@ -132,6 +147,8 @@ function Darstellung({
         </label>
       </section>
 
+      <MenuReihenfolge reihenfolge={menuReihenfolge} onAendern={onMenuReihenfolgeAendern} />
+
       {darfBranding && mandant && (
         <>
           <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
@@ -139,6 +156,109 @@ function Darstellung({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Reihenfolge der Hauptmenuepunkte -- frei einstellbar statt fest im Code
+ * (siehe navigation.ts). Drag & Drop per nativem HTML5-DnD fuer die Maus;
+ * die Auf/Ab-Knoepfe sind dabei kein optischer Fallback, sondern
+ * gleichwertig: natives Drag & Drop funktioniert nicht per Tastatur und auf
+ * den meisten Touch-Browsern nicht (iOS/Android) -- in einer PWA, die auch
+ * auf echten Mobilgeraeten laeuft, waere Drag & Drop allein ein
+ * Komplett-Ausschluss fuer Touch- und Tastaturnutzung.
+ */
+function MenuReihenfolge({
+  reihenfolge,
+  onAendern,
+}: {
+  reihenfolge: HauptReiter[];
+  onAendern: (reihenfolge: HauptReiter[]) => void;
+}) {
+  const eintraege = reiterNachReihenfolge(reihenfolge);
+  const [ziehtIndex, setZiehtIndex] = useState<number | null>(null);
+  const [zielIndex, setZielIndex] = useState<number | null>(null);
+
+  function verschieben(von: number, nach: number) {
+    if (von === nach || von < 0 || nach < 0 || von >= reihenfolge.length || nach >= reihenfolge.length) return;
+    const neu = [...reihenfolge];
+    const [stueck] = neu.splice(von, 1);
+    neu.splice(nach, 0, stueck);
+    onAendern(neu);
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>
+        <IAnpassen />
+        Reihenfolge der Menüpunkte
+      </h3>
+      <p className="zv-sub">
+        Gilt nur für dich, auf diesem Gerät. Zum Verschieben ziehen oder die Pfeile nutzen.
+      </p>
+      <ul className="zv-reihenfolge-liste">
+        {eintraege.map((r, i) => (
+          <li
+            key={r.wert}
+            draggable
+            className={`zv-reihenfolge-zeile${ziehtIndex === i ? " zv-reihenfolge-zieht" : ""}${
+              zielIndex === i && ziehtIndex !== i ? " zv-reihenfolge-ziel" : ""
+            }`}
+            onDragStart={() => setZiehtIndex(i)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setZielIndex(i);
+            }}
+            onDragEnd={() => {
+              setZiehtIndex(null);
+              setZielIndex(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (ziehtIndex !== null) verschieben(ziehtIndex, i);
+              setZiehtIndex(null);
+              setZielIndex(null);
+            }}
+          >
+            <span className="zv-reihenfolge-griff" aria-hidden="true">
+              <IZiehen />
+            </span>
+            <r.icon />
+            <span className="zv-reihenfolge-label">{r.label}</span>
+            <span className="zv-reihenfolge-aktionen">
+              <button
+                type="button"
+                className="zv-icon-btn"
+                disabled={i === 0}
+                onClick={() => verschieben(i, i - 1)}
+                aria-label={`${r.label} nach oben verschieben`}
+                title="Nach oben"
+              >
+                <IVerschiebenHoch />
+              </button>
+              <button
+                type="button"
+                className="zv-icon-btn"
+                disabled={i === eintraege.length - 1}
+                onClick={() => verschieben(i, i + 1)}
+                aria-label={`${r.label} nach unten verschieben`}
+                title="Nach unten"
+              >
+                <IVerschiebenRunter />
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="zv-btn zv-btn-still zv-btn-klein"
+        onClick={() => onAendern(STANDARD_REITER.map((r) => r.wert))}
+      >
+        <IZuruecksetzen />
+        Standardreihenfolge wiederherstellen
+      </button>
+    </section>
   );
 }
 

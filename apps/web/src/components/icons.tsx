@@ -17,7 +17,9 @@
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Ban,
   Banknote,
   BedDouble,
@@ -45,6 +47,7 @@ import {
   EyeOff,
   FileClock,
   FileText,
+  GripVertical,
   HandCoins,
   History,
   Hourglass,
@@ -186,6 +189,12 @@ export const IDeaktivieren = baue(PowerOff);
 // nicht eingetreten ist (vorausschauende Planung).
 export const IGeplant = baue(CalendarClock);
 export const IWarteliste = baue(Hourglass);
+// Eigene Icons fuer "verschieben" in der Menue-Reihenfolge -- bewusst nicht
+// IAufklappen/IZuklappen wiederverwendet, die stehen schon fuer "ein-/
+// ausklappen" und wuerden hier eine andere Bedeutung ueberladen.
+export const IVerschiebenHoch = baue(ArrowUp);
+export const IVerschiebenRunter = baue(ArrowDown);
+export const IZiehen = baue(GripVertical);
 
 /**
  * Prioritaet: Signalstaerken-Symbole statt reiner Farbe -- WCAG 1.4.1

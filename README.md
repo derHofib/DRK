@@ -955,6 +955,55 @@ Klientenakte erschien unformatiert (`2008-04-12` statt `12.04.2008`), weil
 dort als einzige Stelle im Dateikopf `formatDatum()` fehlte. Testmandant
 danach wieder entfernt.
 
+**Nachtrag — Anwärter als Untermenüpunkt + anpassbare Menü-Reihenfolge.**
+Zwei Wünsche zur Hauptnavigation: „Anwärter" steckte bisher nur als Reiter
+*innerhalb* der Klienten-Seite und war darüber kaum zu entdecken; und die
+Reihenfolge der Hauptmenüpunkte lag fest im Code (`Shell.tsx`), mit
+Dashboard bewusst nicht an erster Stelle (Kriterium war Aufrufhäufigkeit,
+nicht Wichtigkeit) — das sollte stattdessen jede:r selbst einstellen
+können.
+- **Neues Modul `apps/web/src/navigation.ts`** zentralisiert die
+  Hauptmenüpunkte (`STANDARD_REITER`) und die Reihenfolge-Logik
+  (`ladeMenuReihenfolge()`/`speichereMenuReihenfolge()`/
+  `reiterNachReihenfolge()`), damit `Shell.tsx` (rendert die Navigation)
+  und `Einstellungen.tsx` (rendert den Editor) dieselbe Quelle nutzen.
+  Dashboard steht in `STANDARD_REITER` jetzt an erster Stelle.
+- **„Klienten" ist jetzt eine aufklappbare Gruppe** in der Sidebar: ein
+  Pfeil klappt zwei Unterzeilen auf, „Klienten" und „Anwärter" — beide
+  führen auf dieselbe Seite, nur direkt auf die jeweilige Ansicht. Der
+  Zustand „welche Ansicht zeigt Klienten" liegt dafür jetzt in `Shell.tsx`
+  statt lokal in `Klienten.tsx` (als Props `ansicht`/`onAnsichtChange`
+  durchgereicht); das bestehende Segmented-Control „Aktiv / Archiv /
+  Anwärter" in der Seite selbst bleibt unverändert erhalten — wichtig für
+  Mobilgeräte ohne Sidebar und als zweiter Zugang auf Desktop. Im
+  eingeklappten Menüband bleiben Pfeil und Unterpunkte bewusst
+  ausgeblendet (kein Platz, keine Funktion verloren: „Klienten" selbst
+  bleibt klickbar, „Anwärter" weiterhin über den Reiter in der Seite
+  erreichbar).
+- **Reihenfolge der Hauptmenüpunkte frei einstellbar** (Einstellungen →
+  Darstellung, neuer Abschnitt): eine Liste aller Menüpunkte, sortierbar
+  per nativem HTML5-Drag-and-Drop *und* per Auf/Ab-Pfeil-Knöpfen an jeder
+  Zeile. Die Pfeile sind dabei kein optischer Fallback, sondern
+  gleichwertig — natives Drag & Drop funktioniert nicht per Tastatur und
+  auf den meisten Touch-Browsern nicht (iOS/Android), und diese PWA läuft
+  nachweislich auf echten Mobilgeräten (siehe „Fallstricke" oben). Ein
+  „Standardreihenfolge wiederherstellen"-Knopf dient als Sicherheitsnetz,
+  falls sich jemand z. B. „Einstellungen" selbst wegsortiert. Gilt nur für
+  dieses Gerät (`localStorage`, wie Theme und Menüband-Einklappen),
+  einwilligungsfrei nach TTDSG §25 Abs. 2.
+
+Geprüft: `pnpm --filter @zimmerakte/web build` (Typecheck + Vite-Build)
+sauber, `pnpm test:api` erneut grün (300 Tests, 27 Suiten — reine
+Backend-Regression, diese Änderung betrifft nur das Frontend). Live im
+Browser geprüft (Playwright): Sidebar zeigt „Klienten" mit Pfeil, Klick
+klappt „Klienten"/„Anwärter" auf und zu, Klick auf „Anwärter" öffnet direkt
+die Anwärter-Ansicht (Segmented Control in der Seite zeigt sie als aktiv);
+in den Einstellungen Dashboard sowohl per Drag & Drop als auch per
+Pfeil-Knopf verschoben, Reihenfolge ändert Sidebar sofort und übersteht
+einen Reload, „Standardreihenfolge wiederherstellen" setzt sie zurück;
+eingeklapptes Menüband zeigt erwartungsgemäß weder Pfeil noch Unterpunkte,
+„Klienten" bleibt klickbar. Testmandant danach wieder entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

@@ -3,6 +3,7 @@ import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto }
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenRolle } from "../api/client";
 import { formatDatum } from "../format";
+import type { KlientenAnsicht } from "../navigation";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
@@ -26,8 +27,17 @@ import { KlientDetail } from "./KlientDetail";
 
 const ROLLEN_MIT_ENTSCHEIDUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
 
-export function Klienten() {
-  const [ansicht, setAnsicht] = useState<"aktiv" | "archiv" | "anwaerter">("aktiv");
+export function Klienten({
+  ansicht,
+  onAnsichtChange,
+}: {
+  ansicht: KlientenAnsicht;
+  onAnsichtChange: (ansicht: KlientenAnsicht) => void;
+}) {
+  // Der Zustand liegt in Shell.tsx (fuer den Sidebar-Unterpunkt
+  // "Anwärter", siehe dort) -- hier nur noch ein Alias, damit der Rest
+  // dieser Datei unveraendert bleibt.
+  const setAnsicht = onAnsichtChange;
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);

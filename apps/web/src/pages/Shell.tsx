@@ -5,20 +5,22 @@ import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
 import {
   IAbmelden,
-  IAufgaben,
+  IAnwaerter,
+  IAufklappen,
   IAusklappen,
-  IDashboard,
   IEinklappen,
-  IEinstellungen,
-  IKassenbuch,
   IKlienten,
   IMehr,
-  IMitarbeitende,
-  ITagesberichte,
   ITraeger,
-  IZimmer,
-  type IconKomponente,
+  IZuklappen,
 } from "../components/icons";
+import {
+  ladeMenuReihenfolge,
+  reiterNachReihenfolge,
+  speichereMenuReihenfolge,
+  type HauptReiter,
+  type KlientenAnsicht,
+} from "../navigation";
 import { Dashboard } from "./Dashboard";
 import { Zimmer } from "./Zimmer";
 import { Klienten } from "./Klienten";
@@ -28,41 +30,21 @@ import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
 import { Einstellungen } from "./Einstellungen";
 
-type Tab =
-  | "dashboard"
-  | "mitarbeitende"
-  | "zimmer"
-  | "klienten"
-  | "kassenbuch"
-  | "tagesberichte"
-  | "aufgaben"
-  | "einstellungen";
-
-/**
- * Reihenfolge ist die EINE Quelle fuer Sidebar (Desktop, zeigt immer alle)
- * UND mobile Reiterleiste (zeigt nur die ersten vier direkt, der Rest
- * wandert dort ins Sammelmenue) -- siehe SICHTBAR_MOBIL/MEHR_MOBIL unten.
- * Kriterium fuer die Reihenfolge: Aufrufhaeufigkeit im Tagesbetrieb, nicht
- * Wichtigkeit. Klienten/Tagesberichte/Kassenbuch/Aufgaben sind das
- * Tagesgeschaeft einer Schicht; Dashboard ist eher "einmal pro Schicht
- * ansehen", Zimmer aendert sich nur bei Ein-/Auszug oder Bauzustand,
- * Mitarbeitende/Einstellungen sind administrativ und selten.
- */
-const REITER: { wert: Tab; label: string; icon: IconKomponente }[] = [
-  { wert: "klienten", label: "Klienten", icon: IKlienten },
-  { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
-  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
-  { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
-  { wert: "dashboard", label: "Dashboard", icon: IDashboard },
-  { wert: "zimmer", label: "Zimmer", icon: IZimmer },
-  { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
-  { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
-];
+type Tab = HauptReiter;
 
 /** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
 const MOBIL_SICHTBAR_ANZAHL = 4;
-const REITER_MOBIL_SICHTBAR = REITER.slice(0, MOBIL_SICHTBAR_ANZAHL);
-const REITER_MOBIL_MEHR = REITER.slice(MOBIL_SICHTBAR_ANZAHL);
+
+/**
+ * Die Unterpunkte von "Klienten" in der Sidebar -- fuehren beide auf
+ * dieselbe Seite, nur direkt auf die jeweilige Ansicht statt ueber den
+ * Reiter dort (siehe Klienten.tsx). Nur hier verdrahtet, nicht Teil der
+ * frei sortierbaren Hauptreihenfolge in navigation.ts.
+ */
+const KLIENTEN_UNTERPUNKTE: { ansicht: KlientenAnsicht; label: string; icon: typeof IKlienten }[] = [
+  { ansicht: "aktiv", label: "Klienten", icon: IKlienten },
+  { ansicht: "anwaerter", label: "Anwärter", icon: IAnwaerter },
+];
 
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
 const BREITE_REITER = new Set<Tab>([
@@ -77,8 +59,9 @@ const BREITE_REITER = new Set<Tab>([
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
 const SIDEBAR_HOVER_SPEICHER = "zimmerakte_sidebar_hover_ausklappen";
+const SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER = "zimmerakte_sidebar_klienten_aufgeklappt";
 
-// Beides reine Anzeigepraeferenzen dieses Geraets -- wie das Theme (siehe
+// Reine Anzeigepraeferenzen dieses Geraets -- wie das Theme (siehe
 // ThemeProvider) gehoert das bewusst nicht in die Datenbank und ist nach
 // TTDSG §25 Abs. 2 einwilligungsfrei.
 function ladeBoolean(schluessel: string): boolean {
@@ -86,6 +69,16 @@ function ladeBoolean(schluessel: string): boolean {
     return localStorage.getItem(schluessel) === "1";
   } catch {
     return false;
+  }
+}
+
+/** Wie ladeBoolean(), nur dass ein noch nie gespeicherter Wert als "an" gilt. */
+function ladeBooleanDefaultAn(schluessel: string): boolean {
+  try {
+    const wert = localStorage.getItem(schluessel);
+    return wert === null ? true : wert === "1";
+  } catch {
+    return true;
   }
 }
 
@@ -105,9 +98,26 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   // eingeklappt ist -- greift also erst zusammen mit eingeklappt=true (siehe
   // app.css, [data-eingeklappt="true"][data-hover-ausklappen="true"]).
   const [hoverAusklappen, setHoverAusklappen] = useState(() => ladeBoolean(SIDEBAR_HOVER_SPEICHER));
+  // Welche Ansicht "Klienten" zeigt -- liegt hier statt lokal in Klienten.tsx,
+  // damit der Unterpunkt "Anwärter" in der Sidebar sie mitsteuern kann.
+  const [klientenAnsicht, setKlientenAnsicht] = useState<KlientenAnsicht>("aktiv");
+  const [klientenUnterpunkteOffen, setKlientenUnterpunkteOffen] = useState(() =>
+    ladeBooleanDefaultAn(SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER)
+  );
+  // Reihenfolge der Hauptmenuepunkte -- frei einstellbar (Einstellungen >
+  // Darstellung), siehe navigation.ts.
+  const [menuReihenfolge, setMenuReihenfolge] = useState<HauptReiter[]>(() => ladeMenuReihenfolge());
+  const REITER = reiterNachReihenfolge(menuReihenfolge);
+  const REITER_MOBIL_SICHTBAR = REITER.slice(0, MOBIL_SICHTBAR_ANZAHL);
+  const REITER_MOBIL_MEHR = REITER.slice(MOBIL_SICHTBAR_ANZAHL);
 
   useEffect(() => speichereBoolean(SIDEBAR_SPEICHER, eingeklappt), [eingeklappt]);
   useEffect(() => speichereBoolean(SIDEBAR_HOVER_SPEICHER, hoverAusklappen), [hoverAusklappen]);
+  useEffect(
+    () => speichereBoolean(SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER, klientenUnterpunkteOffen),
+    [klientenUnterpunkteOffen]
+  );
+  useEffect(() => speichereMenuReihenfolge(menuReihenfolge), [menuReihenfolge]);
 
   // Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe app.css. Die
   // Sidebar (Desktop) kennt dieses Konzept nicht, sie zeigt immer alle
@@ -219,18 +229,77 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
 
           <nav className="zv-sidebar-nav">
-            {REITER.map(({ wert, label, icon: Icon }) => (
-              <button
-                key={wert}
-                className={tab === wert ? "active" : ""}
-                onClick={() => tabWaehlen(wert)}
-                aria-current={tab === wert ? "page" : undefined}
-                title={label}
-              >
-                <Icon />
-                <span className="zv-sidebar-label">{label}</span>
-              </button>
-            ))}
+            {REITER.map(({ wert, label, icon: Icon }) => {
+              if (wert !== "klienten") {
+                return (
+                  <button
+                    key={wert}
+                    className={tab === wert ? "active" : ""}
+                    onClick={() => tabWaehlen(wert)}
+                    aria-current={tab === wert ? "page" : undefined}
+                    title={label}
+                  >
+                    <Icon />
+                    <span className="zv-sidebar-label">{label}</span>
+                  </button>
+                );
+              }
+              // "Klienten" bekommt einen aufklappbaren Unterpunkt
+              // "Anwärter" (siehe navigation.ts/Klienten.tsx) -- der
+              // Pfeil klappt nur die Unterzeilen ein/aus, der Hauptknopf
+              // navigiert weiterhin direkt auf die Klienten-Seite.
+              return (
+                <div key={wert} className="zv-sidebar-gruppe">
+                  <div className="zv-sidebar-gruppe-zeile">
+                    <button
+                      className={tab === "klienten" ? "active" : ""}
+                      onClick={() => {
+                        tabWaehlen("klienten");
+                        setKlientenAnsicht("aktiv");
+                      }}
+                      aria-current={tab === "klienten" ? "page" : undefined}
+                      title={label}
+                    >
+                      <Icon />
+                      <span className="zv-sidebar-label">{label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="zv-icon-btn zv-sidebar-gruppe-pfeil"
+                      onClick={() => setKlientenUnterpunkteOffen((v) => !v)}
+                      aria-expanded={klientenUnterpunkteOffen}
+                      aria-label={
+                        klientenUnterpunkteOffen
+                          ? "Unterpunkte von Klienten einklappen"
+                          : "Unterpunkte von Klienten ausklappen"
+                      }
+                      title={klientenUnterpunkteOffen ? "Einklappen" : "Ausklappen"}
+                    >
+                      {klientenUnterpunkteOffen ? <IZuklappen /> : <IAufklappen />}
+                    </button>
+                  </div>
+                  {klientenUnterpunkteOffen && (
+                    <div className="zv-sidebar-unterpunkte">
+                      {KLIENTEN_UNTERPUNKTE.map((u) => (
+                        <button
+                          key={u.ansicht}
+                          className={tab === "klienten" && klientenAnsicht === u.ansicht ? "active" : ""}
+                          onClick={() => {
+                            tabWaehlen("klienten");
+                            setKlientenAnsicht(u.ansicht);
+                          }}
+                          aria-current={tab === "klienten" && klientenAnsicht === u.ansicht ? "page" : undefined}
+                          title={u.label}
+                        >
+                          <u.icon />
+                          <span className="zv-sidebar-label">{u.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
           <div className="zv-sidebar-foot">
@@ -330,7 +399,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
         <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
           {tab === "dashboard" && <Dashboard />}
           {tab === "zimmer" && <Zimmer />}
-          {tab === "klienten" && <Klienten />}
+          {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
           {tab === "kassenbuch" && <Kassenbuch />}
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "aufgaben" && <Aufgaben />}
@@ -341,6 +410,8 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
               onMandantAktualisiert={setMandant}
               hoverAusklappen={hoverAusklappen}
               onHoverAusklappenAendern={setHoverAusklappen}
+              menuReihenfolge={menuReihenfolge}
+              onMenuReihenfolgeAendern={setMenuReihenfolge}
             />
           )}
         </div>
