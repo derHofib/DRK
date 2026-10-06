@@ -1,10 +1,11 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { RechteModule } from "../rechte/rechte.module";
 import { StandortController } from "./standort.controller";
 import { StandortService } from "./standort.service";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, RechteModule],
   controllers: [StandortController],
   providers: [StandortService],
   exports: [StandortService],

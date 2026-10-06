@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { RechteService } from "../rechte/rechte.service";
 
 export interface StandortDto {
   id: string;
@@ -10,19 +11,12 @@ export interface StandortDto {
   aktiv: boolean;
 }
 
-// Eine neue Einrichtung zu eroeffnen ist eine traegerweite Entscheidung
-// (mehr Personal, mehr Budget) -- deshalb nur Bereichsleitung, anders als
-// beim Bearbeiten einer bestehenden Einrichtung (siehe unten).
-const ROLLEN_MIT_STANDORT_ANLEGEN = new Set<BenutzerRolle>(["bereichsleitung"]);
-
-// Eine bestehende Einrichtung pflegen (Name/Adresse korrigieren, aktivieren/
-// deaktivieren) darf zusaetzlich die Einrichtungsleitung -- gleiches Muster
-// wie ROLLEN_MIT_ZIMMER_STAMMDATEN in zimmer.service.ts.
-const ROLLEN_MIT_STANDORT_BEARBEITEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
 @Injectable()
 export class StandortService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Liefert bewusst auch deaktivierte Standorte mit -- die Verwaltungsseite
@@ -51,9 +45,14 @@ export class StandortService {
     });
   }
 
+  // Eine neue Einrichtung zu eroeffnen ist eine traegerweite Entscheidung
+  // (mehr Personal, mehr Budget) -- deshalb nur ueber standorte.anlegen, das
+  // in der Rollen-Migration bewusst NUR bereichsleitung bekommt (siehe
+  // rollen-mapping.ts), anders als beim Bearbeiten einer bestehenden
+  // Einrichtung (siehe unten).
   async anlegen(input: { name: string; adresse: string }): Promise<StandortDto> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STANDORT_ANLEGEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("standorte", "anlegen"))) {
       throw new ForbiddenException("Nur die Bereichsleitung darf eine neue Einrichtung anlegen.");
     }
     return this.db.withTenant(async (client) => {
@@ -75,8 +74,7 @@ export class StandortService {
     id: string,
     input: { name?: string; adresse?: string; aktiv?: boolean }
   ): Promise<StandortDto> {
-    const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STANDORT_BEARBEITEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("standorte", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen eine Einrichtung bearbeiten.");
     }
     return this.db.withTenant(async (client) => {
