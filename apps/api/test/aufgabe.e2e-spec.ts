@@ -20,6 +20,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () => {
   let app: INestApplication;
@@ -51,15 +52,17 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
     const suffix = randomUUID().slice(0, 8);
     const passwortHash = await bcrypt.hash(passwort, 4);
 
+    const mandantSlug = `test-aufgaben-${suffix}`;
+    const mandantBSlug = `test-aufgaben-b-${suffix}`;
     const { rows: mandantRows } = await admin.query<{ id: string }>(
       "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
-      [`Testmandant Aufgaben ${suffix}`, `test-aufgaben-${suffix}`]
+      [`Testmandant Aufgaben ${suffix}`, mandantSlug]
     );
     mandantId = mandantRows[0].id;
 
     const { rows: mandantBRows } = await admin.query<{ id: string }>(
       "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
-      [`Testmandant Aufgaben B ${suffix}`, `test-aufgaben-b-${suffix}`]
+      [`Testmandant Aufgaben B ${suffix}`, mandantBSlug]
     );
     mandantBId = mandantBRows[0].id;
 
@@ -110,6 +113,12 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
       standort2Id,
     ]);
 
+    // Seit Schritt 4 prueft aufgabe.service.ts (Koordinationsrecht) ueber
+    // die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt -- siehe
+    // rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+    await migriereTestmandant(admin, mandantBId, mandantBSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -131,15 +140,20 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM aufgabe WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
-    await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
-    await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [mandantId, mandantBId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeRollenMigrationAuf(admin, mandantBId);
+      await admin.query("DELETE FROM aufgabe WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
+      await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
+      await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [mandantId, mandantBId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function als(token: string) {

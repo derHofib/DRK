@@ -1,8 +1,9 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, TenantContext, requireTenantContext } from "../common/tenant-context";
+import { TenantContext, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { RechteService } from "../rechte/rechte.service";
 
 export type AufgabePrioritaet = "niedrig" | "normal" | "hoch";
 
@@ -47,16 +48,12 @@ interface AufgabeRoh {
   erledigtAm: string | null;
 }
 
-// Wer eine fremde Zimmer-Aufgabe voll bearbeiten/loeschen/erledigen darf,
-// ohne Ersteller oder zugewiesene Person zu sein -- Koordinationsfunktion,
-// gleiches Rollenmuster wie ROLLEN_MIT_ZIMMER_STAMMDATEN in
-// zimmer.service.ts. Anlegen selbst bleibt bewusst fuer JEDE Rolle offen
-// (Aufgaben sind Tagesgeschaeft wie Tagesberichte, keine Stammdatenpflege).
-const ROLLEN_MIT_AUFGABEN_KOORDINATION = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
 @Injectable()
 export class AufgabeService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   async findeAlle(filter: AufgabeFilter): Promise<AufgabeEintrag[]> {
     const ctx = requireTenantContext();
@@ -159,7 +156,7 @@ export class AufgabeService {
         "zugewiesenAn" in input &&
         (input.zugewiesenAn === ctx.benutzerId || (input.zugewiesenAn === null && roh.zugewiesenAn === ctx.benutzerId));
 
-      if (!this.darfSchreiben(ctx, roh) && !nurEigeneZuweisungGeaendert) {
+      if (!(await this.darfSchreiben(ctx, roh)) && !nurEigeneZuweisungGeaendert) {
         throw new ForbiddenException(
           "Nur Ersteller:in, zugewiesene Person oder Leitung dürfen diese Aufgabe bearbeiten."
         );
@@ -203,7 +200,7 @@ export class AufgabeService {
     const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const roh = await this.ladeRohMitStandortpruefung(client, ctx, id);
-      if (!this.darfSchreiben(ctx, roh)) {
+      if (!(await this.darfSchreiben(ctx, roh))) {
         throw new ForbiddenException("Nur Ersteller:in, zugewiesene Person oder Leitung dürfen diese Aufgabe erledigen.");
       }
       const { rowCount } = await client.query(
@@ -221,16 +218,22 @@ export class AufgabeService {
     const ctx = requireTenantContext();
     await this.db.withTenant(async (client) => {
       const roh = await this.ladeRohMitStandortpruefung(client, ctx, id);
-      if (!this.darfSchreiben(ctx, roh)) {
+      if (!(await this.darfSchreiben(ctx, roh))) {
         throw new ForbiddenException("Nur Ersteller:in, zugewiesene Person oder Leitung dürfen diese Aufgabe löschen.");
       }
       await client.query("DELETE FROM aufgabe WHERE id = $1", [id]);
     });
   }
 
-  private darfSchreiben(ctx: TenantContext, roh: AufgabeRoh): boolean {
+  // Wer eine fremde Zimmer-Aufgabe voll bearbeiten/loeschen/erledigen darf,
+  // ohne Ersteller oder zugewiesene Person zu sein -- Koordinationsfunktion.
+  // Anlegen selbst bleibt bewusst fuer JEDE Rolle offen (Aufgaben sind
+  // Tagesgeschaeft wie Tagesberichte, keine Stammdatenpflege). Die
+  // ODER-Bedingung mit "eigene Aufgabe" ist Anwendungslogik, nicht Teil der
+  // Rechte-Engine (Organigramm-Plan, Lieferreihenfolge Schritt 4).
+  private async darfSchreiben(ctx: TenantContext, roh: AufgabeRoh): Promise<boolean> {
     return (
-      ROLLEN_MIT_AUFGABEN_KOORDINATION.has(ctx.rolle) ||
+      (await this.rechte.hatRecht("aufgaben", "koordinieren")) ||
       roh.erstelltVon === ctx.benutzerId ||
       roh.zugewiesenAn === ctx.benutzerId
     );
