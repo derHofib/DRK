@@ -20,6 +20,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Kassenbuch: Storno-Antragsworkflow", () => {
   let app: INestApplication;
@@ -45,9 +46,10 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     const suffix = randomUUID().slice(0, 8);
     const passwortHash = await bcrypt.hash(passwort, 4);
 
+    const mandantSlug = `test-storno-${suffix}`;
     const { rows: mandantRows } = await admin.query<{ id: string }>(
       "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
-      [`Testmandant Storno ${suffix}`, `test-storno-${suffix}`]
+      [`Testmandant Storno ${suffix}`, mandantSlug]
     );
     mandantId = mandantRows[0].id;
 
@@ -109,12 +111,15 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     );
     einzahlungTypId = typRows[0].id;
 
+    // Seit Schritt 4 prueft kassenbuchung.service.ts (Storno-Entscheidung)
+    // ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt --
+    // siehe rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
 
-    const { rows: slugRows } = await admin.query<{ slug: string }>("SELECT slug FROM mandant WHERE id = $1", [mandantId]);
-    const mandantSlug = slugRows[0].slug;
     async function login(email: string): Promise<string> {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort });
       return res.body.accessToken;
@@ -125,18 +130,22 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function als(token: string) {

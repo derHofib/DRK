@@ -12,6 +12,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 // Eine winzige, aber gueltige 1x1-PNG-Datei -- reicht als Testsignatur.
 const TEST_PNG_BASE64 =
@@ -88,6 +89,11 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     typIds = Object.fromEntries(typRows.map((r) => [r.bezeichnung, r.id])) as Record<string, string>;
 
+    // Seit Schritt 4 prueft kassenbuchung.service.ts (Storno-Selbstbewilligung
+    // der Leitung) ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle
+    // direkt -- siehe rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -99,23 +105,27 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
   });
 
   afterAll(async () => {
-    await admin.query(
-      "DELETE FROM unterschrift WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
-      [mandantId]
-    );
-    await admin.query(
-      "DELETE FROM kassenbuchung_teilnehmer WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
-      [mandantId]
-    );
-    await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query(
+        "DELETE FROM unterschrift WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
+        [mandantId]
+      );
+      await admin.query(
+        "DELETE FROM kassenbuchung_teilnehmer WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
+        [mandantId]
+      );
+      await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function post(path: string, body: Record<string, unknown>) {

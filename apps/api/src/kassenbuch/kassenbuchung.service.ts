@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from "node:crypto";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import {
   ermittleErlaubteStandortIds,
@@ -13,17 +13,11 @@ import {
   standortIstErlaubt,
 } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
+import { RechteService } from "../rechte/rechte.service";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
-
-// Ein Storno macht eine Auszahlung/Einzahlung rueckwirkend ungueltig -- wer
-// darueber selbst entscheiden (nicht nur beantragen) darf, entscheidet ueber
-// die Kassenbuchfuehrung, nicht ueber einzelne Klientendaten. Ein Betreuer
-// darf einen Storno-ANTRAG stellen (stornoBeantragen(), jede Rolle darf
-// das), aber nicht selbst bewilligen -- das entscheidet stornoEntscheiden().
-const ROLLEN_MIT_STORNO_ENTSCHEIDEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 export interface OffenerStornoantragDto {
   id: string;
@@ -95,7 +89,10 @@ const BUCHUNG_SELECT = `
 
 @Injectable()
 export class KassenbuchungService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Die Unterschriftspflicht fuer Auszahlungen ist eine
@@ -290,7 +287,7 @@ export class KassenbuchungService {
         throw err;
       }
 
-      if (ROLLEN_MIT_STORNO_ENTSCHEIDEN.has(ctx.rolle)) {
+      if (await this.rechte.hatRecht("kassenbuch", "storno-entscheiden")) {
         await this.bewilligeAntrag(client, antragQuery.rows[0].id, kassenbuchungId, grund, benutzerId);
       }
       return this.findeEineIntern(client, kassenbuchungId);
@@ -307,7 +304,7 @@ export class KassenbuchungService {
    */
   async stornoEntscheiden(antragId: string, entscheidung: "genehmigt" | "abgelehnt", ablehnungGrund?: string): Promise<KassenbuchungDto> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STORNO_ENTSCHEIDEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("kassenbuch", "storno-entscheiden"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen über Storno-Anträge entscheiden.");
     }
     if (entscheidung === "abgelehnt" && !ablehnungGrund) {

@@ -1,7 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { isPgError } from "../common/pg-error";
+import { RechteService } from "../rechte/rechte.service";
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (kassenbuchung_typ_mandant_id_bezeichnung_key,
 // siehe migrations/0035_kassenbuchung_typ.sql) -- kein geratener String,
@@ -15,13 +16,6 @@ export interface KassenbuchungTypDto {
   istHzl: boolean;
   aktiv: boolean;
 }
-
-// Gleiches Rollenmuster wie ROLLEN_MIT_STANDORT_BEARBEITEN in
-// standort.service.ts -- anders als eine neue Einrichtung ist ein neuer
-// Kassenbuch-Typ keine traegerweite Grundsatzentscheidung, deshalb hier
-// (anders als bei ROLLEN_MIT_STANDORT_ANLEGEN) keine Sonderrolle nur fuer
-// die Bereichsleitung.
-const ROLLEN_MIT_KASSENBUCHUNG_TYP_VERWALTEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 function zuDto(r: {
   id: string;
@@ -41,7 +35,10 @@ function zuDto(r: {
 
 @Injectable()
 export class KassenbuchungTypService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Liefert bewusst auch deaktivierte Typen mit -- die Verwaltungsseite
@@ -60,9 +57,12 @@ export class KassenbuchungTypService {
     });
   }
 
+  // Anders als eine neue Einrichtung ist ein neuer Kassenbuch-Typ keine
+  // traegerweite Grundsatzentscheidung, deshalb hier (anders als
+  // standorte.anlegen) keine Sonderrolle nur fuer die Bereichsleitung.
   async anlegen(input: { bezeichnung: string; kommentarPflicht: boolean }): Promise<KassenbuchungTypDto> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_KASSENBUCHUNG_TYP_VERWALTEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("kassenbuch", "typen-verwalten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Kassenbuch-Typen anlegen.");
     }
     try {
@@ -99,8 +99,7 @@ export class KassenbuchungTypService {
     id: string,
     input: { bezeichnung?: string; kommentarPflicht?: boolean; aktiv?: boolean }
   ): Promise<KassenbuchungTypDto> {
-    const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_KASSENBUCHUNG_TYP_VERWALTEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("kassenbuch", "typen-verwalten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Kassenbuch-Typen bearbeiten.");
     }
     return this.db.withTenant(async (client) => {
