@@ -1040,6 +1040,75 @@ zeigen „Anwärter"/„Archiv", ein Klick wechselt die Ansicht und die
 Panel mit allen drei Ansichten, eine Auswahl schließt es und wechselt
 sauber, Escape schließt es ebenfalls. Testmandant danach wieder entfernt.
 
+**Nachtrag — Organigramm-Modul, Schritt 2: zentrale Rechte-Engine.**
+Zweiter Schritt des mit dem Nutzer abgestimmten Organigramm-Plans (siehe
+Nachtrag "Schritt 1" oben für das Datenmodell). Baut die Rechte-Engine
+selbst, verdrahtet sie aber noch an keinen bestehenden Endpunkt — alle 14
+heutigen `ROLLEN_MIT_*`-Prüfungen bleiben unverändert in Kraft.
+- `apps/api/src/rechte/registry.ts` — Modul×Aktion ist eine Code-Registry,
+  nicht die Datenbank: "neue Module erscheinen automatisch in der Matrix"
+  heißt, diese Liste zu erweitern reicht, keine DB-Zeile nötig. Markiert
+  sensible Aktionen (Klientenakte lesen, Kassenbuch buchen/freigeben,
+  Kostenübernahme genehmigen) und `manage-permissions` als nie delegierbar.
+- `apps/api/src/rechte/rechte.service.ts` — `hatRecht(modul, aktion)` und
+  `ermittleErlaubteOrgUnitIds(modul, aktion)`, als eigenständige,
+  dokumentierte Schrittfolge geschrieben statt einer großen SQL-Abfrage.
+  Wildcard-Kurzschluss für `ist_vollzugriff`-Account-Typen (Geschäftsführung)
+  — liefert das Sentinel `"alle"`, das von keinem Deny eingeschränkt wird.
+  Jede andere Position mit Scope `tenant` wird dagegen zur konkreten Liste
+  aller `org_unit`-Ids aufgelöst, damit ein Deny einer anderen Position sie
+  noch einschränken kann ("Deny gewinnt pro Org-Unit, nicht pro
+  Mitarbeiter" — exakt für den Mehrfachpositionen-Fall nachgewiesen).
+  Stabsstellen ignorieren den gespeicherten Scope-Wert komplett und nutzen
+  ausschließlich `org_position_stabsstelle_scope`, über die Closure-Tabelle
+  auf ihre Nachfahren ausgeweitet. Vertretung nie rekursiv (löst die Rechte
+  des Vertretenen immer direkt aus dessen Positionen auf, nie über eine
+  zweite eingehende Delegation) — schließt Kettenvertretung strukturell
+  aus, nicht nur per Regel.
+- `apps/api/src/rechte/rechte.guard.ts` + `rechte.decorator.ts` —
+  `@ErfordertRecht(modul, aktion)`, analog zu `@Authenticated()`. Eigene
+  Herausforderung: Guards laufen in Nest vor allen Interceptoren, also vor
+  `TenantContextInterceptor` — der Guard spannt den Tenant-Kontext deshalb
+  für die Dauer seiner eigenen Prüfung selbst auf (aus `request.benutzer`,
+  das `AuthGuard` bereits gesetzt hat), unabhängig von der späteren,
+  inhaltlich identischen Aufspannung durch den Interceptor für den
+  eigentlichen Handler.
+- Noch nicht an einem echten Endpunkt im Einsatz — das folgt in
+  Lieferreihenfolge-Schritt 4 (die 14 bestehenden Stellen einzeln
+  umstellen) bzw. Schritt 6 (neue API-Module).
+
+Gefunden und behoben während der Verifikation: zwei echte Testbugs, kein
+Produktivcode betroffen. (1) Eine Testerwartung ging von einem falschen
+Verständnis der Stabsstellen-Scope-Auflösung aus (erwartete nur die
+Einrichtung selbst, tatsächlich korrekt ist die Ausweitung auf den
+gesamten Teilbaum darunter). (2) Das Test-Teardown löschte pauschal alle
+Positionszuweisungen eines Testmandanten und verletzte dabei den
+"letzter Vollzugriff-Inhaber bleibt bestehen"-Schutz aus Schritt 1 — ein
+mitten im Aufräumen geworfener Fehler ließ `admin.end()`/`app.close()`
+nie laufen und hängte dadurch offene Datenbankverbindungen, was den
+Jest-Prozess unbegrenzt am Leben hielt (sichtbar als scheinbar
+hängender Testlauf). Behoben durch gezieltes Deaktivieren des Schutz-
+Triggers nur für die Dauer des Aufräumens plus `try/finally`, damit die
+Verbindungen auch bei einem Fehlschlag garantiert geschlossen werden.
+
+Geprüft: neue `rechte-engine.e2e-spec.ts` (16 Tests) — Account-Typ-Default,
+impliziter Deny, Override (additiv und subtraktiv), Deny-pro-Scope bei
+Mehrfachposition, Stabsstelle-Sonderfall, Subtree-Scope über mehrere
+Ebenen, Einrichtungs-Scope-Ermittlung von einer Team-Position aus
+(überspringt den Bereich), Wildcard-Geschäftsführung (inkl. eines
+Modul/Aktion-Paars ohne jede Datenbank-Zeile), Subjekt-Typ extern
+(Zugriff über `assigned`-Scope, aber nie eine Org-Unit-Menge, nie
+Vollzugriff), sowie der komplette Vertretungs-Themenblock (Erbschaft,
+sensible Rechte per Default ausgeschlossen, `manage-permissions`
+strukturell ausgeschlossen, keine Kettenvertretung, Addition statt
+Ersetzung der eigenen Rechte). Alle 316 API-Tests grün (28 Suiten,
+16 davon neu). Zwei Gegenproben: Wildcard-Kurzschluss auskommentiert →
+der Wildcard-Test wurde rot (`false` statt `true`), wiederhergestellt;
+Kettenvertretungs-Schutz testweise aufgehoben → der
+Kettenvertretungs-Test wurde rot (`true` statt `false`),
+wiederhergestellt. `pnpm build` sauber. Testmandant danach wieder
+entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
