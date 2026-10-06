@@ -24,6 +24,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 // Seit Migration 0021: DRK Rot statt Petrol.
 const STANDARDFARBE = "#e3000f";
@@ -69,12 +70,16 @@ async function seedMandant(admin: Client, label: string): Promise<Testmandant> {
     [`Testmandant ${label}`, slug]
   );
   const mandantId = rows[0].id;
-  return {
+  const testmandant: Testmandant = {
     mandantId,
     slug,
     bereichsleitung: await legeBenutzerAn(admin, mandantId, `bereichsleitung-${label}`, "bereichsleitung"),
     einrichtungsleitung: await legeBenutzerAn(admin, mandantId, `einrichtungsleitung-${label}`, "einrichtungsleitung"),
   };
+  // Seit Schritt 4 prueft mandant.service.ts ueber die Rechte-Engine, nicht
+  // mehr ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
+  await migriereTestmandant(admin, mandantId, slug);
+  return testmandant;
 }
 
 describe("Akzentfarbe je Mandant (Branding)", () => {
@@ -101,20 +106,25 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [
-      mandantA.mandantId,
-      mandantB.mandantId,
-    ]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [
-      mandantA.mandantId,
-      mandantB.mandantId,
-    ]);
-    await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [
-      mandantA.mandantId,
-      mandantB.mandantId,
-    ]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantA.mandantId);
+      await raeumeRollenMigrationAuf(admin, mandantB.mandantId);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [
+        mandantA.mandantId,
+        mandantB.mandantId,
+      ]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id IN ($1, $2)", [
+        mandantA.mandantId,
+        mandantB.mandantId,
+      ]);
+      await admin.query("DELETE FROM mandant WHERE id IN ($1, $2)", [
+        mandantA.mandantId,
+        mandantB.mandantId,
+      ]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   async function login(m: Testmandant, benutzer: Testbenutzer): Promise<string> {

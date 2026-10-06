@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { RechteService } from "../rechte/rechte.service";
 
 interface MandantZeile {
   id: string;
@@ -25,12 +25,20 @@ interface ErscheinungsbildPatch {
  *
  * Die persönliche Anzeigepräferenz hell/dunkel ist bewusst NICHT hier --
  * die liegt im localStorage des Browsers und geht die Datenbank nichts an.
+ *
+ * Rechteprüfung über die zentrale Rechte-Engine (Organigramm-Plan,
+ * Lieferreihenfolge Schritt 4) -- ersetzt das vorherige
+ * ROLLEN_MIT_BRANDING = new Set(["bereichsleitung"]). Die
+ * Bereichsleitung-Migration in rollen-mapping.ts deckt das weiterhin ab
+ * (Geschäftsführung-Vollzugriff), Einrichtungsleitung bekommt es bewusst
+ * nicht (siehe dortiger Kommentar).
  */
-const ROLLEN_MIT_BRANDING = new Set<BenutzerRolle>(["bereichsleitung"]);
-
 @Injectable()
 export class MandantService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Kein WHERE id = ... im Code -- mandant_isolation (RLS) laesst fuer die
@@ -58,8 +66,7 @@ export class MandantService {
    * ein optionales Feld je Aufruf.
    */
   async aktualisiereErscheinungsbild(patch: ErscheinungsbildPatch) {
-    const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_BRANDING.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("mandanten", "branding-bearbeiten"))) {
       throw new ForbiddenException("Nur die Bereichsleitung darf das Erscheinungsbild des Trägers ändern.");
     }
 
