@@ -23,6 +23,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 const TEST_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -143,6 +144,11 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
     einzahlungTypId = typRows.find((t) => t.bezeichnung === "Einzahlung")!.id;
     sonstigesTypId = typRows.find((t) => t.bezeichnung === "Sonstiges")!.id;
 
+    // Seit Schritt 4 prueft rechnung.service.ts ueber die Rechte-Engine,
+    // nicht mehr ueber benutzer.rolle direkt -- siehe
+    // rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -225,6 +231,7 @@ describe("Standort-Einschraenkung: klient, kassenbuchung, kostenuebernahme, rech
   });
 
   afterAll(async () => {
+    await raeumeRollenMigrationAuf(admin, mandantId);
     await admin.query("DELETE FROM rechnung_dokument WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM rechnung_statuswechsel WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);

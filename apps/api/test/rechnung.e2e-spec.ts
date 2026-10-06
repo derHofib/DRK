@@ -13,6 +13,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 const TEST_PDF_BASE64 = "data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsO4CQ==";
 
@@ -54,6 +55,11 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
     );
     klientId = klientRows[0].id;
 
+    // Seit Schritt 4 prueft rechnung.service.ts ueber die Rechte-Engine,
+    // nicht mehr ueber benutzer.rolle direkt -- siehe
+    // rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -65,22 +71,26 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
   });
 
   afterAll(async () => {
-    await admin.query(
-      "DELETE FROM rechnung_dokument WHERE rechnung_id IN (SELECT id FROM rechnung WHERE mandant_id = $1)",
-      [mandantId]
-    );
-    await admin.query(
-      "DELETE FROM rechnung_statuswechsel WHERE rechnung_id IN (SELECT id FROM rechnung WHERE mandant_id = $1)",
-      [mandantId]
-    );
-    await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query(
+        "DELETE FROM rechnung_dokument WHERE rechnung_id IN (SELECT id FROM rechnung WHERE mandant_id = $1)",
+        [mandantId]
+      );
+      await admin.query(
+        "DELETE FROM rechnung_statuswechsel WHERE rechnung_id IN (SELECT id FROM rechnung WHERE mandant_id = $1)",
+        [mandantId]
+      );
+      await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function post(path: string, body: Record<string, unknown>) {

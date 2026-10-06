@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import {
   ermittleErlaubteStandortIds,
@@ -10,6 +10,7 @@ import {
   klientStandortBedingung,
 } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
+import { RechteService } from "../rechte/rechte.service";
 
 // SQLSTATE-Codes, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -37,12 +38,6 @@ export interface RechnungDetailDto extends RechnungDto {
   statusVerlauf: { status: RechnungStatus; grund: string | null; geaendertAm: string }[];
 }
 
-// Ob eine Rechnung genehmigt, abgelehnt oder ausgezahlt wird, ist eine
-// Entscheidung ueber Traegermittel -- gleiches Rollenmuster wie
-// ROLLEN_MIT_STORNO in kassenbuchung.service.ts. Wer eine Rechnung anlegt
-// (jede Rolle, siehe anlegen()), darf ihren Status nicht selbst festlegen.
-const ROLLEN_MIT_STATUSWECHSEL = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
 const LISTEN_SELECT = `
   SELECT r.id, r.klient_id, k.vorname, k.nachname, r.betrag_cent, r.beschreibung, r.erstellt_am,
          sw.status, sw.grund,
@@ -58,7 +53,10 @@ const LISTEN_SELECT = `
 
 @Injectable()
 export class RechnungService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   async findeAlle(filter?: { klientId?: string }): Promise<RechnungDto[]> {
     const { benutzerId } = requireTenantContext();
@@ -156,9 +154,12 @@ export class RechnungService {
    * -- das ist eine Prüfung innerhalb einer einzelnen Tabelle gegen die
    * vorherige Zeile derselben rechnung_id, gehört also dorthin.
    */
+  // Ob eine Rechnung genehmigt, abgelehnt oder ausgezahlt wird, ist eine
+  // Entscheidung ueber Traegermittel. Wer eine Rechnung anlegt (jede Rolle,
+  // siehe anlegen()), darf ihren Status nicht selbst festlegen.
   async statusAendern(id: string, status: RechnungStatus, grund?: string): Promise<RechnungDto> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STATUSWECHSEL.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("rechnungen", "status-wechseln"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen den Status einer Rechnung ändern.");
     }
     const { mandantId, benutzerId } = ctx;
