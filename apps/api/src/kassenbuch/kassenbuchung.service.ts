@@ -19,6 +19,13 @@ import { RechteService } from "../rechte/rechte.service";
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
 
+// Custom-SQLSTATE aus kassenbuchung_stornoantrag_vier_augen_pruefen()
+// (migrations/0045) -- kein Standard-Code, siehe dort. Greift in der Praxis
+// vor allem als Gegenprobe/Fallback: der Normalfall (buchende Person stellt
+// selbst den Antrag) wird in stornoBeantragen() schon vorher abgefangen,
+// damit es dort eine verstaendliche Meldung statt einen rohen DB-Fehler gibt.
+const STORNO_VIER_AUGEN_VERLETZT = "ZA002";
+
 export interface OffenerStornoantragDto {
   id: string;
   grund: string;
@@ -243,23 +250,29 @@ export class KassenbuchungService {
   /**
    * Stellt einen Storno-Antrag. Jede Rolle darf das (auch ein Betreuer, der
    * die Buchung nicht mehr selbst rueckgaengig machen kann) -- ob er sofort
-   * wirksam wird, entscheidet allein die Rolle der antragstellenden Person:
-   * Bereichs-/Einrichtungsleitung bewilligen sich damit im selben Zug
-   * selbst (kein Sinn, auf die eigene Bewilligung zu warten), ein Betreuer
-   * stellt nur den Antrag und muss auf stornoEntscheiden() warten.
+   * wirksam wird, haengt von ZWEI Bedingungen ab: die antragstellende
+   * Person braucht das Recht kassenbuch.storno-entscheiden, UND sie darf
+   * nicht selbst die buchende Person sein (Vier-Augen-Prinzip, siehe
+   * Migration 0045 -- dort als Trigger hart erzwungen, auch fuer
+   * Geschaeftsfuehrung, hier zusaetzlich mit einer verstaendlichen Meldung
+   * vorab abgefangen). Ist beides erfuellt, wird im selben Zug bewilligt
+   * (kein Sinn, auf die eigene Bewilligung zu warten); sonst bleibt der
+   * Antrag offen, bis eine ANDERE berechtigte Person ueber stornoEntscheiden()
+   * entscheidet -- das gilt jetzt auch fuer eine Leitung, die ihre eigene
+   * Buchung stornieren will.
    */
   async stornoBeantragen(kassenbuchungId: string, grund: string): Promise<KassenbuchungDto> {
     const ctx = requireTenantContext();
     const { benutzerId } = ctx;
     return this.db.withTenant(async (client) => {
       const { rows: buchungRows } = await client.query(
-        "SELECT klient_id, standort_id, storniert FROM kassenbuchung WHERE id = $1",
+        "SELECT klient_id, standort_id, storniert, gebucht_von FROM kassenbuchung WHERE id = $1",
         [kassenbuchungId]
       );
       if (buchungRows.length === 0) {
         throw new NotFoundException("Buchung nicht gefunden.");
       }
-      const { klient_id, standort_id, storniert } = buchungRows[0];
+      const { klient_id, standort_id, storniert, gebucht_von } = buchungRows[0];
       if (storniert) {
         throw new ConflictException("Diese Buchung ist bereits storniert.");
       }
@@ -287,7 +300,8 @@ export class KassenbuchungService {
         throw err;
       }
 
-      if (await this.rechte.hatRecht("kassenbuch", "storno-entscheiden")) {
+      const istBuchendePerson = gebucht_von === benutzerId;
+      if (!istBuchendePerson && (await this.rechte.hatRecht("kassenbuch", "storno-entscheiden"))) {
         await this.bewilligeAntrag(client, antragQuery.rows[0].id, kassenbuchungId, grund, benutzerId);
       }
       return this.findeEineIntern(client, kassenbuchungId);
@@ -329,18 +343,33 @@ export class KassenbuchungService {
         throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
       }
 
-      if (entscheidung === "genehmigt") {
-        await this.bewilligeAntrag(client, antragId, kassenbuchung_id, grund, ctx.benutzerId);
-      } else {
-        const { rowCount } = await client.query(
-          `UPDATE kassenbuchung_stornoantrag
-           SET status = 'abgelehnt', ablehnung_grund = $1, entschieden_von = $2, entschieden_am = now()
-           WHERE id = $3 AND status = 'beantragt'`,
-          [ablehnungGrund, ctx.benutzerId, antragId]
-        );
-        if (rowCount === 0) {
-          throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
+      try {
+        if (entscheidung === "genehmigt") {
+          await this.bewilligeAntrag(client, antragId, kassenbuchung_id, grund, ctx.benutzerId);
+        } else {
+          const { rowCount } = await client.query(
+            `UPDATE kassenbuchung_stornoantrag
+             SET status = 'abgelehnt', ablehnung_grund = $1, entschieden_von = $2, entschieden_am = now()
+             WHERE id = $3 AND status = 'beantragt'`,
+            [ablehnungGrund, ctx.benutzerId, antragId]
+          );
+          if (rowCount === 0) {
+            throw new NotFoundException("Storno-Antrag nicht gefunden oder bereits entschieden.");
+          }
         }
+      } catch (err) {
+        // Normalfall faengt schon stornoBeantragen() ab (dort bleibt der
+        // Antrag einfach offen statt automatisch bewilligt zu werden) --
+        // dieser Fall greift nur, wenn jemand trotzdem ueber diesen Pfad
+        // (z.B. unter geliehenem Recht per Delegation) ueber den eigenen
+        // Antrag zu entscheiden versucht. Der Trigger
+        // kassenbuchung_stornoantrag_vier_augen_pruefen() (Migration 0045)
+        // kennt dabei keine Ausnahme fuer den Rechte-Herkunftsweg -- die
+        // Regel ist strukturell, nicht nur Konvention.
+        if (isPgError(err) && err.code === STORNO_VIER_AUGEN_VERLETZT) {
+          throw new ForbiddenException("Wer eine Buchung selbst gebucht hat, darf nicht über deren Storno entscheiden.");
+        }
+        throw err;
       }
       return this.findeEineIntern(client, kassenbuchung_id);
     });
