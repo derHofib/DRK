@@ -5,6 +5,7 @@ import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { RechteService } from "../rechte/rechte.service";
 
 // 30 Minuten: lang genug, um den Link auf einem beliebigen Weg (Teams,
 // muendlich, ...) weiterzugeben, kurz genug, dass ein liegengelassener,
@@ -25,24 +26,12 @@ export interface BenutzerListEintrag {
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
 
-// Bereichsleitung darf traegerweit Mitarbeiter anlegen, Einrichtungsleitung
-// fuer die eigene Einrichtung (siehe Standort-Einschraenkung ueber
-// benutzer_standort -- diese Methode selbst kennt "eigene Einrichtung"
-// nicht extra, RLS plus die optionale Standort-Zuordnung reichen). Betreuer
-// bewusst aussen vor, sonst koennte sich jede Mitarbeiterin selbst oder
-// andere hochstufen.
-const ROLLEN_MIT_BENUTZER_ANLEGEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
-// Wer einem Betreuer Standorte zuweisen darf: dasselbe Rollenpaar wie beim
-// Anlegen. Die Einrichtungsleitung ist dabei zusaetzlich (siehe
-// standorteSetzen()) auf ihre EIGENEN erlaubten Standorte begrenzt --
-// anders als beim Anlegen, wo sie traegerweit keine Grenze hat, weil dort
-// jede neue Person ohnehin zunaechst unbeschraenkt ist.
-const ROLLEN_MIT_STANDORT_ZUWEISEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
 @Injectable()
 export class BenutzerService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Absichtlich ohne "WHERE mandant_id = ..." -- das ist der ganze Punkt
@@ -78,9 +67,13 @@ export class BenutzerService {
     });
   }
 
+  // Bereichsleitung darf traegerweit Mitarbeiter anlegen, Einrichtungsleitung
+  // fuer die eigene Einrichtung (siehe Standort-Einschraenkung ueber
+  // benutzer_standort -- diese Methode selbst kennt "eigene Einrichtung"
+  // nicht extra, RLS plus die optionale Standort-Zuordnung reichen).
   async anlegen(input: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_BENUTZER_ANLEGEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("mitarbeitende", "anlegen"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen neue Mitarbeitende anlegen.");
     }
     // Sonst koennte eine Einrichtungsleitung ueber diesen Weg jemanden (oder
@@ -120,7 +113,7 @@ export class BenutzerService {
    */
   async passwortResetErstellen(zielBenutzerId: string): Promise<{ token: string; laeuftAbAm: string }> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_BENUTZER_ANLEGEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("mitarbeitende", "anlegen"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Passwort-Reset-Links erzeugen.");
     }
 
@@ -170,7 +163,7 @@ export class BenutzerService {
    */
   async standorteSetzen(zielBenutzerId: string, standortIds: string[]): Promise<string[]> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_STANDORT_ZUWEISEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("mitarbeitende", "standort-zuweisen"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Standorte zuweisen.");
     }
     const eindeutigeIds = [...new Set(standortIds)];

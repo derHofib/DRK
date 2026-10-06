@@ -22,6 +22,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Passwort aendern + Passwort-Reset per Link", () => {
   let app: INestApplication;
@@ -67,6 +68,14 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
       [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
     );
 
+    // Seit Schritt 4 pruefen benutzer.service.ts/passwortResetErstellen()
+    // ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt --
+    // siehe rollen-migration-test-helper.ts. Keine Einrichtung noetig:
+    // bereichsleitung wird zur Geschaeftsfuehrung (Vollzugriff), die
+    // unabhaengig von jeder Einrichtung greift.
+    await migriereTestmandant(admin, mandantAId, mandantASlug);
+    await migriereTestmandant(admin, mandantBId, mandantBSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -80,12 +89,17 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
-    await admin.query("DELETE FROM mandant WHERE id = ANY($1)", [[mandantAId, mandantBId]]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantAId);
+      await raeumeRollenMigrationAuf(admin, mandantBId);
+      await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
+      await admin.query("DELETE FROM mandant WHERE id = ANY($1)", [[mandantAId, mandantBId]]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function als(token: string) {
