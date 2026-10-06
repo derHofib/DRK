@@ -22,6 +22,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
   let app: INestApplication;
@@ -53,6 +54,13 @@ describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
       [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
 
+    // Seit Schritt 4 prueft zimmer.service.ts ueber die Rechte-Engine, nicht
+    // mehr ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
+    // Ohne das wuerde der PATCH /zimmer/undefined-Test schon an der
+    // Rechte-Engine mit 403 scheitern statt -- wie hier geprueft -- am
+    // Postgres-Exception-Filter mit 400.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -64,11 +72,15 @@ describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function get(path: string) {

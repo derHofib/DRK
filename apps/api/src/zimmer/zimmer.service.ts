@@ -5,6 +5,7 @@ import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientIstArchiviert } from "../common/standort-restriction";
 import { initialen } from "../common/anonymisierung";
 import { isPgError } from "../common/pg-error";
+import { RechteService } from "../rechte/rechte.service";
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (zimmer_standort_id_nummer_key,
 // siehe migrations/0009_zimmer.sql), kein geratener String -- siehe
@@ -67,35 +68,27 @@ export interface BelegungsverlaufEintrag {
   geplant: boolean;
 }
 
-// Wer den vollen Namen ehemaliger Bewohner:innen sehen darf (z.B. für
-// Amtsnachfragen), statt nur der Initialen -- siehe Bauplan Punkt 03: "die
-// API entscheidet anhand der Rolle". Der aktuelle Bewohner wird immer mit
-// vollem Namen angezeigt, unabhängig von der Rolle -- operativ braucht das
-// jede Mitarbeiterin, die vor der Tür steht.
-const ROLLEN_MIT_VOLLEM_VERLAUF = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
-// Zimmer-/Standort-Stammdaten sind eine strukturelle Entscheidung über die
-// Einrichtung, kein operatives Tagesgeschäft -- Klient zuweisen/Auszug
-// eintragen (belegung.service.ts) bleibt bewusst für alle Rollen offen,
-// das hier nicht. Gleiches Rollenmuster wie ROLLEN_MIT_STORNO in
-// kassenbuchung.service.ts.
-const ROLLEN_MIT_ZIMMER_STAMMDATEN = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
-
 // Custom-SQLSTATE aus dem Trigger belegung_kapazitaet_pruefen()
 // (migrations/0032), kein Standard-Code -- siehe dort.
 const KAPAZITAET_UEBERSCHRITTEN = "ZA001";
 
-// Vier-Augen: wer eine Kapazitaet aendern darf, entscheidet ROLLEN_MIT_
-// ZIMMER_STAMMDATEN wie ueberall sonst bei Zimmer-Stammdaten. Wer sie
-// BESTAETIGEN darf, ist keine feste Rollenmenge, sondern haengt vom
-// Antragsteller ab -- siehe kapazitaetEntscheiden().
+// Vier-Augen: wer eine Kapazitaet aendern darf, entscheidet dasselbe Recht
+// wie ueberall sonst bei Zimmer-Stammdaten (zimmer.bearbeiten). Wer sie
+// BESTAETIGEN darf, ist keine feste Rollenmenge, sondern haengt von der
+// literalen Rolle des Antragstellers ab -- bewusst weiterhin ueber
+// benutzer.rolle, nicht die Rechte-Engine: das ist keine der 14
+// ROLLEN_MIT_*-Prüfungen, sondern eine eigene Anwendungsregel ("die jeweils
+// andere Leitungsrolle entscheidet"), siehe kapazitaetEntscheiden().
 function gegenrolle(rolle: BenutzerRolle): BenutzerRolle {
   return rolle === "bereichsleitung" ? "einrichtungsleitung" : "bereichsleitung";
 }
 
 @Injectable()
 export class ZimmerService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   async findeAlle(): Promise<ZimmerListEintrag[]> {
     const ctx = requireTenantContext();
@@ -247,7 +240,7 @@ export class ZimmerService {
 
   async anlegen(input: { standortId: string; nummer: string; etage?: string; kapazitaet?: number }) {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer anlegen.");
     }
     try {
@@ -294,7 +287,7 @@ export class ZimmerService {
 
   async aktualisieren(id: string, input: { nummer: string; etage?: string }) {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer bearbeiten.");
     }
     try {
@@ -324,7 +317,7 @@ export class ZimmerService {
    */
   async kapazitaetAendern(id: string, neueKapazitaet: number): Promise<ZimmerListEintrag> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen die Kapazität ändern.");
     }
     return this.db.withTenant(async (client) => {
@@ -381,7 +374,7 @@ export class ZimmerService {
     ablehnungGrund?: string
   ): Promise<ZimmerListEintrag> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen über eine Kapazitätsänderung entscheiden.");
     }
     if (entscheidung === "abgelehnt" && !ablehnungGrund) {
@@ -468,7 +461,7 @@ export class ZimmerService {
    */
   async deaktivieren(id: string) {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ZIMMER_STAMMDATEN.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer deaktivieren.");
     }
     return this.db.withTenant(async (client) => {
@@ -495,7 +488,7 @@ export class ZimmerService {
 
   async belegungsverlauf(zimmerId: string): Promise<BelegungsverlaufEintrag[]> {
     const ctx = requireTenantContext();
-    const vollerName = ROLLEN_MIT_VOLLEM_VERLAUF.has(ctx.rolle);
+    const vollerName = await this.rechte.hatRecht("zimmer", "voller-verlauf");
 
     return this.db.withTenant(async (client) => {
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
@@ -531,8 +524,9 @@ export class ZimmerService {
         const geplant = r.einzug > heute;
         // Namensanzeige bewusst UNVERAENDERT an istAktuell gekoppelt (nicht
         // zusaetzlich an geplant): "operativ vor der Tuer stehen" trifft auf
-        // einen erst kuenftig geplanten Einzug nicht zu, siehe Kommentar zu
-        // ROLLEN_MIT_VOLLEM_VERLAUF oben.
+        // einen erst kuenftig geplanten Einzug nicht zu -- der aktuelle
+        // Bewohner wird deshalb immer mit vollem Namen angezeigt,
+        // unabhaengig vom zimmer.voller-verlauf-Recht.
         const zeigeVollenNamen = istAktuell || vollerName;
         return {
           id: r.id,

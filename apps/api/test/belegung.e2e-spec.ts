@@ -16,6 +16,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
   let app: INestApplication;
@@ -94,6 +95,11 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
       [mandantId, zimmerId, klientAktuell.id]
     );
 
+    // Seit Schritt 4 prueft zimmer.service.ts (voller-verlauf) ueber die
+    // Rechte-Engine, nicht mehr ueber benutzer.rolle direkt -- siehe
+    // rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -107,15 +113,19 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   it("leitet den Zimmerstatus aus der Belegung ab, ohne ein Statusfeld zu speichern", async () => {

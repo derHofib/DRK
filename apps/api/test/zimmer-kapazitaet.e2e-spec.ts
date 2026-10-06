@@ -18,6 +18,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Zimmer: Kapazitaet und Vier-Augen-Aenderung", () => {
   let app: INestApplication;
@@ -41,9 +42,10 @@ describe("Zimmer: Kapazitaet und Vier-Augen-Aenderung", () => {
     const suffix = randomUUID().slice(0, 8);
     const passwortHash = await bcrypt.hash(passwort, 4);
 
+    const mandantSlug = `test-kapazitaet-${suffix}`;
     const { rows: mandantRows } = await admin.query<{ id: string }>(
       "INSERT INTO mandant (name, slug) VALUES ($1, $2) RETURNING id",
-      [`Testmandant Kapazitaet ${suffix}`, `test-kapazitaet-${suffix}`]
+      [`Testmandant Kapazitaet ${suffix}`, mandantSlug]
     );
     mandantId = mandantRows[0].id;
 
@@ -85,12 +87,15 @@ describe("Zimmer: Kapazitaet und Vier-Augen-Aenderung", () => {
     );
     klientIds = klientRows.map((r) => r.id);
 
+    // Seit Schritt 4 prueft zimmer.service.ts (Zimmer-Stammdaten +
+    // Vier-Augen-Kapazitaetsaenderung) ueber die Rechte-Engine, nicht mehr
+    // ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
 
-    const { rows: slugRows } = await admin.query<{ slug: string }>("SELECT slug FROM mandant WHERE id = $1", [mandantId]);
-    const mandantSlug = slugRows[0].slug;
     async function login(email: string): Promise<string> {
       const res = await request(app.getHttpServer()).post("/auth/login").send({ mandantSlug, email, passwort });
       return res.body.accessToken;
@@ -101,17 +106,21 @@ describe("Zimmer: Kapazitaet und Vier-Augen-Aenderung", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM zimmer_kapazitaetsantrag WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM zimmer_kapazitaetsantrag WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function als(token: string) {
