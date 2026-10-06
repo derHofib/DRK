@@ -2,15 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { klientIstErlaubt } from "../common/standort-restriction";
+import { RechteService } from "../rechte/rechte.service";
 import { ArchivPdfInput, erzeugeArchivPdf } from "./klient-archiv-pdf";
 import { zuKontaktDto, zuStammdatenDto } from "./klient.service";
-
-// Gleiches Rollenpaar wie bei der Anonymisierung -- Archivieren ist zwar
-// (anders als Anonymisierung) reversibel, aber trotzdem eine traegerweite
-// Statusaenderung, keine alltaegliche Betreuungsaktion.
-const ROLLEN_MIT_ARCHIVIERUNG = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 export interface KlientArchivPdfEintrag {
   id: string;
@@ -20,7 +16,10 @@ export interface KlientArchivPdfEintrag {
 
 @Injectable()
 export class KlientArchivService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * Erzeugt den PDF-Snapshot synchron innerhalb der Transaktion, die auch
@@ -32,7 +31,7 @@ export class KlientArchivService {
    */
   async archivieren(klientId: string): Promise<void> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ARCHIVIERUNG.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("klienten", "archivieren"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen einen Klienten archivieren.");
     }
     return this.db.withTenant(async (client) => {
@@ -69,7 +68,7 @@ export class KlientArchivService {
    */
   async entarchivieren(klientId: string): Promise<void> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ARCHIVIERUNG.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("klienten", "archivieren"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen einen Klienten entarchivieren.");
     }
     return this.db.withTenant(async (client) => {

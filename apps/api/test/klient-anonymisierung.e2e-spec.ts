@@ -19,6 +19,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
   let app: INestApplication;
@@ -77,6 +78,16 @@ describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
     );
     const hzlTypId = hzlTypRows[0].id;
 
+    // verarbeiteMandant() braucht eine Einrichtung, um der Einrichtungsleitung
+    // ueberhaupt eine Position zuzuweisen -- in diesem Test geht es nicht um
+    // Standort-Daten, deshalb nur ein minimaler, sonst unbenutzter Standort.
+    await admin.query("INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Haus Test', 'Teststr. 1')", [
+      mandantId,
+    ]);
+    // Seit Schritt 4 prueft klient.service.ts ueber die Rechte-Engine, nicht
+    // mehr ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -103,15 +114,20 @@ describe("Klient anonymisieren (Art. 17 DSGVO)", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM rechnung_statuswechsel WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM rechnung_statuswechsel WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   function als(token: string) {

@@ -1,14 +1,9 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientStandortBedingung } from "../common/standort-restriction";
+import { RechteService } from "../rechte/rechte.service";
 import type { KlientArchivPdfEintrag } from "./klient-archiv.service";
-
-// Ein anonymisierter Klient bleibt als Zeile (und damit als Ziel jeder
-// Fremdschluessel-Kette aus Belegung/Kassenbuch/Rechnung) bestehen -- nur
-// wer das darf, entscheidet ueber eine Aktion, die nicht rueckgaengig zu
-// machen ist. Gleiches Rollenpaar wie bei Zimmer-/Standort-Stammdaten.
-const ROLLEN_MIT_ANONYMISIERUNG = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 const ANONYM_PLATZHALTER = "Anonymisiert";
 
@@ -98,7 +93,10 @@ export interface KlientDetail extends KlientListEintrag {
 
 @Injectable()
 export class KlientService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   /**
    * archiviert=false (Standard): nur aktive Klient:innen -- die allgemeine
@@ -193,7 +191,7 @@ export class KlientService {
    */
   async anonymisieren(id: string): Promise<KlientDetail> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ANONYMISIERUNG.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("klienten", "anonymisieren"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen einen Klienten anonymisieren.");
     }
     return this.db.withTenant(async (client) => {
