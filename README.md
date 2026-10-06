@@ -1167,6 +1167,60 @@ ein zweiter Dry-Run danach meldet 0 neue Zeilen (Idempotenz),
 grün (29 Suiten, 5 davon neu gegenüber Schritt 2). `pnpm build` sauber.
 Beide Testmandanten danach wieder vollständig entfernt.
 
+**Nachtrag — Organigramm-Modul, Schritt 4: die 14 `ROLLEN_MIT_*`-Stellen
+auf die Rechte-Engine umgestellt.** Vierter Schritt des Organigramm-Plans
+(additiv, neun einzelne Commits — je ein Fachmodul, bestehende Tests
+blieben nach jedem Schritt grün). Jede Stelle `if (!ROLLEN_MIT_X.has(ctx.rolle))`
+wurde durch `if (!(await rechte.hatRecht(modul, aktion)))` ersetzt:
+
+| Datei | Gate(s) |
+|---|---|
+| `mandant.service.ts` | `mandanten.branding-bearbeiten` |
+| `standort.service.ts` | `standorte.anlegen`, `standorte.bearbeiten` |
+| `klient-archiv.service.ts` / `klient.service.ts` | `klienten.archivieren`, `klienten.anonymisieren` |
+| `benutzer.service.ts` | `mitarbeitende.anlegen`, `mitarbeitende.standort-zuweisen` |
+| `anwaerter.service.ts` | `anwaerter.entscheiden` |
+| `rechnung.service.ts` | `rechnungen.status-wechseln` |
+| `aufgabe.service.ts` | `aufgaben.koordinieren` |
+| `kassenbuchung-typ.service.ts` / `kassenbuchung.service.ts` | `kassenbuch.typen-verwalten`, `kassenbuch.storno-entscheiden` |
+| `zimmer.service.ts` | `zimmer.bearbeiten`, `zimmer.voller-verlauf` |
+
+- **Was bewusst NICHT umgestellt wurde**, weil es keine der 14 Mengen ist,
+  sondern eigene Anwendungslogik: die ODER-Bedingung „eigene/zugewiesene
+  Aufgabe" in `aufgabe.service.ts` (`darfSchreiben()` dafür async
+  geworden, mit der Rechte-Engine per `await` kombiniert, nicht ersetzt);
+  die Eskalationsschutz-Prüfungen in `benutzer.service.ts` („Einrichtungsleitung
+  darf niemanden zur Bereichsleitung machen", „nur die eigenen Standorte
+  zuweisen"); die Vier-Augen-Gegenrolle in `zimmer.service.ts::kapazitaetEntscheiden()`
+  (`gegenrolle()` — „die jeweils andere Leitungsrolle muss bestätigen" hat
+  keine Entsprechung in der Rechte-Engine). Alle drei bleiben auf der
+  literalen `ctx.rolle`/`benutzer.rolle`.
+- **Jedes betroffene Fachmodul bekam `RechteService` injiziert**
+  (Konstruktor-Parameter), sein Modul importiert dafür `RechteModule`
+  (nicht global, gleiches Muster wie `AuthModule`).
+- **Testfixtures**: bestehende e2e-Specs legen ihre Testbenutzer seit jeher
+  per rohem SQL nur mit `benutzer.rolle` an, ohne je die echte
+  Rollen-Migration zu durchlaufen — die Rechte-Engine kennt `rolle` aber
+  nicht mehr direkt, sie braucht eine echte Position. Neuer Helfer
+  `test/support/rollen-migration-test-helper.ts` ruft dafür dieselbe,
+  bereits verifizierte `verarbeiteMandant()`-Logik auf (kein zweiter
+  Zuordnungspfad nur für Tests) und räumt sie im Teardown wieder auf.
+  17 betroffene Testdateien entsprechend ergänzt — davon drei mit einer
+  Falle, die erst beim **vollen** Suitelauf auffiel, nicht beim gezielten
+  Testlauf des jeweiligen Fachmoduls: ein separater „fremder Mandant" in
+  einem Mandantentrennungstest (eigene Migration nötig, sonst scheitert
+  der Zugriffsversuch schon an der Rechte-Engine statt — wie dort
+  geprüft — an der Mandantentrennung), eine Selbstbewilligungs-Weiche bei
+  Kassenbuch-Storno und ein `belegungsverlauf()`-Aufruf mit vollem Namen,
+  jeweils in einer Datei, deren Name das nicht erkennen ließ.
+
+Geprüft: nach jedem der neun Teilschritte `pnpm test:api` vollständig
+321/321 grün (29 Suiten), `pnpm build` sauber — kein Schritt hat
+Bestehendes gebrochen. `benutzer.rolle`/`TenantContext.rolle` bleiben
+bestehen (Default-Zuordnung neuer Mitarbeiter, die drei oben genannten
+Ausnahmen), werden aber für keine der 14 Rechteprüfungen mehr direkt
+befragt — das war der Zweck dieses Schritts.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
