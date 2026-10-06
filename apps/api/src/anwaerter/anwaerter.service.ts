@@ -1,16 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
+import { RechteService } from "../rechte/rechte.service";
 
 export type AnwaerterStatus = "offen" | "angenommen" | "abgelehnt";
-
-// Eine Aufnahmeentscheidung ist eine strukturelle Entscheidung ueber die
-// Einrichtung (Kapazitaet, Traegermittel), kein alltaegliches Erfassen
-// einer Anfrage -- gleiches Rollenpaar wie bei Archivieren/Anonymisieren
-// (klient.service.ts, klient-archiv.service.ts). Das blosse Anlegen/
-// Bearbeiten/Loeschen einer Anfrage bleibt dagegen fuer alle Rollen offen,
-// wie klient.anlegen() heute schon.
-const ROLLEN_MIT_ENTSCHEIDUNG = new Set<BenutzerRolle>(["bereichsleitung", "einrichtungsleitung"]);
 
 export interface AnwaerterEintrag {
   id: string;
@@ -41,7 +34,10 @@ const LISTEN_SELECT = `
 
 @Injectable()
 export class AnwaerterService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService
+  ) {}
 
   async findeAlle(status: AnwaerterStatus = "offen"): Promise<AnwaerterEintrag[]> {
     return this.db.withTenant(async (client) => {
@@ -155,12 +151,16 @@ export class AnwaerterService {
    * einer zweiten, gleichzeitigen Entscheidung), ohne dass ein separater
    * Lese-Check noetig waere (gleiches Prinzip wie kostenuebernahme.beenden()).
    */
+  // Eine Aufnahmeentscheidung ist eine strukturelle Entscheidung ueber die
+  // Einrichtung (Kapazitaet, Traegermittel), kein alltaegliches Erfassen
+  // einer Anfrage. Das blosse Anlegen/Bearbeiten/Loeschen einer Anfrage
+  // bleibt dagegen fuer alle Rollen offen, wie klient.anlegen() heute schon.
   async annehmen(
     id: string,
     input: { aktenzeichen: string; amt: string; hzlRhythmus: "monatlich" | "woechentlich" }
   ): Promise<{ id: string }> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ENTSCHEIDUNG.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("anwaerter", "entscheiden"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen eine Anfrage annehmen.");
     }
     return this.db.withTenant(async (client) => {
@@ -206,7 +206,7 @@ export class AnwaerterService {
 
   async ablehnen(id: string, grund: string): Promise<AnwaerterEintrag> {
     const ctx = requireTenantContext();
-    if (!ROLLEN_MIT_ENTSCHEIDUNG.has(ctx.rolle)) {
+    if (!(await this.rechte.hatRecht("anwaerter", "entscheiden"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen eine Anfrage ablehnen.");
     }
     return this.db.withTenant(async (client) => {

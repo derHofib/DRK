@@ -15,6 +15,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
 
 describe("Anwärter", () => {
   let app: INestApplication;
@@ -52,6 +53,11 @@ describe("Anwärter", () => {
     await neuerBenutzer("bereichsleitung", "bereichsleitung");
     await neuerBenutzer("betreuer", "betreuer");
 
+    // Seit Schritt 4 prueft anwaerter.service.ts ueber die Rechte-Engine,
+    // nicht mehr ueber benutzer.rolle direkt -- siehe
+    // rollen-migration-test-helper.ts.
+    await migriereTestmandant(admin, mandantId, mandantSlug);
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -65,13 +71,17 @@ describe("Anwärter", () => {
   });
 
   afterAll(async () => {
-    await admin.query("DELETE FROM anwaerter WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
-    await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
-    await admin.end();
-    await app.close();
+    try {
+      await raeumeRollenMigrationAuf(admin, mandantId);
+      await admin.query("DELETE FROM anwaerter WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
+    } finally {
+      await admin.end();
+      await app.close();
+    }
   });
 
   async function neueAnfrage(zusatz: Record<string, unknown> = {}) {
