@@ -19,6 +19,9 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { AufgabeModule } from "./aufgaben/aufgabe.module";
 import { AnwaerterModule } from "./anwaerter/anwaerter.module";
 import { RechteModule } from "./rechte/rechte.module";
+import { OrganigrammModule } from "./organigramm/organigramm.module";
+import { DelegationModule } from "./delegation/delegation.module";
+import { AuditModule } from "./audit/audit.module";
 
 @Module({
   imports: [
@@ -57,6 +60,9 @@ import { RechteModule } from "./rechte/rechte.module";
     AufgabeModule,
     AnwaerterModule,
     RechteModule,
+    OrganigrammModule,
+    DelegationModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
