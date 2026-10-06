@@ -1109,6 +1109,64 @@ Kettenvertretungs-Test wurde rot (`true` statt `false`),
 wiederhergestellt. `pnpm build` sauber. Testmandant danach wieder
 entfernt.
 
+**Nachtrag — Organigramm-Modul, Schritt 3: Rollen→Systemvorlage-Migration.**
+Dritter Schritt des Organigramm-Plans (Schritt 1: Datenmodell, Schritt 2:
+Rechte-Engine, siehe die beiden Nachträge oben). Bildet `benutzer.rolle`
+auf die drei Systemvorlagen-Account-Typen ab, **additiv** — die 14
+bestehenden `ROLLEN_MIT_*`-Prüfungen bleiben weiterhin unverändert in
+Kraft, nichts Bestehendes ändert sein Verhalten.
+- `apps/api/src/rechte/rollen-mapping.ts` — die eine Quelle für "was
+  bedeutet `einrichtungsleitung` in Rechten", von Migrationsskript UND
+  Abgleichstest gleichermaßen importiert, damit beide nie auseinanderlaufen
+  können. `bereichsleitung` braucht keine eigene Liste — das deckt der
+  Geschäftsführung-Vollzugriff-Wildcard komplett ab, auch die zwei heute
+  `bereichsleitung`-exklusiven Sets (`ROLLEN_MIT_BRANDING`,
+  `ROLLEN_MIT_STANDORT_ANLEGEN`).
+- `apps/api/src/rechte/registry.ts` erweitert um die bislang fehlenden
+  Modul/Aktion-Paare, die die 14 Sets abdecken (u. a. `zimmer.voller-verlauf`,
+  `kassenbuch.storno-entscheiden`, neue Module `standorte`, `rechnungen`,
+  `mandanten`) — jede neue Zeile trägt einen Kommentar, welches
+  `ROLLEN_MIT_*`-Set sie ablöst.
+- `apps/api/scripts/rollen-migration.ts` — Dry-Run (Default) und
+  `--anwenden` teilen sich **denselben** Code (`verarbeiteMandant()`),
+  unterscheiden sich nur darin, ob die umschließende Transaktion
+  `COMMIT`et oder `ROLLBACK`t wird — kein zweiter, parallel gepflegter
+  Simulationspfad. Idempotent (jede `sicherXyz()`-Funktion prüft zuerst,
+  ob die Zeile schon existiert), `--mandant <slug>` beschränkt auf einen
+  Mandanten, `--rueckgaengig` entfernt die drei Systemtypen wieder
+  (geschützt, solange niemand von Hand an der neuen Struktur
+  weitergearbeitet hat). `verarbeiteMandant()` ist exportiert, damit der
+  Abgleichstest die ECHTE Abbildungslogik aufruft, nicht eine im Test
+  nachgebaute Kopie.
+  - `bereichsleitung` → Geschäftsführung (`ist_vollzugriff`), eine
+    Position am Träger-Wurzelknoten.
+  - `einrichtungsleitung`/`betreuer` → je eine Position pro Einrichtung,
+    aus `benutzer_standort` abgeleitet (leer = alle Einrichtungen, sonst
+    genau die zugeordneten — deckt den Springer-Fall aus Schritt 1 direkt
+    ab, ohne eigenen Sonderfall im Skript).
+- `apps/api/test/rollen-migration-abgleich.e2e-spec.ts` — genau die vom
+  Plan geforderte Verifikation ("jede der 14 Mengen gegen die neu
+  aufgelösten Rechte", nicht per Annahme): ein frischer Testmandant mit je
+  einem Benutzer pro Rolle, `verarbeiteMandant()` darauf angewendet, dann
+  `RechteService.hatRecht()` für alle 14 Gates gegen die tatsächliche
+  `ROLLEN_MIT_*`-Zugehörigkeit geprüft (`bereichsleitung`: alle 14 inkl.
+  der 2 exklusiven; `einrichtungsleitung`: genau die 12 gemeinsamen, die 2
+  exklusiven explizit verneint; `betreuer`: keines).
+
+Geprüft: neue `rollen-migration-abgleich.e2e-spec.ts` (5 Tests, davon eine
+Gegenprobe: die Zusatzrechte-Zeilen der Einrichtungsleitung testweise
+gelöscht → alle 12 Gates wurden `false` statt `true`, wiederhergestellt).
+Zusätzlich manuell gegen einen Testmandanten mit 2 Standorten/5 Benutzern
+(Bereichsleitung, eingeschränkte und uneingeschränkte Einrichtungsleitung,
+Mehrfachstandort-"Springer", einfacher Betreuer) verifiziert: Dry-Run
+schreibt nachweislich nichts (per Datenbankabfrage direkt nach dem Lauf),
+`--anwenden` legt genau die erwarteten Zeilen an (inkl. korrekter
+Positions-Wiederverwendung bei mehreren Benutzern derselben Einrichtung),
+ein zweiter Dry-Run danach meldet 0 neue Zeilen (Idempotenz),
+`--rueckgaengig` entfernt alles wieder vollständig. Alle 321 API-Tests
+grün (29 Suiten, 5 davon neu gegenüber Schritt 2). `pnpm build` sauber.
+Beide Testmandanten danach wieder vollständig entfernt.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

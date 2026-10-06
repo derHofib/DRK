@@ -32,14 +32,24 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "klienten", aktion: "anlegen" },
   { modul: "klienten", aktion: "bearbeiten" },
   { modul: "klienten", aktion: "archivieren" },
+  { modul: "klienten", aktion: "anonymisieren" },
 
   { modul: "zimmer", aktion: "ansehen" },
   { modul: "zimmer", aktion: "bearbeiten" },
   { modul: "zimmer", aktion: "belegen" },
+  // Heutiges ROLLEN_MIT_VOLLEM_VERLAUF (zimmer.service.ts) -- ohne dieses
+  // Recht zeigt der Belegungsverlauf anonymisierte Initialen statt des
+  // vollen Namens (siehe common/anonymisierung.ts, CLAUDE.md Regel 6).
+  { modul: "zimmer", aktion: "voller-verlauf" },
 
   { modul: "kassenbuch", aktion: "ansehen" },
   { modul: "kassenbuch", aktion: "buchen", sensibel: true },
   { modul: "kassenbuch", aktion: "freigeben", sensibel: true },
+  // Heutiges ROLLEN_MIT_STORNO_ENTSCHEIDEN -- die Vier-Augen-Entscheidung
+  // ueber einen Stornoantrag, nicht die Buchung selbst.
+  { modul: "kassenbuch", aktion: "storno-entscheiden", sensibel: true },
+  // Heutiges ROLLEN_MIT_KASSENBUCHUNG_TYP_VERWALTEN.
+  { modul: "kassenbuch", aktion: "typen-verwalten" },
 
   { modul: "kostenuebernahmen", aktion: "ansehen" },
   { modul: "kostenuebernahmen", aktion: "anlegen" },
@@ -47,15 +57,37 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
 
   { modul: "mitarbeitende", aktion: "ansehen" },
   { modul: "mitarbeitende", aktion: "anlegen" },
+  // Heutiges ROLLEN_MIT_STANDORT_ZUWEISEN (benutzer.service.ts).
+  { modul: "mitarbeitende", aktion: "standort-zuweisen" },
 
   { modul: "aufgaben", aktion: "ansehen" },
   { modul: "aufgaben", aktion: "bearbeiten" },
+  // Heutiges ROLLEN_MIT_AUFGABEN_KOORDINATION -- bearbeiten/loeschen/
+  // erledigen FREMDER Aufgaben. Ersteller/Zugewiesene duerfen ihre eigene
+  // Aufgabe weiterhin unabhaengig davon bearbeiten (bleibt eine separate
+  // ODER-Bedingung im jeweiligen Service, nicht Teil der Rechte-Engine --
+  // siehe Lieferreihenfolge Schritt 4).
+  { modul: "aufgaben", aktion: "koordinieren" },
 
   { modul: "anwaerter", aktion: "ansehen" },
   { modul: "anwaerter", aktion: "entscheiden" },
 
   { modul: "tagesberichte", aktion: "ansehen" },
   { modul: "tagesberichte", aktion: "anlegen" },
+
+  // Heutiges ROLLEN_MIT_STANDORT_ANLEGEN/-BEARBEITEN (standort.service.ts).
+  { modul: "standorte", aktion: "ansehen" },
+  { modul: "standorte", aktion: "anlegen" },
+  { modul: "standorte", aktion: "bearbeiten" },
+
+  // Heutiges ROLLEN_MIT_STATUSWECHSEL (rechnung.service.ts).
+  { modul: "rechnungen", aktion: "ansehen" },
+  { modul: "rechnungen", aktion: "status-wechseln" },
+
+  // Heutiges ROLLEN_MIT_BRANDING (mandant.service.ts) -- bewusst eigenes
+  // Modul statt "organigramm.bearbeiten": Trägerfarbe/Branding ist fachlich
+  // unabhaengig von der Organisationsstruktur.
+  { modul: "mandanten", aktion: "branding-bearbeiten" },
 
   { modul: "organigramm", aktion: "ansehen" },
   { modul: "organigramm", aktion: "bearbeiten" },
