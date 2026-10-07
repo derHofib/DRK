@@ -9,6 +9,7 @@ import type {
   BenutzerListEintragDto,
   BenutzerRolle,
   DashboardDto,
+  DelegationDto,
   HzlRhythmus,
   KassenbuchungDto,
   KassenbuchungTypDto,
@@ -496,4 +497,17 @@ export const api = {
       istGeplant?: boolean;
     }
   ) => request<PositionDto>(`/organigramm/positions/${positionId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  // Vertretung (Organigramm-Plan, Lieferreihenfolge Schritt 8/UI).
+  delegationenMeine: () => request<DelegationDto[]>("/delegationen/meine"),
+  delegationAnlegen: (payload: {
+    vertreterBenutzerId: string;
+    von: string;
+    bis: string;
+    umfang: "alle" | "auswahl";
+    sensibleRechteEingeschlossen?: boolean;
+    rechte?: { modul: string; aktion: string }[];
+  }) => request<DelegationDto>("/delegationen", { method: "POST", body: JSON.stringify(payload) }),
+  delegationGenehmigen: (id: string) => request<DelegationDto>(`/delegationen/${id}/genehmigen`, { method: "PATCH" }),
+  delegationWiderrufen: (id: string) => request<DelegationDto>(`/delegationen/${id}/widerrufen`, { method: "PATCH" }),
 };

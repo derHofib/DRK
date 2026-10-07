@@ -634,3 +634,41 @@ export interface RechtRegistryEintragDto {
   sensibel?: boolean;
   nieDelegierbar?: boolean;
 }
+
+/**
+ * Vertretung (migrations/0043-0046, delegation.service.ts). status speichert
+ * nur beantragt/genehmigt/widerrufen -- effektiverStatus rechnet
+ * aktiv/abgelaufen serverseitig aus status + von/bis vs. heute dazu
+ * (CLAUDE.md Regel 4: Zustaende werden abgeleitet, nicht gespeichert). Das UI
+ * zeigt deshalb ausschliesslich effektiverStatus, nie status direkt.
+ */
+export type DelegationStatus = "beantragt" | "genehmigt" | "widerrufen";
+export type DelegationEffektiverStatus = "beantragt" | "genehmigt" | "aktiv" | "abgelaufen" | "widerrufen";
+
+export const DELEGATION_EFFEKTIVER_STATUS_LABEL: Record<DelegationEffektiverStatus, string> = {
+  beantragt: "Beantragt",
+  genehmigt: "Genehmigt (wartet auf Beginn)",
+  aktiv: "Aktiv",
+  abgelaufen: "Abgelaufen",
+  widerrufen: "Widerrufen",
+};
+
+/**
+ * Gespiegelt aus DelegationDto in delegation.service.ts. vertretenerBenutzerId
+ * ist immer die Person, deren Rechte verliehen werden (= wer den Antrag
+ * gestellt hat, siehe anlegen() dort) -- vertreterBenutzerId ist, wer die
+ * Rechte zeitweise ausueben darf.
+ */
+export interface DelegationDto {
+  id: string;
+  vertretenerBenutzerId: string;
+  vertretenerName: string;
+  vertreterBenutzerId: string;
+  vertreterName: string;
+  von: string;
+  bis: string;
+  umfang: "alle" | "auswahl";
+  sensibleRechteEingeschlossen: boolean;
+  status: DelegationStatus;
+  effektiverStatus: DelegationEffektiverStatus;
+}

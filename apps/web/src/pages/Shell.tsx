@@ -29,6 +29,7 @@ import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
+import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
 
@@ -69,6 +70,7 @@ const BREITE_REITER = new Set<Tab>([
   "mitarbeitende",
   "tagesberichte",
   "aufgaben",
+  "vertretung",
   "organigramm",
 ]);
 
@@ -475,6 +477,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
+          {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}
           {tab === "einstellungen" && (
             <Einstellungen

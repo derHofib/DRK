@@ -89,6 +89,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  Shuffle,
   SignalHigh,
   SignalLow,
   SignalMedium,
@@ -97,6 +98,7 @@ import {
   Tag,
   TriangleAlert,
   UserRound,
+  UserRoundCheck,
   UserRoundMinus,
   UserRoundPlus,
   UserRoundSearch,
@@ -143,6 +145,7 @@ export const ITagesberichte = baue(NotebookPen);
 export const IEinstellungen = baue(Settings);
 export const IAufgaben = baue(ListChecks);
 export const IOrganigramm = baue(Network);
+export const IVertretung = baue(UserRoundCheck);
 /** Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. */
 export const IMehr = baue(Menu);
 
@@ -264,6 +267,7 @@ export const ILeerArchiv = baueLeer(Archive);
 export const ILeerKontakte = baueLeer(Contact);
 export const ILeerAnwaerter = baueLeer(Inbox);
 export const ILeerOrganigramm = baueLeer(Boxes);
+export const ILeerVertretung = baueLeer(Shuffle);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);

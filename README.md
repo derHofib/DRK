@@ -1589,6 +1589,73 @@ statt eines Grids; eine auf `ist_system=true` gesetzte Zeile verliert
 korrekt den „Umbenennen"-Knopf; kein horizontaler Seiten-Overflow bei
 390px. Keine Konsolenfehler.
 
+**Nachtrag — Organigramm-Modul, Schritt 8: Vertretung-UI.** Die
+Delegation-API (`delegation.service.ts`/`delegation.controller.ts`, siehe
+Schritt 7) bekommt ihre Oberfläche -- bewusst **kein eigener Unterreiter
+im Organigramm**, sondern ein eigenständiger Hauptmenüpunkt
+(`apps/web/src/pages/Vertretung.tsx`): Vertretung ist kein
+Organisationsstruktur-Thema, sondern etwas, das jeder Mitarbeitende
+selbst beantragt/entscheidet, unabhängig von der eigenen Position im Baum.
+
+- **`effektiverStatus`, nie `status`** (CLAUDE.md Regel 4): die Pill zeigt
+  ausschließlich den abgeleiteten Wert aus `DelegationDto`. Eigene
+  Statusfarbe pro Wert, aber ausschließlich über die vorhandenen
+  `.zv-pill-*`-Klassen aus `app.css` (Regel 7) -- `beantragt`→info,
+  `genehmigt`→teilweise/amber (wartet auf den Starttermin, bewusst eine
+  andere Farbe als „beantragt": zwei verschiedene Wartezustände),
+  `aktiv`→ok, `abgelaufen`→neutral (vergeben), `widerrufen`→danger.
+- **„Ablehnen" ist derselbe Endpunkt wie „Widerrufen"** -- die Tabelle
+  kennt keinen eigenen Ablehnen-Status (siehe Auftrag). Damit eine Zeile
+  nicht zwei Knöpfe für denselben `PATCH .../widerrufen`-Aufruf zeigt,
+  blendet die Vertretung-Zeile „Widerrufen" aus, solange sie schon
+  „Genehmigen"/„Ablehnen" zeigt (Vertreter, Status `beantragt`) --
+  `Ablehnen` dort, `Widerrufen` für alle anderen berechtigten Fälle
+  (inkl. der vertretenen Person, die den eigenen Antrag zurückzieht).
+- **Richtungstext** „Du vertrittst X" / „X vertritt dich" statt roher
+  Feldnamen -- aus Sicht des eingeloggten Benutzers (`tokenBenutzerId()`,
+  wie in `Aufgaben.tsx`), nicht aus Sicht der Datenbank.
+- **Fund beim Live-Check, kein Bug dieses Schritts**: `GET
+  /rechte/registry` (für die Rechte-Checkbox-Liste bei `umfang="auswahl"`)
+  hängt an `organigramm.manage-permissions` (`rechte.controller.ts`) --
+  genau das Recht, das laut `rollen-mapping.ts` heute nur
+  Geschäftsführung-Konten (Vollzugriff-Wildcard) bekommen, kein
+  Betreuer/Einrichtungsleitung. Für die meisten Mitarbeitenden bleibt
+  „Nur ausgewählte Rechte" damit praktisch unbenutzbar, bis
+  `rollen-mapping.ts` organigramm-Rechte für weitere Rollen vorsieht --
+  dieselbe „bewusste, noch ausstehende Einschränkung" wie bei den
+  Organigramm-Leseendpunkten (Schritt 6). Die Seite fängt das ab, statt
+  daran zu zerbrechen: wie bei der Account-Typ-Verwaltung
+  (`Organigramm.tsx`) wird die Registry NICHT beim Öffnen der Seite
+  mitgeladen, sondern erst beim Öffnen des Beantragen-Formulars -- ein
+  Konto ohne das Recht sieht nie einen Fehlerbanner, nur eine leere
+  Checkbox-Liste mit Hinweistext; „Alle eigenen Rechte" bleibt für jede
+  Rolle uneingeschränkt nutzbar.
+- Neues Icon `IVertretung` (`UserRoundCheck`) für den Hauptreiter,
+  `ILeerVertretung` (`Shuffle`) für den Leerzustand -- beide bisher nicht
+  im Set verwendet (siehe Kommentarkopf `icons.tsx`: nur namentliche
+  Importe).
+
+Geprüft: `pnpm build` sauber (API+shared+Web), volle API-Suite
+**396/396 grün (36 Suiten)** -- unverändert, da keine Backend-Datei
+angefasst wurde. Live-Browser-Check (Playwright, zwei eigens angelegte
+Testbenutzer A/B in einem frischen Testmandanten, Anmeldung über die
+echte UI): Leerzustand vor der ersten Vertretung; A beantragt
+(`umfang="alle"`) → Zeile erscheint sofort mit Status „Beantragt"
+(info-Pill), Richtungstext aus A-Sicht „X vertritt dich"; B sieht
+„Du vertrittst X" plus Genehmigen/Ablehnen, klickt Genehmigen → Status
+„Aktiv" (ok-Pill) bei beiden; A widerruft über das Bestätigungs-Modal →
+Status „Widerrufen" (danger-Pill) bei beiden, kein Widerrufen-Knopf mehr.
+Zweiter Durchlauf mit `umfang="auswahl"` (Testbenutzer mit
+Vollzugriff-Account-Typ, s.o.): 38 Checkbox-Zeilen erscheinen,
+`organigramm.manage-permissions` (nieDelegierbar) fehlt korrekt in der
+Liste, „inkl. sensibler Rechte"-Hinweis sichtbar, Ablehnen-Bestätigung
+zeigt den richtigen Titel/Text und führt ebenfalls zu Status „Widerrufen".
+Dritter Durchlauf bestätigt den Lazy-Load: `/rechte/registry` wird beim
+bloßen Öffnen der Seite nicht aufgerufen, erst beim Öffnen des
+Beantragen-Formulars, dann genau einmal. Keine Konsolenfehler, alle
+Testdaten (Mandant, Benutzer, Positionen, Delegationen) im Anschluss
+wieder gelöscht.
+
 **Nachtrag — Organigramm-Modul, Schritt 9: Externe Parteien, Schema-Verifikation.**
 Kein neuer Code -- das Schema für „Externe Parteien" (Kostenträger,
 Betreuungsgerichte u. ä.) existiert bereits vollständig seit Schritt 1/2:
