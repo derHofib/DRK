@@ -1589,6 +1589,56 @@ statt eines Grids; eine auf `ist_system=true` gesetzte Zeile verliert
 korrekt den „Umbenennen"-Knopf; kein horizontaler Seiten-Overflow bei
 390px. Keine Konsolenfehler.
 
+**Nachtrag — Organigramm-Modul, Schritt 9: Externe Parteien, Schema-Verifikation.**
+Kein neuer Code -- das Schema für „Externe Parteien" (Kostenträger,
+Betreuungsgerichte u. ä.) existiert bereits vollständig seit Schritt 1/2:
+`account_typ.kategorie='extern'` kann per `CHECK` nie `ist_vollzugriff=true`
+sein, ein Trigger (`account_typ_recht_pruefen`) lehnt für einen
+extern-Account-Typ jede `account_typ_recht`-Zeile mit `erlaubt=true` und
+`scope <> 'assigned'` ab, und `org_position_objekt_scope` liegt für den
+objektbezogenen Zugriff bereit, bleibt aber ungenutzt, bis eine UI sie
+befüllt. Dieser Schritt belegt diese drei Invarianten mit einer neuen
+e2e-Spec, statt sie weiter nur als Kommentar zu behaupten.
+
+- Neue Datei `apps/api/test/externe-parteien-schema.e2e-spec.ts`. Da kein
+  bestehender Endpunkt `RechteService.ermittleErlaubteOrgUnitIds()`
+  aufruft (verifiziert: alle heutigen `@ErfordertRecht()`/`hatRecht()`-
+  Stellen sind reine Ja/Nein-Prüfungen, kein Service filtert eine Liste
+  danach), kombiniert die Spec echtes HTTP-Login über das volle
+  `AppModule` (Login, `@Authenticated()`, ein rechte-gegateter 403) mit
+  direktem Zugriff auf `RechteService` aus demselben Container für die
+  Scope-Auflösung selbst -- Muster und Begründung stehen im Dateikopf.
+- **CHECK-Invariante**: ein roher `INSERT` mit `kategorie='extern'` und
+  `ist_vollzugriff=true` scheitert an `account_typ_check` (Postgres-Code
+  `23514`).
+- **Trigger-Invariante als Gegenprobe-Paar**: für denselben extern-Typ und
+  dasselbe `(modul,aktion)`-Paar scheitert `scope='tenant'` (`P0001`),
+  `scope='assigned'` gelingt -- belegt, dass der Trigger gezielt
+  `scope<>'assigned'` abfängt, nicht pauschal jede Zeile blockiert.
+- **Rechte-Engine, Anwenderperspektive**: ein extern-Konto mit genau einer
+  erlaubten Zeile (`klienten.lesen-akte`, `scope='assigned'`) hat
+  `hatRecht()===true`, aber `ermittleErlaubteOrgUnitIds()` liefert dafür
+  immer `[]` -- nie `"alle"`, nie irgendeine Org-Unit-Id. Gegenprobe:
+  dasselbe Konto hat für ein anderes Modul/Aktion-Paar `hatRecht()===false`
+  -- die Erlaubnis ist exakt auf die eine Zeile begrenzt.
+  Default-Deny (extern-Typ ganz ohne jede `account_typ_recht`-Zeile) ist
+  sowohl direkt am Service als auch über einen echten 403 auf
+  `GET /organigramm/org-units` belegt.
+- Keine Abweichung vom erwarteten Stand gefunden, bis auf eine
+  Testinfrastruktur-Nebensache: der Vollzugriff-Schutztrigger auf
+  `org_position_besetzung` feuert für einen Mandanten ganz ohne
+  Vollzugriff-Position bei JEDER Löschung dieser Tabelle (nicht nur beim
+  Entfernen einer tatsächlichen Vollzugriff-Zeile) -- bereits bekanntes,
+  in `rollen-migration-abgleich.e2e-spec.ts` ebenso gehandhabtes Verhalten
+  (Trigger kurz deaktivieren, danach wieder aktivieren), kein neuer Bug
+  und keine Migration nötig.
+- `.env.example` bekommt `FEATURE_EXTERNE_PARTEIEN=false` (reserviert,
+  liest heute noch kein Code) für die nächste Phase (Login + Einladung +
+  Protokollierung für externe Parteien).
+
+Geprüft: `pnpm --filter @zimmerakte/api build` sauber, volle API-Suite
+**403/403 grün (37 Suiten)** -- 396 vorher + 7 neue.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
