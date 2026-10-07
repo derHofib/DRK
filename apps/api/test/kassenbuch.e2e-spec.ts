@@ -25,6 +25,11 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
   let mandantId: string;
   let mandantSlug: string;
   let tokenBereichsleitung: string;
+  // Zweite Leitung, ausschliesslich zum ENTSCHEIDEN ueber einen von
+  // tokenBereichsleitung gestellten Storno-Antrag -- seit der
+  // Vier-Augen-Verschaerfung (Migration 0045) darf die buchende Person
+  // nie selbst entscheiden, auch nicht als Bereichsleitung.
+  let tokenZweiteLeitung: string;
   let klientWoechentlich: string;
   let klientMonatlich: string;
   let standortHaus: string;
@@ -51,6 +56,11 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
        VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
       [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
+    );
+    await admin.query(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
+       VALUES ($1, $2, 'Zweite Leitung Test', $3, 'bereichsleitung')`,
+      [mandantId, `zweite-leitung-${suffix}@beispiel.test`, passwortHash]
     );
 
     const { rows: klientWoRows } = await admin.query<{ id: string }>(
@@ -102,6 +112,11 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       .post("/auth/login")
       .send({ mandantSlug, email: `bereichsleitung-${suffix}@beispiel.test`, passwort });
     tokenBereichsleitung = res.body.accessToken;
+
+    const resZweiteLeitung = await request(app.getHttpServer())
+      .post("/auth/login")
+      .send({ mandantSlug, email: `zweite-leitung-${suffix}@beispiel.test`, passwort });
+    tokenZweiteLeitung = resZweiteLeitung.body.accessToken;
   });
 
   afterAll(async () => {
@@ -254,16 +269,25 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     const liste = await get(`/kassenbuchungen?klientId=${klientWoechentlich}`);
     const offeneHzl = liste.body.find((b: { istHzl: boolean; storniert: boolean }) => b.istHzl && !b.storniert);
 
-    // Bereichsleitung beantragt und bewilligt sich damit im selben Zug
-    // selbst (siehe kassenbuchung.service.ts, stornoBeantragen()).
+    // Bereichsleitung hat die Buchung selbst gebucht -- ihr eigener Antrag
+    // bleibt deshalb offen (Vier-Augen-Prinzip, Migration 0045), eine
+    // ZWEITE Leitung muss entscheiden.
     const stornoRes = await request(app.getHttpServer())
       .post(`/kassenbuchungen/${offeneHzl.id}/storno-antrag`)
       .set("Authorization", `Bearer ${tokenBereichsleitung}`)
       .send({ grund: "Falscher Betrag eingegeben" });
     expect(stornoRes.status).toBe(201);
-    expect(stornoRes.body.storniert).toBe(true);
-    expect(stornoRes.body.stornoGrund).toBe("Falscher Betrag eingegeben");
-    expect(stornoRes.body.offenerStornoantrag).toBeNull();
+    expect(stornoRes.body.storniert).toBe(false);
+    expect(stornoRes.body.offenerStornoantrag).not.toBeNull();
+
+    const entschiedenRes = await request(app.getHttpServer())
+      .patch(`/kassenbuchungen/storno-antraege/${stornoRes.body.offenerStornoantrag.id}`)
+      .set("Authorization", `Bearer ${tokenZweiteLeitung}`)
+      .send({ entscheidung: "genehmigt" });
+    expect(entschiedenRes.status).toBe(200);
+    expect(entschiedenRes.body.storniert).toBe(true);
+    expect(entschiedenRes.body.stornoGrund).toBe("Falscher Betrag eingegeben");
+    expect(entschiedenRes.body.offenerStornoantrag).toBeNull();
 
     const neueBuchung = await post("/kassenbuchungen", {
       klientId: klientWoechentlich,
@@ -398,12 +422,22 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       const liste = await get("/kassenbuchungen");
       const grillfest = liste.body.find((b: { verwendungszweck: string }) => b.verwendungszweck === "Grillfest im Garten");
 
+      // Von tokenBereichsleitung gebucht (siehe weiter oben in dieser
+      // Datei) -- ihr eigener Antrag bleibt deshalb offen (Vier-Augen,
+      // Migration 0045), die zweite Leitung entscheidet.
       const res = await request(app.getHttpServer())
         .post(`/kassenbuchungen/${grillfest.id}/storno-antrag`)
         .set("Authorization", `Bearer ${tokenBereichsleitung}`)
         .send({ grund: "Wetter" });
       expect(res.status).toBe(201);
-      expect(res.body.storniert).toBe(true);
+      expect(res.body.storniert).toBe(false);
+
+      const entschieden = await request(app.getHttpServer())
+        .patch(`/kassenbuchungen/storno-antraege/${res.body.offenerStornoantrag.id}`)
+        .set("Authorization", `Bearer ${tokenZweiteLeitung}`)
+        .send({ entscheidung: "genehmigt" });
+      expect(entschieden.status).toBe(200);
+      expect(entschieden.body.storniert).toBe(true);
     });
 
     /**

@@ -2,9 +2,15 @@
  * Storno-Antragsworkflow (Migration 0031, kassenbuchung.service.ts
  * stornoBeantragen()/stornoEntscheiden()): ein Betreuer durfte bislang gar
  * nicht stornieren, jetzt darf er einen Antrag stellen -- entscheiden darf
- * weiterhin nur Bereichs- oder Einrichtungsleitung. Bei einer Leitung wird
- * der eigene Antrag im selben Zug automatisch bewilligt (kein Sinn, auf die
- * eigene Bewilligung zu warten); bei einem Betreuer bleibt er offen.
+ * weiterhin nur Bereichs- oder Einrichtungsleitung.
+ *
+ * Seit der Vier-Augen-Verschaerfung (Migration 0045, siehe
+ * kassenbuch-vier-augen.e2e-spec.ts) gilt zusaetzlich: wer selbst gebucht
+ * hat, darf ueber den eigenen Storno-Antrag NIE entscheiden, auch nicht als
+ * Bereichs-/Einrichtungsleitung -- die fruehere Selbstbewilligung einer
+ * Leitung im selben Zug entfaellt. neueBuchung() bucht deshalb dort, wo eine
+ * Leitung anschliessend ueber den Antrag entscheiden soll, bewusst nicht
+ * mehr als diese Leitung selbst, sondern als Betreuer.
  *
  * Aufbau: zwei Standorte S1/S2, je ein Klient mit einer Buchung, dazu
  * "einrichtungsleitung-s1" (auf S1 eingeschraenkt) als Gegenprobe zur
@@ -159,8 +165,8 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     };
   }
 
-  async function neueBuchung(klientId: string, zweck: string): Promise<string> {
-    const res = await als(tokenBereichsleitung).post("/kassenbuchungen", {
+  async function neueBuchung(klientId: string, zweck: string, bucherToken: string = tokenBereichsleitung): Promise<string> {
+    const res = await als(bucherToken).post("/kassenbuchungen", {
       klientId,
       datum: "2026-08-30",
       betragCent: 500,
@@ -209,7 +215,11 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
   });
 
   it("Bereichsleitung genehmigt den Antrag eines Betreuers -- Buchung wird storniert", async () => {
-    const buchungId = await neueBuchung(klient1, "Testbuchung C");
+    // Von Betreuer gebucht (nicht von Bereichsleitung) -- sonst wuerde die
+    // Vier-Augen-Regel (Migration 0045) die Entscheidung weiter unten
+    // zu Recht blockieren, da Bereichsleitung sonst ihre eigene Buchung
+    // entschiede.
+    const buchungId = await neueBuchung(klient1, "Testbuchung C", tokenBetreuer);
     const antrag = await als(tokenBetreuer).post(`/kassenbuchungen/${buchungId}/storno-antrag`, { grund: "Grund C" });
     const antragId = antrag.body.offenerStornoantrag.id;
 
@@ -223,7 +233,8 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
   });
 
   it("Bereichsleitung lehnt einen Antrag ab -- Grund ist Pflicht, Buchung bleibt aktiv", async () => {
-    const buchungId = await neueBuchung(klient1, "Testbuchung D");
+    // Von Betreuer gebucht, siehe Kommentar im Test oben (Vier-Augen-Regel).
+    const buchungId = await neueBuchung(klient1, "Testbuchung D", tokenBetreuer);
     const antrag = await als(tokenBetreuer).post(`/kassenbuchungen/${buchungId}/storno-antrag`, { grund: "Grund D" });
     const antragId = antrag.body.offenerStornoantrag.id;
 
@@ -257,19 +268,34 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     expect(zweiter.status).toBe(409);
   });
 
-  it("Bereichsleitung storniert direkt -- ihr eigener Antrag wird im selben Zug bewilligt", async () => {
+  it("Bereichsleitung bucht selbst und stellt den Storno-Antrag -- bleibt offen (Vier-Augen, Migration 0045)", async () => {
     const buchungId = await neueBuchung(klient1, "Testbuchung F");
     const res = await als(tokenBereichsleitung).post(`/kassenbuchungen/${buchungId}/storno-antrag`, {
       grund: "Direkt storniert",
     });
     expect(res.status).toBe(201);
-    expect(res.body.storniert).toBe(true);
-    expect(res.body.offenerStornoantrag).toBeNull();
+    expect(res.body.storniert).toBe(false);
+    expect(res.body.offenerStornoantrag).not.toBeNull();
+
+    // Eine ANDERE Leitung muss entscheiden -- siehe
+    // kassenbuch-vier-augen.e2e-spec.ts fuer die ausfuehrliche Pruefung
+    // dieser Regel (inkl. DB-Gegenprobe und "unter Vertretung").
+    const entschieden = await als(tokenEinrichtungsleitungS1).patch(
+      `/kassenbuchungen/storno-antraege/${res.body.offenerStornoantrag.id}`,
+      { entscheidung: "genehmigt" }
+    );
+    // Einrichtungsleitung-S1 ist auf Standort 1 beschraenkt, klient1 wohnt
+    // dort -- sieht die Buchung also, darf sie (als Nicht-Buchende) entscheiden.
+    expect(entschieden.status).toBe(200);
+    expect(entschieden.body.storniert).toBe(true);
   });
 
   it("Einrichtungsleitung-S1 darf ueber einen Antrag ihres Standorts entscheiden, nicht ueber einen fremden", async () => {
-    const eigeneBuchung = await neueBuchung(klient1, "Testbuchung G (S1)");
-    const fremdeBuchung = await neueBuchung(klient2, "Testbuchung H (S2)");
+    // Von Betreuer gebucht, siehe Kommentar oben (Vier-Augen-Regel) -- sonst
+    // koennte Bereichsleitung am Ende nicht ueber fremderAntrag entscheiden,
+    // da sie sonst ihre eigene Buchung entschiede.
+    const eigeneBuchung = await neueBuchung(klient1, "Testbuchung G (S1)", tokenBetreuer);
+    const fremdeBuchung = await neueBuchung(klient2, "Testbuchung H (S2)", tokenBetreuer);
 
     const eigenerAntrag = await als(tokenBetreuer).post(`/kassenbuchungen/${eigeneBuchung}/storno-antrag`, {
       grund: "S1-Antrag",
