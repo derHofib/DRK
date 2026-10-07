@@ -1221,6 +1221,77 @@ bestehen (Default-Zuordnung neuer Mitarbeiter, die drei oben genannten
 Ausnahmen), werden aber für keine der 14 Rechteprüfungen mehr direkt
 befragt — das war der Zweck dieses Schritts.
 
+**Nachtrag — Organigramm-Modul, Schritte 5 und 6 (lesend), parallel über
+zwei isolierte Subagenten erarbeitet.** Beide Schritte berühren disjunkte
+Dateien (Kassenbuch vs. drei neue Module) und liefen deshalb in eigenen
+Git-Worktrees gleichzeitig; diese Session hat anschließend beide Branches
+geprüft, gemergt, die Testfolgen der Vier-Augen-Verschärfung in zwei
+bestehenden Dateien nachgezogen und die volle Suite einmal gemeinsam
+grün bekommen.
+
+**Schritt 5 — Kassenbuch-Vier-Augen-Verschärfung.** Bislang durfte sich
+eine Bereichs- oder Einrichtungsleitung, die selbst gebucht hatte, den
+eigenen Storno-Antrag im selben Zug bewilligen. Migration 0045 erzwingt
+jetzt per `BEFORE UPDATE`-Trigger auf `kassenbuchung_stornoantrag`
+(Custom-SQLSTATE `ZA002`), dass die entscheidende Person nie die buchende
+sein darf — **ohne Ausnahme, auch nicht für Geschäftsführung** (eine der
+drei harten Ausnahmen vom Vollzugriff-Wildcard). `stornoBeantragen()`
+fängt den Normalfall schon vorher mit einer verständlichen Meldung ab
+(Antrag bleibt offen statt automatisch bewilligt), `stornoEntscheiden()`
+übersetzt das Custom-SQLSTATE in einen 403 statt eines rohen 500ers. Neuer
+Test `kassenbuch-vier-augen.e2e-spec.ts` (4 Tests) deckt den Normalfall,
+eine DB-Gegenprobe (roher `UPDATE` als App-Rolle scheitert mit `ZA002`)
+und den explizit geforderten „unter Vertretung"-Fall ab: eine Person ohne
+eigenes Recht, die sich `kassenbuch.storno-entscheiden` per direkt
+angelegter Delegation leiht, darf trotzdem nicht über die eigene Buchung
+entscheiden — die Regel kennt keine Ausnahme für den Rechte-Herkunftsweg.
+Diese Verhaltensänderung brach 7 bestehende Tests in
+`kassenbuch-storno-antrag.e2e-spec.ts` und `kassenbuch.e2e-spec.ts`, die
+bislang explizit die alte Selbstbewilligung prüften oder sie implizit
+voraussetzten (Buchung und Entscheidung über denselben Leitungs-Token) —
+nachgezogen auf das neue Verhalten (eine zweite Leitung entscheidet),
+ohne die eigentliche Prüfaussage der Tests zu verändern.
+
+**Schritt 6 (lesend) — neue Module `organigramm/`, `delegation/`,
+`audit/`.** Ausschließlich `GET`-Endpunkte, Mutationen (Reparenting,
+Account-Typ-Matrix bearbeiten, Delegation anlegen/genehmigen/widerrufen)
+folgen in einem späteren Schritt:
+- `GET /organigramm/org-units`, `/positions`, `/account-typen` — gated mit
+  `organigramm.ansehen`. `/positions` leitet `besetztMit` live aus
+  `org_position_besetzung` ab (CLAUDE.md Regel 4) und redigiert
+  `benutzerId`/`benutzerName` auf `null`, wenn der Aufrufer
+  `organigramm.personendaten-sehen` fehlt — eine Feldredaktion innerhalb
+  des Service, nicht Teil des Guards (CLAUDE.md Regel 6, gleiches Muster
+  wie `zimmer.voller-verlauf`).
+- `GET /delegationen/meine` — Delegationen, an denen der Aufrufer in
+  beiderlei Richtung (Vertretener oder Vertreter) beteiligt ist, mit
+  abgeleitetem `effektiverStatus` (`beantragt`/`genehmigt`/`aktiv`/
+  `abgelaufen`/`widerrufen` aus `status` + `von`/`bis` vs. heute, nie
+  gespeichert). Kein besonderes Recht nötig, nur `@Authenticated()`.
+- `GET /audit-log` — paginiert (`offset`/`limit`, zod `safeParse` +
+  `BadRequestException`), filterbar nach `modul`/`objektTyp`/`objektId`.
+  Gated mit `organigramm.manage-permissions`, nicht `ansehen` (Audit-Log
+  gehört fachlich zur Rechteverwaltung). Kein Schreib-Endpunkt — das
+  Protokoll ist unveränderlich (`REVOKE UPDATE, DELETE`, Migration 0044),
+  Schreiben passiert künftig aus den jeweiligen Fachservices heraus.
+- **Bewusste Zwischenstand-Einschränkung**: `rollen-mapping.ts` (Schritt 3)
+  kennt `organigramm.*` noch nicht für Einrichtungsleitung/Mitarbeiter —
+  bis diese Zuordnung ergänzt wird (kein Teil dieses Schritts, wäre
+  Scope-Creep in Schritt 3 gewesen), sehen nur `ist_vollzugriff`-Konten
+  (Geschäftsführung) diese drei neuen Endpunkte. Das ist erwartetes
+  Verhalten, kein Bug — in den Köpfen der drei neuen Testdateien
+  dokumentiert.
+- 20 neue Tests (`organigramm-lesen.e2e-spec.ts` 10,
+  `delegation-lesen.e2e-spec.ts` 4, `audit-log-lesen.e2e-spec.ts` 6),
+  Fixtures direkt über `account_typ`/`org_position`/`org_position_besetzung`
+  (wie `rechte-engine.e2e-spec.ts`), weil `rollen-mapping.ts` die
+  benötigten Rechte für Nicht-Vollzugriff-Konten noch nicht kennt.
+
+Geprüft: `pnpm --filter @zimmerakte/api build` sauber nach dem Merge
+beider Branches. Volle Suite **345/345 grün (33 Suiten)** — 321 vorher +
+4 (Vier-Augen) + 20 (lesende Endpunkte), keine Regression durch die
+parallele Arbeit oder den Merge.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
