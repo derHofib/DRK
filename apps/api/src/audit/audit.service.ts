@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
+import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
+import { requireTenantContext } from "../common/tenant-context";
 
 export interface AuditEintragDto {
   id: string;
@@ -88,5 +90,49 @@ export class AuditService {
       );
       return rows.map(zuDto);
     });
+  }
+
+  /**
+   * Schreibt EINEN Protokolleintrag -- aufgerufen von anderen Services
+   * innerhalb IHRER EIGENEN Transaktion (deshalb der rohe `client`
+   * als Parameter, kein eigenes `db.withTenant()`: ein zweiter Aufruf
+   * würde eine zweite, unabhängige Verbindung/Transaktion öffnen und
+   * damit nicht mehr atomar mit der Strukturänderung sein, die er
+   * protokollieren soll). Kein eigener Schreib-Endpunkt (siehe Klassendoc
+   * oben) -- genau das macht diese Methode hier zur einzigen Schreibstelle.
+   *
+   * `handelndAlsVertreterVon` bleibt vorerst immer null: kein bestehender
+   * Code-Pfad weiß heute, ob ein `hatRecht()`-Erfolg über eine eigene
+   * Position oder über eine Delegation aufgelöst wurde (RechteService gibt
+   * das nicht nach außen). Das echt zu befüllen ist Sache von Schritt 8
+   * (Vertretung), wenn der Tenant-Kontext um "handelt aktuell als Vertreter
+   * von X" erweitert wird -- bis dahin ist null ehrlicher als eine Annahme.
+   */
+  async protokollieren(
+    client: PoolClient,
+    eintrag: {
+      modul: string;
+      aktion: string;
+      objektTyp: string;
+      objektId?: string | null;
+      vorher?: unknown;
+      nachher?: unknown;
+    }
+  ): Promise<void> {
+    const { mandantId, benutzerId } = requireTenantContext();
+    await client.query(
+      `INSERT INTO audit_log (mandant_id, benutzer_id, modul, aktion, objekt_typ, objekt_id, vorher, nachher)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        mandantId,
+        benutzerId,
+        eintrag.modul,
+        eintrag.aktion,
+        eintrag.objektTyp,
+        eintrag.objektId ?? null,
+        eintrag.vorher !== undefined ? JSON.stringify(eintrag.vorher) : null,
+        eintrag.nachher !== undefined ? JSON.stringify(eintrag.nachher) : null,
+      ]
+    );
   }
 }

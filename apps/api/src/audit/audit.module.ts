@@ -8,5 +8,8 @@ import { AuditService } from "./audit.service";
   imports: [AuthModule, RechteModule],
   controllers: [AuditController],
   providers: [AuditService],
+  // AuditService.protokollieren() wird von anderen Fachmodulen aufgerufen
+  // (organigramm/, delegation/), die dafuer AuditModule importieren.
+  exports: [AuditService],
 })
 export class AuditModule {}
