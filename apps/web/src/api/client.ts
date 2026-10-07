@@ -502,6 +502,21 @@ export const api = {
     }
   ) => request<PositionDto>(`/organigramm/positions/${positionId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   organigrammExportPdf: () => dateiHerunterladen("/organigramm/export/pdf", "organigramm.pdf"),
+  organigrammWeitereEinheitenSetzen: (positionId: string, orgUnitIds: string[]) =>
+    request<PositionDto>(`/organigramm/positions/${positionId}/weitere-einheiten`, {
+      method: "PUT",
+      body: JSON.stringify({ orgUnitIds }),
+    }),
+  organigrammOrgUnitsReihenfolge: (elternId: string, geordneteIds: string[]) =>
+    request<void>("/organigramm/org-units/reihenfolge", {
+      method: "PUT",
+      body: JSON.stringify({ elternId, geordneteIds }),
+    }),
+  organigrammPositionenReihenfolge: (orgUnitId: string, parentPositionId: string | null, geordneteIds: string[]) =>
+    request<void>("/organigramm/positions/reihenfolge", {
+      method: "PUT",
+      body: JSON.stringify({ orgUnitId, parentPositionId, geordneteIds }),
+    }),
 
   // Vertretung (Organigramm-Plan, Lieferreihenfolge Schritt 8/UI).
   delegationenMeine: () => request<DelegationDto[]>("/delegationen/meine"),

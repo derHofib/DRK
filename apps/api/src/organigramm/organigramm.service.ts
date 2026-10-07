@@ -27,6 +27,14 @@ export interface BesetzungDto {
 export interface PositionDto {
   id: string;
   orgUnitId: string;
+  /**
+   * Zusaetzliche Organisationseinheiten einer Linienposition (Migration
+   * 0047 -- z.B. eine Einrichtungsleitung mit zwei Einrichtungen). Immer
+   * leer bei typ="stabsstelle" (die nutzt weiterhin ausschliesslich
+   * org_position_stabsstelle_scope). Keine Personendaten, deshalb ohne
+   * Redaktion in zuPositionDto().
+   */
+  weitereOrgUnitIds: string[];
   parentPositionId: string | null;
   titel: string;
   typ: "linie" | "stabsstelle";
@@ -77,6 +85,10 @@ const POSITIONEN_SELECT = `
   SELECT p.id, p.org_unit_id, p.parent_position_id, p.titel, p.typ, p.account_typ_id,
          p.ist_geplant, p.aktiv, p.soll_besetzung, p.gueltig_ab, p.gueltig_bis,
          COALESCE(
+           (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
+           '{}'
+         ) AS weitere_org_unit_ids,
+         COALESCE(
            jsonb_agg(
              jsonb_build_object(
                'besetzungId', b.id, 'benutzerId', b.benutzer_id, 'benutzerName', bu.name,
@@ -115,6 +127,7 @@ function zuPositionDtoVoll(r: any): PositionDto {
   return {
     id: r.id,
     orgUnitId: r.org_unit_id,
+    weitereOrgUnitIds: r.weitere_org_unit_ids,
     parentPositionId: r.parent_position_id,
     titel: r.titel,
     typ: r.typ,
@@ -174,10 +187,17 @@ export class OrganigrammService {
     private readonly audit: AuditService
   ) {}
 
+  /**
+   * ORDER BY COALESCE(reihenfolge, ...): noch nie manuell sortierte
+   * Einheiten (reihenfolge IS NULL, der Normalfall vor dem ersten Drag im
+   * Baum) fallen stabil ans Ende, alphabetisch -- siehe setzeOrgUnitReihenfolge()
+   * fuer das Schreiben dieser Spalte, Migration 0047 fuer die Begruendung.
+   */
   async findeOrgUnits(): Promise<OrgUnitDto[]> {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query(
-        `SELECT id, parent_id, typ, standort_id, name, aktiv FROM org_unit ORDER BY name`
+        `SELECT id, parent_id, typ, standort_id, name, aktiv FROM org_unit
+         ORDER BY COALESCE(reihenfolge, 2147483647), name`
       );
       return rows.map(zuOrgUnitDto);
     });
@@ -198,7 +218,9 @@ export class OrganigrammService {
   async findePositionen(): Promise<PositionDto[]> {
     const zeigeNamen = await this.rechte.hatRecht("organigramm", "personendaten-sehen");
     return this.db.withTenant(async (client) => {
-      const { rows } = await client.query(`${POSITIONEN_SELECT} GROUP BY p.id ORDER BY p.titel`);
+      const { rows } = await client.query(
+        `${POSITIONEN_SELECT} GROUP BY p.id ORDER BY COALESCE(p.reihenfolge, 2147483647), p.titel`
+      );
       return rows.map((r) => zuPositionDto(r, zeigeNamen));
     });
   }
@@ -347,6 +369,42 @@ export class OrganigrammService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Geschwister-Reihenfolge fuer Organisationseinheiten (Positionen siehe
+   * setzePositionenReihenfolge() im Positionen-Abschnitt unten). Ein Update
+   * in einer Abfrage statt N Einzel-UPDATEs: unnest() koppelt jede Id an
+   * ihren neuen Index, das WHERE auf elternId filtert zugleich auf
+   * "tatsaechlich Geschwister" -- RLS filtert zusaetzlich automatisch auf
+   * den eigenen Mandanten (CLAUDE.md Regel 2). Kommen weniger Zeilen zurueck
+   * als Ids uebergeben wurden, war mindestens eine Id kein Geschwister
+   * (falscher Elternknoten oder mandantsfremd) -- das ist ein Bedienfehler
+   * des Aufrufers (der Baum im Client kennt die tatsaechlichen Geschwister),
+   * kein Serverfehler.
+   */
+  async setzeOrgUnitReihenfolge(elternId: string, geordneteIds: string[]): Promise<void> {
+    await this.db.withTenant(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE org_unit AS o
+         SET reihenfolge = v.idx
+         FROM (SELECT * FROM unnest($1::uuid[], $2::int[]) AS t(id, idx)) AS v
+         WHERE o.id = v.id AND o.parent_id = $3
+         RETURNING o.id`,
+        [geordneteIds, geordneteIds.map((_, i) => i), elternId]
+      );
+      if (rows.length !== geordneteIds.length) {
+        throw new BadRequestException("Nicht alle angegebenen Ids sind Geschwister dieser Organisationseinheit.");
+      }
+      await this.audit.protokollieren(client, {
+        modul: "organigramm",
+        aktion: "org-unit.reihenfolge-setzen",
+        objektTyp: "org_unit",
+        objektId: elternId,
+        vorher: null,
+        nachher: { geordneteIds },
+      });
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -668,6 +726,89 @@ export class OrganigrammService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Ersetzt die komplette Liste weiterer Organisationseinheiten (DELETE +
+   * INSERT, exakt das Muster von setzeStabsstelleScope() oben) -- nur fuer
+   * typ="linie" gueltig, der Trigger org_position_weitere_einheit_pruefen
+   * lehnt sonst (und bei einem Duplikat der eigenen org_unit_id) mit P0001
+   * ab (Migration 0047). Wirkt sich sofort auf die Rechte-Engine aus
+   * (rechte.service.ts::orgUnitIdsFuerScope() unioniert Scopes ueber alle
+   * zugeordneten Einheiten), nicht nur auf die Darstellung im Baum.
+   */
+  async setzeWeitereEinheiten(positionId: string, orgUnitIds: string[]): Promise<PositionDto> {
+    const ctx = requireTenantContext();
+    const zeigeNamen = await this.rechte.hatRecht("organigramm", "personendaten-sehen");
+    const eindeutig = [...new Set(orgUnitIds)];
+    try {
+      return await this.db.withTenant(async (client) => {
+        const vorher = await this.findeEinzelnePosition(client, positionId, zeigeNamen);
+        await client.query("DELETE FROM org_position_weitere_einheit WHERE position_id = $1", [positionId]);
+        for (const orgUnitId of eindeutig) {
+          await client.query(
+            `INSERT INTO org_position_weitere_einheit (mandant_id, position_id, org_unit_id) VALUES ($1, $2, $3)`,
+            [ctx.mandantId, positionId, orgUnitId]
+          );
+        }
+        const nachher = await this.findeEinzelnePosition(client, positionId, zeigeNamen);
+        await this.audit.protokollieren(client, {
+          modul: "organigramm",
+          aktion: "position.weitere-einheiten-setzen",
+          objektTyp: "org_position",
+          objektId: positionId,
+          vorher,
+          nachher,
+        });
+        return nachher;
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === RAISE_EXCEPTION) {
+        throw new ConflictException(
+          err.message ?? "Weitere Organisationseinheiten gibt es nur für Linienpositionen."
+        );
+      }
+      if (isPgError(err) && err.code === FOREIGN_KEY_VIOLATION) {
+        throw new NotFoundException("Organisationseinheit nicht gefunden.");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Geschwister-Reihenfolge fuer Positionen (Organisationseinheiten siehe
+   * setzeOrgUnitReihenfolge() oben bei den Organisationseinheiten-Methoden).
+   * "Geschwister" heisst hier: gleiche org_unit_id UND gleiche
+   * parent_position_id (siehe Organigramm.tsx::baueBaum() -- genau so
+   * werden Positions-Kinder dort gruppiert). parentPositionId=null braucht
+   * IS NOT DISTINCT FROM statt "=", sonst matcht NULL=NULL in SQL nie.
+   */
+  async setzePositionenReihenfolge(
+    orgUnitId: string,
+    parentPositionId: string | null,
+    geordneteIds: string[]
+  ): Promise<void> {
+    await this.db.withTenant(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE org_position AS p
+         SET reihenfolge = v.idx
+         FROM (SELECT * FROM unnest($1::uuid[], $2::int[]) AS t(id, idx)) AS v
+         WHERE p.id = v.id AND p.org_unit_id = $3 AND p.parent_position_id IS NOT DISTINCT FROM $4
+         RETURNING p.id`,
+        [geordneteIds, geordneteIds.map((_, i) => i), orgUnitId, parentPositionId]
+      );
+      if (rows.length !== geordneteIds.length) {
+        throw new BadRequestException("Nicht alle angegebenen Ids sind Geschwister dieser Position.");
+      }
+      await this.audit.protokollieren(client, {
+        modul: "organigramm",
+        aktion: "position.reihenfolge-setzen",
+        objektTyp: "org_position",
+        objektId: orgUnitId,
+        vorher: null,
+        nachher: { orgUnitId, parentPositionId, geordneteIds },
+      });
+    });
   }
 
   // ---------------------------------------------------------------------

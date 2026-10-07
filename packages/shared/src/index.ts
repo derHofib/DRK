@@ -589,6 +589,8 @@ export interface BesetzungDto {
 export interface PositionDto {
   id: string;
   orgUnitId: string;
+  /** Zusätzliche Organisationseinheiten einer Linienposition (z.B. eine Einrichtungsleitung mit zwei Einrichtungen). */
+  weitereOrgUnitIds: string[];
   parentPositionId: string | null;
   titel: string;
   typ: PositionTyp;

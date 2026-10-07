@@ -1897,6 +1897,60 @@ Drag&Drop/Verschieben, Account-Typ-Verwaltung, Anzeigen als…,
 Tabellenansicht/Export), Vertretung (API+UI), Externe-Parteien-Schema
 und diese abschließende Verifikation.
 
+**Nachtrag — Organigramm-Modul, Nachtrag „Flexibilität": Backend für
+Geschwister-Reihenfolge und Mehrfachzuordnung.** Rückmeldung aus dem
+Live-Einsatz nach Abschluss von Schritt 10: die Baumansicht selbst sollte
+flexibler werden (vollständig sichtbar + Zoom, eine Karte je Mitarbeiter,
+selbst bestimmbare Reihenfolge, eine Einrichtungsleitung mit zwei
+Einrichtungen, Ein-/Ausklappen). Erster Teil (Backend), die
+Frontend-Teilschritte folgen einzeln. Zwei Rückfragen vorab geklärt:
+Reihenfolge = Geschwister-Sortierung innerhalb des bestehenden Baums
+(kein frei platzierbares Whiteboard), Mehrfachzuordnung = echte
+Datenmodell-Änderung (nicht nur eine visuelle zweite Karte).
+
+- **Migration 0047**: `org_unit.reihenfolge`/`org_position.reihenfolge`
+  (nullable int, `NULL` = noch nie manuell sortiert, fällt beim Lesen ans
+  Ende). Neue Tabelle `org_position_weitere_einheit` (Mehrfachzuordnung
+  einer **Linien**-Position zu weiteren Organisationseinheiten, z.B. eine
+  Einrichtungsleitung mit zwei Einrichtungen) mit RLS und einem
+  Guard-Trigger nach dem Muster von `org_position_stabsstelle_scope_pruefen`
+  (Migration 0042): nur `typ='linie'`, keine Zuordnung zur bereits
+  vorhandenen Heimat-Einheit. Bewusst nicht auch für Stabsstellen geöffnet
+  -- die haben mit `org_position_stabsstelle_scope` bereits einen
+  allgemeineren Mehrfach-Scope (inklusive trägerweit), ein zweiter,
+  überlappender Mechanismus für denselben Zweck wäre zwei Quellen für
+  dieselbe Information.
+- **Rechte-Engine** (`rechte.service.ts::orgUnitIdsFuerScope()`): eine
+  Linienposition hat jetzt einen „Anker"-Satz (`[org_unit_id,
+  ...weitereOrgUnitIds]`) statt einer einzelnen Org-Unit. Jeder
+  hierarchische Scope (`team`/`wohngruppe`/`subtree`/`einrichtung`/`bereich`)
+  wird JE Anker aufgelöst und über `UNION`/`ANY($1)` vereinigt -- `tenant`
+  bleibt ankerunabhängig. Mit einer Gegenprobe geprüft: Anker-Erweiterung
+  testweise auskommentiert (`[position.orgUnitId]` statt `[...,
+  ...weitereOrgUnitIds]`) -- der Scope-Union-Test wird korrekt rot (nur
+  eine statt zwei Einrichtungen), danach wiederhergestellt.
+- **Neue Endpunkte**: `PUT /organigramm/positions/:id/weitere-einheiten`
+  (Replace-Set, exakt das Muster von `setzeStabsstelleScope()`),
+  `PUT /organigramm/org-units/reihenfolge` und
+  `PUT /organigramm/positions/reihenfolge` (je `{ ...gruppenSchlüssel,
+  geordneteIds }` -- ein `UPDATE … FROM unnest(...)` pro Aufruf statt N
+  Einzel-Updates, das WHERE auf den Gruppenschlüssel filtert zugleich auf
+  „tatsächlich Geschwister"; kommen weniger Zeilen zurück als Ids
+  übergeben wurden, ist das ein Bedienfehler des Aufrufers, keine
+  Serverausnahme -- 400). Alle drei mit `organigramm.bearbeiten` gegated,
+  wie die übrigen Positions-/Org-Unit-Mutationen. `findeOrgUnits()`/
+  `findePositionen()` sortieren jetzt nach `COALESCE(reihenfolge, …), Name`
+  statt nur nach Name -- die Reihenfolge-Spalte selbst wird nicht an den
+  Client exponiert, die Liste kommt bereits richtig sortiert an.
+  `PositionDto` bekommt `weitereOrgUnitIds: string[]`.
+
+Geprüft: `pnpm build` sauber (shared+API+Web), volle API-Suite **425/425
+grün (41 Suiten)** -- 415 vorher + 10 neue
+(`organigramm-flexibilitaet.e2e-spec.ts`: Reihenfolge-Persistenz +
+Geschwister-Validierung für Org-Units und Positionen, Weitere-Einheiten-
+Replace-Set inkl. Scope-Union-Nachweis über `RechteService` direkt,
+Stabsstelle-Ablehnung, Selbst-Duplikat-Ablehnung, 403/401 je Endpunkt).
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

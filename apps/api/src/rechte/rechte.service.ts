@@ -7,6 +7,13 @@ import { istDelegierbar, istSensibel, RECHTE_REGISTRY } from "./registry";
 interface AktivePosition {
   id: string;
   orgUnitId: string;
+  /**
+   * Zusaetzliche Organisationseinheiten einer Linienposition (Migration
+   * 0047, org_position_weitere_einheit -- z.B. eine Einrichtungsleitung mit
+   * zwei Einrichtungen). Fuer Stabsstellen immer leer: deren Scope kommt
+   * ausschliesslich aus org_position_stabsstelle_scope, s. orgUnitIdsFuerScope().
+   */
+  weitereOrgUnitIds: string[];
   typ: "linie" | "stabsstelle";
   accountTypId: string;
   istVollzugriff: boolean;
@@ -117,7 +124,11 @@ export class RechteService {
 
   private async aktivePositionen(client: import("pg").PoolClient, benutzerId: string): Promise<AktivePosition[]> {
     const { rows } = await client.query(
-      `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff
+      `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff,
+              COALESCE(
+                (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
+                '{}'
+              ) AS weitere_org_unit_ids
        FROM org_position_besetzung b
        JOIN org_position p ON p.id = b.position_id
        JOIN account_typ a ON a.id = p.account_typ_id
@@ -129,6 +140,7 @@ export class RechteService {
     return rows.map((r) => ({
       id: r.id,
       orgUnitId: r.org_unit_id,
+      weitereOrgUnitIds: r.weitere_org_unit_ids,
       typ: r.typ,
       accountTypId: r.account_typ_id,
       istVollzugriff: r.ist_vollzugriff,
@@ -223,6 +235,14 @@ export class RechteService {
    * nie aus der hierarchischen Scope-Vokabular, die nur fuer Linienpositionen
    * sinnvoll ist (siehe Organigramm-Plan: "Stabsstellen erben keinen
    * Subtree-Scope... haben explizit konfigurierte Scopes").
+   *
+   * Eine Linienposition hat seit Migration 0047 nicht mehr zwangslaeufig nur
+   * EINE Organisationseinheit -- "Anker" ist deshalb die eigene org_unit_id
+   * PLUS alle weiteren Einheiten (org_position_weitere_einheit, z.B. eine
+   * Einrichtungsleitung mit zwei Einrichtungen). Jeder hierarchische Scope
+   * (team/wohngruppe/subtree/einrichtung/bereich) wird JE Anker einzeln
+   * aufgeloest und die Ergebnisse vereinigt -- "tenant" bleibt ankerunabhaengig
+   * (gilt ohnehin fuer den ganzen Mandanten).
    */
   private async orgUnitIdsFuerScope(
     client: import("pg").PoolClient,
@@ -240,30 +260,31 @@ export class RechteService {
       return rows.map((r) => r.descendant_id);
     }
 
+    const anker = [position.orgUnitId, ...position.weitereOrgUnitIds];
+
     switch (scope) {
       case "own":
       case "assigned":
         return null;
       case "team":
       case "wohngruppe":
-        return [position.orgUnitId];
+        return anker;
       case "subtree": {
         const { rows } = await client.query(
-          `SELECT descendant_id FROM org_unit_closure WHERE ancestor_id = $1`,
-          [position.orgUnitId]
+          `SELECT DISTINCT descendant_id FROM org_unit_closure WHERE ancestor_id = ANY($1)`,
+          [anker]
         );
         return rows.map((r) => r.descendant_id);
       }
       case "einrichtung":
       case "bereich": {
         const { rows } = await client.query(
-          `SELECT ou.id
+          `SELECT DISTINCT ON (c.descendant_id) ou.id
            FROM org_unit_closure c
            JOIN org_unit ou ON ou.id = c.ancestor_id
-           WHERE c.descendant_id = $1 AND ou.typ = $2
-           ORDER BY c.depth ASC
-           LIMIT 1`,
-          [position.orgUnitId, scope]
+           WHERE c.descendant_id = ANY($1) AND ou.typ = $2
+           ORDER BY c.descendant_id, c.depth ASC`,
+          [anker, scope]
         );
         return rows.map((r) => r.id);
       }
@@ -396,7 +417,11 @@ export class RechteService {
   async simuliereFuerPosition(positionId: string): Promise<SimulationZelleDto[]> {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query(
-        `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff
+        `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff,
+                COALESCE(
+                  (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
+                  '{}'
+                ) AS weitere_org_unit_ids
          FROM org_position p JOIN account_typ a ON a.id = p.account_typ_id
          WHERE p.id = $1`,
         [positionId]
@@ -405,6 +430,7 @@ export class RechteService {
       const position: AktivePosition = {
         id: rows[0].id,
         orgUnitId: rows[0].org_unit_id,
+        weitereOrgUnitIds: rows[0].weitere_org_unit_ids,
         typ: rows[0].typ,
         accountTypId: rows[0].account_typ_id,
         istVollzugriff: rows[0].ist_vollzugriff,

@@ -61,6 +61,26 @@ const stabsstelleScopeSchema = z.object({
   orgUnitIds: z.array(z.string().uuid()),
 });
 
+const weitereEinheitenSchema = z.object({
+  orgUnitIds: z.array(z.string().uuid()),
+});
+
+const geordneteIdsSchema = z
+  .array(z.string().uuid())
+  .min(1)
+  .refine((v) => new Set(v).size === v.length, "Keine doppelten Ids.");
+
+const orgUnitReihenfolgeSchema = z.object({
+  elternId: z.string().uuid(),
+  geordneteIds: geordneteIdsSchema,
+});
+
+const positionenReihenfolgeSchema = z.object({
+  orgUnitId: z.string().uuid(),
+  parentPositionId: z.string().uuid().nullable(),
+  geordneteIds: geordneteIdsSchema,
+});
+
 const accountTypAnlegenSchema = z.object({
   name: z.string().trim().min(1, "Name darf nicht leer sein."),
   kategorie: z.enum(["intern", "extern"]).optional(),
@@ -144,6 +164,17 @@ export class OrganigrammController {
     return this.organigramm.aktualisiereOrgUnit(id, orgUnitAktualisierenSchema.parse(body));
   }
 
+  // "reihenfolge" als eigenes Segment (nicht "org-units/:id/reihenfolge"):
+  // eine Geschwister-Reihenfolge betrifft immer MEHRERE Knoten auf einmal
+  // (den gesamten neu geordneten Satz), nicht einen einzelnen -- passt nicht
+  // ins Schema "ein Endpunkt, eine Ressourcen-Id".
+  @Put("org-units/reihenfolge")
+  @ErfordertRecht("organigramm", "bearbeiten")
+  async orgUnitsReihenfolge(@Body() body: unknown) {
+    const { elternId, geordneteIds } = orgUnitReihenfolgeSchema.parse(body);
+    await this.organigramm.setzeOrgUnitReihenfolge(elternId, geordneteIds);
+  }
+
   @Post("positions")
   @ErfordertRecht("organigramm", "bearbeiten")
   async positionAnlegen(@Body() body: unknown) {
@@ -183,6 +214,24 @@ export class OrganigrammController {
   async stabsstelleScope(@Param("id") id: string, @Body() body: unknown) {
     const { orgUnitIds } = stabsstelleScopeSchema.parse(body);
     return this.organigramm.setzeStabsstelleScope(id, orgUnitIds);
+  }
+
+  // Mehrfachzuordnung einer Linienposition zu weiteren Organisationseinheiten
+  // (z.B. Einrichtungsleitung mit zwei Einrichtungen, Migration 0047) --
+  // wirkt sich ueber rechte.service.ts::orgUnitIdsFuerScope() direkt auf die
+  // Rechte-Engine aus.
+  @Put("positions/:id/weitere-einheiten")
+  @ErfordertRecht("organigramm", "bearbeiten")
+  async weitereEinheiten(@Param("id") id: string, @Body() body: unknown) {
+    const { orgUnitIds } = weitereEinheitenSchema.parse(body);
+    return this.organigramm.setzeWeitereEinheiten(id, orgUnitIds);
+  }
+
+  @Put("positions/reihenfolge")
+  @ErfordertRecht("organigramm", "bearbeiten")
+  async positionenReihenfolge(@Body() body: unknown) {
+    const { orgUnitId, parentPositionId, geordneteIds } = positionenReihenfolgeSchema.parse(body);
+    await this.organigramm.setzePositionenReihenfolge(orgUnitId, parentPositionId, geordneteIds);
   }
 
   @Post("account-typen")
