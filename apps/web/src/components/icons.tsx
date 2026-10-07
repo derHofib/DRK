@@ -96,6 +96,7 @@ import {
   SignalMedium,
   SlidersHorizontal,
   Sun,
+  Table2,
   Tag,
   TriangleAlert,
   UserRound,
@@ -289,3 +290,5 @@ export const IStabsstelle = baue(Workflow);
 export const IVerschieben = baue(Move);
 /** "Anzeigen als…" (Rechte-Simulation) -- durch eine fremde Brille schauen. */
 export const IAnzeigenAls = baue(Glasses);
+/** Tabellenansicht/Export -- vierter Reiter neben Baum/Account-Typen/Anzeigen als…. */
+export const ITabelle = baue(Table2);

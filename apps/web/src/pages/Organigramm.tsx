@@ -23,12 +23,14 @@ import {
   IDeaktivieren,
   IEinziehen,
   IFehler,
+  IHerunterladen,
   ILeerOrganigramm,
   INeu,
   IOrganigramm,
   IPosition,
   ISpeichern,
   IStabsstelle,
+  ITabelle,
   ITraeger,
   IVerschieben,
   IZiehen,
@@ -230,6 +232,27 @@ function positionsStatus(p: PositionDto): { label: string; klasse: string } {
   return { label: "Besetzt", klasse: "zv-pill-ok" };
 }
 
+/**
+ * Gemeinsame Herleitung fuer KnotenBox (Baumansicht) UND TabellenAnsicht --
+ * ohne organigramm.personendaten-sehen liefert der Server benutzerName=null
+ * bei trotzdem vorhandenen besetztMit-Eintraegen (CLAUDE.md Regel 6), das
+ * muss sich von "wirklich vakant" unterscheiden lassen.
+ */
+function besetzteNamen(p: PositionDto): { namen: string[]; ausgeblendet: boolean } {
+  const namen = p.besetztMit.filter((b) => b.benutzerName !== null).map((b) => b.benutzerName as string);
+  return { namen, ausgeblendet: p.besetztMit.length > 0 && namen.length === 0 };
+}
+
+/** Dieselbe "Besetzt mit"-Zelle fuer Tabellenansicht UND CSV-Export, damit
+ * beide nie auseinanderlaufen -- anders als KnotenBox (die zeigt bei
+ * Vakanz gar keine Namenszeile, der Status-Pill traegt das dort schon). */
+function besetztMitText(p: PositionDto): string {
+  const { namen, ausgeblendet } = besetzteNamen(p);
+  if (namen.length > 0) return namen.join(", ");
+  if (ausgeblendet) return "Namen ausgeblendet";
+  return "Derzeit nicht besetzt";
+}
+
 function heute(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -307,8 +330,7 @@ function KnotenBox({
 
   const p = knoten.position!;
   const status = positionsStatus(p);
-  const namen = p.besetztMit.filter((b) => b.benutzerName !== null).map((b) => b.benutzerName as string);
-  const namenAusgeblendet = p.besetztMit.length > 0 && namen.length === 0;
+  const { namen, ausgeblendet: namenAusgeblendet } = besetzteNamen(p);
   const Icon = p.typ === "stabsstelle" ? IStabsstelle : IPosition;
   return (
     <button
@@ -1158,12 +1180,10 @@ function SimulationAnsicht({
   benutzerListe,
   positionen,
   orgUnitNamen,
-  accountTypNamen,
 }: {
   benutzerListe: BenutzerListEintragDto[];
   positionen: PositionDto[];
   orgUnitNamen: Map<string, string>;
-  accountTypNamen: Map<string, string>;
 }) {
   const [art, setArt] = useState<"benutzer" | "position">("benutzer");
   const [benutzerId, setBenutzerId] = useState("");
@@ -1315,10 +1335,170 @@ function SimulationAnsicht({
 }
 
 /**
+ * Ein Feld fuer den CSV-Export. Semikolon statt Komma als Trennzeichen
+ * (siehe erzeugeCsv()) heisst: ein Wert, der selbst ein Semikolon oder
+ * Anführungszeichen enthaelt, muss in Anführungszeichen stehen, enthaltene
+ * Anführungszeichen werden verdoppelt -- Standard-CSV-Escaping (RFC 4180).
+ */
+function csvFeld(wert: string): string {
+  if (/[;"\n]/.test(wert)) return `"${wert.replace(/"/g, '""')}"`;
+  return wert;
+}
+
+/**
+ * Semikolon statt Komma: ein deutsches Excel erwartet per Locale das
+ * Komma als Dezimaltrennzeichen und wuerde eine komma-getrennte CSV-Datei
+ * sonst als eine einzige Spalte einlesen. Dieselben sechs Spalten wie die
+ * Tabellenansicht (dieselbe besetztMitText()-Funktion), damit CSV und
+ * UI nie auseinanderlaufen.
+ */
+function erzeugeCsv(
+  positionen: PositionDto[],
+  orgUnitNamen: Map<string, string>,
+  accountTypNamen: Map<string, string>
+): string {
+  const kopf = ["Titel", "Einheit", "Typ", "Account-Typ", "Status", "Besetzt mit"];
+  const zeilen = positionen.map((p) => [
+    p.titel,
+    orgUnitNamen.get(p.orgUnitId) ?? "?",
+    POSITION_TYP_LABEL[p.typ],
+    accountTypNamen.get(p.accountTypId) ?? "?",
+    positionsStatus(p).label,
+    besetztMitText(p),
+  ]);
+  return [kopf, ...zeilen].map((zeile) => zeile.map(csvFeld).join(";")).join("\r\n");
+}
+
+/**
+ * Klassischer Blob+<a download>-Mechanismus direkt im Browser -- anders als
+ * api.organigrammExportPdf() braucht der CSV-Export keinen Server-
+ * Roundtrip, die Daten sind ueber laden() schon vollstaendig im State.
+ */
+function csvHerunterladen(inhalt: string, dateiname: string) {
+  const blob = new Blob([inhalt], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = dateiname;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Tabellenansicht/Export -- letzter UI-Teilschritt aus Schritt 7 (Baum →
+ * Seitenpanel → Umhängen → Account-Typ-Verwaltung → Anzeigen als… →
+ * Tabellenansicht/Export). Ein echtes <table>-Element (.zv-table) statt des
+ * .zv-karten-liste-Grid-Patterns der anderen Ansichten hier in dieser Datei:
+ * export-taugliche tabellarische Daten (CSV/PDF) spiegeln sich in einer
+ * echten Tabelle natuerlicher als in einem Karten-Grid.
+ */
+function TabellenAnsicht({
+  orgUnits,
+  positionen,
+  accountTypNamen,
+  orgUnitNamen,
+}: {
+  orgUnits: OrgUnitDto[];
+  positionen: PositionDto[];
+  accountTypNamen: Map<string, string>;
+  orgUnitNamen: Map<string, string>;
+}) {
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [wirdExportiert, setWirdExportiert] = useState(false);
+
+  const sortiert = useMemo(
+    () => [...positionen].sort((a, b) => a.titel.localeCompare(b.titel, "de")),
+    [positionen]
+  );
+
+  function csvExportieren() {
+    setFehler(null);
+    const inhalt = `﻿${erzeugeCsv(sortiert, orgUnitNamen, accountTypNamen)}`;
+    csvHerunterladen(inhalt, "organigramm.csv");
+  }
+
+  async function pdfExportieren() {
+    setFehler(null);
+    setWirdExportiert(true);
+    try {
+      await api.organigrammExportPdf();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "PDF konnte nicht erzeugt werden.");
+    } finally {
+      setWirdExportiert(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="zv-vorschau-zeile" style={{ marginBottom: 16 }}>
+        <button className="zv-btn zv-btn-still" type="button" onClick={csvExportieren} disabled={sortiert.length === 0}>
+          <IHerunterladen />
+          CSV exportieren
+        </button>
+        <button
+          className="zv-btn zv-btn-still"
+          type="button"
+          onClick={pdfExportieren}
+          disabled={wirdExportiert}
+        >
+          <IHerunterladen />
+          {wirdExportiert ? "Erzeugt…" : "PDF exportieren"}
+        </button>
+      </div>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+
+      {sortiert.length === 0 ? (
+        <Leerzustand icon={ILeerOrganigramm}>
+          {orgUnits.length === 0 ? "Noch keine Organisationsstruktur angelegt." : "Noch keine Positionen angelegt."}
+        </Leerzustand>
+      ) : (
+        <table className="zv-table">
+          <thead>
+            <tr>
+              <th>Titel</th>
+              <th>Einheit</th>
+              <th>Typ</th>
+              <th>Account-Typ</th>
+              <th>Status</th>
+              <th>Besetzt mit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortiert.map((p) => {
+              const status = positionsStatus(p);
+              return (
+                <tr key={p.id}>
+                  <td>{p.titel}</td>
+                  <td>{orgUnitNamen.get(p.orgUnitId) ?? "?"}</td>
+                  <td>{POSITION_TYP_LABEL[p.typ]}</td>
+                  <td>{accountTypNamen.get(p.accountTypId) ?? "?"}</td>
+                  <td>
+                    <span className={`zv-pill ${status.klasse}`}>{status.label}</span>
+                  </td>
+                  <td>{besetztMitText(p)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/**
  * Organigramm-Grundansicht + Seitenpanel + Umhängen + Account-Typ-
- * Verwaltung + "Anzeigen als…" -- Organigramm-Plan, Lieferreihenfolge
- * Schritt 7/UI. Die Tabellenansicht/Export folgt als eigener, spaeter
- * commiteter Teilschritt.
+ * Verwaltung + "Anzeigen als…" + Tabellenansicht/Export -- Organigramm-Plan,
+ * Lieferreihenfolge Schritt 7/UI, damit vollstaendig.
  *
  * Umhängen geht zwei gleichwertige Wege (Organigramm-Plan: "Drag & Drop,
  * PLUS eine gleichwertige Tastatur-Alternative"): natives HTML5-Drag&Drop
@@ -1344,7 +1524,7 @@ export function Organigramm() {
   const [ausgewaehlterSchluessel, setAusgewaehlterSchluessel] = useState<string | null>(null);
   const [gezogenerSchluessel, setGezogenerSchluessel] = useState<string | null>(null);
   const [zielSchluessel, setZielSchluessel] = useState<string | null>(null);
-  const [ansicht, setAnsicht] = useState<"baum" | "account-typen" | "simulation">("baum");
+  const [ansicht, setAnsicht] = useState<"baum" | "account-typen" | "simulation" | "tabelle">("baum");
   // Registry separat und erst bei Bedarf laden (nicht im Haupt-laden()):
   // GET /rechte/registry braucht organigramm.manage-permissions, waehrend
   // der Baum selbst nur organigramm.ansehen braucht -- ein Konto ohne das
@@ -1491,6 +1671,16 @@ export function Organigramm() {
           <IAnzeigenAls />
           Anzeigen als…
         </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={ansicht === "tabelle"}
+          className={ansicht === "tabelle" ? "active" : ""}
+          onClick={() => setAnsicht("tabelle")}
+        >
+          <ITabelle />
+          Tabelle
+        </button>
       </div>
 
       {ansicht === "account-typen" ? (
@@ -1504,11 +1694,13 @@ export function Organigramm() {
           <AccountTypenAnsicht accountTypen={accountTypen} registry={registry} onAktualisiert={laden} />
         </>
       ) : ansicht === "simulation" ? (
-        <SimulationAnsicht
-          benutzerListe={benutzerListe}
+        <SimulationAnsicht benutzerListe={benutzerListe} positionen={positionen} orgUnitNamen={orgUnitNamen} />
+      ) : ansicht === "tabelle" ? (
+        <TabellenAnsicht
+          orgUnits={orgUnits}
           positionen={positionen}
-          orgUnitNamen={orgUnitNamen}
           accountTypNamen={accountTypNamen}
+          orgUnitNamen={orgUnitNamen}
         />
       ) : (
         <>

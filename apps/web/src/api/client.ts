@@ -501,6 +501,7 @@ export const api = {
       istGeplant?: boolean;
     }
   ) => request<PositionDto>(`/organigramm/positions/${positionId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  organigrammExportPdf: () => dateiHerunterladen("/organigramm/export/pdf", "organigramm.pdf"),
 
   // Vertretung (Organigramm-Plan, Lieferreihenfolge Schritt 8/UI).
   delegationenMeine: () => request<DelegationDto[]>("/delegationen/meine"),

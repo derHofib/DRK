@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Put } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Put, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { ErfordertRecht } from "../rechte/rechte.decorator";
@@ -115,6 +116,20 @@ export class OrganigrammController {
   @ErfordertRecht("organigramm", "ansehen")
   async accountTypen() {
     return this.organigramm.findeAccountTypen();
+  }
+
+  // Bewusst mit dem SCHWAECHEREN organigramm.ansehen gegated, nicht
+  // manage-permissions: der Export zeigt exakt dieselben (bereits
+  // redigierten) Daten, die ohnehin schon in der Baumansicht sichtbar sind
+  // -- keine zusaetzliche Sensibilitaet gegenueber den GET-Endpunkten oben.
+  @Get("export/pdf")
+  @ErfordertRecht("organigramm", "ansehen")
+  async exportPdf(@Res({ passthrough: false }) res: Response) {
+    const pdf = await this.organigramm.exportPdf();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="organigramm.pdf"');
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(pdf);
   }
 
   @Post("org-units")

@@ -6,6 +6,7 @@ import { isPgError } from "../common/pg-error";
 import { RechteService } from "../rechte/rechte.service";
 import { AuditService } from "../audit/audit.service";
 import { istGueltigesRecht } from "../rechte/registry";
+import { erzeugeOrganigrammPdf } from "./organigramm-export-pdf";
 
 export interface OrgUnitDto {
   id: string;
@@ -227,6 +228,28 @@ export class OrganigrammService {
       );
       return rows.map(zuAccountTypDto);
     });
+  }
+
+  /**
+   * Ruft bewusst findeOrgUnits()/findePositionen()/findeAccountTypen() auf
+   * statt die Daten ein zweites Mal direkt per SQL zu lesen (CLAUDE.md
+   * Regel 6: Anonymisierung passiert beim Lesen) -- die
+   * Namensredaktion in findePositionen() gilt dadurch automatisch auch
+   * fuer den PDF-Export, ohne dass hier eine zweite, leicht auseinander-
+   * laufende Pruefung auf organigramm.personendaten-sehen noetig waere.
+   * Der Mandantenname kommt aus der traeger-Zeile von findeOrgUnits() --
+   * sie traegt ihn seit der Mandanten-Anlage (Trigger
+   * org_unit_traeger_anlegen, migrations/0040), eine eigene Abfrage auf
+   * "mandant" waere dieselbe Information ueber einen zweiten Weg.
+   */
+  async exportPdf(): Promise<Buffer> {
+    const [orgUnits, positionen, accountTypen] = await Promise.all([
+      this.findeOrgUnits(),
+      this.findePositionen(),
+      this.findeAccountTypen(),
+    ]);
+    const mandantName = orgUnits.find((u) => u.typ === "traeger")?.name ?? "Zimmerakte";
+    return erzeugeOrganigrammPdf({ mandantName, orgUnits, positionen, accountTypen });
   }
 
   // ---------------------------------------------------------------------
