@@ -13,6 +13,7 @@ import {
   IMitarbeitende,
   IOrganigramm,
   ITagesberichte,
+  IVertretung,
   IZimmer,
   type IconKomponente,
 } from "./components/icons";
@@ -25,6 +26,7 @@ export type HauptReiter =
   | "kassenbuch"
   | "tagesberichte"
   | "aufgaben"
+  | "vertretung"
   | "organigramm"
   | "einstellungen";
 
@@ -52,6 +54,7 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
+  { wert: "vertretung", label: "Vertretung", icon: IVertretung },
   { wert: "organigramm", label: "Organigramm", icon: IOrganigramm },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
