@@ -1706,6 +1706,73 @@ e2e-Spec, statt sie weiter nur als Kommentar zu behaupten.
 Geprüft: `pnpm --filter @zimmerakte/api build` sauber, volle API-Suite
 **403/403 grün (37 Suiten)** -- 396 vorher + 7 neue.
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), sechster Teilschritt:
+Tabellenansicht + CSV/PDF-Export.** Letzter fehlender UI-Teilschritt aus der
+ursprünglichen Lieferreihenfolge (Baum → Seitenpanel → Umhängen →
+Account-Typ-Verwaltung → Anzeigen als… → Tabellenansicht/Export). Dritter
+Reiter im bestehenden `.zv-segmented`-Umschalter (`Organigramm.tsx`), neben
+„Baum" und „Account-Typen".
+
+- **Keine neue Leseroute für die Tabelle selbst**: `orgUnits`/`positionen`/
+  `accountTypen` sind über `laden()` in der `Organigramm()`-Komponente schon
+  vollständig geladen -- die Tabellenansicht ist nur eine andere Darstellung
+  derselben Daten, kein zweiter Request.
+- **CSV clientseitig, PDF serverseitig** -- unterschiedliche Gründe: die CSV
+  braucht keine Daten, die der Client nicht ohnehin schon hat (ein
+  Server-Roundtrip für denselben Stand wäre reiner Umweg), ein PDF dagegen
+  braucht `pdf-lib`, eine Node-Bibliothek, die im Browser-Bundle nichts zu
+  suchen hat. Neuer Endpunkt `GET /organigramm/export/pdf`, gated mit dem
+  SCHWÄCHEREN `organigramm.ansehen` (nicht `manage-permissions`) -- der
+  Export zeigt dieselben Daten, die ohnehin schon in der Baumansicht
+  sichtbar sind, keine zusätzliche Sensibilität.
+- **Derselbe Redaktionsmechanismus, nicht dupliziert** (CLAUDE.md Regel 6):
+  `OrganigrammService.exportPdf()` ruft `findeOrgUnits()`/`findePositionen()`/
+  `findeAccountTypen()` -- genau die Methoden, die auch die bestehenden
+  GET-Endpunkte bedienen -- statt ein zweites Mal direkt per SQL zu lesen.
+  Wer ohne `organigramm.personendaten-sehen` exportiert, bekommt automatisch
+  "Namen ausgeblendet" im PDF, ohne dass der PDF-Code das selbst prüfen
+  müsste; eine zweite Prüfstelle hätte irgendwann vom Original abweichen
+  können.
+- **Semikolon statt Komma als CSV-Trennzeichen**: ein deutsches Excel
+  erwartet per Locale das Komma als Dezimaltrennzeichen und würde eine
+  komma-getrennte Datei sonst als eine einzige Spalte einlesen -- Semikolon
+  ist die in Deutschland übliche Excel-Konvention. Aus demselben Grund ein
+  BOM-Präfix vor dem Inhalt, sonst erkennt Excel unter Windows die
+  enthaltenen Umlaute nicht korrekt.
+- **`besetzteNamen()`/`besetztMitText()` als gemeinsame Hilfsfunktionen**
+  (`Organigramm.tsx`) statt doppelter Logik: dieselbe Herleitung
+  (Namen/„Namen ausgeblendet"/„Derzeit nicht besetzt") bedient jetzt sowohl
+  `KnotenBox` (Baumansicht) als auch `TabellenAnsicht` und `erzeugeCsv()` --
+  alle drei liefen vorher Gefahr, bei einer künftigen Änderung
+  auseinanderzulaufen. Der PDF-Generator (`organigramm-export-pdf.ts`, API)
+  bekommt dieselbe Herleitung zwangsläufig noch einmal: die API hängt
+  bewusst nicht von `@zimmerakte/shared` ab (das Paket ist für Typen/Label,
+  die Web UND API gemeinsam brauchen -- die API braucht diese Label bisher
+  nirgends außer hier), ein React-/DOM-Import quer über den Build-Grenzen
+  wäre ohnehin nicht möglich.
+- Echtes `<table className="zv-table">`-Element statt des
+  `.zv-karten-liste`-Grid-Patterns der anderen Organigramm-Unteransichten:
+  export-taugliche tabellarische Daten passen in eine echte Tabelle
+  natürlicher, und `.zv-table` existierte als CSS-Klasse bereits
+  (`display: block` + `overflow-x: auto`, siehe „Fallstricke" oben) --
+  diese Ansicht ist ihre erste tatsächliche Verwendung im Projekt.
+- Neues Icon `ITabelle` (`Table2`) für den dritten Reiter -- bisher nicht im
+  Set verwendet.
+
+Geprüft: `pnpm build` sauber (API+shared+Web), volle API-Suite **406/406
+grün (38 Suiten)** -- 403 vorher + 3 neue (`organigramm-export-pdf.e2e-spec.ts`:
+200 mit Recht inkl. PDF-Magic-Bytes-Prüfung, 403 ohne Recht, 401 ohne Token).
+Gegenprobe: `@ErfordertRecht()` am neuen Endpunkt auskommentiert -- der
+403-Test wird rot (200 statt 403), wiederhergestellt wieder grün. Eigens
+angelegter Testmandant, Live-Browser-Check (Playwright, echte Anmeldung über
+die UI): Tabellen-Tab zeigt alle drei angelegten Positionen mit korrekten
+Spalten (inkl. „Besetzt 1/2"-Teilbesetzung, einer vakanten Stabsstelle und
+dem Vollzugriff-Konto); CSV-Download liefert BOM + Semikolon-Kopfzeile +
+exakt dieselben drei Zeilen wie die Tabelle; PDF-Download liefert eine
+nicht-leere Datei mit gültigen `%PDF-`-Magic-Bytes. Kein horizontaler
+Seiten-Overflow bei 390px (die Tabelle scrollt intern). Keine
+Konsolenfehler. Testdaten im Anschluss wieder gelöscht.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

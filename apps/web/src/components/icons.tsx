@@ -95,6 +95,7 @@ import {
   SignalMedium,
   SlidersHorizontal,
   Sun,
+  Table2,
   Tag,
   TriangleAlert,
   UserRound,
@@ -286,3 +287,5 @@ export const IPosition = baue(Briefcase);
 export const IStabsstelle = baue(Workflow);
 /** "Verschieben nach…" -- die Tastatur-/Klick-Alternative zu Drag & Drop. */
 export const IVerschieben = baue(Move);
+/** Tabellenansicht/Export -- dritter Reiter neben Baum/Account-Typen. */
+export const ITabelle = baue(Table2);
