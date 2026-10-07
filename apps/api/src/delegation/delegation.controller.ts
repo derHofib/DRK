@@ -1,13 +1,24 @@
-import { Controller, Get } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { DelegationService } from "./delegation.service";
 
+const anlegenSchema = z.object({
+  vertreterBenutzerId: z.string().uuid(),
+  von: z.string().date(),
+  bis: z.string().date(),
+  umfang: z.enum(["alle", "auswahl"]),
+  sensibleRechteEingeschlossen: z.boolean().optional(),
+  rechte: z.array(z.object({ modul: z.string().min(1), aktion: z.string().min(1) })).optional(),
+});
+
 /**
- * Nur lesend (Organigramm-Plan, Lieferreihenfolge Schritt 6) -- anlegen,
- * genehmigen und widerrufen einer Delegation folgen in einem spaeteren
- * Schritt. Bewusst ohne @ErfordertRecht(): die eigenen Delegationen zu
- * sehen braucht kein besonderes Recht, analog zu z. B.
- * GET /aufgaben?nurEigene=true.
+ * anlegen/genehmigen/widerrufen sind bewusst NUR mit @Authenticated()
+ * gegated, kein @ErfordertRecht() -- die fachliche Berechtigung ("bin ich
+ * Vertretener/Vertreter GENAU dieser Zeile") ist spezifisch fuer den
+ * einzelnen Datensatz, kein globales Modul-Recht. Deshalb pruefen die
+ * Service-Methoden das selbst (analog zu meineDelegationen()/
+ * GET /aufgaben?nurEigene=true).
  */
 @Controller("delegationen")
 @Authenticated()
@@ -17,5 +28,20 @@ export class DelegationController {
   @Get("meine")
   async meine() {
     return this.delegationen.meineDelegationen();
+  }
+
+  @Post()
+  async anlegen(@Body() body: unknown) {
+    return this.delegationen.anlegen(anlegenSchema.parse(body));
+  }
+
+  @Patch(":id/genehmigen")
+  async genehmigen(@Param("id") id: string) {
+    return this.delegationen.genehmigen(id);
+  }
+
+  @Patch(":id/widerrufen")
+  async widerrufen(@Param("id") id: string) {
+    return this.delegationen.widerrufen(id);
   }
 }
