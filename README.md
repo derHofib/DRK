@@ -1844,6 +1844,59 @@ nicht-leere Datei mit gültigen `%PDF-`-Magic-Bytes. Kein horizontaler
 Seiten-Overflow bei 390px (die Tabelle scrollt intern). Keine
 Konsolenfehler. Testdaten im Anschluss wieder gelöscht.
 
+**Nachtrag — Organigramm-Modul, Schritt 10 (Abschluss): durchgängige
+Verifikation + E2E-Hauptszenario.** Letzter Punkt der Lieferreihenfolge
+aus dem ursprünglichen Plan. Kein neuer Code am Fachmodell oder an der
+Rechte-Engine selbst -- dieser Schritt prüft nur, dass das in den
+Schritten 1–9 gebaute Ganze tatsächlich als Ganzes funktioniert, mit dem
+im Auftrag wörtlich vorgegebenen Szenario als einzigem, zusammenhängenden
+Test statt nur in Einzelteilen über die vielen Teilschritt-Specs
+verstreut:
+
+- **`apps/api/test/organigramm-e2e-hauptszenario.e2e-spec.ts`** (neu):
+  Platzhalter-Position „Einrichtungsleitung (geplant)" anlegen → Rechte
+  konfigurieren (neuer Account-Typ + `PUT .../rechte`) → Mitarbeiter
+  zuweisen (`POST .../besetzen`) → Rechte greifen sofort → Audit-Eintrag
+  vorhanden. Alles über echte HTTP-Endpunkte, nicht nur `RechteService`
+  direkt (anders als `rechte-engine.e2e-spec.ts`) -- das Szenario ist eine
+  Behauptung über das Zusammenspiel von Controller, Guard und Engine,
+  nicht nur über die Engine allein.
+- **„Sofort" konkret geprüft, nicht nur behauptet**: der Zielbenutzer wird
+  VOR jeder Positionszuweisung eingeloggt (JWT ausgestellt, als der
+  Benutzer noch null Positionen hatte), danach wird genau dieses -- zu dem
+  Zeitpunkt bereits ausgestellte -- Token nach der Zuweisung unverändert
+  wiederverwendet, kein Re-Login, kein Refresh. Der Erfolg belegt damit
+  nicht nur "nach der Zuweisung geht es", sondern konkret, dass Rechte pro
+  Request aus der Datenbank aufgelöst werden und nicht im Token oder in
+  einem zwischengespeicherten Zustand stecken (Organigramm-Plan: "keine
+  Cross-Request-Caches").
+- **Audit-Nachweis über zwei verschiedene `objekt_typ`-Werte**: die
+  Positions-Mutationen (`position.anlegen`, `position.bearbeiten` fürs
+  `istGeplant`-Flag) protokollieren mit `objekt_typ='org_position'`, die
+  Zuweisung selbst (`position.besetzen`) aber mit
+  `objekt_typ='org_position_besetzung'` und der ID der neuen
+  Besetzungszeile, nicht der Position (siehe
+  `organigramm.service.ts::besetzen()`) -- der Test sucht diesen Eintrag
+  deshalb bewusst über den im `nachher`-Snapshot weiterhin enthaltenen
+  Positions-`id`-Wert, statt fälschlich denselben `objekt_typ`-Filter wie
+  bei den beiden anderen Mutationen anzunehmen.
+- Gegenprobe nach Projektkonvention: die Zuweisung (`POST .../besetzen`)
+  testweise übersprungen -- der „sofort"-Test wird korrekt rot (403 statt
+  200 bei der abschließenden `GET /organigramm/org-units`-Prüfung),
+  danach wiederhergestellt.
+
+Geprüft: `pnpm build` sauber (shared+API+Web), volle API-Suite **415/415
+grün (40 Suiten)** -- 414 vorher + 1 neu (das Hauptszenario selbst zählt
+als genau ein Test, deckt aber die komplette Kette ab). Damit ist das
+Organigramm-Modul mit Positions- und Rechteverwaltung laut der
+ursprünglichen Lieferreihenfolge (Schritte 1–10) vollständig umgesetzt:
+Datenmodell, zentrale Rechte-Engine, Migration aller 14 ehemaligen
+`ROLLEN_MIT_*`-Stellen, Kassenbuch-Vier-Augen, lesende und schreibende
+API, alle sechs UI-Teilschritte (Grundansicht, Seitenpanel,
+Drag&Drop/Verschieben, Account-Typ-Verwaltung, Anzeigen als…,
+Tabellenansicht/Export), Vertretung (API+UI), Externe-Parteien-Schema
+und diese abschließende Verifikation.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
