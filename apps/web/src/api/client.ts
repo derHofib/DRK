@@ -447,12 +447,11 @@ export const api = {
   organigrammOrgUnits: () => request<OrgUnitDto[]>("/organigramm/org-units"),
   organigrammPositionen: () => request<PositionDto[]>("/organigramm/positions"),
   organigrammAccountTypen: () => request<AccountTypDto[]>("/organigramm/account-typen"),
-  // Reparenting (Drag & Drop + Kontextmenue) und Account-Typ-Verwaltung
-  // kommen mit den naechsten UI-Teilschritten dazu -- hier erstmal nur, was
-  // das Seitenpanel braucht: neue Unter-Einheit/Position anlegen, Besetzen/
-  // Beenden/Deaktivieren.
+  // Account-Typ-Verwaltung kommt mit einem spaeteren UI-Teilschritt dazu.
   organigrammOrgUnitAnlegen: (payload: { typ: "bereich" | "team"; name: string; parentId: string }) =>
     request<OrgUnitDto>("/organigramm/org-units", { method: "POST", body: JSON.stringify(payload) }),
+  organigrammOrgUnitAktualisieren: (id: string, payload: { name?: string; parentId?: string }) =>
+    request<OrgUnitDto>(`/organigramm/org-units/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   organigrammPositionAnlegen: (payload: {
     orgUnitId: string;
     titel: string;
@@ -473,4 +472,15 @@ export const api = {
     }),
   organigrammPositionDeaktivieren: (positionId: string) =>
     request<PositionDto>(`/organigramm/positions/${positionId}/deaktivieren`, { method: "PATCH" }),
+  organigrammPositionAktualisieren: (
+    positionId: string,
+    payload: {
+      titel?: string;
+      accountTypId?: string;
+      parentPositionId?: string;
+      sollBesetzung?: number;
+      gueltigBis?: string | null;
+      istGeplant?: boolean;
+    }
+  ) => request<PositionDto>(`/organigramm/positions/${positionId}`, { method: "PATCH", body: JSON.stringify(payload) }),
 };

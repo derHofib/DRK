@@ -71,6 +71,7 @@ import {
   Minimize2,
   Monitor,
   Moon,
+  Move,
   Network,
   NotebookPen,
   Palette,
@@ -279,3 +280,5 @@ export const ITag = baue(Tag);
 export const IBereichTeam = baue(Boxes);
 export const IPosition = baue(Briefcase);
 export const IStabsstelle = baue(Workflow);
+/** "Verschieben nach…" -- die Tastatur-/Klick-Alternative zu Drag & Drop. */
+export const IVerschieben = baue(Move);

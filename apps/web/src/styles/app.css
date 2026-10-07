@@ -1865,6 +1865,35 @@
   box-shadow: 0 0 0 2px var(--zv-accent-soft);
 }
 
+/* Umhaengen per Drag & Drop -- siehe Organigramm.tsx (gueltigeZiele()).
+   Die gezogene Box bleibt sichtbar, aber gedaempft; JEDES gueltige Ziel
+   bekommt waehrend des Ziehens einen gestrichelten Akzentrahmen (nicht nur
+   das aktuell ueberflogene), damit von Anfang an klar ist, wohin ueberhaupt
+   fallengelassen werden kann -- genau das Prinzip "Information nicht nur
+   ueber Hover", das sonst beim reinen Ausprobieren verloren ginge. */
+.zv-organigramm-knoten-zieht {
+  opacity: 0.45;
+}
+
+.zv-organigramm-knoten-ziel-moeglich {
+  border-style: dashed;
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-ziel-aktuell {
+  background: var(--zv-accent-soft);
+  border-style: solid;
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-griff {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--zv-text-faint);
+  display: flex;
+}
+
 .zv-organigramm-knoten-einheit {
   background: var(--zv-surface-2);
   align-items: center;

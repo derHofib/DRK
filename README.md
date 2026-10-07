@@ -1486,6 +1486,55 @@ Baum (11→12 Knoten); neue Unter-Einheit anlegen → erscheint im Baum;
 Position deaktivieren → Knoten und Panel zeigen „inaktiv". Keine
 Konsolenfehler in allen vier Abläufen.
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), dritter Teilschritt:
+Umhängen per Drag & Drop + „Verschieben nach…".** Der Organigramm-Plan
+verlangt hier ausdrücklich zwei gleichwertige Wege, nicht Maus mit
+Tastatur-Fallback.
+
+- **Zwei neue PATCH-Aufrufe im API-Client** (`organigrammOrgUnitAktualisieren`,
+  `organigrammPositionAktualisieren`) — beide Endpunkte existierten bereits
+  seit Schritt 6 (schreibend), sie waren im Web-Client nur noch nicht
+  verdrahtet.
+- **Eine Funktion, zwei Zugänge**: `gueltigeZiele(quelle, alleKnoten)`
+  berechnet die erlaubten Ziele (gleiche Art, nicht man selbst, nicht der
+  eigene Teilbaum) — sowohl für Drag & Drop als auch für „Verschieben
+  nach…" im Seitenpanel. Eine „falsche Reihenfolge" (z. B. Bereich unter
+  Team) wird bewusst NICHT zusätzlich ausgeschlossen: der
+  Zyklenschutz-Trigger in der Datenbank kennt diese Unterscheidung auch
+  nicht, Client und Server ziehen dieselbe Grenze.
+- **Drag & Drop**: jede Box mit `typ ∈ {bereich,team}` (Organisations-
+  einheiten) oder jede Position ist ziehbar (Griff-Icon oben rechts,
+  Muster aus `Einstellungen.tsx::MenuReihenfolge`, State-getrieben statt
+  `dataTransfer`-Payload). Während des Ziehens bekommen **alle** gültigen
+  Ziele einen gestrichelten Akzentrahmen, nicht nur das gerade überflogene
+  — sonst wäre „wohin darf ich überhaupt ziehen" nur durch Ausprobieren
+  herausfindbar.
+- **„Verschieben nach…" als die gleichwertige Tastatur-Alternative** — ganz
+  bewusst ein Modal mit einer fokussierbaren `<select>`-Zielliste, **kein**
+  literales Rechtsklick-Kontextmenü: ein echtes Kontextmenü ist für
+  Tastatur- und Screenreader-Nutzung notorisch schlecht zugänglich, ein
+  Modal mit einer normalen Formular-Auswahl ist die tatsächlich
+  gleichwertige Alternative. Erscheint in `EinheitPanel` nur für
+  Bereich/Team (dieselbe Grenze wie beim Ziehen), in `PositionPanel`
+  immer (jede Position kann eine neue `parentPositionId` bekommen) —
+  jeweils ausgeblendet, wenn keine gültigen Ziele existieren.
+- Bekannte, bewusst nicht behobene Grenze: `org_position.org_unit_id` ist
+  über die API nicht änderbar (nur `parentPositionId`) — eine Position
+  wechselt ihre Organisationseinheit also nur indirekt, wenn ihre ganze
+  Einheit verschoben wird. Das ist der heutige Stand von
+  `aktualisierePosition()` (Schritt 6), keine Lücke dieses UI-Schritts.
+
+Geprüft: `pnpm build` sauber, volle API-Suite weiterhin **393/393 grün
+(35 Suiten)** (dieser Schritt nutzt nur bestehende Endpunkte, keine
+Backend-Änderung). Live-Browser-Check (Playwright, echte API +
+Dev-Server): Drag & Drop einer Organisationseinheit auf eine neue
+übergeordnete Einheit (per `dragTo`, inkl. Tiefenprüfung der Boxen
+vorher/nachher) korrekt; „Verschieben nach…" für eine Position auf eine
+neue übergeordnete Position korrekt; **Gegenprobe** — derselbe Drag auf
+den eigenen Nachkommen feuert keinen PATCH-Request und lässt den Baum
+unverändert (Zyklenschutz greift schon clientseitig, bevor der Server
+überhaupt gefragt wird). Keine Konsolenfehler.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

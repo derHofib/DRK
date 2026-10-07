@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { AccountTypDto, BenutzerListEintragDto, BesetzungDto, OrgUnitDto, PositionDto } from "@zimmerakte/shared";
 import { ORG_UNIT_TYP_LABEL, POSITION_TYP_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -18,6 +18,8 @@ import {
   ISpeichern,
   IStabsstelle,
   ITraeger,
+  IVerschieben,
+  IZiehen,
 } from "../components/icons";
 
 /**
@@ -141,6 +143,72 @@ function alleKnoten(wurzel: Knoten): Knoten[] {
   return ergebnis;
 }
 
+function nachkommenSchluessel(knoten: Knoten): Set<string> {
+  const ergebnis = new Set<string>();
+  function besuch(k: Knoten) {
+    for (const kind of k.kinder) {
+      ergebnis.add(kind.schluessel);
+      besuch(kind);
+    }
+  }
+  besuch(knoten);
+  return ergebnis;
+}
+
+/**
+ * Wer kommt fuer "quelle" ueberhaupt als neues Ziel infrage -- fuer Drag &
+ * Drop UND fuer "Verschieben nach…" dieselbe Funktion, damit beide Wege nie
+ * auseinanderlaufen. Nur dieselbe Art (Einheit auf Einheit, Position auf
+ * Position -- eine Position unter eine andere Einheit haengen gibt es in
+ * diesem API-Stand nicht, org_unit_id einer Position ist nicht aenderbar),
+ * nie man selbst, nie der eigene Teilbaum (sonst Zyklus). Eine
+ * "falsche Reihenfolge" (z.B. Bereich unter Team) wird hier NICHT
+ * zusaetzlich ausgeschlossen -- der Zyklenschutz-Trigger in der DB kennt
+ * diese Unterscheidung auch nicht, Client und Server sollen dieselbe
+ * Grenze ziehen.
+ */
+function gueltigeZiele(quelle: Knoten, alle: Knoten[]): Set<string> {
+  const nachkommen = nachkommenSchluessel(quelle);
+  const ziele = new Set<string>();
+  for (const k of alle) {
+    if (k.art !== quelle.art || k.schluessel === quelle.schluessel || nachkommen.has(k.schluessel)) continue;
+    ziele.add(k.schluessel);
+  }
+  return ziele;
+}
+
+/** Nur traeger/einrichtung bleiben fest -- siehe legeOrgUnitAn(), dieselbe Grenze. */
+function istZiehbareEinheit(u: OrgUnitDto): boolean {
+  return u.typ === "bereich" || u.typ === "team";
+}
+
+function istZiehbar(k: Knoten): boolean {
+  return k.art === "position" || istZiehbareEinheit(k.einheit!);
+}
+
+interface ZielOption {
+  id: string;
+  label: string;
+}
+
+function zielOptionen(quelle: Knoten, alle: Knoten[], orgUnitNamen: Map<string, string>): ZielOption[] {
+  const erlaubt = gueltigeZiele(quelle, alle);
+  const optionen: ZielOption[] = [];
+  for (const k of alle) {
+    if (!erlaubt.has(k.schluessel)) continue;
+    if (k.art === "einheit") {
+      optionen.push({ id: k.einheit!.id, label: `${k.einheit!.name} (${ORG_UNIT_TYP_LABEL[k.einheit!.typ]})` });
+    } else {
+      optionen.push({
+        id: k.position!.id,
+        label: `${k.position!.titel} (${orgUnitNamen.get(k.position!.orgUnitId) ?? "?"})`,
+      });
+    }
+  }
+  optionen.sort((a, b) => a.label.localeCompare(b.label, "de"));
+  return optionen;
+}
+
 function positionsStatus(p: PositionDto): { label: string; klasse: string } {
   if (p.istGeplant) return { label: "Geplant (Platzhalter)", klasse: "zv-pill-info" };
   if (p.besetztMit.length === 0) return { label: "Vakant", klasse: "zv-pill-neutral" };
@@ -164,15 +232,38 @@ function KnotenBox({
   accountTypNamen,
   ausgewaehlt,
   onOeffnen,
+  ziehtGerade,
+  istZielMoeglich,
+  istZielAktuell,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   knoten: Knoten;
   accountTypNamen: Map<string, string>;
   ausgewaehlt: boolean;
   onOeffnen: () => void;
+  ziehtGerade: boolean;
+  istZielMoeglich: boolean;
+  istZielAktuell: boolean;
+  onDragStart: () => void;
+  onDragOver: (e: DragEvent<HTMLButtonElement>) => void;
+  onDrop: (e: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
 }) {
   const links = knoten.x * SPALTEN_SCHRITT + (SPALTEN_SCHRITT - BOX_BREITE) / 2;
   const oben = knoten.tiefe * ZEILEN_SCHRITT;
   const stil = { left: links, top: oben, width: BOX_BREITE, height: BOX_HOEHE };
+  const ziehbar = istZiehbar(knoten);
+  const zugsKlassen = `${ziehtGerade ? " zv-organigramm-knoten-zieht" : ""}${
+    istZielMoeglich ? " zv-organigramm-knoten-ziel-moeglich" : ""
+  }${istZielAktuell ? " zv-organigramm-knoten-ziel-aktuell" : ""}`;
+  const ziehGriff = ziehbar && (
+    <span className="zv-organigramm-knoten-griff" aria-hidden="true">
+      <IZiehen />
+    </span>
+  );
 
   if (knoten.art === "einheit") {
     const u = knoten.einheit!;
@@ -181,9 +272,15 @@ function KnotenBox({
       <button
         type="button"
         style={stil}
+        draggable={ziehbar}
         onClick={onOeffnen}
-        className={`zv-organigramm-knoten zv-organigramm-knoten-einheit${u.aktiv ? "" : " zv-organigramm-knoten-inaktiv"}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}`}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
+        className={`zv-organigramm-knoten zv-organigramm-knoten-einheit${u.aktiv ? "" : " zv-organigramm-knoten-inaktiv"}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}${zugsKlassen}`}
       >
+        {ziehGriff}
         <div className="zv-organigramm-knoten-kopf">
           <Icon />
           <span className="zv-organigramm-knoten-titel">{u.name}</span>
@@ -205,11 +302,17 @@ function KnotenBox({
     <button
       type="button"
       style={stil}
+      draggable={ziehbar}
       onClick={onOeffnen}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={`zv-organigramm-knoten zv-organigramm-knoten-position${
         p.typ === "stabsstelle" ? " zv-organigramm-knoten-stabsstelle" : ""
-      }${!p.aktiv ? " zv-organigramm-knoten-inaktiv" : ""}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}`}
+      }${!p.aktiv ? " zv-organigramm-knoten-inaktiv" : ""}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}${zugsKlassen}`}
     >
+      {ziehGriff}
       <div className="zv-organigramm-knoten-kopf">
         <Icon />
         <span className="zv-organigramm-knoten-titel">{p.titel}</span>
@@ -266,17 +369,37 @@ function EinheitPanel({
   einheit,
   positionenInEinheit,
   accountTypen,
+  verschiebenZiele,
+  aufVerschieben,
   onAktualisiert,
 }: {
   einheit: OrgUnitDto;
   positionenInEinheit: PositionDto[];
   accountTypen: AccountTypDto[];
+  verschiebenZiele: ZielOption[];
+  aufVerschieben: (zielId: string) => Promise<void>;
   onAktualisiert: () => void;
 }) {
   const [neueEinheitOffen, setNeueEinheitOffen] = useState(false);
   const [neuePositionOffen, setNeuePositionOffen] = useState(false);
+  const [verschiebenOffen, setVerschiebenOffen] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  async function verschieben(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await aufVerschieben(String(form.get("zielId") ?? ""));
+      setVerschiebenOffen(false);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Einheit konnte nicht verschoben werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
 
   async function einheitAnlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -345,6 +468,12 @@ function EinheitPanel({
           <INeu />
           Position anlegen
         </button>
+        {verschiebenZiele.length > 0 && (
+          <button className="zv-btn zv-btn-still" type="button" onClick={() => setVerschiebenOffen(true)}>
+            <IVerschieben />
+            Verschieben nach…
+          </button>
+        )}
       </div>
 
       <h4>Positionen in dieser Einheit</h4>
@@ -423,6 +552,31 @@ function EinheitPanel({
           </form>
         </Modal>
       )}
+
+      {verschiebenOffen && (
+        <Modal titel="Verschieben nach…" onClose={() => setVerschiebenOffen(false)}>
+          <form onSubmit={verschieben}>
+            <p className="zv-sub">Neue übergeordnete Organisationseinheit für „{einheit.name}".</p>
+            <div className="zv-field">
+              <label htmlFor="einheit-ziel">Neue übergeordnete Einheit</label>
+              <select id="einheit-ziel" name="zielId" required defaultValue="" autoFocus>
+                <option value="" disabled>
+                  Bitte wählen…
+                </option>
+                {verschiebenZiele.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert} style={{ marginTop: 16 }}>
+              <IVerschieben />
+              {wirdGespeichert ? "Speichert…" : "Verschieben"}
+            </button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -437,20 +591,40 @@ function PositionPanel({
   position,
   accountTypNamen,
   benutzerListe,
+  verschiebenZiele,
+  aufVerschieben,
   onAktualisiert,
 }: {
   position: PositionDto;
   accountTypNamen: Map<string, string>;
   benutzerListe: BenutzerListEintragDto[];
+  verschiebenZiele: ZielOption[];
+  aufVerschieben: (zielId: string) => Promise<void>;
   onAktualisiert: () => void;
 }) {
   const [besetzenOffen, setBesetzenOffen] = useState(false);
   const [beendenBesetzung, setBeendenBesetzung] = useState<BesetzungDto | null>(null);
   const [deaktivierenOffen, setDeaktivierenOffen] = useState(false);
+  const [verschiebenOffen, setVerschiebenOffen] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
   const status = positionsStatus(position);
+
+  async function verschieben(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await aufVerschieben(String(form.get("zielId") ?? ""));
+      setVerschiebenOffen(false);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Position konnte nicht verschoben werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
 
   async function besetzen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -531,6 +705,12 @@ function PositionPanel({
           <button className="zv-btn zv-btn-still" type="button" onClick={() => setDeaktivierenOffen(true)}>
             <IDeaktivieren />
             Deaktivieren
+          </button>
+        )}
+        {verschiebenZiele.length > 0 && (
+          <button className="zv-btn zv-btn-still" type="button" onClick={() => setVerschiebenOffen(true)}>
+            <IVerschieben />
+            Verschieben nach…
           </button>
         )}
       </div>
@@ -622,15 +802,53 @@ function PositionPanel({
           </div>
         </Modal>
       )}
+
+      {verschiebenOffen && (
+        <Modal titel="Verschieben nach…" onClose={() => setVerschiebenOffen(false)}>
+          <form onSubmit={verschieben}>
+            <p className="zv-sub">
+              Neue übergeordnete Position für „{position.titel}" (Berichtslinie, nicht die Organisationseinheit --
+              die bleibt dieselbe).
+            </p>
+            <div className="zv-field">
+              <label htmlFor="position-ziel">Neue übergeordnete Position</label>
+              <select id="position-ziel" name="zielId" required defaultValue="" autoFocus>
+                <option value="" disabled>
+                  Bitte wählen…
+                </option>
+                {verschiebenZiele.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert} style={{ marginTop: 16 }}>
+              <IVerschieben />
+              {wirdGespeichert ? "Speichert…" : "Verschieben"}
+            </button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
 
 /**
- * Organigramm-Grundansicht + Seitenpanel -- Organigramm-Plan,
- * Lieferreihenfolge Schritt 7/UI. Drag & Drop + Kontextmenü (Umhängen),
- * Account-Typ-Verwaltung, "Anzeigen als…" und die Tabellenansicht/Export
- * folgen als eigene, spaeter commitete Teilschritte.
+ * Organigramm-Grundansicht + Seitenpanel + Umhängen -- Organigramm-Plan,
+ * Lieferreihenfolge Schritt 7/UI. Account-Typ-Verwaltung, "Anzeigen als…"
+ * und die Tabellenansicht/Export folgen als eigene, spaeter commitete
+ * Teilschritte.
+ *
+ * Umhängen geht zwei gleichwertige Wege (Organigramm-Plan: "Drag & Drop,
+ * PLUS eine gleichwertige Tastatur-Alternative"): natives HTML5-Drag&Drop
+ * direkt im Baum, oder im Seitenpanel "Verschieben nach…" -- ein Modal mit
+ * einer <select>-Zielauswahl statt eines literalen Rechtsklick-
+ * Kontextmenues. Bewusst so: ein echtes Kontextmenue ist fuer Tastatur-
+ * und Screenreader-Nutzung notorisch schlecht zugaenglich, ein Modal mit
+ * einer fokussierbaren Liste ist die tatsaechlich gleichwertige
+ * Alternative, nicht nur eine andere Form desselben Mauswege. Beide Wege
+ * nutzen dieselbe gueltigeZiele()-Funktion, damit sie nie auseinanderlaufen.
  */
 export function Organigramm() {
   const [orgUnits, setOrgUnits] = useState<OrgUnitDto[]>([]);
@@ -644,6 +862,8 @@ export function Organigramm() {
   // Knoten-Referenz waere dann veraltet. Der Schluessel findet den
   // aktuellen Knoten jedes Mal frisch in der neu gebauten Liste.
   const [ausgewaehlterSchluessel, setAusgewaehlterSchluessel] = useState<string | null>(null);
+  const [gezogenerSchluessel, setGezogenerSchluessel] = useState<string | null>(null);
+  const [zielSchluessel, setZielSchluessel] = useState<string | null>(null);
 
   function laden() {
     return Promise.all([
@@ -681,6 +901,53 @@ export function Organigramm() {
   }, [wurzel]);
 
   const ausgewaehlterKnoten = knoten.find((k) => k.schluessel === ausgewaehlterSchluessel) ?? null;
+  const orgUnitNamen = useMemo(() => new Map(orgUnits.map((u) => [u.id, u.name])), [orgUnits]);
+
+  const gezogenerKnoten = knoten.find((k) => k.schluessel === gezogenerSchluessel) ?? null;
+  const gueltigeZielSchluessel = useMemo(
+    () => (gezogenerKnoten ? gueltigeZiele(gezogenerKnoten, knoten) : new Set<string>()),
+    [gezogenerKnoten, knoten]
+  );
+
+  const verschiebenZiele = useMemo(() => {
+    if (!ausgewaehlterKnoten) return [];
+    if (ausgewaehlterKnoten.art === "einheit" && !istZiehbareEinheit(ausgewaehlterKnoten.einheit!)) return [];
+    return zielOptionen(ausgewaehlterKnoten, knoten, orgUnitNamen);
+  }, [ausgewaehlterKnoten, knoten, orgUnitNamen]);
+
+  async function verschiebenNachId(quelle: Knoten, zielId: string) {
+    if (quelle.art === "einheit") {
+      await api.organigrammOrgUnitAktualisieren(quelle.einheit!.id, { parentId: zielId });
+    } else {
+      await api.organigrammPositionAktualisieren(quelle.position!.id, { parentPositionId: zielId });
+    }
+    await laden();
+  }
+
+  function beiDragOver(e: DragEvent<HTMLButtonElement>, ziel: Knoten) {
+    if (!gueltigeZielSchluessel.has(ziel.schluessel)) return;
+    e.preventDefault();
+    setZielSchluessel(ziel.schluessel);
+  }
+
+  async function beiDrop(e: DragEvent<HTMLButtonElement>, ziel: Knoten) {
+    e.preventDefault();
+    const quelle = gezogenerKnoten;
+    setGezogenerSchluessel(null);
+    setZielSchluessel(null);
+    if (!quelle || !gueltigeZielSchluessel.has(ziel.schluessel)) return;
+    const zielId = ziel.art === "einheit" ? ziel.einheit!.id : ziel.position!.id;
+    try {
+      await verschiebenNachId(quelle, zielId);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Verschieben nicht möglich.");
+    }
+  }
+
+  function beiDragEnd() {
+    setGezogenerSchluessel(null);
+    setZielSchluessel(null);
+  }
 
   return (
     <div>
@@ -713,6 +980,13 @@ export function Organigramm() {
                 accountTypNamen={accountTypNamen}
                 ausgewaehlt={k.schluessel === ausgewaehlterSchluessel}
                 onOeffnen={() => setAusgewaehlterSchluessel(k.schluessel)}
+                ziehtGerade={k.schluessel === gezogenerSchluessel}
+                istZielMoeglich={gezogenerSchluessel !== null && gueltigeZielSchluessel.has(k.schluessel)}
+                istZielAktuell={k.schluessel === zielSchluessel}
+                onDragStart={() => setGezogenerSchluessel(k.schluessel)}
+                onDragOver={(e) => beiDragOver(e, k)}
+                onDrop={(e) => beiDrop(e, k)}
+                onDragEnd={beiDragEnd}
               />
             ))}
           </div>
@@ -725,6 +999,8 @@ export function Organigramm() {
             einheit={ausgewaehlterKnoten.einheit}
             positionenInEinheit={positionen.filter((p) => p.orgUnitId === ausgewaehlterKnoten.einheit!.id)}
             accountTypen={accountTypen}
+            verschiebenZiele={verschiebenZiele}
+            aufVerschieben={(zielId) => verschiebenNachId(ausgewaehlterKnoten, zielId)}
             onAktualisiert={laden}
           />
         )}
@@ -733,6 +1009,8 @@ export function Organigramm() {
             position={ausgewaehlterKnoten.position}
             accountTypNamen={accountTypNamen}
             benutzerListe={benutzerListe}
+            verschiebenZiele={verschiebenZiele}
+            aufVerschieben={(zielId) => verschiebenNachId(ausgewaehlterKnoten, zielId)}
             onAktualisiert={laden}
           />
         )}
