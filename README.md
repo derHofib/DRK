@@ -1706,6 +1706,77 @@ e2e-Spec, statt sie weiter nur als Kommentar zu behaupten.
 Geprüft: `pnpm --filter @zimmerakte/api build` sauber, volle API-Suite
 **403/403 grün (37 Suiten)** -- 396 vorher + 7 neue.
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), fünfter Teilschritt:
+„Anzeigen als…" (Rechte-Simulation).** Vorletzter fehlender UI-Teilschritt
+vor Tabellenansicht/Export: eine Admin-Ansicht, die für eine gewählte
+Person ODER eine gewählte Position zeigt, welche Rechte effektiv gelten
+würden, inklusive Herkunft je Zelle -- rein lesend, keine Mutation.
+
+- **Zwei getrennte Simulationspfade statt eines gemeinsamen**, weil es
+  fachlich zwei verschiedene Fragen sind: `simuliereFuerBenutzer()`
+  beantwortet „was gilt heute effektiv" (alle aktiven Positionen der
+  Person, vereinigt, PLUS eine greifende Vertretung -- exakt dieselbe
+  Logik wie `hatRecht()`), `simuliereFuerPosition()` beantwortet „was
+  würde DIESE Position allein gewähren". Deshalb filtert
+  `simuliereFuerPosition()` bewusst NICHT nach `p.aktiv`: eine geplante
+  Platzhalter-Position (`ist_geplant=true`, noch unbesetzt) muss
+  simulierbar sein, das ist laut Organigramm-Plan der Hauptanwendungsfall
+  für diese Ansicht (Rechte vorab konfigurieren und prüfen, bevor überhaupt
+  jemand zugewiesen wird).
+- **`positionsGrant()` refaktoriert, Verhalten unverändert**: die
+  Override/Default-Abfrage steckt jetzt in der neuen privaten
+  `positionsGrantRoh()` (liefert zusätzlich die Herkunft
+  `"override"`/`"account-typ-default"`), `positionsGrant()` baut daraus wie
+  bisher das `PositionsErgebnis` per `orgUnitIdsFuerScope()`. Die
+  bestehende API-Suite bleibt dabei unverändert grün -- der Beleg, dass
+  sich am Produktivverhalten nichts verschoben hat.
+- **Fünf Herkunftswerte** (`RechtHerkunft`, neu in `packages/shared`):
+  `vollzugriff` (Wildcard-Kurzschluss), `account-typ-default`, `override`,
+  `delegation` (kommt ausschließlich über eine aktive Vertretung herein,
+  nie aus einer eigenen Position) und `kein-eintrag` (impliziter Deny).
+  `RECHT_HERKUNFT_LABEL` übersetzt sie für die Oberfläche.
+- **`GET /rechte/simulation`** (neu im bestehenden `RechteController`, wie
+  im Kommentar dort seit Schritt 7/UI, vierter Teilschritt angekündigt):
+  genau eines von `benutzerId`/`positionId` als Query-Parameter
+  (`safeParse` + `BadRequestException` statt ungefangenem `ZodError`,
+  CLAUDE.md-Pflicht), sonst 400. Gated mit demselben
+  `organigramm.manage-permissions` wie `/rechte/registry` -- „Anzeigen
+  als…" deckt auf, wie Rechte für eine Person/Position aufgelöst werden,
+  dieselbe Vertraulichkeitsstufe wie die Account-Typ-Verwaltung selbst.
+  `apps/api/package.json` bekommt dafür erstmals eine Abhängigkeit auf
+  `@zimmerakte/shared` (bisher importierte keine API-Datei von dort --
+  `RechtHerkunft`/`SimulationZelleDto`/`SimulationDto` sollen nicht doppelt
+  gepflegt werden, API und Web teilen jetzt dieselbe Quelle).
+- **Web-Client**: dritter Reiter „Anzeigen als…" im Organigramm-Segmented-
+  Control (neues Icon `IAnzeigenAls`, `Glasses` -- noch nicht im Set
+  verwendet). `SimulationAnsicht` lädt wie `AccountTypenAnsicht` NICHTS
+  automatisch beim Öffnen des Reiters, sondern erst nach einer
+  tatsächlichen Auswahl (Mitarbeiter/in ODER Position, zwei getrennte
+  `<select>`-Formulare statt eines gemeinsamen Dropdowns, weil beide IDs
+  aus unterschiedlichen Wertebereichen stammen). Ergebnis als
+  `.zv-karten-liste`-Tabelle, „Zugriff" über die vorhandenen
+  `.zv-pill-ok`/`.zv-pill-neutral`-Klassen (Regel 7: keine neue Farbe),
+  „Herkunft" als Klartext über `RECHT_HERKUNFT_LABEL`. Fehlerbehandlung
+  wie bei `EinheitPanel`/`PositionPanel`: der Server entscheidet, das UI
+  zeigt nur die Server-Antwort an.
+
+Geprüft: `pnpm build` sauber (shared+API+Web), volle API-Suite **411/411
+grün (38 Suiten)** -- 403 vorher + 8 neue (`rechte-simulation-lesen.e2e-
+spec.ts`: beide Zielarten, Override- vs. Account-Typ-Default-Herkunft,
+Vollzugriff-Kurzschluss, beide 400-Fälle, 403, 401, 404 bei unbekannter
+`positionId`). Live-Browser-Check (Playwright, eigens angelegter
+Testmandant mit Admin-Konto, Vollzugriff-Konto, einer besetzten Position
+mit Override und einer UNBESETZTEN Platzhalter-Position, echte
+UI-Anmeldung): Reiter „Anzeigen als…" klickbar, zeigt erklärenden Satz und
+bleibt zunächst ergebnislos; Mitarbeiter/in „Team Leitung Nord" ausgewählt
+→ 39 Zeilen (= `RECHTE_REGISTRY.length`) erscheinen sofort, `zimmer ·
+ansehen` zeigt „Erlaubt" mit Herkunft „Override · Teilbaum (Linie)";
+Wechsel auf Position → die unbesetzte Platzhalter-Position „Platzhalter:
+neue Teamleitung" ausgewählt → dieselben 39 Zeilen, `zimmer · ansehen`
+jetzt korrekt „Account-Typ · Team" (kein Override auf dieser Position) --
+belegt, dass eine noch nie zugewiesene Position tatsächlich simulierbar
+ist. Keine Konsolenfehler. Testmandant anschließend vollständig gelöscht.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

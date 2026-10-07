@@ -49,6 +49,7 @@ import {
   EyeOff,
   FileClock,
   FileText,
+  Glasses,
   GripVertical,
   HandCoins,
   History,
@@ -286,3 +287,5 @@ export const IPosition = baue(Briefcase);
 export const IStabsstelle = baue(Workflow);
 /** "Verschieben nach…" -- die Tastatur-/Klick-Alternative zu Drag & Drop. */
 export const IVerschieben = baue(Move);
+/** "Anzeigen als…" (Rechte-Simulation) -- durch eine fremde Brille schauen. */
+export const IAnzeigenAls = baue(Glasses);

@@ -636,6 +636,40 @@ export interface RechtRegistryEintragDto {
 }
 
 /**
+ * Herkunft einer simulierten Rechte-Zelle ("Anzeigen als…", Organigramm-Plan
+ * Schritt 7/UI, fünfter Teilschritt) -- erklärt, WOHER ein erlaubt/nicht
+ * erlaubt kommt, nicht nur DASS es so ist: "vollzugriff" (Wildcard-
+ * Kurzschluss), "account-typ-default" (aus account_typ_recht),
+ * "override" (org_position_recht_override ersetzt den Default),
+ * "delegation" (kommt ausschließlich über eine aktive Vertretung herein,
+ * nie aus einer eigenen Position) und "kein-eintrag" (impliziter Deny,
+ * weder Default noch Override vorhanden).
+ */
+export type RechtHerkunft = "vollzugriff" | "account-typ-default" | "override" | "delegation" | "kein-eintrag";
+
+export const RECHT_HERKUNFT_LABEL: Record<RechtHerkunft, string> = {
+  vollzugriff: "Vollzugriff",
+  "account-typ-default": "Account-Typ",
+  override: "Override",
+  delegation: "Vertretung",
+  "kein-eintrag": "Kein Zugriff",
+};
+
+export interface SimulationZelleDto {
+  modul: string;
+  aktion: string;
+  erlaubt: boolean;
+  herkunft: RechtHerkunft;
+  scope?: string;
+}
+
+/** Antwort von GET /rechte/simulation -- genau eines von benutzerId/positionId war die Anfrage. */
+export interface SimulationDto {
+  ziel: { typ: "benutzer" | "position"; id: string };
+  zellen: SimulationZelleDto[];
+}
+
+/**
  * Vertretung (migrations/0043-0046, delegation.service.ts). status speichert
  * nur beantragt/genehmigt/widerrufen -- effektiverStatus rechnet
  * aktiv/abgelaufen serverseitig aus status + von/bis vs. heute dazu

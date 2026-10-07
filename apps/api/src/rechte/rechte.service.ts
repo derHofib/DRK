@@ -1,7 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import type { RechtHerkunft, SimulationZelleDto } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
-import { istDelegierbar, istSensibel } from "./registry";
+import { istDelegierbar, istSensibel, RECHTE_REGISTRY } from "./registry";
 
 interface AktivePosition {
   id: string;
@@ -164,39 +165,50 @@ export class RechteService {
    * weder ein Default noch ein Override existiert (impliziter Deny --
    * traegt bewusst NICHT zur Verbotsmenge bei, siehe PositionsErgebnis-Kommentar
    * oben: das ist Abwesenheit einer Erlaubnis, kein aktives Verbot).
+   *
+   * Extrahiert aus positionsGrant() (Organigramm-Plan Schritt 7/UI, fünfter
+   * Teilschritt "Anzeigen als…"): die Simulation braucht genau diese rohe
+   * Override/Default-Entscheidung samt Herkunft, OHNE die anschliessende
+   * Org-Unit-Aufloesung -- eine simulierte Zelle zeigt "Override" oder
+   * "Account-Typ", nicht Mengen von Org-Unit-Ids.
    */
+  private async positionsGrantRoh(
+    client: import("pg").PoolClient,
+    position: AktivePosition,
+    modul: string,
+    aktion: string
+  ): Promise<{ erlaubt: boolean; scope: string; herkunft: "override" | "account-typ-default" } | null> {
+    const { rows: overrideRows } = await client.query(
+      `SELECT erlaubt, scope FROM org_position_recht_override
+       WHERE position_id = $1 AND modul = $2 AND aktion = $3`,
+      [position.id, modul, aktion]
+    );
+    if (overrideRows.length > 0) {
+      return { erlaubt: overrideRows[0].erlaubt, scope: overrideRows[0].scope, herkunft: "override" };
+    }
+    const { rows: defaultRows } = await client.query(
+      `SELECT erlaubt, scope FROM account_typ_recht
+       WHERE account_typ_id = $1 AND modul = $2 AND aktion = $3`,
+      [position.accountTypId, modul, aktion]
+    );
+    if (defaultRows.length === 0) return null;
+    return { erlaubt: defaultRows[0].erlaubt, scope: defaultRows[0].scope, herkunft: "account-typ-default" };
+  }
+
   private async positionsGrant(
     client: import("pg").PoolClient,
     position: AktivePosition,
     modul: string,
     aktion: string
   ): Promise<PositionsErgebnis | null> {
-    const { rows: overrideRows } = await client.query(
-      `SELECT erlaubt, scope FROM org_position_recht_override
-       WHERE position_id = $1 AND modul = $2 AND aktion = $3`,
-      [position.id, modul, aktion]
-    );
-    let erlaubt: boolean;
-    let scope: string;
-    if (overrideRows.length > 0) {
-      erlaubt = overrideRows[0].erlaubt;
-      scope = overrideRows[0].scope;
-    } else {
-      const { rows: defaultRows } = await client.query(
-        `SELECT erlaubt, scope FROM account_typ_recht
-         WHERE account_typ_id = $1 AND modul = $2 AND aktion = $3`,
-        [position.accountTypId, modul, aktion]
-      );
-      if (defaultRows.length === 0) return null;
-      erlaubt = defaultRows[0].erlaubt;
-      scope = defaultRows[0].scope;
-    }
+    const roh = await this.positionsGrantRoh(client, position, modul, aktion);
+    if (!roh) return null;
 
-    const orgUnitIds = await this.orgUnitIdsFuerScope(client, position, scope);
+    const orgUnitIds = await this.orgUnitIdsFuerScope(client, position, roh.scope);
     const ergebnis = leeresErgebnis();
-    ergebnis.eigenerGrant = erlaubt;
+    ergebnis.eigenerGrant = roh.erlaubt;
     if (orgUnitIds !== null) {
-      if (erlaubt) orgUnitIds.forEach((id) => ergebnis.erlaubteOrgUnitIds.add(id));
+      if (roh.erlaubt) orgUnitIds.forEach((id) => ergebnis.erlaubteOrgUnitIds.add(id));
       else orgUnitIds.forEach((id) => ergebnis.verboteneOrgUnitIds.add(id));
     }
     return ergebnis;
@@ -306,5 +318,120 @@ export class RechteService {
       ergebnis = vereinigen(ergebnis, vertretenerErgebnis);
     }
     return ergebnis;
+  }
+
+  /**
+   * "Anzeigen als…" (Organigramm-Plan, Schritt 7/UI, fünfter Teilschritt):
+   * rein lesend, KEINE Mutation -- im Unterschied zu hatRecht()/
+   * ermittleErlaubteOrgUnitIds() wird hier nichts entschieden oder
+   * durchgesetzt, nur offengelegt, WIE die Rechte-Engine für diesen
+   * Benutzer JEDE Zeile der Registry gerade aufloesen würde, samt Herkunft
+   * je Zelle. Deshalb zwei getrennte Pfade statt einer gemeinsamen Methode:
+   * "für einen Benutzer" beantwortet "was gilt heute effektiv" (inklusive
+   * Vertretung, exakt wie hatRecht()), "für eine Position"
+   * (simuliereFuerPosition, unten) beantwortet die fachlich andere Frage
+   * "was würde DIESE Position allein gewähren" -- unabhaengig davon, ob
+   * und von wem sie überhaupt besetzt ist.
+   */
+  async simuliereFuerBenutzer(benutzerId: string): Promise<SimulationZelleDto[]> {
+    return this.db.withTenant(async (client) => {
+      if (await this.istVollzugriff(client, benutzerId)) {
+        return RECHTE_REGISTRY.map((e) => ({
+          modul: e.modul,
+          aktion: e.aktion,
+          erlaubt: true,
+          herkunft: "vollzugriff" as const,
+          scope: "tenant",
+        }));
+      }
+
+      const positionen = await this.aktivePositionen(client, benutzerId);
+      const zellen: SimulationZelleDto[] = [];
+      for (const eintrag of RECHTE_REGISTRY) {
+        // Erste Position mit erlaubt=true gewinnt sofort (die Herkunft einer
+        // einzelnen erlaubenden Position ist eindeutig); ohne Treffer merkt
+        // sich die Schleife trotzdem die letzte gefundene (sogar verbietende)
+        // Herkunft, damit "kein-eintrag" wirklich nur bedeutet "keine
+        // einzige Position hatte ueberhaupt eine Zeile dafuer".
+        let treffer: { herkunft: RechtHerkunft; scope?: string; erlaubt: boolean } | null = null;
+        for (const position of positionen) {
+          const roh = await this.positionsGrantRoh(client, position, eintrag.modul, eintrag.aktion);
+          if (!roh) continue;
+          if (roh.erlaubt) {
+            treffer = { herkunft: roh.herkunft, scope: roh.scope, erlaubt: true };
+            break;
+          }
+          if (!treffer) treffer = { herkunft: roh.herkunft, scope: roh.scope, erlaubt: false };
+        }
+
+        if (!treffer || !treffer.erlaubt) {
+          const delegiert = await this.delegierteAufloesung(client, benutzerId, eintrag.modul, eintrag.aktion);
+          if (delegiert?.eigenerGrant) treffer = { herkunft: "delegation", erlaubt: true };
+        }
+
+        zellen.push({
+          modul: eintrag.modul,
+          aktion: eintrag.aktion,
+          erlaubt: treffer?.erlaubt ?? false,
+          herkunft: treffer?.herkunft ?? "kein-eintrag",
+          scope: treffer?.scope,
+        });
+      }
+      return zellen;
+    });
+  }
+
+  /**
+   * Zweiter Simulationspfad (siehe Kommentar bei simuliereFuerBenutzer):
+   * "was würde diese Position allein gewähren", auch fuer eine noch gar
+   * nicht besetzte Platzhalter-Position (istGeplant) -- das ist laut
+   * Organigramm-Plan der Hauptanwendungsfall ("Platzhalter-Position anlegen
+   * → Rechte konfigurieren → … → Rechte greifen sofort bei Zuweisung"), bei
+   * dem eine Leitung VOR der ersten Besetzung prüfen will, ob die
+   * konfigurierten Rechte stimmen. Filtert deshalb bewusst NICHT nach
+   * `p.aktiv` -- anders als jeder andere Pfad der Rechte-Engine, der
+   * ausschliesslich aktuell besetzte, aktive Positionen eines Benutzers
+   * betrachtet.
+   */
+  async simuliereFuerPosition(positionId: string): Promise<SimulationZelleDto[]> {
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query(
+        `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff
+         FROM org_position p JOIN account_typ a ON a.id = p.account_typ_id
+         WHERE p.id = $1`,
+        [positionId]
+      );
+      if (rows.length === 0) throw new NotFoundException("Position nicht gefunden.");
+      const position: AktivePosition = {
+        id: rows[0].id,
+        orgUnitId: rows[0].org_unit_id,
+        typ: rows[0].typ,
+        accountTypId: rows[0].account_typ_id,
+        istVollzugriff: rows[0].ist_vollzugriff,
+      };
+
+      if (position.istVollzugriff) {
+        return RECHTE_REGISTRY.map((e) => ({
+          modul: e.modul,
+          aktion: e.aktion,
+          erlaubt: true,
+          herkunft: "vollzugriff" as const,
+          scope: "tenant",
+        }));
+      }
+
+      const zellen: SimulationZelleDto[] = [];
+      for (const eintrag of RECHTE_REGISTRY) {
+        const roh = await this.positionsGrantRoh(client, position, eintrag.modul, eintrag.aktion);
+        zellen.push({
+          modul: eintrag.modul,
+          aktion: eintrag.aktion,
+          erlaubt: roh?.erlaubt ?? false,
+          herkunft: roh ? roh.herkunft : "kein-eintrag",
+          scope: roh?.scope,
+        });
+      }
+      return zellen;
+    });
   }
 }

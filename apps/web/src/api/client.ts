@@ -27,6 +27,7 @@ import type {
   RechnungDto,
   RechnungStatus,
   RechtRegistryEintragDto,
+  SimulationDto,
   StandortDto,
   TagDto,
   TagesberichtDto,
@@ -462,6 +463,9 @@ export const api = {
       body: JSON.stringify({ rechte }),
     }),
   rechteRegistry: () => request<RechtRegistryEintragDto[]>("/rechte/registry"),
+  // "Anzeigen als…" -- genau eines von benutzerId/positionId, s. rechte.controller.ts.
+  rechteSimulation: (query: { benutzerId: string } | { positionId: string }) =>
+    request<SimulationDto>(`/rechte/simulation?${new URLSearchParams(query as Record<string, string>).toString()}`),
   organigrammOrgUnitAnlegen: (payload: { typ: "bereich" | "team"; name: string; parentId: string }) =>
     request<OrgUnitDto>("/organigramm/org-units", { method: "POST", body: JSON.stringify(payload) }),
   organigrammOrgUnitAktualisieren: (id: string, payload: { name?: string; parentId?: string }) =>
