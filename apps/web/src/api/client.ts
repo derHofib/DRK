@@ -25,6 +25,7 @@ import type {
   RechnungDetailDto,
   RechnungDto,
   RechnungStatus,
+  RechtRegistryEintragDto,
   StandortDto,
   TagDto,
   TagesberichtDto,
@@ -447,7 +448,19 @@ export const api = {
   organigrammOrgUnits: () => request<OrgUnitDto[]>("/organigramm/org-units"),
   organigrammPositionen: () => request<PositionDto[]>("/organigramm/positions"),
   organigrammAccountTypen: () => request<AccountTypDto[]>("/organigramm/account-typen"),
-  // Account-Typ-Verwaltung kommt mit einem spaeteren UI-Teilschritt dazu.
+  organigrammAccountTypAnlegen: (payload: { name: string; kategorie?: "intern" | "extern" }) =>
+    request<AccountTypDto>("/organigramm/account-typen", { method: "POST", body: JSON.stringify(payload) }),
+  organigrammAccountTypAktualisieren: (id: string, payload: { name?: string }) =>
+    request<AccountTypDto>(`/organigramm/account-typen/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  organigrammAccountTypRechteSetzen: (
+    id: string,
+    rechte: { modul: string; aktion: string; scope: string; erlaubt: boolean }[]
+  ) =>
+    request<AccountTypDto>(`/organigramm/account-typen/${id}/rechte`, {
+      method: "PUT",
+      body: JSON.stringify({ rechte }),
+    }),
+  rechteRegistry: () => request<RechtRegistryEintragDto[]>("/rechte/registry"),
   organigrammOrgUnitAnlegen: (payload: { typ: "bereich" | "team"; name: string; parentId: string }) =>
     request<OrgUnitDto>("/organigramm/org-units", { method: "POST", body: JSON.stringify(payload) }),
   organigrammOrgUnitAktualisieren: (id: string, payload: { name?: string; parentId?: string }) =>

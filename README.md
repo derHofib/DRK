@@ -1535,6 +1535,60 @@ den eigenen Nachkommen feuert keinen PATCH-Request und lässt den Baum
 unverändert (Zyklenschutz greift schon clientseitig, bevor der Server
 überhaupt gefragt wird). Keine Konsolenfehler.
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), vierter Teilschritt:
+Account-Typ-Verwaltung.** Letzter Baustein vor „Anzeigen als…" und der
+Tabellenansicht/Export.
+
+- **Ein neuer Endpunkt, weil die Matrix sonst nicht dieselbe Liste wie
+  serverseitig hätte**: `GET /rechte/registry` (neuer `RechteController`,
+  `apps/api/src/rechte/`) gibt `RECHTE_REGISTRY` unverändert zurück --
+  gated mit `organigramm.manage-permissions`, genau wie `GET /audit-log`.
+  `RechteModule` bekommt dafür erstmals einen eigenen Controller (vorher
+  nur Service/Guard für andere Module); `GET /rechte/simulation`
+  ("Anzeigen als…") zieht laut Plan in denselben Controller, wenn dieser
+  Teilschritt kommt. Neue e2e-Spec `rechte-registry-lesen.e2e-spec.ts` (3
+  Tests, inkl. 403 ohne das Recht und einer Gegenprobe gegen die echte
+  `RECHTE_REGISTRY`-Konstante statt nur gegen eine erwartete Zeilenzahl).
+- Im Web-Client ein neuer Reiter **innerhalb** der Organigramm-Seite
+  („Baum" / „Account-Typen", `.zv-segmented`-Muster aus `Klienten.tsx`)
+  statt eines eigenen Hauptmenüpunkts -- Account-Typen sind ein
+  Verwaltungsaspekt des Organigramms, kein eigenständiges Modul.
+- **Liste + Anlegen/Umbenennen** nach dem Muster von `KassenbuchTypen.tsx`:
+  `ist_system`-Zeilen (Systemvorlagen) bekommen keinen
+  „Umbenennen"-Knopf, ihre Rechte-Matrix bleibt trotzdem bearbeitbar --
+  „Systemvorlage" heißt laut Organigramm-Plan nur „vorbefüllt und vor
+  Löschen/Umbenennen geschützt", nicht „nicht editierbar".
+- **Rechte-Matrix im Seitenpanel** (eigene `AccountTypRechteEditor`-
+  Komponente, per Vollbild-Umschalter bei Bedarf mehr Platz): eine Zeile
+  pro `(modul, aktion)` aus der Registry, ohne Eintrag in der lokalen
+  Auswahl ein impliziter Deny -- exakt wie eine fehlende
+  `account_typ_recht`-Zeile serverseitig. Scope kommt aus einer
+  festen Acht-Werte-Liste (`own`/`team`/`wohngruppe`/`subtree`/
+  `einrichtung`/`bereich`/`tenant`/`assigned`, aus dem Organigramm-Plan),
+  nicht aus einem Freitextfeld, obwohl die Spalte selbst in der DB freier
+  Text ist. Änderungen werden lokal gesammelt und erst auf „Speichern"
+  als Ganzes per `PUT` geschrieben (der Endpunkt ersetzt ohnehin die
+  komplette Rechte-Menge, ein Request pro Zelle wäre sinnlos).
+- `ist_vollzugriff=true`-Typen zeigen statt der Matrix nur den Hinweistext
+  „nicht reduzierbar" -- reiner Anzeigezustand, kein Grid, exakt wie im
+  Organigramm-Plan vorgegeben.
+- `GET /rechte/registry` wird bewusst NICHT im Haupt-`laden()` der Seite
+  mitgeladen, sondern erst, sobald „Account-Typen" tatsächlich angeklickt
+  wird: das Recht dafür ist enger als `organigramm.ansehen` (das für den
+  Baum reicht), ein Konto ohne `manage-permissions` soll beim bloßen
+  Öffnen der Organigramm-Seite keinen Fehlerbanner sehen.
+
+Geprüft: `pnpm build` sauber, volle API-Suite **396/396 grün (36
+Suiten)** -- 393 vorher + 3 neue (Registry-Endpunkt). Live-Browser-Check
+(Playwright, eigens angelegter Testmandant): Account-Typ anlegen →
+erscheint sofort in der Liste; Rechte-Matrix zeigt alle 39
+Registry-Zeilen; eine Zelle auf Scope „Team" gesetzt, gespeichert, Panel
+geschlossen und neu geöffnet → Wert korrekt aus der DB gelesen (nicht nur
+im Client-State hängengeblieben); Vollzugriff-Typ zeigt den Hinweistext
+statt eines Grids; eine auf `ist_system=true` gesetzte Zeile verliert
+korrekt den „Umbenennen"-Knopf; kein horizontaler Seiten-Overflow bei
+390px. Keine Konsolenfehler.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

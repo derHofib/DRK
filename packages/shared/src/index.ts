@@ -621,3 +621,16 @@ export interface AccountTypDto {
   istVollzugriff: boolean;
   rechte: AccountTypRechtDto[];
 }
+
+/**
+ * Gespiegelt aus apps/api/src/rechte/registry.ts (GET /rechte/registry) --
+ * die Modul×Aktion-Registry ist Code, nicht die Datenbank. Grundlage fuer
+ * die Rechte-Matrix in der Account-Typ-Verwaltung: eine Zeile ohne
+ * zugehoerige account_typ_recht-Zeile ist einfach ein impliziter Deny.
+ */
+export interface RechtRegistryEintragDto {
+  modul: string;
+  aktion: string;
+  sensibel?: boolean;
+  nieDelegierbar?: boolean;
+}
