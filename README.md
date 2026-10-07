@@ -1429,6 +1429,63 @@ Personendaten-Redaktion korrekt für ein Konto ohne
 API-Suite weiterhin **393/393 grün (35 Suiten)** — UI-Schritt berührt kein
 Backend.
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), zweiter Teilschritt:
+Seitenpanel pro Knoten.** Klick auf einen Knoten (Organisationseinheit
+oder Position) öffnet die bestehende `Seitenpanel`-Komponente (slide-in,
+wie beim Klient-Detail) mit Stammdaten und Aktionen.
+
+- **Eine kleine, aber notwendige Backend-Erweiterung vorab**:
+  `BesetzungDto` bekam `besetzungId` und `gueltigAb` (POSITIONEN_SELECT in
+  `organigramm.service.ts`, `packages/shared`) — ohne `besetzungId` hätte
+  das Seitenpanel keine Möglichkeit gehabt, `PATCH .../besetzung/:id/beenden`
+  für eine bestimmte Besetzung aufzurufen. Die Redaktionsfunktion
+  `zuPositionDto()` behält beide Felder auch ohne
+  `organigramm.personendaten-sehen` bei (nur `benutzerId`/`benutzerName`
+  werden `null`) — ein bestehender Fehler dabei entdeckt und mitbehoben:
+  die alte Fassung hätte diese Felder beim Redigieren stillschweigend
+  verworfen. Bestehende `toEqual()`-Assertions in `organigramm-lesen`/
+  `organigramm-schreiben.e2e-spec.ts` entsprechend ergänzt (exakte
+  Objektgleichheit, neue Felder mussten mit).
+- **Organisationseinheit-Panel**: Name/Typ/Status, Liste der enthaltenen
+  Positionen, „Bereich/Team anlegen" (neue Unter-Einheit) und „Position
+  anlegen" — beides als Modal nach dem etablierten Muster
+  (`KassenbuchTypen.tsx`).
+- **Positions-Panel**: Titel/Typ/Account-Typ/Status, Liste der aktiven
+  Besetzungen mit „seit"-Datum (aus dem neuen `gueltigAb`-Feld) und je
+  einem „Beenden"-Link, „Besetzen" (Mitarbeiter-Auswahl aus
+  `api.benutzerListe()` + Datum) und „Deaktivieren" (mit Bestätigungs-Modal,
+  da über die API nicht rückgängig zu machen).
+- **Bewusst keine clientseitige Rechteprüfung, die Aktionen ausblendet**:
+  `rollen-mapping.ts` (Schritt 3) kennt `organigramm.bearbeiten` für
+  Einrichtungsleitung/Mitarbeiter noch nicht — ein serverseitiges 403 wäre
+  heute für die meisten Konten der Normalfall. Die Knöpfe bleiben trotzdem
+  sichtbar (der Server bleibt die einzige Instanz, die wirklich
+  entscheidet, sinngemäß dasselbe Prinzip wie CLAUDE.md Regel 1 für RLS),
+  Fehlermeldungen vom Server erscheinen direkt im Panel.
+- Nach jeder Mutation werden alle vier Listen (Org-Units, Positionen,
+  Account-Typen, Benutzer) neu geladen; das Panel hält dabei nicht die
+  alte Knoten-Referenz fest, sondern nur einen Schlüssel (`u:<id>`/
+  `p:<id>`) und findet den aktuellen Knoten nach jedem Neuaufbau frisch —
+  eine gehaltene Objekt-Referenz wäre nach dem Neuladen veraltet gewesen.
+- **Im Live-Test eine eigene Fehlannahme aufgedeckt, kein App-Bug**: ein
+  Testlauf, der eine Besetzung mit „Ende = gestern" sofort beenden wollte,
+  obwohl die Besetzung selbst erst „heute" begann, bekam zu Recht ein 400
+  vom Server (`gueltig_bis >= gueltig_ab`, derselbe CHECK wie überall
+  sonst im Projekt) — die Fehlermeldung erschien korrekt im Panel. Und:
+  „Ende = heute" lässt die Besetzung bis einschließlich heute als besetzt
+  stehen (dieselbe inklusive Enddatums-Semantik wie beim bestehenden
+  „Auszugsdatum" in `KlientDetail.tsx`) — kein Bug, nur eine falsche
+  Testerwartung, die beim Nachmessen aufgefallen ist.
+
+Geprüft: `pnpm build` sauber, volle API-Suite weiterhin **393/393 grün
+(35 Suiten)**. Live-Browser-Check (Playwright, eigens angelegter
+Testmandant): vakante Position besetzen → Panel zeigt Namen und
+„Besetzt"-Pill; Besetzung beenden → Server-Validierung inkl. Fehlertext im
+Panel geprüft; neue Position in einer Einheit anlegen → erscheint sofort im
+Baum (11→12 Knoten); neue Unter-Einheit anlegen → erscheint im Baum;
+Position deaktivieren → Knoten und Panel zeigen „inaktiv". Keine
+Konsolenfehler in allen vier Abläufen.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

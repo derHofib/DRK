@@ -443,11 +443,34 @@ export const api = {
   aufgabeErledigen: (id: string) => request<AufgabeDto>(`/aufgaben/${id}/erledigen`, { method: "PATCH" }),
   aufgabeLoeschen: (id: string) => request<{ ok: true }>(`/aufgaben/${id}`, { method: "DELETE" }),
 
-  // Organigramm-Modul (Organigramm-Plan, Lieferreihenfolge Schritt 7/UI) --
-  // vorerst nur die lesenden Endpunkte fuer die Grundansicht. Mutationen
-  // (Reparenting, Besetzen, Account-Typ-Verwaltung) kommen mit den
-  // naechsten UI-Teilschritten dazu.
+  // Organigramm-Modul (Organigramm-Plan, Lieferreihenfolge Schritt 7/UI).
   organigrammOrgUnits: () => request<OrgUnitDto[]>("/organigramm/org-units"),
   organigrammPositionen: () => request<PositionDto[]>("/organigramm/positions"),
   organigrammAccountTypen: () => request<AccountTypDto[]>("/organigramm/account-typen"),
+  // Reparenting (Drag & Drop + Kontextmenue) und Account-Typ-Verwaltung
+  // kommen mit den naechsten UI-Teilschritten dazu -- hier erstmal nur, was
+  // das Seitenpanel braucht: neue Unter-Einheit/Position anlegen, Besetzen/
+  // Beenden/Deaktivieren.
+  organigrammOrgUnitAnlegen: (payload: { typ: "bereich" | "team"; name: string; parentId: string }) =>
+    request<OrgUnitDto>("/organigramm/org-units", { method: "POST", body: JSON.stringify(payload) }),
+  organigrammPositionAnlegen: (payload: {
+    orgUnitId: string;
+    titel: string;
+    typ?: "linie" | "stabsstelle";
+    accountTypId: string;
+    sollBesetzung?: number;
+    gueltigAb?: string;
+  }) => request<PositionDto>("/organigramm/positions", { method: "POST", body: JSON.stringify(payload) }),
+  organigrammPositionBesetzen: (positionId: string, payload: { benutzerId: string; gueltigAb?: string }) =>
+    request<PositionDto>(`/organigramm/positions/${positionId}/besetzen`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  organigrammBesetzungBeenden: (positionId: string, besetzungId: string, payload: { gueltigBis?: string }) =>
+    request<PositionDto>(`/organigramm/positions/${positionId}/besetzung/${besetzungId}/beenden`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  organigrammPositionDeaktivieren: (positionId: string) =>
+    request<PositionDto>(`/organigramm/positions/${positionId}/deaktivieren`, { method: "PATCH" }),
 };

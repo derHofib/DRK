@@ -342,9 +342,10 @@ describe("Organigramm: schreibende Endpunkte", () => {
       });
       expect(res.status).toBe(201);
       expect(res.body.istGeplant).toBe(false);
-      expect(res.body.besetztMit).toEqual([{ benutzerId: benWorker1, benutzerName: "worker1" }]);
-      const { rows } = await admin.query("SELECT id FROM org_position_besetzung WHERE position_id = $1", [posId]);
-      besetzungId = rows[0].id;
+      expect(res.body.besetztMit).toEqual([
+        { besetzungId: expect.any(String), benutzerId: benWorker1, benutzerName: "worker1", gueltigAb: gestern },
+      ]);
+      besetzungId = res.body.besetztMit[0].besetzungId;
     });
 
     it("GEGENPROBE: istGeplant=true bei aktiver Besetzung wird abgelehnt -> 409", async () => {
@@ -363,7 +364,9 @@ describe("Organigramm: schreibende Endpunkte", () => {
     it("eine erneute Besetzung danach ist moeglich", async () => {
       const res = await als(tokenGf).post(`/organigramm/positions/${posId}/besetzen`, { benutzerId: benWorker2 });
       expect(res.status).toBe(201);
-      expect(res.body.besetztMit).toEqual([{ benutzerId: benWorker2, benutzerName: "worker2" }]);
+      expect(res.body.besetztMit).toEqual([
+        { besetzungId: expect.any(String), benutzerId: benWorker2, benutzerName: "worker2", gueltigAb: expect.any(String) },
+      ]);
     });
 
     it("besetzen mit unbekanntem Benutzer -> 404", async () => {

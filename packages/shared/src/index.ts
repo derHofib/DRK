@@ -580,8 +580,10 @@ export interface OrgUnitDto {
  * Personen") bleibt sichtbar, nur die Identitaet nicht.
  */
 export interface BesetzungDto {
+  besetzungId: string;
   benutzerId: string | null;
   benutzerName: string | null;
+  gueltigAb: string;
 }
 
 export interface PositionDto {

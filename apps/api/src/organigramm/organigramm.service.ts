@@ -17,8 +17,10 @@ export interface OrgUnitDto {
 }
 
 export interface BesetzungDto {
+  besetzungId: string;
   benutzerId: string | null;
   benutzerName: string | null;
+  gueltigAb: string;
 }
 
 export interface PositionDto {
@@ -75,7 +77,10 @@ const POSITIONEN_SELECT = `
          p.ist_geplant, p.aktiv, p.soll_besetzung, p.gueltig_ab, p.gueltig_bis,
          COALESCE(
            jsonb_agg(
-             jsonb_build_object('benutzerId', b.benutzer_id, 'benutzerName', bu.name)
+             jsonb_build_object(
+               'besetzungId', b.id, 'benutzerId', b.benutzer_id, 'benutzerName', bu.name,
+               'gueltigAb', b.gueltig_ab
+             )
              ORDER BY bu.name
            ) FILTER (WHERE b.id IS NOT NULL),
            '[]'::jsonb
@@ -125,7 +130,13 @@ function zuPositionDtoVoll(r: any): PositionDto {
 function zuPositionDto(r: any, zeigeNamen: boolean): PositionDto {
   const voll = zuPositionDtoVoll(r);
   if (zeigeNamen) return voll;
-  return { ...voll, besetztMit: voll.besetztMit.map(() => ({ benutzerId: null, benutzerName: null })) };
+  // besetzungId/gueltigAb bleiben erhalten -- das sind keine personenbezogenen
+  // Daten und werden gebraucht, um eine Besetzung auch ohne Namensanzeige
+  // ueber die UI beenden zu koennen (siehe Organigramm.tsx-Seitenpanel).
+  return {
+    ...voll,
+    besetztMit: voll.besetztMit.map((b) => ({ ...b, benutzerId: null, benutzerName: null })),
+  };
 }
 
 function zuAccountTypDto(r: any): AccountTypDto {

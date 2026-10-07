@@ -1845,6 +1845,24 @@
   border: 1px solid var(--zv-border);
   background: var(--zv-surface);
   overflow: hidden;
+  /* Knoten sind echte <button>-Elemente (Klick oeffnet das Seitenpanel) --
+     Browser-Grundstil zuruecksetzen, damit sie weiterhin wie die reinen
+     Darstellungs-Boxen der Grundansicht aussehen. */
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-organigramm-knoten:hover,
+.zv-organigramm-knoten:focus-visible {
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-aktiv {
+  border-color: var(--zv-accent);
+  border-width: 2px;
+  box-shadow: 0 0 0 2px var(--zv-accent-soft);
 }
 
 .zv-organigramm-knoten-einheit {

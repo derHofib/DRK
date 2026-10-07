@@ -216,7 +216,14 @@ describe("Organigramm: lesende Endpunkte", () => {
       const res = await als(tokenMitNamen)("/organigramm/positions");
       expect(res.status).toBe(200);
       const position = res.body.find((p: any) => p.id === posMitNamenId);
-      expect(position.besetztMit).toEqual([{ benutzerId: expect.any(String), benutzerName: benMitNamenName }]);
+      expect(position.besetztMit).toEqual([
+        {
+          besetzungId: expect.any(String),
+          benutzerId: expect.any(String),
+          benutzerName: benMitNamenName,
+          gueltigAb: expect.any(String),
+        },
+      ]);
     });
 
     it("ohne organigramm.personendaten-sehen: dieselbe Position zeigt benutzerId/benutzerName als null, aber die Besetzung bleibt als Eintrag sichtbar", async () => {
@@ -225,7 +232,9 @@ describe("Organigramm: lesende Endpunkte", () => {
       const position = res.body.find((p: any) => p.id === posMitNamenId);
       // Gegenprobe gegen die zuvor sichtbaren echten Daten: ohne das Recht
       // wird redigiert, nicht einfach dieselbe Antwort erneut geliefert.
-      expect(position.besetztMit).toEqual([{ benutzerId: null, benutzerName: null }]);
+      expect(position.besetztMit).toEqual([
+        { besetzungId: expect.any(String), benutzerId: null, benutzerName: null, gueltigAb: expect.any(String) },
+      ]);
     });
 
     it("eine unbesetzte Position liefert ein leeres besetztMit-Array (vakant), fuer beide Sichten gleich", async () => {
