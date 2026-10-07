@@ -1292,6 +1292,76 @@ beider Branches. Volle Suite **345/345 grün (33 Suiten)** — 321 vorher +
 4 (Vier-Augen) + 20 (lesende Endpunkte), keine Regression durch die
 parallele Arbeit oder den Merge.
 
+**Nachtrag — Organigramm-Modul, Schritt 7: schreibende Endpunkte für
+Delegation und Organigramm, wieder parallel über zwei isolierte
+Subagenten.** Vorab ein gemeinsamer Helfer, selbst geschrieben, damit
+beide Agenten ihn nicht unabhängig voneinander anlegen und dabei in
+Konflikt geraten: `AuditService.protokollieren(client, {...})` schreibt
+EINEN `audit_log`-Eintrag innerhalb der Transaktion des aufrufenden
+Services (kein eigenes `db.withTenant()` — sonst wäre der Eintrag nicht
+atomar mit der Änderung, die er protokolliert). `handelnd_als_vertreter_von`
+bleibt dabei vorerst immer `null`: kein bestehender Code-Pfad weiß heute,
+ob ein `hatRecht()`-Erfolg über eine eigene Position oder über eine
+Delegation aufgelöst wurde — das wird erst mit der UI für Vertretung
+nachgezogen.
+
+**Delegation anlegen/genehmigen/widerrufen.** Fachliches Vier-Augen-Prinzip
+exakt wie beim Kassenbuch-Storno (Migration 0045), nur ist die "andere
+Person" hier nicht über eine Rechteprüfung bestimmt, sondern durch die
+Delegation selbst bereits eindeutig festgelegt:
+- `POST /delegationen` — nur die VERTRETENE Person kann anlegen (man
+  verleiht nur die eigenen Rechte, man beantragt sie nicht für jemand
+  anderen). Bei `umfang="auswahl"` wird jedes `{modul,aktion}`-Paar vor
+  jedem DB-Insert gegen `istDelegierbar()` geprüft (klare 400-Meldung statt
+  dem rohen Fehler aus dem Insert-Trigger von Migration 0043) — eine
+  mitgeschickte Rechte-Liste bei `umfang="alle"` wird abgelehnt statt
+  stillschweigend ignoriert.
+- `PATCH /delegationen/:id/genehmigen` — ausschließlich die im Antrag
+  benannte `vertreter_benutzer_id` darf entscheiden, **niemand sonst, auch
+  keine eigene Anfrage**. Migration 0046 erzwingt das zusätzlich hart in
+  der DB (`BEFORE UPDATE`-Trigger, Custom-SQLSTATE `ZA003`), unabhängig vom
+  Code-Pfad — gleiches Zwei-Schichten-Prinzip wie bei Migration 0045.
+- `PATCH /delegationen/:id/widerrufen` — beide Seiten dürfen (Widerruf ist
+  die "sichere Richtung", kein Vier-Augen-Prinzip nötig).
+- Alle drei bleiben wie `GET /delegationen/meine` rein `@Authenticated()`
+  — die Berechtigung ist spezifisch für die einzelne Zeile, kein globales
+  Modul-Recht.
+- 14 neue Tests, inklusive einer DB-Gegenprobe (roher `UPDATE` als
+  App-Rolle mit falschem `genehmigt_von` scheitert mit `ZA003`, derselbe
+  `UPDATE` mit dem richtigen Wert geht durch).
+
+**Organigramm-Mutationen: Organisationseinheiten, Positionen,
+Account-Typen.** Jede Invariante (Closure-Table-Pflege, Zyklenschutz beim
+Umhängen, `ist_geplant`-Auto-Clear beim Besetzen, Stabsstelle-Scope nur für
+`typ=stabsstelle`, "letzter Vollzugriff-Inhaber bleibt bestehen",
+Account-Typ-Matrix-Regeln) steckt bereits als Postgres-Trigger in den
+Migrationen 0040–0042 — die neuen Service-Methoden lösen nichts davon
+selbst, sie übersetzen nur die resultierenden `P0001`/`23503`/`23505`-Fehler
+in verständliche HTTP-Antworten (Vorbild: `rechnung.service.ts`):
+- `POST`/`PATCH /organigramm/org-units` — nur `typ="bereich"|"team"`
+  anlegbar (Träger/Einrichtung entstehen automatisch per Trigger),
+  Umhängen mit Zyklen-Gegenprobe.
+- `POST`/`PATCH /organigramm/positions` + `/deaktivieren` +
+  `/besetzen` + `/besetzung/:id/beenden` + `/stabsstelle-scope` — kompletter
+  Positions-Lebenszyklus (Platzhalter → besetzen → beenden → erneut
+  besetzen → deaktivieren), inkl. Zyklen- und `istGeplant`-Gegenprobe.
+- `POST`/`PATCH /organigramm/account-typen` + `/rechte` — jedes
+  `{modul,aktion}`-Paar wird vor jedem Schreibzugriff komplett gegen
+  `istGueltigesRecht()` validiert, bevor überhaupt etwas gelöscht wird;
+  `ist_system`-Typen sind vor Umbenennung geschützt, `ist_vollzugriff`-Typen
+  bekommen laut Trigger nie einzelne Rechte-Zeilen.
+- Struktur-Endpunkte gated mit `organigramm.bearbeiten`, Account-Typ-/
+  Rechte-Endpunkte bewusst mit dem engeren `organigramm.manage-permissions`.
+- 34 neue Tests, inklusive der "letzter Vollzugriff-Inhaber"-Gegenprobe und
+  zwei direkten `audit_log`-Prüfungen gegen echte PostgreSQL.
+- Bewusste Zwischenstand-Einschränkung weiterhin unverändert: nur ein
+  `ist_vollzugriff=true`-Konto nutzt diese Endpunkte heute (siehe Nachtrag
+  zu Schritt 6 oben).
+
+Geprüft: `pnpm --filter @zimmerakte/api build` sauber nach dem Merge beider
+Branches (disjunkte Dateien, keine Konflikte). Volle Suite **393/393 grün
+(35 Suiten)** — 345 vorher + 14 (Delegation) + 34 (Organigramm-Mutationen).
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
