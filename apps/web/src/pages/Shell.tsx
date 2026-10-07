@@ -29,6 +29,7 @@ import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
+import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
 
 type Tab = HauptReiter;
@@ -68,6 +69,7 @@ const BREITE_REITER = new Set<Tab>([
   "mitarbeitende",
   "tagesberichte",
   "aufgaben",
+  "organigramm",
 ]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
@@ -473,6 +475,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
+          {tab === "organigramm" && <Organigramm />}
           {tab === "einstellungen" && (
             <Einstellungen
               mandant={mandant}

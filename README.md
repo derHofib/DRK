@@ -1362,6 +1362,73 @@ Geprüft: `pnpm --filter @zimmerakte/api build` sauber nach dem Merge beider
 Branches (disjunkte Dateien, keine Konflikte). Volle Suite **393/393 grün
 (35 Suiten)** — 345 vorher + 14 (Delegation) + 34 (Organigramm-Mutationen).
 
+**Nachtrag — Organigramm-Modul, Schritt 7 (UI), erster Teilschritt:
+Organigramm-Grundansicht (lesend).** Diesmal selbst gebaut statt über
+Subagenten — die UI-Teilschritte bauen stark aufeinander auf und teilen
+sich dieselben Dateien (`Organigramm.tsx`, `Shell.tsx`, `icons.tsx`),
+parallele Agenten hätten sich hier eher im Weg gestanden als Zeit gespart.
+
+- Neuer zehnter Hauptreiter „Organigramm" (`navigation.ts`,
+  `STANDARD_REITER`) — eigenständiges Modul mit eigener Fläche, bewusst
+  kein Unterpunkt wie Anwärter/Archiv unter Klienten.
+- `OrgUnitDto`/`PositionDto`/`BesetzungDto`/`AccountTypDto` wandern nach
+  `packages/shared` (gespiegelt aus `organigramm.service.ts`) — erster
+  Schritt, in dem das Web-Paket diese Typen braucht.
+- **Baum-Rendering**: ein selbstgebautes, einfaches Ebenen-Layout statt
+  einer neuen Graph-Library (im Projekt existiert keine, siehe
+  Organigramm-Plan) — Blätter bekommen aufsteigende eindeutige Spalten in
+  Durchlaufreihenfolge, jeder innere Knoten wird über dem Mittel seiner
+  Kinder zentriert. Überschneidungsfrei, solange jede Spalte dieselbe
+  Breite hat (hier der Fall) — ein vollwertiger Tidy-Tree-Algorithmus wäre
+  für die erwartete Knotenzahl unnötiger Aufwand. Verbindungslinien als
+  SVG-Pfade (rechtwinklig, klassischer Organigramm-Stil), Knoten als
+  absolut positionierte HTML-Boxen darüber — Geometrie kommt aus
+  `Organigramm.tsx` (echte Pixelkoordinaten, keine Design-Entscheidung,
+  deshalb bewusst Inline-Style), Farbe/Radius/Abstand ausschließlich aus
+  Tokens (CLAUDE.md Regel 7).
+- Organisationseinheiten UND Positionen stehen im selben Baum: eine
+  Position hängt unter ihrer Einheit (`org_unit_id`) und zusätzlich, falls
+  gesetzt, unter einer anderen Position **derselben** Einheit
+  (`parent_position_id`) — eine einheitsübergreifende
+  `parent_position_id` wird für dieses einfache Layout bewusst ignoriert
+  (die Position hängt dann direkt unter ihrer eigenen Einheit), sonst
+  könnten sich Teilbäume überschneiden. Dokumentiert als bewusste
+  Vereinfachung in `baueBaum()`, keine spätere Drag&Drop-Ansicht
+  betroffen.
+- Statusdarstellung nicht nur über Farbe (WCAG 1.4.1): Stabsstelle =
+  gestrichelter Rahmen, eigenes Icon je Positionstyp
+  (`IPosition`/`IStabsstelle`), Status-Pill zusätzlich mit Text
+  („Besetzt"/„Besetzt 1/2"/„Vakant"/„Geplant (Platzhalter)").
+  `organigramm.personendaten-sehen` (CLAUDE.md Regel 6) greift bereits:
+  ohne das Recht zeigt eine besetzte Position „Namen ausgeblendet" statt
+  der echten Namen — im Browser gegen beide Fälle geprüft (Konto mit und
+  ohne das Recht, siehe unten).
+- **Ein echter CSS-Bug im echten Browser gefunden, nicht nur vermutet**:
+  `overflow: hidden` auf den Unterzeilen-Spans ließ deren automatische
+  Flex-Mindesthöhe laut Spezifikation auf 0 fallen (statt `min-content`),
+  der Spaltenflex quetschte sie bei knappem Platz auf wenige Pixel
+  zusammen — abgeschnittene Buchstaben, keine sauber abgeschnittene
+  Zeile. Sichtbar erst im gerenderten DOM (`getBoundingClientRect` zeigte
+  6,9px Zeilenhöhe bei 11,5px Schrift), nicht im Code. Behoben mit
+  `flex-shrink: 0` auf allen vier Zeilen plus einer auf die tatsächlich
+  gemessenen Zeilenhöhen abgestimmten `BOX_HOEHE` (112px statt 86px) —
+  genau das Prinzip „Layout- und Farbaussagen gehören gemessen, nicht
+  angesehen" aus CLAUDE.md, hier einmal mehr bestätigt.
+- Seitenpanel, Drag & Drop, Account-Typ-Verwaltung, „Anzeigen als…" und
+  die Tabellenansicht/Export bleiben eigene, später committete
+  Teilschritte (Organigramm-Plan, Lieferreihenfolge Schritt 7/UI).
+
+Geprüft: `pnpm build` sauber (API+shared+Web, Vite-Bundle 364 kB).
+Live-Browser-Check (Playwright, echte API + Dev-Server, eigens angelegter
+Testmandant mit Träger→Einrichtung→Bereich→Team und sieben Positionen
+inkl. Stabsstelle/Platzhalter/Vakanz/Mehrfachbesetzung): Baum rendert
+korrekt (11 Knoten), horizontales Scrollen der Leinwand funktioniert,
+Personendaten-Redaktion korrekt für ein Konto ohne
+`organigramm.personendaten-sehen`, kein horizontaler Seiten-Overflow bei
+390px (`scrollWidth - clientWidth === 0`), keine Konsolenfehler. Volle
+API-Suite weiterhin **393/393 grün (35 Suiten)** — UI-Schritt berührt kein
+Backend.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

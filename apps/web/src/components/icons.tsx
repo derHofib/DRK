@@ -24,6 +24,8 @@ import {
   Banknote,
   BedDouble,
   BookX,
+  Boxes,
+  Briefcase,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -69,6 +71,7 @@ import {
   Minimize2,
   Monitor,
   Moon,
+  Network,
   NotebookPen,
   Palette,
   PanelLeftClose,
@@ -99,6 +102,7 @@ import {
   UserRoundX,
   Users,
   Wallet,
+  Workflow,
   X,
   type LucideProps,
 } from "lucide-react";
@@ -137,6 +141,7 @@ export const IMitarbeitende = baue(IdCard);
 export const ITagesberichte = baue(NotebookPen);
 export const IEinstellungen = baue(Settings);
 export const IAufgaben = baue(ListChecks);
+export const IOrganigramm = baue(Network);
 /** Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. */
 export const IMehr = baue(Menu);
 
@@ -257,8 +262,20 @@ export const ILeerAufgaben = baueLeer(ListTodo);
 export const ILeerArchiv = baueLeer(Archive);
 export const ILeerKontakte = baueLeer(Contact);
 export const ILeerAnwaerter = baueLeer(Inbox);
+export const ILeerOrganigramm = baueLeer(Boxes);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);
 export const IStandort = baue(MapPin);
 export const ITag = baue(Tag);
+
+/**
+ * Organigramm: Organisationseinheit (Bereich/Team -- Traeger/Einrichtung
+ * nutzen weiterhin ITraeger, s.o.) und die beiden Positionstypen. Eigene
+ * Icons statt Wiederverwendung, da Stabsstelle/Linie sonst dieselbe
+ * Bedeutung wie ein bereits belegtes Icon ueberladen wuerden (siehe
+ * Kommentar bei IVerschiebenHoch/-Runter oben fuer dasselbe Prinzip).
+ */
+export const IBereichTeam = baue(Boxes);
+export const IPosition = baue(Briefcase);
+export const IStabsstelle = baue(Workflow);

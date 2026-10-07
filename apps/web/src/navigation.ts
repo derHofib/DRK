@@ -11,6 +11,7 @@ import {
   IKassenbuch,
   IKlienten,
   IMitarbeitende,
+  IOrganigramm,
   ITagesberichte,
   IZimmer,
   type IconKomponente,
@@ -24,6 +25,7 @@ export type HauptReiter =
   | "kassenbuch"
   | "tagesberichte"
   | "aufgaben"
+  | "organigramm"
   | "einstellungen";
 
 export type KlientenAnsicht = "aktiv" | "archiv" | "anwaerter";
@@ -50,6 +52,7 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
+  { wert: "organigramm", label: "Organigramm", icon: IOrganigramm },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
 

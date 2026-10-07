@@ -1801,3 +1801,104 @@
     display: none;
   }
 }
+
+/* ==================================================================
+   Organigramm -- Baum aus Organisationseinheiten und Positionen.
+   Positionierung der Knoten/Pfade kommt aus Organigramm.tsx (Layout-
+   Algorithmus, echte Pixelkoordinaten, keine Design-Entscheidung) und
+   bleibt deshalb Inline-Style; alles, was hier Farbe/Abstand/Radius ist,
+   kommt wie ueberall aus Tokens (CLAUDE.md Regel 7).
+   ================================================================== */
+.zv-organigramm-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--zv-space-2) 0 var(--zv-space-5);
+}
+
+.zv-organigramm-leinwand {
+  position: relative;
+}
+
+.zv-organigramm-verbindungen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.zv-organigramm-linie {
+  fill: none;
+  stroke: var(--zv-border);
+  stroke-width: 1.5;
+}
+
+.zv-organigramm-knoten {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  overflow: hidden;
+}
+
+.zv-organigramm-knoten-einheit {
+  background: var(--zv-surface-2);
+  align-items: center;
+  text-align: center;
+}
+
+.zv-organigramm-knoten-stabsstelle {
+  border-style: dashed;
+}
+
+.zv-organigramm-knoten-inaktiv {
+  opacity: 0.55;
+}
+
+.zv-organigramm-knoten-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.zv-organigramm-knoten-titel {
+  font-weight: var(--zv-weight-semibold);
+  font-size: var(--zv-text-s);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * flex-shrink:0 ist hier Pflicht, nicht Kosmetik: ohne overflow:visible
+ * faellt die automatische Flex-Mindesthoehe eines Items per Spezifikation
+ * auf 0 (statt min-content), weil darunter overflow:hidden steht -- ohne
+ * flex-shrink:0 quetscht der Spaltenflex diese Zeilen bei zu wenig Platz
+ * bis auf wenige Pixel zusammen (abgeschnittene Buchstaben OBERHALB der
+ * eigentlich sichtbaren Zeile), statt die Zeile als Ganzes abzuschneiden.
+ * In echten Browser-Tests nachvollzogen -- siehe Organigramm.tsx fuer die
+ * dazu passend bemessene BOX_HOEHE.
+ */
+.zv-organigramm-knoten-sub,
+.zv-organigramm-knoten-namen,
+.zv-organigramm-knoten > .zv-pill {
+  flex-shrink: 0;
+}
+
+.zv-organigramm-knoten-sub,
+.zv-organigramm-knoten-namen {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}

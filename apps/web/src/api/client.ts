@@ -1,6 +1,7 @@
 import type {
   AnwaerterDto,
   AnwaerterStatus,
+  AccountTypDto,
   AufgabeDto,
   AufgabenAnzahlDto,
   AufgabePrioritaet,
@@ -19,6 +20,8 @@ import type {
   LoginRequest,
   LoginResponse,
   MandantDto,
+  OrgUnitDto,
+  PositionDto,
   RechnungDetailDto,
   RechnungDto,
   RechnungStatus,
@@ -439,4 +442,12 @@ export const api = {
   ) => request<AufgabeDto>(`/aufgaben/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   aufgabeErledigen: (id: string) => request<AufgabeDto>(`/aufgaben/${id}/erledigen`, { method: "PATCH" }),
   aufgabeLoeschen: (id: string) => request<{ ok: true }>(`/aufgaben/${id}`, { method: "DELETE" }),
+
+  // Organigramm-Modul (Organigramm-Plan, Lieferreihenfolge Schritt 7/UI) --
+  // vorerst nur die lesenden Endpunkte fuer die Grundansicht. Mutationen
+  // (Reparenting, Besetzen, Account-Typ-Verwaltung) kommen mit den
+  // naechsten UI-Teilschritten dazu.
+  organigrammOrgUnits: () => request<OrgUnitDto[]>("/organigramm/org-units"),
+  organigrammPositionen: () => request<PositionDto[]>("/organigramm/positions"),
+  organigrammAccountTypen: () => request<AccountTypDto[]>("/organigramm/account-typen"),
 };

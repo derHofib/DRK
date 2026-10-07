@@ -540,3 +540,82 @@ export interface AnwaerterDto {
   entschiedenAm: string | null;
   entschiedenVonName: string | null;
 }
+
+/**
+ * Organigramm-Modul (migrations/0040-0042): Organisationseinheiten,
+ * Positionen und Account-Typen als einzige Quelle fuer Rechte. Gespiegelt
+ * aus organigramm.service.ts -- siehe dort fuer die Herleitung jedes
+ * Felds (z. B. "ebene" bewusst nicht gespeichert, siehe OrgUnitDto.typ).
+ */
+export type OrgUnitTyp = "traeger" | "einrichtung" | "bereich" | "team";
+export type PositionTyp = "linie" | "stabsstelle";
+export type AccountTypKategorie = "intern" | "extern";
+
+export const ORG_UNIT_TYP_LABEL: Record<OrgUnitTyp, string> = {
+  traeger: "Träger",
+  einrichtung: "Einrichtung",
+  bereich: "Bereich",
+  team: "Team",
+};
+
+export const POSITION_TYP_LABEL: Record<PositionTyp, string> = {
+  linie: "Linie",
+  stabsstelle: "Stabsstelle",
+};
+
+export interface OrgUnitDto {
+  id: string;
+  parentId: string | null;
+  typ: OrgUnitTyp;
+  standortId: string | null;
+  name: string;
+  aktiv: boolean;
+}
+
+/**
+ * Je Position eine Zeile pro aktuell aktiver Besetzung (Mehrfachbesetzung
+ * moeglich, siehe org_position_besetzung). Ohne das Recht
+ * "organigramm.personendaten-sehen" liefert der Server hier statt des
+ * Namens ueberall null -- die Zeilenanzahl (also "besetzt mit wie vielen
+ * Personen") bleibt sichtbar, nur die Identitaet nicht.
+ */
+export interface BesetzungDto {
+  benutzerId: string | null;
+  benutzerName: string | null;
+}
+
+export interface PositionDto {
+  id: string;
+  orgUnitId: string;
+  parentPositionId: string | null;
+  titel: string;
+  typ: PositionTyp;
+  accountTypId: string;
+  istGeplant: boolean;
+  aktiv: boolean;
+  sollBesetzung: number;
+  gueltigAb: string;
+  gueltigBis: string | null;
+  besetztMit: BesetzungDto[];
+}
+
+export interface AccountTypRechtDto {
+  modul: string;
+  aktion: string;
+  scope: string;
+  erlaubt: boolean;
+}
+
+/**
+ * istVollzugriff=true heisst Wildcard (Geschaeftsfuehrung) -- rechte ist
+ * dann immer leer, die Matrix zeigt dafuer "alles erlaubt, nicht
+ * reduzierbar" als reinen Anzeigezustand (siehe Organigramm-Plan).
+ */
+export interface AccountTypDto {
+  id: string;
+  name: string;
+  kategorie: AccountTypKategorie;
+  istSystem: boolean;
+  istVollzugriff: boolean;
+  rechte: AccountTypRechtDto[];
+}
