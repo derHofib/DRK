@@ -1809,15 +1809,18 @@
    bleibt deshalb Inline-Style; alles, was hier Farbe/Abstand/Radius ist,
    kommt wie ueberall aus Tokens (CLAUDE.md Regel 7).
    ================================================================== */
-/* Feste Hoehe statt frueher overflow-y:hidden (Live-Rueckmeldung: der Baum
-   soll als Standardansicht immer vollstaendig sichtbar sein -- die
-   Zoomstufe in Organigramm.tsx passt die Leinwand per Default auf genau
-   diese Flaeche ein, siehe "Einpassen"-Logik dort). Beide Achsen
+/* Randlos/vollbild statt einer festen vh-Zahl (Live-Rueckmeldung): die
+   Hoehe wird von Organigramm.tsx::einpassen() per JS auf den Platz bis
+   zum unteren Seitenrand gesetzt (inline style, neu vermessen bei jedem
+   Einpassen/Laden/Resize) -- min-height hier ist nur das Sicherheitsnetz,
+   bevor dieser Effekt beim allerersten Rendern greift. Beide Achsen
    scrollbar, damit bei einer hoeher gewaehlten Zoomstufe geschwenkt werden
-   kann. */
+   kann (Mausrad/Trackpad sind jetzt fuers Zoomen reserviert, siehe
+   beiWheel() dort -- Schwenken bei starkem Zoom laeuft ueber die
+   Scrollbalken). */
 .zv-organigramm-scroll {
   overflow: auto;
-  height: 65vh;
+  min-height: 360px;
   padding: var(--zv-space-2) 0 var(--zv-space-5);
 }
 

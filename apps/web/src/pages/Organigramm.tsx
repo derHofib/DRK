@@ -1,4 +1,14 @@
-import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  DragEvent,
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AccountTypDto,
   BenutzerListEintragDto,
@@ -2089,30 +2099,93 @@ export function Organigramm() {
 
   // Zoom/Fit-to-view (Live-Rueckmeldung: Standardansicht immer vollstaendig
   // sichtbar). leinwandAussenRef misst die tatsaechlich verfuegbare Flaeche
-  // des Scroll-Containers (.zv-organigramm-scroll, feste Hoehe per CSS) --
-  // die Zoomstufe wird bei JEDER Aenderung der Baumgroesse neu eingepasst,
-  // ein manuelles Herein-/Herauszoomen gilt also bis zum naechsten Laden
-  // (z.B. nach einer Bearbeitung), dann wieder "Einpassen" als Standard.
+  // des Scroll-Containers (.zv-organigramm-scroll) -- die Zoomstufe wird
+  // bei JEDER Aenderung der Baumgroesse neu eingepasst, ein manuelles
+  // Herein-/Herauszoomen gilt also bis zum naechsten Laden (z.B. nach
+  // einer Bearbeitung), dann wieder "Einpassen" als Standard.
   const leinwandAussenRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const ZOOM_MIN = 0.2;
   const ZOOM_MAX = 2;
 
+  // Randlos/vollbild (Live-Rueckmeldung): keine feste CSS-Hoehe mehr --
+  // einpassen() vermisst bei jedem Aufruf neu, wie viel Platz bis zum
+  // unteren Seitenrand frei ist, und setzt ihn als inline style. Das
+  // passiert hier per JS statt per CSS calc(100vh - X), weil X von der
+  // tatsaechlichen Flussposition abhaengt (z.B. verschiebt eine
+  // Fehlermeldung ueber dem Baum alles nach unten).
   function einpassen() {
     const el = leinwandAussenRef.current;
-    if (!el || breite === 0 || hoehe === 0) return;
+    if (!el) return;
+    const oben = el.getBoundingClientRect().top;
+    el.style.height = `${Math.max(360, window.innerHeight - oben - 24)}px`;
+    if (breite === 0 || hoehe === 0) return;
     const passend = Math.min(1, el.clientWidth / breite, el.clientHeight / hoehe);
     setZoom(Math.max(ZOOM_MIN, passend));
   }
 
   useEffect(() => {
     einpassen();
+    window.addEventListener("resize", einpassen);
+    return () => window.removeEventListener("resize", einpassen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [breite, hoehe]);
 
   function zoomAendern(faktor: number) {
     setZoom((alt) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((alt + faktor) * 100) / 100)));
   }
+
+  // Mausrad/Trackpad-Zoom (Live-Rueckmeldung), um den Cursor verankert --
+  // sonst "springt" der Baum bei jedem Zoomschritt zur Fensterecke. Echter
+  // (nicht-passiver) DOM-Listener statt React onWheel: React haengt
+  // wheel/touch-Handler standardmaessig passiv ein (Scroll-Performance),
+  // wo e.preventDefault() wirkungslos waere und der Container trotz
+  // Zoom-Absicht weiterscrollen wuerde. zoomRef haelt den aktuellen Zoom
+  // fuer den Listener bereit, ohne ihn bei jedem Tick neu zu binden.
+  // pendingScrollRef + der useLayoutEffect direkt darunter setzen
+  // scrollLeft/-Top SYNCHRON nach der Zoom-Aenderung, aber vor dem
+  // naechsten Bildaufbau -- sonst waere kurz der alte Ausschnitt mit der
+  // neuen Zoomstufe sichtbar (ein sichtbarer Sprung).
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const pendingScrollRef = useRef<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    const el = leinwandAussenRef.current;
+    if (!el) return;
+    function beiWheel(e: WheelEvent) {
+      e.preventDefault();
+      const rect = el!.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      const altZoom = zoomRef.current;
+      const inhaltX = (el!.scrollLeft + cursorX) / altZoom;
+      const inhaltY = (el!.scrollTop + cursorY) / altZoom;
+      // Multiplikativ statt additiv: fuehlt sich bei Mausrad-Einzelschritten
+      // (deltaY ~100) genauso richtig an wie bei den vielen kleinen
+      // deltaY-Werten einer Trackpad-Geste.
+      const faktor = Math.exp(-e.deltaY * 0.0015);
+      const neuerZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, altZoom * faktor));
+      pendingScrollRef.current = {
+        left: inhaltX * neuerZoom - cursorX,
+        top: inhaltY * neuerZoom - cursorY,
+      };
+      setZoom(neuerZoom);
+    }
+    el.addEventListener("wheel", beiWheel, { passive: false });
+    return () => el.removeEventListener("wheel", beiWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breite, hoehe]);
+
+  useLayoutEffect(() => {
+    const anker = pendingScrollRef.current;
+    if (!anker) return;
+    pendingScrollRef.current = null;
+    const el = leinwandAussenRef.current;
+    if (!el) return;
+    el.scrollLeft = anker.left;
+    el.scrollTop = anker.top;
+  }, [zoom]);
 
   return (
     <div>

@@ -2056,6 +2056,58 @@ zwei Unterpositionen reduziert die Knotenzahl um 2, zeigt „+2" und stellt
 beim Ausklappen exakt den vorherigen Zustand wieder her; keine
 Konsolenfehler im finalen Durchlauf.
 
+**Nachtrag — Organigramm-Modul, Nachtrag „Flexibilität": Arbeitsfeld randlos,
+Mausrad/Trackpad-Zoom, Drag-Zielanzeige bestätigt.** Weitere Live-Rückmeldung
+nach dem vorigen Durchlauf -- drei Teilanliegen, von denen zwei schon
+bestanden und nur bestätigt werden mussten (dazu zwei Rückfragen vorab
+gestellt und geklärt, um keine unnötige Datenmodell-Änderung anzustoßen):
+
+- **Arbeitsfeld randlos/vollbild** (echte Änderung): `.zv-organigramm-scroll`
+  hatte eine feste `height: 65vh`. `einpassen()` misst jetzt per
+  `getBoundingClientRect().top` und setzt die Höhe per JS auf den Platz bis
+  zum unteren Seitenrand (`window.innerHeight - oben - 24`, `min-height:
+  360px` in der CSS nur als Sicherheitsnetz vor dem ersten Durchlauf) --
+  nicht per `calc(100vh - X)`, weil X vom tatsächlichen Seiteninhalt
+  oberhalb abhängt (z.B. verschiebt eine Fehlermeldung alles nach unten).
+  Neu vermessen bei jedem Laden, bei „Einpassen" und bei einem
+  `resize`-Listener.
+- **Mausrad/Trackpad-Zoom** (echte Änderung): ein nativer, NICHT-passiver
+  `wheel`-Listener auf dem Scroll-Container (React hängt `onWheel`
+  standardmäßig passiv ein, dort liefe `e.preventDefault()` ins Leere) --
+  `deltaY` steuert den Zoom multiplikativ (`Math.exp(-deltaY * 0.0015)`,
+  fühlt sich bei einzelnen Mausrad-Rasten genauso richtig an wie bei den
+  vielen kleinen Trackpad-Deltas), verankert am Cursor: `pendingScrollRef`
+  merkt sich die berechnete neue `scrollLeft`/`scrollTop`-Position, ein
+  `useLayoutEffect` auf `[zoom]` setzt sie synchron nach der Zoom-Änderung,
+  aber vor dem nächsten Bildaufbau (sonst kurz sichtbarer Sprung zum alten
+  Ausschnitt mit neuer Zoomstufe). Mausrad/Trackpad sind damit fürs Zoomen
+  reserviert -- Schwenken bei starkem Zoom läuft über die Scrollbalken.
+- **Beim Ziehen alle gültigen Zielpositionen anzeigen**: bestand bereits
+  (`istZielMoeglich={gezogenerSchluessel !== null && gueltigeZielSchluessel.has(...)}`,
+  unabhängig vom Hover) -- im Live-Check erneut bestätigt, keine
+  Code-Änderung nötig.
+- **Feste Rollen-Reihenfolge** (Geschäftsführer/Träger/Bereichsleitung/
+  Einrichtungsleitung/Standort/Mitarbeiter): nach Rückfrage bewusst NICHT
+  umgesetzt -- würde entweder eine allgemeine, hartkodierte Rollen-Rangfolge
+  in ein eigentlich generisches Organigramm-Werkzeug einbauen, oder
+  Standorte (bisher reine Adress-Stammdaten ohne Platz im Baum) zu neuen
+  Knoten machen. Die Baumansicht sortiert ohnehin streng nach Tiefe --
+  passt die Reihenfolge nicht, liegt es an der Positionierung der
+  Organisationseinheiten/Positionen in den eigenen Daten, nicht an der
+  Anzeige.
+
+Geprüft: `pnpm build` sauber, API-Suite weiterhin **425/425 grün (41
+Suiten)** (dieser Teil hatte keine Backend-Änderung). Live-Browser-Check
+(Playwright, Chromium, frisch gesäter Testmandant): Arbeitsfeld füllt den
+Platz bis knapp an den unteren Viewport-Rand; simuliertes Mausrad-Scrollen
+auf der Containermitte ändert den Zoom (72 %→113 %→zurück auf 72 % beim
+Gegenscrollen), ohne dass die Scrollposition danach wild abweicht; beim
+Starten eines Zugs leuchten sofort 6 gültige Zielpositionen auf, ganz ohne
+vorheriges Hovern über ein bestimmtes Ziel; die Knotenreihenfolge von oben
+nach unten entspricht exakt der Tiefe der zugrunde liegenden Daten
+(Träger → Einrichtungen → deren Positionen → Teampositionen → Mitarbeiter);
+keine Konsolenfehler.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
