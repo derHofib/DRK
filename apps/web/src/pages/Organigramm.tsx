@@ -176,6 +176,128 @@ function sichtbarerBaum(wurzel: Knoten, kollabiert: Set<string>): Knoten {
   return klon(wurzel);
 }
 
+/**
+ * Live-Rueckmeldung: "unter der Karte Träger den Geschäftsführer, darunter
+ * alles andere" / "unter der Einrichtungsleitung die Häuser" -- eine
+ * fuehrende Position (Linie, kein parentPositionId, Heimat-Einheit = die
+ * aktuelle Einheit) soll in der ZEICHNUNG ueber ihrer Einheit stehen statt
+ * darunter, mit der Einheit (und ihren per "weitere Einheiten" verknuepften
+ * Schwestereinheiten) als Kind-Karten.
+ *
+ * Reine ANZEIGE-Transformation, bewusst NUR auf den Render-Pfad angewendet
+ * (wurzelSichtbar -> wurzelAnzeige in Organigramm()), NICHT auf wurzelVoll:
+ * Geschwister-Reihenfolge, Zyklenschutz und "Verschieben nach…" muessen
+ * weiterhin auf der echten Containment-Struktur arbeiten (siehe deren
+ * eigene Kommentare) -- sonst wuerde z.B. "Haus A" und "Haus B" trotz
+ * echter Geschwisterschaft unter Träger plötzlich als Kinder verschiedener
+ * Positionen gelten.
+ *
+ * Wurzel-Sonderfall: die Wurzel (Träger) selbst wird nie ersetzt (sie ist
+ * immer genau einmal sichtbar) -- nur ihre ANDEREN Kinder wandern unter die
+ * fuehrende Position. Jede tiefere Einheit mit fuehrender Position wird
+ * dagegen an ihrer Stelle durch die Position ERSETZT, die Einheit selbst
+ * (ohne die Position) wird zu deren Kind.
+ */
+function wendeLeitungsStruktur(wurzel: Knoten): Knoten {
+  // orgUnitId -> positionId: welche Einheit soll (zusaetzlich zur eigenen
+  // Heimat-Einheit der Position) als "weitere Einheit" unter dieser
+  // Position haengen, statt an ihrer natuerlichen Stelle zu bleiben.
+  const weitereAnspruch = new Map<string, string>();
+  (function sammleAnsprueche(k: Knoten) {
+    if (k.art === "position" && !k.istWeitereZuordnung && k.position?.typ === "linie" && !k.position.parentPositionId) {
+      for (const weitereId of k.position.weitereOrgUnitIds) weitereAnspruch.set(weitereId, k.position.id);
+    }
+    k.kinder.forEach(sammleAnsprueche);
+  })(wurzel);
+
+  // positionId -> bereits verarbeitete (!) Teilbaeume weiterer Einheiten,
+  // zum Schluss an die jeweilige Leitungs-Position angehaengt.
+  const zuLeiter = new Map<string, Knoten[]>();
+
+  function istLeiterVon(kind: Knoten, einheitId: string): boolean {
+    return (
+      kind.art === "position" &&
+      !kind.istWeitereZuordnung &&
+      kind.position?.typ === "linie" &&
+      !kind.position.parentPositionId &&
+      kind.position.orgUnitId === einheitId
+    );
+  }
+
+  function verarbeite(k: Knoten, istWurzel: boolean): Knoten | null {
+    const kinder: Knoten[] = [];
+    for (const kind of k.kinder) {
+      // Die alte "weitere Zuordnung"-Duplikat-Karte (siehe baueBaum() oben)
+      // ist fuer eine Leitungs-Position jetzt ueberfluessig: ihre weiteren
+      // Einheiten erscheinen bereits als echte Kind-Teilbaeume unter ihr
+      // (siehe weitereAnspruch/zuLeiter oben) -- die alte Karte wuerde die
+      // Position nur ein zweites Mal redundant zeigen. Fuer alle anderen
+      // Positionen (Stabsstellen, Positionen mit parentPositionId) bleibt
+      // die alte Karte die einzige Darstellung weiterer Einheiten.
+      if (
+        kind.istWeitereZuordnung &&
+        kind.position?.typ === "linie" &&
+        !kind.position.parentPositionId
+      ) {
+        continue;
+      }
+      const ergebnis = verarbeite(kind, false);
+      if (ergebnis) kinder.push(ergebnis);
+    }
+    let knoten: Knoten = { ...k, kinder };
+
+    // Eigene Leitungs-Befoerderung IMMER zuerst versuchen -- AUCH wenn
+    // diese Einheit gleich darunter als "weitere Einheit" einer ANDEREN
+    // Position erkannt und umgehaengt wird. Sonst wuerde eine Einheit mit
+    // eigener Leitung, die GLEICHZEITIG weitere Einheit einer anderen
+    // Leitung ist, ihre eigene Leitung beim Umhaengen verlieren (die
+    // Pruefung unten arbeitet auf dem ggf. schon befoerderten Ergebnis).
+    if (knoten.art === "einheit") {
+      const leiterIndex = knoten.kinder.findIndex((kind) => istLeiterVon(kind, knoten.einheit!.id));
+      if (leiterIndex !== -1) {
+        const leiter = { ...knoten.kinder[leiterIndex] };
+        const andereKinder = knoten.kinder.filter((_, i) => i !== leiterIndex);
+        if (istWurzel) {
+          leiter.kinder = [...andereKinder, ...leiter.kinder];
+          knoten = { ...knoten, kinder: [leiter] };
+        } else {
+          leiter.kinder = [{ ...knoten, kinder: andereKinder }, ...leiter.kinder];
+          knoten = leiter;
+        }
+      }
+    }
+
+    // Erst jetzt pruefen, ob die URSPRUENGLICHE Einheit (k, unabhaengig
+    // von einer eigenen Befoerderung oben) anderswo als weitere Einheit
+    // beansprucht wird -- umgehaengt wird dann das ggf. schon befoerderte
+    // Ergebnis (knoten), nicht die nackte Einheit.
+    if (!istWurzel && k.art === "einheit" && weitereAnspruch.has(k.einheit!.id)) {
+      const zielPositionId = weitereAnspruch.get(k.einheit!.id)!;
+      const liste = zuLeiter.get(zielPositionId) ?? [];
+      liste.push(knoten);
+      zuLeiter.set(zielPositionId, liste);
+      return null;
+    }
+
+    return knoten;
+  }
+
+  let neueWurzel = verarbeite(wurzel, true) ?? wurzel;
+
+  if (zuLeiter.size > 0) {
+    function anhaengen(k: Knoten): Knoten {
+      const kinder = k.kinder.map(anhaengen);
+      if (k.art === "position" && !k.istWeitereZuordnung && k.position && zuLeiter.has(k.position.id)) {
+        kinder.push(...zuLeiter.get(k.position.id)!);
+      }
+      return { ...k, kinder };
+    }
+    neueWurzel = anhaengen(neueWurzel);
+  }
+
+  return neueWurzel;
+}
+
 const BOX_BREITE = 212;
 const SPALTEN_SCHRITT = BOX_BREITE + 28;
 // Hoch genug fuer eine Position mit allen vier Zeilen (Titel, Account-Typ,
@@ -1948,16 +2070,23 @@ export function Organigramm() {
     [wurzelVoll, kollabiert]
   );
 
+  // wurzelAnzeige: NUR fuers Rendering/Layout (Live-Rueckmeldung: Leitungs-
+  // Positionen ueber ihrer Einheit zeigen, siehe wendeLeitungsStruktur()).
+  // alleKnotenVoll/elternMap weiter unten bauen bewusst weiterhin auf
+  // wurzelVoll auf (nicht auf diesem Zweig hier), damit Drag&Drop/
+  // Geschwister/Zyklenschutz die echte Containment-Struktur sehen.
+  const wurzelAnzeige = useMemo(() => (wurzelSichtbar ? wendeLeitungsStruktur(wurzelSichtbar) : null), [wurzelSichtbar]);
+
   const { breite, hoehe, yJeTiefe, knoten } = useMemo(() => {
-    if (!wurzelSichtbar) return { breite: 0, hoehe: 0, yJeTiefe: [] as number[], knoten: [] as Knoten[] };
-    const { breiteSpalten, yJeTiefe, gesamtHoehe } = layout(wurzelSichtbar);
+    if (!wurzelAnzeige) return { breite: 0, hoehe: 0, yJeTiefe: [] as number[], knoten: [] as Knoten[] };
+    const { breiteSpalten, yJeTiefe, gesamtHoehe } = layout(wurzelAnzeige);
     return {
       breite: Math.max(breiteSpalten, 1) * SPALTEN_SCHRITT,
       hoehe: gesamtHoehe,
       yJeTiefe,
-      knoten: alleKnoten(wurzelSichtbar),
+      knoten: alleKnoten(wurzelAnzeige),
     };
-  }, [wurzelSichtbar]);
+  }, [wurzelAnzeige]);
 
   const alleKnotenVoll = useMemo(() => (wurzelVoll ? alleKnoten(wurzelVoll) : []), [wurzelVoll]);
   const elternMap = useMemo(() => (wurzelVoll ? elternKarte(wurzelVoll) : new Map<string, Knoten>()), [wurzelVoll]);
@@ -2146,6 +2275,13 @@ export function Organigramm() {
   // scrollLeft/-Top SYNCHRON nach der Zoom-Aenderung, aber vor dem
   // naechsten Bildaufbau -- sonst waere kurz der alte Ausschnitt mit der
   // neuen Zoomstufe sichtbar (ein sichtbarer Sprung).
+  //
+  // ctrlKey unterscheidet Zoomen von Schwenken (Live-Rueckmeldung: "frei
+  // bewegen" in alle Richtungen zusaetzlich zum Zoom) -- Browser setzen
+  // ctrlKey=true bei einer Trackpad-Pinch-Geste UND bei Strg+Mausrad,
+  // waehrend normales Zwei-Finger-Scrollen (Trackpad) oder ein einfaches
+  // Mausrad OHNE Strg kein ctrlKey mitbringen. Das ist dieselbe Konvention
+  // wie in Google Maps/Figma/Miro: Pinch=Zoom, Scrollen=Schwenken.
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const pendingScrollRef = useRef<{ left: number; top: number } | null>(null);
@@ -2155,6 +2291,14 @@ export function Organigramm() {
     if (!el) return;
     function beiWheel(e: WheelEvent) {
       e.preventDefault();
+      if (!e.ctrlKey) {
+        // Schwenken: deltaX/-Y kommen bei einer Trackpad-Zweifinger-Geste
+        // bereits in beide Richtungen, bei einem reinen Mausrad meist nur
+        // vertikal (deltaX bleibt dann 0) -- beides direkt uebernehmen.
+        el!.scrollLeft += e.deltaX;
+        el!.scrollTop += e.deltaY;
+        return;
+      }
       const rect = el!.getBoundingClientRect();
       const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;

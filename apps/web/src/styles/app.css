@@ -1814,10 +1814,9 @@
    zum unteren Seitenrand gesetzt (inline style, neu vermessen bei jedem
    Einpassen/Laden/Resize) -- min-height hier ist nur das Sicherheitsnetz,
    bevor dieser Effekt beim allerersten Rendern greift. Beide Achsen
-   scrollbar, damit bei einer hoeher gewaehlten Zoomstufe geschwenkt werden
-   kann (Mausrad/Trackpad sind jetzt fuers Zoomen reserviert, siehe
-   beiWheel() dort -- Schwenken bei starkem Zoom laeuft ueber die
-   Scrollbalken). */
+   scrollbar: Organigramm.tsx::beiWheel() schwenkt per Trackpad/Mausrad
+   direkt per scrollLeft/-Top, die nativen Balken bleiben als
+   Maus-Alternative (Balken ziehen) erhalten. */
 .zv-organigramm-scroll {
   overflow: auto;
   min-height: 360px;

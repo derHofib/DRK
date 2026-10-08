@@ -2108,6 +2108,76 @@ nach unten entspricht exakt der Tiefe der zugrunde liegenden Daten
 (Träger → Einrichtungen → deren Positionen → Teampositionen → Mitarbeiter);
 keine Konsolenfehler.
 
+**Nachtrag — Organigramm-Modul, Nachtrag „Flexibilität": Trackpad-Schwenken,
+Leitungs-Positionen über ihrer Einheit.** Zwei weitere Live-Rückmeldungen,
+mit zwei vorab geklärten Rückfragen (um nicht am eigentlichen Wunsch
+vorbeizubauen):
+
+- **Trackpad-Schwenken** (echte Änderung, Ergänzung zum Wheel-Zoom der
+  letzten Runde): `beiWheel()` unterscheidet jetzt per `e.ctrlKey` zwischen
+  Zoomen (Pinch-Geste am Trackpad oder Strg+Mausrad -- Browser setzen
+  dafür ctrlKey, dieselbe Konvention wie Google Maps/Figma/Miro) und
+  Schwenken (normales Zwei-Finger-Scrollen am Trackpad oder einfaches
+  Mausrad, ohne ctrlKey -- direkt `scrollLeft`/`scrollTop` verschoben).
+- **Leitungs-Position über ihrer Einheit** (echte Änderung, neue Funktion
+  `wendeLeitungsStruktur()`): eine Linien-Position ohne `parentPositionId`
+  (eine "Leitung", die niemandem Bericht erstattet) steht in der Zeichnung
+  jetzt ÜBER ihrer Heimat-Einheit statt darunter -- z.B. Geschäftsführung
+  direkt (und einzig) unter Träger, mit allem anderen darunter; eine
+  Einrichtungsleitung über "ihrem" Haus, inklusive aller per „weitere
+  Einheiten" verknüpften zusätzlichen Häuser (die bisher als Duplikat-Karte
+  unter der jeweils anderen Einheit erschienen, jetzt stattdessen als
+  echter Kind-Teilbaum unter der Leitung). Zwei Rückfragen vorab geklärt:
+  Geschäftsführung bekommt eine eigene, zentrierte Reihe (nicht einfach
+  wie zuvor neben den Häusern), und weitere Häuser hängen über den
+  bestehenden „weitere Einheiten"-Mechanismus unter derselben Leitung,
+  statt einer neuen, pauschalen Rollen-Rangfolge (die zuvor explizit
+  abgelehnt wurde, s.o.).
+
+  **Bewusst nur eine Anzeige-Transformation**: `wendeLeitungsStruktur()`
+  läuft ausschließlich auf dem Render-Pfad (`wurzelSichtbar` →
+  `wurzelAnzeige`, unmittelbar vor `layout()`/`alleKnoten()`) -- `wurzelVoll`
+  bleibt für Drag&Drop, Zyklenschutz, Geschwister-Reihenfolge und
+  „Verschieben nach…" die UNVERÄNDERTE echte Containment-Struktur. Sonst
+  würden z.B. „Haus A" und „Haus B" trotz echter Geschwisterschaft unter
+  Träger plötzlich als Kinder verschiedener Positionen gelten, und eine
+  Reihenfolge-Änderung würde die falsche Gruppe sortieren. Folge/bewusste
+  Lücke: Einklappen einer Leitungs-Position blendet nur ihre NATÜRLICHEN
+  Kinder aus (z.B. untergeordnete Positionen), nicht die nur visuell
+  angehängte Einheit darunter -- im Live-Check geprüft und als Trade-off
+  akzeptiert, siehe dort.
+
+  Zwei echte Bugs beim Bau selbst gefunden und behoben (nicht erst beim
+  Live-Check, sondern beim gezielten Nachrechnen der Zwischenergebnisse --
+  „Prüfen statt behaupten" auch während der Implementierung):
+  1. Eine Einheit, die gleichzeitig eine EIGENE Leitung hat UND als
+     „weitere Einheit" einer ANDEREN Leitung beansprucht wird, verlor beim
+     ersten Entwurf ihre eigene Leitung (die Weitere-Einheiten-Prüfung
+     griff vor der Eigen-Beförderung). Behoben, indem jede Einheit zuerst
+     ihre eigene Beförderung durchläuft und erst DANACH geprüft wird, ob
+     das (ggf. schon beförderte) Ergebnis anderswo angehängt werden soll.
+  2. Die alte „weitere Zuordnung"-Duplikat-Karte (Vorrunde) blieb parallel
+     bestehen und zeigte dieselbe Position ein zweites Mal redundant an.
+     Jetzt unterdrückt für jede Position, die die neue Beförderung
+     bekommt -- nur Stabsstellen und Positionen mit `parentPositionId`
+     nutzen weiterhin die alte Duplikat-Karte.
+
+Geprüft: `pnpm build` sauber, API-Suite weiterhin **425/425 grün (41
+Suiten)** (keine Backend-Änderung in dieser Runde). Live-Browser-Check
+(Playwright, derselbe gesäte Testmandant wie zuvor): Baum zeigt
+Träger → Geschäftsführung (einzige, zentrierte Karte) → Einrichtungsleitung
+A (zwei gestapelte Besetzungs-Karten) → Haus A, Team 1/2/3 Leitung UND
+Einrichtungsleitung B (letztere, weil Haus B als weitere Einheit
+verknüpft ist und selbst eine eigene Leitung hat) → Mitarbeiter 1a/1b
+bzw. Haus B; keine doppelten Karten mehr. Bestehende Funktionen separat
+nachgeprüft (laufen bewusst weiter auf der unveränderten `wurzelVoll`):
+Klick auf „Haus A" öffnet weiterhin sein eigenes Panel, „Weitere
+Organisationseinheiten" im Panel von Einrichtungsleitung A zeigt
+weiterhin korrekt Haus B, Einklappen von Einrichtungsleitung A reduziert
+die Knotenzahl um ihre natürlichen Kinder (12→7), Geschwister-Button bei
+Team 1 Leitung weiterhin vorhanden, Drag-Start auf „Haus A" läuft ohne
+Fehler durch; keine Konsolenfehler.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
