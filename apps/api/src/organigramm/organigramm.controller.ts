@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
@@ -168,7 +168,13 @@ export class OrganigrammController {
   // eine Geschwister-Reihenfolge betrifft immer MEHRERE Knoten auf einmal
   // (den gesamten neu geordneten Satz), nicht einen einzelnen -- passt nicht
   // ins Schema "ein Endpunkt, eine Ressourcen-Id".
+  // @HttpCode(204): der Service liefert bewusst nichts zurueck (reine
+  // Reihenfolge, kein veraendertes Objekt mit eigenem DTO) -- ohne den
+  // Decorator schickt Nest trotzdem Status 200 mit leerem Body, und
+  // api/client.ts::request() haelt nur 204 fuer body-los (res.json() auf
+  // einem leeren 200-Body wirft "Unexpected end of JSON input").
   @Put("org-units/reihenfolge")
+  @HttpCode(204)
   @ErfordertRecht("organigramm", "bearbeiten")
   async orgUnitsReihenfolge(@Body() body: unknown) {
     const { elternId, geordneteIds } = orgUnitReihenfolgeSchema.parse(body);
@@ -227,7 +233,9 @@ export class OrganigrammController {
     return this.organigramm.setzeWeitereEinheiten(id, orgUnitIds);
   }
 
+  // @HttpCode(204): siehe Kommentar bei orgUnitsReihenfolge oben.
   @Put("positions/reihenfolge")
+  @HttpCode(204)
   @ErfordertRecht("organigramm", "bearbeiten")
   async positionenReihenfolge(@Body() body: unknown) {
     const { orgUnitId, parentPositionId, geordneteIds } = positionenReihenfolgeSchema.parse(body);

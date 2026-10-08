@@ -1,4 +1,4 @@
-import { CSSProperties, DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AccountTypDto,
   BenutzerListEintragDto,
@@ -17,6 +17,7 @@ import {
   IAbbrechen,
   IAnpassen,
   IAnzeigenAls,
+  IAufklappen,
   IAuszug,
   IBearbeiten,
   IBereichTeam,
@@ -32,8 +33,14 @@ import {
   IStabsstelle,
   ITabelle,
   ITraeger,
+  IVergroessern,
+  IVerkleinern,
+  IVerknuepft,
   IVerschieben,
+  IVerschiebenLinks,
+  IVerschiebenRechts,
   IZiehen,
+  IZuklappen,
 } from "../components/icons";
 
 /**
@@ -53,6 +60,18 @@ interface Knoten {
   kinder: Knoten[];
   tiefe: number;
   x: number;
+  /**
+   * true fuer die zusaetzliche Karte einer Linienposition unter einer
+   * WEITEREN Organisationseinheit (Migration 0047, Mehrfachzuordnung --
+   * z.B. Einrichtungsleitung mit zwei Einrichtungen). Diese Karte hat keine
+   * eigene Berichtslinie (parent_position_id bezieht sich nur auf die
+   * Heimat-Einheit) und ist bewusst weder zieh- noch Reihenfolge-bar (siehe
+   * istZiehbar()/geschwister()) -- die Reihenfolge-Spalte gehoert zur
+   * Position als Ganzes, nicht zu einem einzelnen weiteren Auftrittsort.
+   */
+  istWeitereZuordnung?: boolean;
+  /** Nur gesetzt, wenn der Knoten wegen Einklappen (kollabiert-Set) seine Kinder verbirgt. */
+  versteckteNachkommen?: number;
 }
 
 /**
@@ -105,7 +124,78 @@ function baueBaum(orgUnits: OrgUnitDto[], positionen: PositionDto[]): Knoten | n
     }
   }
 
+  // Weitere Organisationseinheiten (Mehrfachzuordnung, Migration 0047):
+  // zusaetzliche, eigenstaendige Karten direkt unter der jeweils anderen
+  // Einheit -- ein eigener Schluessel (nicht `p:${id}`), damit sich die
+  // Heimat-Karte und ihre weiteren Auftrittsorte im Baum unterscheiden
+  // lassen (istWeitereZuordnung, siehe Knoten-Kommentar oben).
+  for (const p of positionen) {
+    for (const weitereId of p.weitereOrgUnitIds) {
+      const einheit = einheitKnoten.get(weitereId);
+      if (!einheit) continue;
+      einheit.kinder.push({
+        schluessel: `p:${p.id}:weiter:${weitereId}`,
+        art: "position",
+        position: p,
+        kinder: [],
+        tiefe: 0,
+        x: 0,
+        istWeitereZuordnung: true,
+      });
+    }
+  }
+
   return wurzel;
+}
+
+/**
+ * Liefert einen flachen Klon des Baums, in dem jeder kollabierte Knoten
+ * (siehe Organigramm(): kollabiert-Set) seine Kinder fuers Layout/Rendering
+ * verliert -- die Originaldaten (wurzelVoll) bleiben unangetastet, damit
+ * Zyklenschutz/"Verschieben nach…"-Zieloptionen weiterhin den VOLLEN Baum
+ * sehen (Einklappen ist eine reine Anzeige-Praeferenz, keine
+ * Struktur-Aenderung).
+ */
+function sichtbarerBaum(wurzel: Knoten, kollabiert: Set<string>): Knoten {
+  function klon(k: Knoten): Knoten {
+    if (kollabiert.has(k.schluessel) && k.kinder.length > 0) {
+      return { ...k, kinder: [], versteckteNachkommen: alleKnoten(k).length - 1 };
+    }
+    return { ...k, kinder: k.kinder.map(klon) };
+  }
+  return klon(wurzel);
+}
+
+const BOX_BREITE = 212;
+const SPALTEN_SCHRITT = BOX_BREITE + 28;
+// Hoch genug fuer eine Position mit allen vier Zeilen (Titel, Account-Typ,
+// Status-Pill, Namen) OHNE dass der Spaltenflex etwas zusammenquetschen
+// muss (siehe .zv-organigramm-knoten-sub/-namen in app.css) -- gemessen an
+// den tatsaechlich gerenderten Zeilenhoehen, nicht geschaetzt.
+const BOX_HOEHE = 112;
+const ZEILEN_LUECKE = 48;
+// Abstand zwischen gestapelten Platzkarten EINER Position (siehe
+// knotenHoehe() unten) -- kleiner als ZEILEN_LUECKE, weil es derselbe
+// Knoten bleibt, nur mit mehreren Mitarbeiter-Karten statt einer.
+const PLATZKARTEN_LUECKE = 6;
+
+/**
+ * Anzahl der zu stapelnden Karten EINES Knotens: eine Organisationseinheit
+ * ist immer genau eine Karte, eine Position eine Karte je Mitarbeiter
+ * (mindestens eine -- "Vakant"/"Geplant" braucht trotzdem eine Karte, siehe
+ * KnotenBox). "Jeder Mitarbeiter eine eigene Karte" (Live-Rueckmeldung)
+ * heisst hier: volle, gestapelte Karten UNTEREINANDER am selben Platz,
+ * nicht nebeneinander -- vermeidet eine Neuberechnung der Spaltenbreiten
+ * im Layout-Algorithmus unten, der Spalten bewusst gleich breit haelt.
+ */
+function platzkarten(k: Knoten): number {
+  if (k.art !== "position") return 1;
+  return Math.max(1, k.position!.besetztMit.length);
+}
+
+function knotenHoehe(k: Knoten): number {
+  const n = platzkarten(k);
+  return n * BOX_HOEHE + (n - 1) * PLATZKARTEN_LUECKE;
 }
 
 /**
@@ -116,13 +206,22 @@ function baueBaum(orgUnits: OrgUnitDto[], positionen: PositionDto[]): Knoten | n
  * ueberschneidungsfrei, solange jede Spalte dieselbe Breite hat (hier der
  * Fall) -- ein vollwertiger Tidy-Tree-Algorithmus waere fuer die hier
  * erwartete Knotenzahl (zwei- bis niedrig dreistellig) unnoetiger Aufwand.
+ *
+ * yJeTiefe ersetzt seit der Mehrfachbesetzungs-Darstellung (eine Karte je
+ * Mitarbeiter, gestapelt) das vorherige "tiefe * ZEILEN_SCHRITT": jede
+ * Zeile ist jetzt so hoch wie ihr hoechster Knoten (eine Position mit drei
+ * Mitarbeitern braucht mehr Platz als eine mit einem) -- ein einzelner
+ * fester Zeilenabstand wuerde hohe Karten in die naechste Zeile ragen
+ * lassen.
  */
-function layout(wurzel: Knoten): { breiteSpalten: number; tiefe: number } {
+function layout(wurzel: Knoten): { breiteSpalten: number; tiefe: number; yJeTiefe: number[]; gesamtHoehe: number } {
   let naechsteSpalte = 0;
   let maxTiefe = 0;
+  const maxHoeheJeTiefe = new Map<number, number>();
   function besuch(knoten: Knoten, tiefe: number) {
     knoten.tiefe = tiefe;
     maxTiefe = Math.max(maxTiefe, tiefe);
+    maxHoeheJeTiefe.set(tiefe, Math.max(maxHoeheJeTiefe.get(tiefe) ?? 0, knotenHoehe(knoten)));
     if (knoten.kinder.length === 0) {
       knoten.x = naechsteSpalte;
       naechsteSpalte += 1;
@@ -134,18 +233,15 @@ function layout(wurzel: Knoten): { breiteSpalten: number; tiefe: number } {
     knoten.x = (erste + letzte) / 2;
   }
   besuch(wurzel, 0);
-  return { breiteSpalten: naechsteSpalte, tiefe: maxTiefe };
-}
 
-const BOX_BREITE = 212;
-const SPALTEN_SCHRITT = BOX_BREITE + 28;
-// Hoch genug fuer eine Position mit allen vier Zeilen (Titel, Account-Typ,
-// Status-Pill, Namen) OHNE dass der Spaltenflex etwas zusammenquetschen
-// muss (siehe .zv-organigramm-knoten-sub/-namen in app.css) -- gemessen an
-// den tatsaechlich gerenderten Zeilenhoehen, nicht geschaetzt.
-const BOX_HOEHE = 112;
-const ZEILEN_LUECKE = 48;
-const ZEILEN_SCHRITT = BOX_HOEHE + ZEILEN_LUECKE;
+  const yJeTiefe: number[] = [];
+  let kumulativ = 0;
+  for (let t = 0; t <= maxTiefe; t++) {
+    yJeTiefe[t] = kumulativ;
+    kumulativ += (maxHoeheJeTiefe.get(t) ?? BOX_HOEHE) + ZEILEN_LUECKE;
+  }
+  return { breiteSpalten: naechsteSpalte, tiefe: maxTiefe, yJeTiefe, gesamtHoehe: kumulativ - ZEILEN_LUECKE };
+}
 
 function alleKnoten(wurzel: Knoten): Knoten[] {
   const ergebnis: Knoten[] = [];
@@ -186,9 +282,29 @@ function gueltigeZiele(quelle: Knoten, alle: Knoten[]): Set<string> {
   const ziele = new Set<string>();
   for (const k of alle) {
     if (k.art !== quelle.art || k.schluessel === quelle.schluessel || nachkommen.has(k.schluessel)) continue;
+    if (k.istWeitereZuordnung) continue;
     ziele.add(k.schluessel);
   }
   return ziele;
+}
+
+/** Schluessel -> Elternknoten, einmal pro Baum berechnet -- Grundlage fuer
+ * geschwister() (Geschwister-Reihenfolge per Drag/Buttons, siehe Organigramm()). */
+function elternKarte(wurzel: Knoten): Map<string, Knoten> {
+  const karte = new Map<string, Knoten>();
+  function besuch(k: Knoten) {
+    for (const kind of k.kinder) {
+      karte.set(kind.schluessel, k);
+      besuch(kind);
+    }
+  }
+  besuch(wurzel);
+  return karte;
+}
+
+/** Geschwister EXKLUSIVE weitere-Zuordnung-Karten (siehe Knoten-Kommentar) -- die haben keine eigene Reihenfolge. */
+function geschwister(eltern: Knoten): Knoten[] {
+  return eltern.kinder.filter((k) => !k.istWeitereZuordnung);
 }
 
 /** Nur traeger/einrichtung bleiben fest -- siehe legeOrgUnitAn(), dieselbe Grenze. */
@@ -264,51 +380,89 @@ function datumAnzeige(iso: string): string {
 
 function KnotenBox({
   knoten,
+  yJeTiefe,
   accountTypNamen,
   ausgewaehlt,
   onOeffnen,
   ziehtGerade,
   istZielMoeglich,
   istZielAktuell,
+  einfuegeAn,
   onDragStart,
   onDragOver,
   onDrop,
   onDragEnd,
+  onKollabierenUmschalten,
 }: {
   knoten: Knoten;
+  yJeTiefe: number[];
   accountTypNamen: Map<string, string>;
   ausgewaehlt: boolean;
   onOeffnen: () => void;
   ziehtGerade: boolean;
   istZielMoeglich: boolean;
   istZielAktuell: boolean;
+  einfuegeAn: "vor" | "nach" | null;
   onDragStart: () => void;
-  onDragOver: (e: DragEvent<HTMLButtonElement>) => void;
-  onDrop: (e: DragEvent<HTMLButtonElement>) => void;
+  onDragOver: (e: DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
+  onKollabierenUmschalten: (() => void) | null;
 }) {
   const links = knoten.x * SPALTEN_SCHRITT + (SPALTEN_SCHRITT - BOX_BREITE) / 2;
-  const oben = knoten.tiefe * ZEILEN_SCHRITT;
-  const stil = { left: links, top: oben, width: BOX_BREITE, height: BOX_HOEHE };
+  const oben = yJeTiefe[knoten.tiefe] ?? 0;
+  const hoehe = knotenHoehe(knoten);
+  const stil = { left: links, top: oben, width: BOX_BREITE, height: hoehe };
   const ziehbar = istZiehbar(knoten);
+  // Knoten sind div[role=button], kein <button> -- der Ein-/Ausklapp-Knopf
+  // steckt als echtes <button> darin, und zwei verschachtelte <button>
+  // sind ungueltiges HTML (React warnt: validateDOMNesting). Deshalb hier
+  // die Tastatur-Aktivierung manuell nachgebaut.
+  function beiKnotenTaste(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOeffnen();
+    }
+  }
   const zugsKlassen = `${ziehtGerade ? " zv-organigramm-knoten-zieht" : ""}${
     istZielMoeglich ? " zv-organigramm-knoten-ziel-moeglich" : ""
-  }${istZielAktuell ? " zv-organigramm-knoten-ziel-aktuell" : ""}`;
+  }${istZielAktuell ? " zv-organigramm-knoten-ziel-aktuell" : ""}${
+    einfuegeAn ? ` zv-organigramm-knoten-einfuegen-${einfuegeAn}` : ""
+  }`;
   const ziehGriff = ziehbar && (
     <span className="zv-organigramm-knoten-griff" aria-hidden="true">
       <IZiehen />
     </span>
   );
+  const kollabierenKnopf = onKollabierenUmschalten && (
+    <button
+      type="button"
+      className="zv-organigramm-knoten-kollabieren"
+      onClick={(e) => {
+        e.stopPropagation();
+        onKollabierenUmschalten();
+      }}
+      aria-label={knoten.versteckteNachkommen ? "Teilbaum einblenden" : "Teilbaum ausblenden"}
+      title={knoten.versteckteNachkommen ? "Teilbaum einblenden" : "Teilbaum ausblenden"}
+    >
+      {knoten.versteckteNachkommen ? <IAufklappen /> : <IZuklappen />}
+    </button>
+  );
+  const verstecktHinweis = knoten.versteckteNachkommen ? (
+    <span className="zv-pill zv-pill-neutral zv-organigramm-knoten-versteckt">+{knoten.versteckteNachkommen}</span>
+  ) : null;
 
   if (knoten.art === "einheit") {
     const u = knoten.einheit!;
     const Icon = u.typ === "traeger" || u.typ === "einrichtung" ? ITraeger : IBereichTeam;
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         style={stil}
         draggable={ziehbar}
         onClick={onOeffnen}
+        onKeyDown={beiKnotenTaste}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -316,6 +470,7 @@ function KnotenBox({
         className={`zv-organigramm-knoten zv-organigramm-knoten-einheit${u.aktiv ? "" : " zv-organigramm-knoten-inaktiv"}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}${zugsKlassen}`}
       >
         {ziehGriff}
+        {kollabierenKnopf}
         <div className="zv-organigramm-knoten-kopf">
           <Icon />
           <span className="zv-organigramm-knoten-titel">{u.name}</span>
@@ -324,7 +479,8 @@ function KnotenBox({
           {ORG_UNIT_TYP_LABEL[u.typ]}
           {!u.aktiv && " · inaktiv"}
         </span>
-      </button>
+        {verstecktHinweis}
+      </div>
     );
   }
 
@@ -332,45 +488,68 @@ function KnotenBox({
   const status = positionsStatus(p);
   const { namen, ausgeblendet: namenAusgeblendet } = besetzteNamen(p);
   const Icon = p.typ === "stabsstelle" ? IStabsstelle : IPosition;
+  // Eine Karte je Mitarbeiter (Live-Rueckmeldung): mindestens eine
+  // Platzkarte ("Vakant"/"Geplant"), sonst eine je tatsaechlich besetztem
+  // Platz -- gestapelt, siehe knotenHoehe()/platzkarten() oben.
+  const anzahlKarten = platzkarten(knoten);
+  const zeilen: (string | null)[] = anzahlKarten === 1 ? [namen[0] ?? null] : namen.length > 0 ? namen : [null];
+  while (zeilen.length < anzahlKarten) zeilen.push(null);
+
   return (
-    <button
-      type="button"
-      style={stil}
-      draggable={ziehbar}
-      onClick={onOeffnen}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      className={`zv-organigramm-knoten zv-organigramm-knoten-position${
-        p.typ === "stabsstelle" ? " zv-organigramm-knoten-stabsstelle" : ""
-      }${!p.aktiv ? " zv-organigramm-knoten-inaktiv" : ""}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}${zugsKlassen}`}
-    >
-      {ziehGriff}
-      <div className="zv-organigramm-knoten-kopf">
-        <Icon />
-        <span className="zv-organigramm-knoten-titel">{p.titel}</span>
-      </div>
-      <span className="zv-organigramm-knoten-sub">
-        {accountTypNamen.get(p.accountTypId) ?? "?"}
-        {p.typ === "stabsstelle" && " · Stabsstelle"}
-        {!p.aktiv && " · inaktiv"}
-      </span>
-      <span className={`zv-pill ${status.klasse}`}>{status.label}</span>
-      {namen.length > 0 && <span className="zv-organigramm-knoten-namen">{namen.join(", ")}</span>}
-      {namenAusgeblendet && <span className="zv-organigramm-knoten-namen">Namen ausgeblendet</span>}
-    </button>
+    <div style={{ position: "absolute", left: links, top: oben, width: BOX_BREITE, height: hoehe }}>
+      {zeilen.map((name, i) => (
+        <div
+          key={knoten.position!.besetztMit[i]?.besetzungId ?? `leer-${i}`}
+          role="button"
+          tabIndex={0}
+          style={{ position: "absolute", top: i * (BOX_HOEHE + PLATZKARTEN_LUECKE), left: 0, width: BOX_BREITE, height: BOX_HOEHE }}
+          draggable={ziehbar}
+          onClick={onOeffnen}
+          onKeyDown={beiKnotenTaste}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onDragEnd={onDragEnd}
+          className={`zv-organigramm-knoten zv-organigramm-knoten-position${
+            p.typ === "stabsstelle" ? " zv-organigramm-knoten-stabsstelle" : ""
+          }${!p.aktiv ? " zv-organigramm-knoten-inaktiv" : ""}${ausgewaehlt ? " zv-organigramm-knoten-aktiv" : ""}${zugsKlassen}`}
+        >
+          {i === 0 && ziehGriff}
+          {i === 0 && kollabierenKnopf}
+          <div className="zv-organigramm-knoten-kopf">
+            <Icon />
+            <span className="zv-organigramm-knoten-titel">{p.titel}</span>
+            {knoten.istWeitereZuordnung && (
+              <span title="Weitere Organisationseinheit derselben Position" aria-hidden="true">
+                <IVerknuepft />
+              </span>
+            )}
+          </div>
+          <span className="zv-organigramm-knoten-sub">
+            {accountTypNamen.get(p.accountTypId) ?? "?"}
+            {p.typ === "stabsstelle" && " · Stabsstelle"}
+            {!p.aktiv && " · inaktiv"}
+          </span>
+          <span className={`zv-pill ${status.klasse}`}>{status.label}</span>
+          {name && <span className="zv-organigramm-knoten-namen">{name}</span>}
+          {!name && namenAusgeblendet && anzahlKarten === 1 && (
+            <span className="zv-organigramm-knoten-namen">Namen ausgeblendet</span>
+          )}
+          {i === 0 && verstecktHinweis}
+        </div>
+      ))}
+    </div>
   );
 }
 
-function Verbindungen({ knoten }: { knoten: Knoten[] }) {
+function Verbindungen({ knoten, yJeTiefe }: { knoten: Knoten[]; yJeTiefe: number[] }) {
   const pfade: string[] = [];
   for (const k of knoten) {
     const px = k.x * SPALTEN_SCHRITT + SPALTEN_SCHRITT / 2;
-    const py = k.tiefe * ZEILEN_SCHRITT + BOX_HOEHE;
+    const py = (yJeTiefe[k.tiefe] ?? 0) + knotenHoehe(k);
     for (const kind of k.kinder) {
       const cx = kind.x * SPALTEN_SCHRITT + SPALTEN_SCHRITT / 2;
-      const cy = kind.tiefe * ZEILEN_SCHRITT;
+      const cy = yJeTiefe[kind.tiefe] ?? 0;
       const midY = py + (cy - py) / 2;
       pfade.push(`M ${px} ${py} V ${midY} H ${cx} V ${cy}`);
     }
@@ -381,6 +560,54 @@ function Verbindungen({ knoten }: { knoten: Knoten[] }) {
         <path key={i} d={d} className="zv-organigramm-linie" />
       ))}
     </svg>
+  );
+}
+
+interface GeschwisterInfo {
+  eltern: Knoten;
+  liste: Knoten[];
+  index: number;
+}
+
+/**
+ * "Nach links/rechts"-Knöpfe -- Tastatur-/Klick-Alternative zum Drag für
+ * die Geschwister-Reihenfolge (Live-Rückmeldung: "ich möchte sie selbst
+ * sortieren können"), gleiches Prinzip wie die Auf/Ab-Knöpfe in
+ * Einstellungen.tsx::MenuReihenfolge -- nur horizontal, weil Geschwister
+ * im Organigramm nebeneinander stehen, nicht untereinander. Erscheint nur,
+ * wenn es überhaupt mehr als ein Geschwister gibt.
+ */
+function GeschwisterButtons({
+  geschwister,
+  aufVerschieben,
+}: {
+  geschwister: GeschwisterInfo | null;
+  aufVerschieben: (richtung: "links" | "rechts") => Promise<void>;
+}) {
+  if (!geschwister || geschwister.liste.length < 2) return null;
+  return (
+    <>
+      <button
+        className="zv-btn zv-btn-still"
+        type="button"
+        onClick={() => aufVerschieben("links")}
+        disabled={geschwister.index === 0}
+        aria-label="In der Reihenfolge nach links verschieben"
+        title="Nach links"
+      >
+        <IVerschiebenLinks />
+      </button>
+      <button
+        className="zv-btn zv-btn-still"
+        type="button"
+        onClick={() => aufVerschieben("rechts")}
+        disabled={geschwister.index === geschwister.liste.length - 1}
+        aria-label="In der Reihenfolge nach rechts verschieben"
+        title="Nach rechts"
+      >
+        <IVerschiebenRechts />
+      </button>
+    </>
   );
 }
 
@@ -405,6 +632,8 @@ function EinheitPanel({
   accountTypen,
   verschiebenZiele,
   aufVerschieben,
+  geschwister,
+  aufGeschwisterVerschieben,
   onAktualisiert,
 }: {
   einheit: OrgUnitDto;
@@ -412,6 +641,8 @@ function EinheitPanel({
   accountTypen: AccountTypDto[];
   verschiebenZiele: ZielOption[];
   aufVerschieben: (zielId: string) => Promise<void>;
+  geschwister: GeschwisterInfo | null;
+  aufGeschwisterVerschieben: (richtung: "links" | "rechts") => Promise<void>;
   onAktualisiert: () => void;
 }) {
   const [neueEinheitOffen, setNeueEinheitOffen] = useState(false);
@@ -508,6 +739,7 @@ function EinheitPanel({
             Verschieben nach…
           </button>
         )}
+        <GeschwisterButtons geschwister={geschwister} aufVerschieben={aufGeschwisterVerschieben} />
       </div>
 
       <h4>Positionen in dieser Einheit</h4>
@@ -616,6 +848,108 @@ function EinheitPanel({
 }
 
 /**
+ * Verwaltung der weiteren Organisationseinheiten einer Linienposition
+ * (Migration 0047, Live-Rückmeldung "Einrichtungsleitung mit zwei
+ * Einrichtungen"). Replace-Set wie bei der Stabsstelle-Scope-Verwaltung,
+ * hier aber mit sofortiger Einzel-Aktion je Zeile (Hinzufügen/Entfernen)
+ * statt eines gesammelten "Speichern" -- es ist immer nur eine einzelne
+ * Einheit, die dazukommt oder wegfällt, kein mehrzeiliges Formular wie die
+ * Rechte-Matrix.
+ */
+function WeitereEinheiten({
+  position,
+  orgUnits,
+  orgUnitNamen,
+  onAktualisiert,
+}: {
+  position: PositionDto;
+  orgUnits: OrgUnitDto[];
+  orgUnitNamen: Map<string, string>;
+  onAktualisiert: () => void;
+}) {
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  const optionen = orgUnits.filter((u) => u.id !== position.orgUnitId && !position.weitereOrgUnitIds.includes(u.id));
+
+  async function setzen(neu: string[]) {
+    setFehler(null);
+    setWirdGespeichert(true);
+    try {
+      await api.organigrammWeitereEinheitenSetzen(position.id, neu);
+      onAktualisiert();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Weitere Organisationseinheiten konnten nicht gespeichert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  async function hinzufuegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const orgUnitId = String(new FormData(form).get("orgUnitId") ?? "");
+    if (!orgUnitId) return;
+    await setzen([...position.weitereOrgUnitIds, orgUnitId]);
+    form.reset();
+  }
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <h4>Weitere Organisationseinheiten</h4>
+      <p className="zv-sub">
+        Zusätzlich zur Heimat-Einheit zugeordnet -- z.B. eine Einrichtungsleitung mit zwei Einrichtungen. Wirkt sich
+        sofort auf die Rechte dieser Position aus.
+      </p>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+
+      <ul className="zv-verlauf-liste">
+        {position.weitereOrgUnitIds.map((id) => (
+          <li key={id}>
+            <strong>{orgUnitNamen.get(id) ?? "?"}</strong>
+            <button
+              className="zv-link-btn"
+              type="button"
+              onClick={() => setzen(position.weitereOrgUnitIds.filter((wid) => wid !== id))}
+              disabled={wirdGespeichert}
+            >
+              <IAbbrechen />
+              Entfernen
+            </button>
+          </li>
+        ))}
+        {position.weitereOrgUnitIds.length === 0 && <li className="zv-sub-inline">Keine weiteren Einheiten.</li>}
+      </ul>
+
+      {optionen.length > 0 && (
+        <form onSubmit={hinzufuegen} className="zv-vorschau-zeile" style={{ marginTop: 12 }}>
+          <select name="orgUnitId" defaultValue="" required aria-label="Weitere Einheit wählen">
+            <option value="" disabled>
+              Einheit wählen…
+            </option>
+            {optionen.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          <button className="zv-btn zv-btn-still" type="submit" disabled={wirdGespeichert}>
+            <INeu />
+            Hinzufügen
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/**
  * Seitenpanel-Inhalt fuer eine Position: Stammdaten, die aktiven
  * Besetzungen (mit "seit"-Datum) je mit "Beenden", sowie "Besetzen" und
  * "Deaktivieren". Siehe EinheitPanel fuer die Begruendung, warum die
@@ -625,15 +959,25 @@ function PositionPanel({
   position,
   accountTypNamen,
   benutzerListe,
+  orgUnits,
+  orgUnitNamen,
   verschiebenZiele,
   aufVerschieben,
+  istWeitereZuordnung,
+  geschwister,
+  aufGeschwisterVerschieben,
   onAktualisiert,
 }: {
   position: PositionDto;
   accountTypNamen: Map<string, string>;
   benutzerListe: BenutzerListEintragDto[];
+  orgUnits: OrgUnitDto[];
+  orgUnitNamen: Map<string, string>;
   verschiebenZiele: ZielOption[];
   aufVerschieben: (zielId: string) => Promise<void>;
+  istWeitereZuordnung: boolean;
+  geschwister: GeschwisterInfo | null;
+  aufGeschwisterVerschieben: (richtung: "links" | "rechts") => Promise<void>;
   onAktualisiert: () => void;
 }) {
   const [besetzenOffen, setBesetzenOffen] = useState(false);
@@ -721,6 +1065,14 @@ function PositionPanel({
       </p>
       <span className={`zv-pill ${status.klasse}`}>{status.label}</span>
 
+      {istWeitereZuordnung && (
+        <div className="zv-hinweis zv-hinweis-info" style={{ marginTop: 16 }}>
+          <IVerknuepft />
+          Weitere Organisationseinheit dieser Position -- Heimat-Einheit: {orgUnitNamen.get(position.orgUnitId) ?? "?"}
+          . Besetzen/Verschieben/Reihenfolge gelten nur dort, siehe die Karte in der Heimat-Einheit.
+        </div>
+      )}
+
       {fehler && (
         <div className="zv-hinweis zv-hinweis-fehler" style={{ marginTop: 16 }}>
           <IFehler />
@@ -728,28 +1080,35 @@ function PositionPanel({
         </div>
       )}
 
-      <div className="zv-vorschau-zeile" style={{ marginTop: 16, marginBottom: 20 }}>
-        {position.aktiv && (
-          <button className="zv-btn zv-btn-still" type="button" onClick={() => setBesetzenOffen(true)}>
-            <IEinziehen />
-            Besetzen
-          </button>
-        )}
-        {position.aktiv && (
-          <button className="zv-btn zv-btn-still" type="button" onClick={() => setDeaktivierenOffen(true)}>
-            <IDeaktivieren />
-            Deaktivieren
-          </button>
-        )}
-        {verschiebenZiele.length > 0 && (
-          <button className="zv-btn zv-btn-still" type="button" onClick={() => setVerschiebenOffen(true)}>
-            <IVerschieben />
-            Verschieben nach…
-          </button>
-        )}
-      </div>
+      {!istWeitereZuordnung && (
+        <div className="zv-vorschau-zeile" style={{ marginTop: 16, marginBottom: 20 }}>
+          {position.aktiv && (
+            <button className="zv-btn zv-btn-still" type="button" onClick={() => setBesetzenOffen(true)}>
+              <IEinziehen />
+              Besetzen
+            </button>
+          )}
+          {position.aktiv && (
+            <button className="zv-btn zv-btn-still" type="button" onClick={() => setDeaktivierenOffen(true)}>
+              <IDeaktivieren />
+              Deaktivieren
+            </button>
+          )}
+          {verschiebenZiele.length > 0 && (
+            <button className="zv-btn zv-btn-still" type="button" onClick={() => setVerschiebenOffen(true)}>
+              <IVerschieben />
+              Verschieben nach…
+            </button>
+          )}
+          <GeschwisterButtons geschwister={geschwister} aufVerschieben={aufGeschwisterVerschieben} />
+        </div>
+      )}
 
-      <h4>Besetzungen</h4>
+      {!istWeitereZuordnung && position.typ === "linie" && (
+        <WeitereEinheiten position={position} orgUnits={orgUnits} orgUnitNamen={orgUnitNamen} onAktualisiert={onAktualisiert} />
+      )}
+
+      <h4 style={{ marginTop: 20 }}>Besetzungen</h4>
       <ul className="zv-verlauf-liste">
         {position.besetztMit.map((b) => (
           <li key={b.besetzungId}>
@@ -1567,31 +1926,63 @@ export function Organigramm() {
 
   const accountTypNamen = useMemo(() => new Map(accountTypen.map((a) => [a.id, a.name])), [accountTypen]);
 
-  const wurzel = useMemo(() => baueBaum(orgUnits, positionen), [orgUnits, positionen]);
-  const { breite, hoehe, knoten } = useMemo(() => {
-    if (!wurzel) return { breite: 0, hoehe: 0, knoten: [] as Knoten[] };
-    const { breiteSpalten, tiefe } = layout(wurzel);
+  // wurzelVoll: der VOLLSTAENDIGE Baum, Grundlage fuer Zyklenschutz
+  // (gueltigeZiele), "Verschieben nach…"-Zieloptionen und die
+  // Geschwister-Ermittlung -- Einklappen (kollabiert) ist eine reine
+  // Anzeige-Praeferenz und darf diese Entscheidungen nicht beeinflussen
+  // (siehe sichtbarerBaum()-Kommentar).
+  const wurzelVoll = useMemo(() => baueBaum(orgUnits, positionen), [orgUnits, positionen]);
+  const [kollabiert, setKollabiert] = useState<Set<string>>(new Set());
+  const wurzelSichtbar = useMemo(
+    () => (wurzelVoll ? sichtbarerBaum(wurzelVoll, kollabiert) : null),
+    [wurzelVoll, kollabiert]
+  );
+
+  const { breite, hoehe, yJeTiefe, knoten } = useMemo(() => {
+    if (!wurzelSichtbar) return { breite: 0, hoehe: 0, yJeTiefe: [] as number[], knoten: [] as Knoten[] };
+    const { breiteSpalten, yJeTiefe, gesamtHoehe } = layout(wurzelSichtbar);
     return {
       breite: Math.max(breiteSpalten, 1) * SPALTEN_SCHRITT,
-      hoehe: (tiefe + 1) * ZEILEN_SCHRITT - ZEILEN_LUECKE,
-      knoten: alleKnoten(wurzel),
+      hoehe: gesamtHoehe,
+      yJeTiefe,
+      knoten: alleKnoten(wurzelSichtbar),
     };
-  }, [wurzel]);
+  }, [wurzelSichtbar]);
 
-  const ausgewaehlterKnoten = knoten.find((k) => k.schluessel === ausgewaehlterSchluessel) ?? null;
+  const alleKnotenVoll = useMemo(() => (wurzelVoll ? alleKnoten(wurzelVoll) : []), [wurzelVoll]);
+  const elternMap = useMemo(() => (wurzelVoll ? elternKarte(wurzelVoll) : new Map<string, Knoten>()), [wurzelVoll]);
+
+  const ausgewaehlterKnoten = alleKnotenVoll.find((k) => k.schluessel === ausgewaehlterSchluessel) ?? null;
   const orgUnitNamen = useMemo(() => new Map(orgUnits.map((u) => [u.id, u.name])), [orgUnits]);
 
-  const gezogenerKnoten = knoten.find((k) => k.schluessel === gezogenerSchluessel) ?? null;
+  const gezogenerKnoten = alleKnotenVoll.find((k) => k.schluessel === gezogenerSchluessel) ?? null;
+  const gezogenesEltern = gezogenerKnoten ? elternMap.get(gezogenerKnoten.schluessel) ?? null : null;
   const gueltigeZielSchluessel = useMemo(
-    () => (gezogenerKnoten ? gueltigeZiele(gezogenerKnoten, knoten) : new Set<string>()),
-    [gezogenerKnoten, knoten]
+    () => (gezogenerKnoten ? gueltigeZiele(gezogenerKnoten, alleKnotenVoll) : new Set<string>()),
+    [gezogenerKnoten, alleKnotenVoll]
   );
 
   const verschiebenZiele = useMemo(() => {
     if (!ausgewaehlterKnoten) return [];
     if (ausgewaehlterKnoten.art === "einheit" && !istZiehbareEinheit(ausgewaehlterKnoten.einheit!)) return [];
-    return zielOptionen(ausgewaehlterKnoten, knoten, orgUnitNamen);
-  }, [ausgewaehlterKnoten, knoten, orgUnitNamen]);
+    return zielOptionen(ausgewaehlterKnoten, alleKnotenVoll, orgUnitNamen);
+  }, [ausgewaehlterKnoten, alleKnotenVoll, orgUnitNamen]);
+
+  // Geschwister-Reihenfolge des ausgewaehlten Knotens -- Grundlage fuer die
+  // "Nach links/rechts"-Knoepfe im Seitenpanel (Tastatur-/Klick-
+  // Alternative zum Drag, siehe geordneteGeschwister()/beiDrop() unten).
+  // Weitere-Zuordnung-Karten haben keinen Eltern-Eintrag in elternMap
+  // (sie haengen direkt, aber ausserhalb der normalen Geschwister-Zaehlung)
+  // -- fuer sie bleibt das Ergebnis bewusst null.
+  const geschwisterDesAusgewaehlten = useMemo(() => {
+    if (!ausgewaehlterKnoten || ausgewaehlterKnoten.istWeitereZuordnung) return null;
+    const eltern = elternMap.get(ausgewaehlterKnoten.schluessel);
+    if (!eltern) return null;
+    const liste = geschwister(eltern);
+    const index = liste.findIndex((k) => k.schluessel === ausgewaehlterKnoten.schluessel);
+    if (index === -1) return null;
+    return { eltern, liste, index };
+  }, [ausgewaehlterKnoten, elternMap]);
 
   async function verschiebenNachId(quelle: Knoten, zielId: string) {
     if (quelle.art === "einheit") {
@@ -1602,20 +1993,79 @@ export function Organigramm() {
     await laden();
   }
 
-  function beiDragOver(e: DragEvent<HTMLButtonElement>, ziel: Knoten) {
+  /** Persistiert eine neue Geschwister-Reihenfolge -- welcher Endpunkt greift, hängt von der ART des bewegten Knotens ab, nicht vom Elternknoten (eine Einheit kann sowohl Unter-Einheiten als auch Positionen als Kinder haben). */
+  async function reihenfolgeSpeichern(gezogen: Knoten, eltern: Knoten, geordnet: Knoten[]) {
+    const ids = geordnet.map((k) => (k.art === "einheit" ? k.einheit!.id : k.position!.id));
+    if (gezogen.art === "einheit") {
+      await api.organigrammOrgUnitsReihenfolge(eltern.einheit!.id, ids);
+    } else {
+      const orgUnitId = eltern.art === "einheit" ? eltern.einheit!.id : eltern.position!.orgUnitId;
+      const parentPositionId = eltern.art === "position" ? eltern.position!.id : null;
+      await api.organigrammPositionenReihenfolge(orgUnitId, parentPositionId, ids);
+    }
+  }
+
+  async function geschwisterVerschieben(richtung: "links" | "rechts") {
+    if (!geschwisterDesAusgewaehlten || !ausgewaehlterKnoten) return;
+    const { eltern, liste, index } = geschwisterDesAusgewaehlten;
+    const zielIndex = richtung === "links" ? index - 1 : index + 1;
+    if (zielIndex < 0 || zielIndex >= liste.length) return;
+    const neu = [...liste];
+    [neu[index], neu[zielIndex]] = [neu[zielIndex], neu[index]];
+    try {
+      await reihenfolgeSpeichern(ausgewaehlterKnoten, eltern, neu);
+      await laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Reihenfolge konnte nicht gespeichert werden.");
+    }
+  }
+
+  function istGeschwisterVonGezogenem(ziel: Knoten): boolean {
+    if (!gezogenerKnoten || !gezogenesEltern || ziel.schluessel === gezogenerKnoten.schluessel) return false;
+    if (ziel.art !== gezogenerKnoten.art || ziel.istWeitereZuordnung) return false;
+    return elternMap.get(ziel.schluessel) === gezogenesEltern;
+  }
+
+  const [einfuegeZiel, setEinfuegeZiel] = useState<{ schluessel: string; an: "vor" | "nach" } | null>(null);
+
+  function beiDragOver(e: DragEvent<HTMLDivElement>, ziel: Knoten) {
+    if (istGeschwisterVonGezogenem(ziel)) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const mitte = rect.left + rect.width / 2;
+      setEinfuegeZiel({ schluessel: ziel.schluessel, an: e.clientX < mitte ? "vor" : "nach" });
+      setZielSchluessel(null);
+      return;
+    }
+    setEinfuegeZiel(null);
     if (!gueltigeZielSchluessel.has(ziel.schluessel)) return;
     e.preventDefault();
     setZielSchluessel(ziel.schluessel);
   }
 
-  async function beiDrop(e: DragEvent<HTMLButtonElement>, ziel: Knoten) {
+  async function beiDrop(e: DragEvent<HTMLDivElement>, ziel: Knoten) {
     e.preventDefault();
     const quelle = gezogenerKnoten;
+    const eltern = gezogenesEltern;
+    const einfuegeAktuell = einfuegeZiel;
     setGezogenerSchluessel(null);
     setZielSchluessel(null);
-    if (!quelle || !gueltigeZielSchluessel.has(ziel.schluessel)) return;
-    const zielId = ziel.art === "einheit" ? ziel.einheit!.id : ziel.position!.id;
+    setEinfuegeZiel(null);
+    if (!quelle) return;
     try {
+      if (einfuegeAktuell && einfuegeAktuell.schluessel === ziel.schluessel && eltern) {
+        const aktuelleGeschwister = geschwister(eltern);
+        const ohneGezogen = aktuelleGeschwister.filter((k) => k.schluessel !== quelle.schluessel);
+        const zielIndex = ohneGezogen.findIndex((k) => k.schluessel === ziel.schluessel);
+        const einfuegeIndex = einfuegeAktuell.an === "vor" ? zielIndex : zielIndex + 1;
+        const geordnet = [...ohneGezogen];
+        geordnet.splice(einfuegeIndex, 0, quelle);
+        await reihenfolgeSpeichern(quelle, eltern, geordnet);
+        await laden();
+        return;
+      }
+      if (!gueltigeZielSchluessel.has(ziel.schluessel)) return;
+      const zielId = ziel.art === "einheit" ? ziel.einheit!.id : ziel.position!.id;
       await verschiebenNachId(quelle, zielId);
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Verschieben nicht möglich.");
@@ -1625,6 +2075,43 @@ export function Organigramm() {
   function beiDragEnd() {
     setGezogenerSchluessel(null);
     setZielSchluessel(null);
+    setEinfuegeZiel(null);
+  }
+
+  function kollabierenUmschalten(schluessel: string) {
+    setKollabiert((alt) => {
+      const neu = new Set(alt);
+      if (neu.has(schluessel)) neu.delete(schluessel);
+      else neu.add(schluessel);
+      return neu;
+    });
+  }
+
+  // Zoom/Fit-to-view (Live-Rueckmeldung: Standardansicht immer vollstaendig
+  // sichtbar). leinwandAussenRef misst die tatsaechlich verfuegbare Flaeche
+  // des Scroll-Containers (.zv-organigramm-scroll, feste Hoehe per CSS) --
+  // die Zoomstufe wird bei JEDER Aenderung der Baumgroesse neu eingepasst,
+  // ein manuelles Herein-/Herauszoomen gilt also bis zum naechsten Laden
+  // (z.B. nach einer Bearbeitung), dann wieder "Einpassen" als Standard.
+  const leinwandAussenRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const ZOOM_MIN = 0.2;
+  const ZOOM_MAX = 2;
+
+  function einpassen() {
+    const el = leinwandAussenRef.current;
+    if (!el || breite === 0 || hoehe === 0) return;
+    const passend = Math.min(1, el.clientWidth / breite, el.clientHeight / hoehe);
+    setZoom(Math.max(ZOOM_MIN, passend));
+  }
+
+  useEffect(() => {
+    einpassen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breite, hoehe]);
+
+  function zoomAendern(faktor: number) {
+    setZoom((alt) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((alt + faktor) * 100) / 100)));
   }
 
   return (
@@ -1711,30 +2198,54 @@ export function Organigramm() {
             und Aktionen.
           </p>
 
-          {!wurzel && geladen && !fehler ? (
+          {!wurzelVoll && geladen && !fehler ? (
             <Leerzustand icon={ILeerOrganigramm}>Noch keine Organisationsstruktur angelegt.</Leerzustand>
-          ) : wurzel ? (
-            <div className="zv-organigramm-scroll">
-              <div className="zv-organigramm-leinwand" style={{ width: breite, height: hoehe }}>
-                <Verbindungen knoten={knoten} />
-                {knoten.map((k) => (
-                  <KnotenBox
-                    key={k.schluessel}
-                    knoten={k}
-                    accountTypNamen={accountTypNamen}
-                    ausgewaehlt={k.schluessel === ausgewaehlterSchluessel}
-                    onOeffnen={() => setAusgewaehlterSchluessel(k.schluessel)}
-                    ziehtGerade={k.schluessel === gezogenerSchluessel}
-                    istZielMoeglich={gezogenerSchluessel !== null && gueltigeZielSchluessel.has(k.schluessel)}
-                    istZielAktuell={k.schluessel === zielSchluessel}
-                    onDragStart={() => setGezogenerSchluessel(k.schluessel)}
-                    onDragOver={(e) => beiDragOver(e, k)}
-                    onDrop={(e) => beiDrop(e, k)}
-                    onDragEnd={beiDragEnd}
-                  />
-                ))}
+          ) : wurzelSichtbar ? (
+            <>
+              <div className="zv-organigramm-zoom-leiste">
+                <button className="zv-icon-btn" type="button" onClick={() => zoomAendern(-0.1)} aria-label="Verkleinern" title="Verkleinern">
+                  <IVerkleinern />
+                </button>
+                <span className="zv-organigramm-zoom-wert">{Math.round(zoom * 100)}%</span>
+                <button className="zv-icon-btn" type="button" onClick={() => zoomAendern(0.1)} aria-label="Vergrößern" title="Vergrößern">
+                  <IVergroessern />
+                </button>
+                <button className="zv-btn zv-btn-still zv-btn-klein" type="button" onClick={einpassen}>
+                  Einpassen
+                </button>
               </div>
-            </div>
+              <div className="zv-organigramm-scroll" ref={leinwandAussenRef}>
+                <div style={{ width: breite * zoom, height: hoehe * zoom }}>
+                  <div
+                    className="zv-organigramm-leinwand"
+                    style={{ width: breite, height: hoehe, transform: `scale(${zoom})` }}
+                  >
+                    <Verbindungen knoten={knoten} yJeTiefe={yJeTiefe} />
+                    {knoten.map((k) => (
+                      <KnotenBox
+                        key={k.schluessel}
+                        knoten={k}
+                        yJeTiefe={yJeTiefe}
+                        accountTypNamen={accountTypNamen}
+                        ausgewaehlt={k.schluessel === ausgewaehlterSchluessel}
+                        onOeffnen={() => setAusgewaehlterSchluessel(k.schluessel)}
+                        ziehtGerade={k.schluessel === gezogenerSchluessel}
+                        istZielMoeglich={gezogenerSchluessel !== null && gueltigeZielSchluessel.has(k.schluessel)}
+                        istZielAktuell={k.schluessel === zielSchluessel}
+                        einfuegeAn={einfuegeZiel?.schluessel === k.schluessel ? einfuegeZiel.an : null}
+                        onDragStart={() => setGezogenerSchluessel(k.schluessel)}
+                        onDragOver={(e) => beiDragOver(e, k)}
+                        onDrop={(e) => beiDrop(e, k)}
+                        onDragEnd={beiDragEnd}
+                        onKollabierenUmschalten={
+                          k.kinder.length > 0 || k.versteckteNachkommen ? () => kollabierenUmschalten(k.schluessel) : null
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
           ) : null}
 
           <Seitenpanel offen={ausgewaehlterKnoten !== null} onSchliessen={() => setAusgewaehlterSchluessel(null)}>
@@ -1745,6 +2256,8 @@ export function Organigramm() {
                 accountTypen={accountTypen}
                 verschiebenZiele={verschiebenZiele}
                 aufVerschieben={(zielId) => verschiebenNachId(ausgewaehlterKnoten, zielId)}
+                geschwister={geschwisterDesAusgewaehlten}
+                aufGeschwisterVerschieben={geschwisterVerschieben}
                 onAktualisiert={laden}
               />
             )}
@@ -1753,8 +2266,13 @@ export function Organigramm() {
                 position={ausgewaehlterKnoten.position}
                 accountTypNamen={accountTypNamen}
                 benutzerListe={benutzerListe}
+                orgUnits={orgUnits}
+                orgUnitNamen={orgUnitNamen}
                 verschiebenZiele={verschiebenZiele}
                 aufVerschieben={(zielId) => verschiebenNachId(ausgewaehlterKnoten, zielId)}
+                istWeitereZuordnung={ausgewaehlterKnoten.istWeitereZuordnung ?? false}
+                geschwister={geschwisterDesAusgewaehlten}
+                aufGeschwisterVerschieben={geschwisterVerschieben}
                 onAktualisiert={laden}
               />
             )}

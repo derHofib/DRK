@@ -1809,14 +1809,35 @@
    bleibt deshalb Inline-Style; alles, was hier Farbe/Abstand/Radius ist,
    kommt wie ueberall aus Tokens (CLAUDE.md Regel 7).
    ================================================================== */
+/* Feste Hoehe statt frueher overflow-y:hidden (Live-Rueckmeldung: der Baum
+   soll als Standardansicht immer vollstaendig sichtbar sein -- die
+   Zoomstufe in Organigramm.tsx passt die Leinwand per Default auf genau
+   diese Flaeche ein, siehe "Einpassen"-Logik dort). Beide Achsen
+   scrollbar, damit bei einer hoeher gewaehlten Zoomstufe geschwenkt werden
+   kann. */
 .zv-organigramm-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
+  height: 65vh;
   padding: var(--zv-space-2) 0 var(--zv-space-5);
+}
+
+.zv-organigramm-zoom-leiste {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-organigramm-zoom-wert {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  min-width: 3.5em;
+  text-align: center;
 }
 
 .zv-organigramm-leinwand {
   position: relative;
+  transform-origin: top left;
 }
 
 .zv-organigramm-verbindungen {
@@ -1845,10 +1866,9 @@
   border: 1px solid var(--zv-border);
   background: var(--zv-surface);
   overflow: hidden;
-  /* Knoten sind echte <button>-Elemente (Klick oeffnet das Seitenpanel) --
-     Browser-Grundstil zuruecksetzen, damit sie weiterhin wie die reinen
-     Darstellungs-Boxen der Grundansicht aussehen. */
-  appearance: none;
+  /* div[role=button] statt <button> (der Ein-/Ausklapp-Knopf steckt als
+     echtes <button> darin, zwei verschachtelte <button> sind ungueltiges
+     HTML) -- trotzdem wie ein Formularelement aussehen und bedienen. */
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -1892,6 +1912,65 @@
   right: 4px;
   color: var(--zv-text-faint);
   display: flex;
+}
+
+/* Ein-/Ausklappen (Live-Rueckmeldung): eigener Klickbereich, getrennt vom
+   Haupt-Klick der Box (der oeffnet das Seitenpanel) -- dasselbe Prinzip
+   wie der Zieh-Griff oben, zwei unabhaengige Aktionen auf derselben Karte
+   duerfen sich nicht gegenseitig ueberlagern. */
+.zv-organigramm-knoten-kollabieren {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  padding: 2px;
+  border-radius: var(--zv-radius-s);
+  border: none;
+  background: transparent;
+  color: var(--zv-text-faint);
+  cursor: pointer;
+}
+
+.zv-organigramm-knoten-kollabieren:hover,
+.zv-organigramm-knoten-kollabieren:focus-visible {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-organigramm-knoten-versteckt {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+}
+
+/* Geschwister per Drag sortieren (Live-Rueckmeldung): eine schmale
+   Einfuege-Linie am linken/rechten Rand der ueberflogenen Karte, bewusst
+   als eigene Klasse statt eines generischen "Ziel"-Zustands -- anders als
+   zv-organigramm-knoten-ziel-moeglich/-aktuell (Umhaengen) ist das hier
+   KEIN gueltiges Reparenting-Ziel, sondern eine Positions-Markierung
+   zwischen zwei Geschwistern. */
+.zv-organigramm-knoten-einfuegen-vor,
+.zv-organigramm-knoten-einfuegen-nach {
+  box-shadow: none;
+}
+
+.zv-organigramm-knoten-einfuegen-vor::before,
+.zv-organigramm-knoten-einfuegen-nach::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--zv-accent);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-organigramm-knoten-einfuegen-vor::before {
+  left: -14px;
+}
+
+.zv-organigramm-knoten-einfuegen-nach::after {
+  right: -14px;
 }
 
 .zv-organigramm-knoten-einheit {

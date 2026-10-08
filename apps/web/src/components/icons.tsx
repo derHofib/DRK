@@ -19,6 +19,7 @@ import {
   ArchiveRestore,
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Ban,
   Banknote,
@@ -60,6 +61,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LayoutList,
+  Link,
   Link2,
   ListChecks,
   ListTodo,
@@ -288,6 +290,11 @@ export const IPosition = baue(Briefcase);
 export const IStabsstelle = baue(Workflow);
 /** "Verschieben nach…" -- die Tastatur-/Klick-Alternative zu Drag & Drop. */
 export const IVerschieben = baue(Move);
+/** Markiert eine weitere Organisationseinheit derselben Linienposition (Migration 0047) -- bewusst Link statt Link2 (IResetLink), andere Bedeutung. */
+export const IVerknuepft = baue(Link);
+/** Geschwister-Reihenfolge im Organigramm (horizontal) -- eigene Icons, nicht IVerschiebenHoch/-Runter (die stehen für die vertikale Menü-Reihenfolge in Einstellungen.tsx). */
+export const IVerschiebenLinks = baue(ArrowLeft);
+export const IVerschiebenRechts = baue(ArrowRight);
 /** "Anzeigen als…" (Rechte-Simulation) -- durch eine fremde Brille schauen. */
 export const IAnzeigenAls = baue(Glasses);
 /** Tabellenansicht/Export -- vierter Reiter neben Baum/Account-Typen/Anzeigen als…. */

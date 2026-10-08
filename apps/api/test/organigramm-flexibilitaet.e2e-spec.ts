@@ -199,7 +199,9 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
       elternId: traegerId,
       geordneteIds: [einrichtungBId, einrichtungAId],
     });
-    expect(res.status).toBe(200);
+    // 204: der Endpunkt liefert bewusst kein Objekt zurueck (reine
+    // Reihenfolge) -- siehe Kommentar im Controller.
+    expect(res.status).toBe(204);
 
     const gelesen = await als(tokenAdmin).get("/organigramm/org-units");
     const indexA = gelesen.body.findIndex((u: any) => u.id === einrichtungAId);
@@ -239,7 +241,7 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
       parentPositionId: null,
       geordneteIds: [posSib3Id, posSib1Id, posSib2Id],
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
 
     const gelesen = await als(tokenAdmin).get("/organigramm/positions");
     const index3 = gelesen.body.findIndex((p: any) => p.id === posSib3Id);

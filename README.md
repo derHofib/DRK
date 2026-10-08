@@ -1951,6 +1951,111 @@ Geschwister-Validierung für Org-Units und Positionen, Weitere-Einheiten-
 Replace-Set inkl. Scope-Union-Nachweis über `RechteService` direkt,
 Stabsstelle-Ablehnung, Selbst-Duplikat-Ablehnung, 403/401 je Endpunkt).
 
+**Nachtrag — Organigramm-Modul, Nachtrag „Flexibilität": Frontend (Baumansicht
+Zoom/Fit, Mehrfachbesetzung als Karten, weitere Einheiten, Geschwister-
+Reihenfolge, Ein-/Ausklappen).** Zweiter Teil der obigen Rückmeldung, die
+fünf UI-Lücken aus der Live-Einsatz-Rückmeldung:
+
+- **Zoom/Fit-to-view**: `.zv-organigramm-scroll` ist jetzt beidachsig
+  scrollbar mit fester Höhe (`65vh`) statt `overflow-y: hidden`. Beim
+  (Neu-)Laden wird automatisch auf `Math.min(1, verfügbareBreite/Baumbreite,
+  verfügbareHöhe/Baumhöhe)` eingepasst (`einpassen()`, ein `useEffect` auf
+  `[breite, hoehe]`) -- die Leinwand liegt dafür in einem äußeren
+  Sizer-Div (`breite*zoom × höhe*zoom`), die eigentliche Leinwand bekommt
+  `transform: scale(zoom)`, damit native Scrollbalken bei Zoom > 1 korrekt
+  mitwachsen. Zwei ±10%-Knöpfe plus „Einpassen" -- bewusst kein Mausrad-/
+  Pinch-Gesture, passend zum bisherigen Verzicht auf eine Graph-Library und
+  zur generellen Vorliebe des Projekts für explizite, zugängliche Bedienung.
+  Manueller Zoom ist damit absichtlich NICHT über einen Reload hinweg
+  persistent -- „Standard ist immer vollständig sichtbar" gilt bei jedem
+  (erneuten) Laden.
+- **Eine Karte je Mitarbeiter**: umgesetzt als VERTIKALES Stapeln
+  vollwertiger, einzeln klickbarer Karten innerhalb derselben Spalte
+  (`platzkarten()`/`knotenHoehe()`, Zeilenhöhen jetzt pro Tiefe statt
+  global fest: `yJeTiefe: number[]`). Bewusste Abweichung vom
+  ursprünglichen Plan-Wortlaut „eigene Spalten-Slots" (horizontales
+  Verteilen): das hätte eine deutlich größere Umschreibung der
+  Spaltenbreiten-Zuteilung gebraucht (jedes Blatt bekommt heute genau eine
+  Spaltenbreite, eine Position mit sowohl mehreren Mitarbeitern als auch
+  Kindern bräuchte variable Zentrierung, die das bestehende
+  Reingold-Tilford-artige Layout nicht sauber trägt) -- vertikales Stapeln
+  erreicht dasselbe fachliche Ziel (jeder Mitarbeiter eine eigene,
+  unabhängig klickbare Karte) mit einer reinen Zeilenhöhen- statt
+  Spaltenbreiten-Änderung.
+- **Weitere Organisationseinheiten**: neuer Abschnitt im Seitenpanel für
+  `typ==='linie'`-Positionen (Liste + Entfernen, Select + Hinzufügen,
+  ruft `organigrammWeitereEinheitenSetzen` direkt pro Änderung). Im Baum
+  erzeugt eine weitere Einheit eine zusätzliche Karte direkt unter der
+  jeweils anderen Organisationseinheit (`istWeitereZuordnung`, eigenes
+  `IVerknuepft`-Badge), Klick öffnet dasselbe Seitenpanel mit einem
+  Hinweisbanner statt der Besetzen-/Deaktivieren-/Verschieben-Knöpfe.
+  Bewusste Lücke wie geplant: keine gezeichnete Verbindungslinie über
+  Astgrenzen hinweg.
+- **Geschwister-Reihenfolge**: zwei gleichwertige Wege. Drag über einen
+  echten Geschwisterknoten (gleicher Elternknoten in `wurzelVoll`, gleiche
+  `art`, keine weitere Zuordnung) zeigt einen schmalen Einfüge-Indikator
+  statt der Umhängen-Hervorhebung (Cursor-x vs. Boxmitte entscheidet
+  vor/nach); Drop ruft je nach Art des gezogenen Knotens
+  `org-units/reihenfolge` oder `positions/reihenfolge`. Alternative ohne
+  Maus: „Nach links/rechts"-Knöpfe im Seitenpanel (`GeschwisterButtons`,
+  neue Icons `IVerschiebenLinks`/-`Rechts` statt der bereits anders belegten
+  `IVerschiebenHoch`/-`Runter`), gleiches Prinzip wie die Auf/Ab-Knöpfe in
+  `Einstellungen.tsx::MenuReihenfolge`, nur horizontal.
+- **Ein-/Ausklappen**: eigener Chevron-Knopf oben links, getrennt vom
+  Box-Klick (gleiches Prinzip wie der bereits bestehende Zieh-Griff oben
+  rechts). Zwei parallele Baum-Repräsentationen -- `wurzelVoll` (komplett,
+  Grundlage für Zyklenschutz/„Verschieben nach…"/Geschwisterlisten,
+  unberührt von Kollaps) und `wurzelSichtbar` (abgeleitet über
+  `sichtbarerBaum()`, nur fürs Rendering/Layout) -- damit Kollabieren nie
+  Drag-Validität oder Geschwister-Logik verfälscht. Kollabierte Knoten
+  zeigen „+N" für die ausgeblendete Nachkommenzahl.
+
+**Zwei echte Bugs beim Live-Check gefunden und behoben** (siehe
+„Prüfen statt behaupten" -- beide wären bei reinem Code-Lesen nicht
+aufgefallen):
+
+1. Der neue Kollabieren-Knopf (`<button>`) steckte in der bisherigen
+   Knoten-Box, die selbst ein `<button>` war -- verschachtelte `<button>`
+   sind ungültiges HTML (React warnte im Live-Check: `validateDOMNesting`).
+   Behoben, indem die Knoten-Box von `<button>` auf `<div role="button"
+   tabIndex={0}>` mit manuell nachgebauter Enter/Leertaste-Aktivierung
+   umgestellt wurde (`beiKnotenTaste`) -- der Kollabieren-Knopf bleibt ein
+   echtes, jetzt gültig verschachteltes `<button>`.
+2. Die beiden neuen `reihenfolge`-Endpunkte geben bewusst kein Objekt
+   zurück (reine Sortierung); ohne `@HttpCode(204)` schickt Nest dafür
+   trotzdem Status 200 mit leerem Body. `api/client.ts::request()` hält
+   nur Status 204 für body-los und ruft sonst `res.json()` auf -- auf
+   einem leeren 200-Body wirft das `SyntaxError: Unexpected end of JSON
+   input`. Die Folge im Live-Check: der PUT persistierte korrekt im
+   Backend, aber die anschließende `await laden()` in
+   `geschwisterVerschieben()`/`beiDrop()` wurde nie erreicht (Exception im
+   `try` vorher), die Baumansicht blieb unverändert stehen bis zum
+   nächsten vollständigen Neuladen der Seite. Erst durch gezieltes
+   Nachverfolgen der Netzwerk-Anfragen im Live-Check sichtbar geworden
+   (ein einzelner PUT, kein nachfolgender GET) -- mit einem
+   `console.log` vor/nach `await laden()` lokalisiert, dann sauber mit
+   `@HttpCode(204)` auf beiden Controller-Methoden behoben (zwei
+   bestehende e2e-Assertions von `toBe(200)` auf `toBe(204)` angepasst).
+
+Geprüft: `pnpm build` sauber (shared+API+Web), volle API-Suite erneut
+**425/425 grün (41 Suiten)** nach dem `@HttpCode(204)`-Fix. Live-Browser-
+Check (Playwright, Chromium, eigens gesäter Mandant mit zwei Einrichtungen,
+einer doppelt besetzten und zusätzlich einer anderen Einrichtung
+zugeordneten Einrichtungsleitung, drei Geschwister-Teampositionen, einer
+Teamposition mit zwei Unterpositionen): Baum lädt auf 71 % eingepasst,
+Zoom-Knöpfe ändern den Wert (71 %→81 %); Einrichtungsleitung erscheint als
+zwei gestapelte Karten (Vor- und Nachname je Karte) UND zusätzlich als
+zwei gestapelte Karten unter der zweiten Einrichtung mit `IVerknuepft`-
+Badge; Klick auf die weitere-Zuordnung-Karte zeigt den Hinweisbanner und
+blendet Besetzen/Deaktivieren/Verschieben korrekt aus; „Nach rechts"-Knopf
+UND simulierter Drag&Drop (manuell erzeugte `DragEvent`s mit Verzögerung
+zwischen den Events, da Playwrights native Drag-Simulation mit dieser
+React-Implementierung nicht zuverlässig greift) verschieben Geschwister
+korrekt und sichtbar ohne Seiten-Reload; Einklappen einer Teamposition mit
+zwei Unterpositionen reduziert die Knotenzahl um 2, zeigt „+2" und stellt
+beim Ausklappen exakt den vorherigen Zustand wieder her; keine
+Konsolenfehler im finalen Durchlauf.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker
