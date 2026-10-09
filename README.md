@@ -2178,6 +2178,41 @@ die Knotenzahl um ihre natürlichen Kinder (12→7), Geschwister-Button bei
 Team 1 Leitung weiterhin vorhanden, Drag-Start auf „Haus A" läuft ohne
 Fehler durch; keine Konsolenfehler.
 
+**Nachtrag — Organigramm-Modul, Nachtrag „Flexibilität": nur noch
+Positionen im Baum, keine Einheiten-Karten.** Letzte Live-Rückmeldung
+dieser Runde: Organisationseinheiten (Träger/Einrichtung/Bereich/Team)
+sollen gar keine eigene Karte mehr bekommen -- „es geht nur über die
+Personen". Neue Funktion `entferneEinheiten()`, direkt nach
+`wendeLeitungsStruktur()` im selben Render-Pfad: jeder verbleibende
+`"einheit"`-Knoten verschwindet, seine Kinder rücken eine Ebene höher.
+Bleiben mehrere voneinander unabhängige Wurzel-Positionen übrig (keine
+gemeinsame Leitung oberhalb), sammelt ein unsichtbarer Platzhalter-Knoten
+sie als Geschwister -- `layout()`/`alleKnoten()` überspringen ihn beim
+Zeichnen und zählen ihn nicht als zusätzliche Tiefe. Wie immer bei diesen
+Transformationen: bewusst NUR der Render-Pfad, `wurzelVoll` bleibt für
+Drag&Drop/Geschwister/Zyklenschutz unverändert die echte
+Containment-Struktur.
+
+**Eine echte Lücke dabei erkannt und geschlossen, bevor sie zum Problem
+wurde**: Das Seitenpanel einer Organisationseinheit (`EinheitPanel` --
+„Bereich/Team anlegen", „Position anlegen", Umbenennen/Deaktivieren,
+Geschwister-Reihenfolge einer Einheit) ließ sich bisher AUSSCHLIESSLICH
+durch einen Klick auf die jeweilige Einheiten-Karte öffnen. Ohne Karten
+wäre das komplett unerreichbar geworden -- keine neue Position mehr
+anlegbar, keine neue Einrichtung/Bereich mehr. Deshalb ein neues
+Auswahlfeld „Organisationseinheit bearbeiten…" oberhalb des Baums: wählt
+denselben `ausgewaehlterSchluessel`-Mechanismus an (`u:<id>`), der auch
+beim Klick auf eine Karte gesetzt wird -- dasselbe Panel öffnet sich,
+ganz ohne dass die Einheit je als Karte sichtbar war.
+
+Geprüft: `pnpm build` sauber, API-Suite weiterhin **425/425 grün (41
+Suiten)** (keine Backend-Änderung). Live-Browser-Check (Playwright):
+0 Einheiten-Karten im Baum (vorher 2-3), alle Positionen weiterhin sichtbar
+und verbunden; Auswahlfeld listet Träger und beide Einrichtungen korrekt,
+Auswahl von „Haus A" öffnet das Einheit-Panel mit „Bereich/Team anlegen"
+und „Position anlegen"; Klick auf eine Positions-Karte öffnet weiterhin
+ihr eigenes Panel mit „Besetzen"; keine Konsolenfehler.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

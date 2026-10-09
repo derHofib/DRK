@@ -82,6 +82,13 @@ interface Knoten {
   istWeitereZuordnung?: boolean;
   /** Nur gesetzt, wenn der Knoten wegen Einklappen (kollabiert-Set) seine Kinder verbirgt. */
   versteckteNachkommen?: number;
+  /**
+   * Reiner Platzhalter ohne eigene Karte (siehe entferneEinheiten() unten)
+   * -- sammelt mehrere voneinander unabhaengige Wurzel-Positionen als
+   * Geschwister, falls keine gemeinsame Leitung existiert. layout()/
+   * alleKnoten() ueberspringen ihn beim Zeichnen/Zaehlen der Tiefe.
+   */
+  unsichtbar?: boolean;
 }
 
 /**
@@ -298,6 +305,33 @@ function wendeLeitungsStruktur(wurzel: Knoten): Knoten {
   return neueWurzel;
 }
 
+/**
+ * Live-Rueckmeldung: "es geht nur über die Personen" -- Organisationseinheiten
+ * (Träger/Einrichtung/Bereich/Team) bekommen keine eigene Karte mehr, nur
+ * noch Positionen. Reine ANZEIGE-Transformation wie wendeLeitungsStruktur()
+ * (bewusst NUR auf den Render-Pfad angewendet, NICHT auf wurzelVoll --
+ * Geschwister-Reihenfolge, Zyklenschutz und "Verschieben nach…" müssen
+ * weiterhin die echte Containment-Struktur sehen, siehe deren Kommentare).
+ *
+ * Eine entfernte Einheit "verschwindet" einfach -- ihre Kinder (weitere
+ * Positionen, tiefer verschachtelte, jetzt ebenfalls entfernte Einheiten)
+ * rücken an ihre Stelle, eine Ebene höher. Bleiben am Ende mehrere
+ * voneinander unabhängige Wurzel-Positionen übrig (keine gemeinsame
+ * Leitung oberhalb), sammelt ein unsichtbarer Platzhalter-Knoten sie als
+ * Geschwister -- layout()/alleKnoten() überspringen ihn beim Zeichnen und
+ * zählen ihn nicht als zusätzliche Tiefe.
+ */
+function entferneEinheiten(wurzel: Knoten): Knoten {
+  function bereinige(k: Knoten): Knoten[] {
+    const kinder = k.kinder.flatMap(bereinige);
+    if (k.art === "einheit") return kinder;
+    return [{ ...k, kinder }];
+  }
+  const ergebnisse = bereinige(wurzel);
+  if (ergebnisse.length === 1) return ergebnisse[0];
+  return { schluessel: "wurzel:unsichtbar", art: "position", kinder: ergebnisse, tiefe: 0, x: 0, unsichtbar: true };
+}
+
 const BOX_BREITE = 212;
 const SPALTEN_SCHRITT = BOX_BREITE + 28;
 // Hoch genug fuer eine Position mit allen vier Zeilen (Titel, Account-Typ,
@@ -321,7 +355,7 @@ const PLATZKARTEN_LUECKE = 6;
  * im Layout-Algorithmus unten, der Spalten bewusst gleich breit haelt.
  */
 function platzkarten(k: Knoten): number {
-  if (k.art !== "position") return 1;
+  if (k.unsichtbar || k.art !== "position") return 1;
   return Math.max(1, k.position!.besetztMit.length);
 }
 
@@ -352,14 +386,20 @@ function layout(wurzel: Knoten): { breiteSpalten: number; tiefe: number; yJeTief
   const maxHoeheJeTiefe = new Map<number, number>();
   function besuch(knoten: Knoten, tiefe: number) {
     knoten.tiefe = tiefe;
-    maxTiefe = Math.max(maxTiefe, tiefe);
-    maxHoeheJeTiefe.set(tiefe, Math.max(maxHoeheJeTiefe.get(tiefe) ?? 0, knotenHoehe(knoten)));
+    if (!knoten.unsichtbar) {
+      maxTiefe = Math.max(maxTiefe, tiefe);
+      maxHoeheJeTiefe.set(tiefe, Math.max(maxHoeheJeTiefe.get(tiefe) ?? 0, knotenHoehe(knoten)));
+    }
     if (knoten.kinder.length === 0) {
       knoten.x = naechsteSpalte;
       naechsteSpalte += 1;
       return;
     }
-    for (const kind of knoten.kinder) besuch(kind, tiefe + 1);
+    // Ein unsichtbarer Platzhalter zaehlt nicht als eigene Zeile -- seine
+    // Kinder (mehrere unabhaengige Wurzel-Positionen) starten selbst bei
+    // Tiefe 0, nicht eine Ebene darunter.
+    const kindTiefe = knoten.unsichtbar ? tiefe : tiefe + 1;
+    for (const kind of knoten.kinder) besuch(kind, kindTiefe);
     const erste = knoten.kinder[0].x;
     const letzte = knoten.kinder[knoten.kinder.length - 1].x;
     knoten.x = (erste + letzte) / 2;
@@ -378,7 +418,11 @@ function layout(wurzel: Knoten): { breiteSpalten: number; tiefe: number; yJeTief
 function alleKnoten(wurzel: Knoten): Knoten[] {
   const ergebnis: Knoten[] = [];
   function besuch(k: Knoten) {
-    ergebnis.push(k);
+    // unsichtbar (entferneEinheiten()): zaehlt mit fuer Zyklenschutz/
+    // Nachkommen-Zaehlung auf wurzelVoll (das diesen Knotentyp nie
+    // enthaelt), wird aber nie als Karte gezeichnet -- hier ausgeschlossen,
+    // damit KnotenBox/Verbindungen ihn gar nicht erst zu sehen bekommen.
+    if (!k.unsichtbar) ergebnis.push(k);
     for (const kind of k.kinder) besuch(kind);
   }
   besuch(wurzel);
@@ -2013,6 +2057,17 @@ export function Organigramm() {
   // Knoten-Referenz waere dann veraltet. Der Schluessel findet den
   // aktuellen Knoten jedes Mal frisch in der neu gebauten Liste.
   const [ausgewaehlterSchluessel, setAusgewaehlterSchluessel] = useState<string | null>(null);
+  // Organisationseinheiten bekommen seit "es geht nur über die Personen"
+  // (Live-Rückmeldung) keine eigene Karte mehr im Baum -- ohne diesen
+  // Auswahl-Umweg gäbe es keinen Weg mehr zu EinheitPanel (Bereich/Team
+  // anlegen, Position anlegen, Umbenennen/Deaktivieren, Geschwister-
+  // Reihenfolge einer Einheit), weil der Klick auf die Karte bisher der
+  // EINZIGE Einstieg dafür war.
+  const [einheitAuswahl, setEinheitAuswahl] = useState("");
+  const organisationseinheitenSortiert = useMemo(
+    () => [...orgUnits].sort((a, b) => a.name.localeCompare(b.name, "de")),
+    [orgUnits]
+  );
   const [gezogenerSchluessel, setGezogenerSchluessel] = useState<string | null>(null);
   const [zielSchluessel, setZielSchluessel] = useState<string | null>(null);
   const [ansicht, setAnsicht] = useState<"baum" | "account-typen" | "simulation" | "tabelle">("baum");
@@ -2071,11 +2126,16 @@ export function Organigramm() {
   );
 
   // wurzelAnzeige: NUR fuers Rendering/Layout (Live-Rueckmeldung: Leitungs-
-  // Positionen ueber ihrer Einheit zeigen, siehe wendeLeitungsStruktur()).
-  // alleKnotenVoll/elternMap weiter unten bauen bewusst weiterhin auf
-  // wurzelVoll auf (nicht auf diesem Zweig hier), damit Drag&Drop/
-  // Geschwister/Zyklenschutz die echte Containment-Struktur sehen.
-  const wurzelAnzeige = useMemo(() => (wurzelSichtbar ? wendeLeitungsStruktur(wurzelSichtbar) : null), [wurzelSichtbar]);
+  // Positionen ueber ihrer Einheit zeigen, dann gar keine Einheiten-Karten
+  // mehr -- "es geht nur ueber die Personen", siehe wendeLeitungsStruktur()/
+  // entferneEinheiten()). alleKnotenVoll/elternMap weiter unten bauen
+  // bewusst weiterhin auf wurzelVoll auf (nicht auf diesem Zweig hier),
+  // damit Drag&Drop/Geschwister/Zyklenschutz die echte Containment-
+  // Struktur sehen.
+  const wurzelAnzeige = useMemo(
+    () => (wurzelSichtbar ? entferneEinheiten(wendeLeitungsStruktur(wurzelSichtbar)) : null),
+    [wurzelSichtbar]
+  );
 
   const { breite, hoehe, yJeTiefe, knoten } = useMemo(() => {
     if (!wurzelAnzeige) return { breite: 0, hoehe: 0, yJeTiefe: [] as number[], knoten: [] as Knoten[] };
@@ -2409,11 +2469,33 @@ export function Organigramm() {
       ) : (
         <>
           <p className="zv-sub" style={{ marginTop: -8, marginBottom: 16 }}>
-            Organisationseinheiten und Positionen dieses Trägers. Durchgezogener Rahmen: Linienposition. Gestrichelter
-            Rahmen: Stabsstelle (kein automatischer Zuständigkeitsbereich). Namen erscheinen nur mit dem Recht
-            „Personendaten sehen" -- sonst nur die Anzahl der besetzten Plätze. Klick auf einen Knoten zeigt Details
-            und Aktionen.
+            Positionen dieses Trägers -- Organisationseinheiten erscheinen nicht als eigene Karte, eine Leitungsposition
+            steht stattdessen über der Einheit, die sie verantwortet. Durchgezogener Rahmen: Linienposition.
+            Gestrichelter Rahmen: Stabsstelle (kein automatischer Zuständigkeitsbereich). Namen erscheinen nur mit dem
+            Recht „Personendaten sehen" -- sonst nur die Anzahl der besetzten Plätze. Klick auf einen Knoten zeigt
+            Details und Aktionen.
           </p>
+
+          {organisationseinheitenSortiert.length > 0 && (
+            <div className="zv-vorschau-zeile" style={{ marginBottom: 16 }}>
+              <select
+                aria-label="Organisationseinheit bearbeiten"
+                value={einheitAuswahl}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setEinheitAuswahl("");
+                  if (id) setAusgewaehlterSchluessel(`u:${id}`);
+                }}
+              >
+                <option value="">Organisationseinheit bearbeiten…</option>
+                {organisationseinheitenSortiert.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {ORG_UNIT_TYP_LABEL[u.typ]}: {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {!wurzelVoll && geladen && !fehler ? (
             <Leerzustand icon={ILeerOrganigramm}>Noch keine Organisationsstruktur angelegt.</Leerzustand>
