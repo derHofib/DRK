@@ -4,12 +4,22 @@ import {
   IAnmelden,
   IBestaetigen,
   IFehler,
+  IInfo,
   ISichtbar,
   IVerborgen,
   IZurueck,
 } from "../components/icons";
 
-export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
+export function Login({
+  onLoggedIn,
+  sitzungAbgelaufen,
+}: {
+  onLoggedIn: () => void;
+  /** true, wenn App.tsx wegen eines abgelaufenen/ungueltigen Tokens hierher
+   *  zurueckgeschaltet hat (statt eines normalen, ersten Logins) -- zeigt
+   *  eine kurze, dezente Erklaerung statt der rohen Server-Meldung. */
+  sitzungAbgelaufen?: boolean;
+}) {
   const [mandantSlug, setMandantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [passwort, setPasswort] = useState("");
@@ -109,12 +119,19 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <h1>Zimmerakte</h1>
         <p className="zv-sub">Anmeldung</p>
 
-        {fehler && (
-            <div className="zv-hinweis zv-hinweis-fehler">
-              <IFehler />
-              {fehler}
+        {fehler ? (
+          <div className="zv-hinweis zv-hinweis-fehler">
+            <IFehler />
+            {fehler}
+          </div>
+        ) : (
+          sitzungAbgelaufen && (
+            <div className="zv-hinweis zv-hinweis-info">
+              <IInfo />
+              Sitzung abgelaufen -- bitte erneut anmelden.
             </div>
-          )}
+          )
+        )}
 
         <div className="zv-field">
           <label htmlFor="mandantSlug">Träger-Kennung</label>

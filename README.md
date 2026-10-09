@@ -2213,6 +2213,40 @@ Auswahl von „Haus A" öffnet das Einheit-Panel mit „Bereich/Team anlegen"
 und „Position anlegen"; Klick auf eine Positions-Karte öffnet weiterhin
 ihr eigenes Panel mit „Besetzen"; keine Konsolenfehler.
 
+**Nachtrag — Anmeldung: abgelaufener Token schaltet sofort zur Login-Seite
+um.** Live-Rückmeldung (nicht Organigramm-spezifisch): ein abgelaufener/
+ungültiger Token zeigte bisher nur die rohe Server-Meldung „Token ungültig
+oder abgelaufen." als rote Inline-Fehlermeldung MITTEN in der laufenden
+Seite -- der Rest der Anwendung (Sidebar, Inhalt) blieb stehen, wer nicht
+genau hinsah, bemerkte nicht, dass eine erneute Anmeldung nötig ist.
+
+- `api/client.ts::request()` erkennt jetzt gezielt: ein 401 auf einen
+  Request, der tatsächlich einen Token mitgeschickt hat, bedeutet laut
+  `auth.guard.ts` immer „Token ungültig/abgelaufen" -- Token wird gelöscht
+  und ein neuer, modul-globaler Callback (`aufSitzungAbgelaufen()`)
+  aufgerufen. Bewusst nur bei VORHANDENEM Token: ein fehlgeschlagener
+  Login-Versuch selbst (falsches Passwort/falscher Code) läuft ohne Token
+  und soll weiterhin ganz normal als Formularfehler erscheinen, nicht als
+  „Sitzung abgelaufen".
+- `App.tsx` registriert diesen Callback einmalig und schaltet bei Aufruf
+  sofort von `Shell` auf `Login` um (kein Router im Einsatz, siehe
+  bestehende `angemeldet`-State-Weiche) -- mit einem neuen
+  `sitzungAbgelaufen`-Flag statt der rohen Fehlermeldung.
+- `Login.tsx` zeigt bei gesetztem Flag eine kurze, dezente Erklärung
+  („Sitzung abgelaufen -- bitte erneut anmelden.", `zv-hinweis-info`,
+  neutrale Info-Farbe) statt der alarmierenden roten Fehlermeldung --
+  verschwindet automatisch, sobald ein eigener Formularfehler (z.B.
+  falsches Passwort danach) angezeigt wird.
+
+Geprüft: `pnpm build` sauber, API-Suite weiterhin 425/425 grün (keine
+Backend-Änderung). Live-Browser-Check (Playwright): Token im
+`localStorage` manipuliert, anschließende Navigation löst einen
+authentifizierten Request aus -- landet sofort auf der Login-Seite mit
+dem dezenten Hinweis, ohne gleichzeitige rote Fehlermeldung; ein danach
+bewusst falsch eingegebenes Passwort zeigt weiterhin normal „Anmeldedaten
+ungültig.", nicht den Sitzungs-Hinweis; ein erneuter Login mit korrektem
+Passwort funktioniert unverändert.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

@@ -51,6 +51,22 @@ export function clearToken(): void {
 }
 
 /**
+ * Live-Rueckmeldung: ein abgelaufener/ungueltiger Token zeigte bisher nur
+ * eine rote Fehlermeldung MITTEN in der laufenden Seite ("Token ungültig
+ * oder abgelaufen."), die Seite blieb aber stehen -- wer nicht genau
+ * hinsah, wusste nicht, dass er sich neu anmelden muss. App.tsx registriert
+ * hier einmalig einen Handler, der stattdessen sofort zur Login-Seite
+ * zurueckschaltet (mit einer kurzen, dezenten Erklaerung statt der rohen
+ * Server-Meldung). Modul-globaler Callback statt Context/Redux: request()
+ * unten ist eine einfache Funktion ausserhalb jeder Komponente, hat also
+ * keinen anderen Weg, React-State zu erreichen.
+ */
+let beiSitzungAbgelaufen: (() => void) | null = null;
+export function aufSitzungAbgelaufen(fn: () => void): void {
+  beiSitzungAbgelaufen = fn;
+}
+
+/**
  * Liest die Rolle aus der JWT-Nutzlast -- ohne Signaturpruefung, und das ist
  * Absicht.
  *
@@ -117,6 +133,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // jedem Body-Parsing.
     if (res.status === 429) {
       throw new Error("Zu viele Anmeldeversuche. Bitte warten Sie eine Minute, bevor Sie es erneut versuchen.");
+    }
+    // Nur wenn WIR einen Token mitgeschickt haben, ist ein 401 ein
+    // abgelaufener/ungueltiger Token (siehe auth.guard.ts) -- ein
+    // fehlgeschlagener Login-Versuch selbst (falsches Passwort/falscher
+    // Code) laeuft ohne Token und soll normal als Formularfehler erscheinen,
+    // nicht ploetzlich zur Login-Seite "zurueckspringen".
+    if (res.status === 401 && token) {
+      clearToken();
+      beiSitzungAbgelaufen?.();
     }
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(body.message ?? `Anfrage fehlgeschlagen (${res.status})`);
