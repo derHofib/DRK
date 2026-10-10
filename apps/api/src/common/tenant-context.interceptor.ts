@@ -24,7 +24,7 @@ export class TenantContextInterceptor implements NestInterceptor {
 
     return new Observable((subscriber) => {
       tenantContextStorage.run(
-        { mandantId: benutzer.mandantId, benutzerId: benutzer.sub, rolle: benutzer.rolle },
+        { mandantId: benutzer.mandantId, benutzerId: benutzer.sub },
         () => {
           next.handle().subscribe(subscriber);
         }

@@ -21,7 +21,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Zimmer und Standort: bearbeiten, deaktivieren", () => {
   let app: INestApplication;
@@ -51,21 +51,27 @@ describe("Zimmer und Standort: bearbeiten, deaktivieren", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
-    const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
-      [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuer Test', $3, 'betreuer')`,
-      [mandantId, `betreuer-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    const einrichtungsleitungId = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "einrichtungsleitung",
+      email: `einrichtungsleitung-s1-${suffix}@beispiel.test`,
+      name: "Einrichtungsleitung S1 Test",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email: `betreuer-${suffix}@beispiel.test`,
+      name: "Betreuer Test",
+      passwortHash,
+    });
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
@@ -80,13 +86,11 @@ describe("Zimmer und Standort: bearbeiten, deaktivieren", () => {
 
     await admin.query(
       "INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)",
-      [mandantId, einrichtungsleitungRows[0].id, standort1]
+      [mandantId, einrichtungsleitungId, standort1]
     );
 
     // Seit Schritt 4 prueft standort.service.ts ueber die Rechte-Engine,
-    // nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
+    // nicht mehr ueber benutzer.rolle direkt -- siehe konto-mit-rolle.ts.
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -103,7 +107,7 @@ describe("Zimmer und Standort: bearbeiten, deaktivieren", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query(
         "DELETE FROM belegung WHERE zimmer_id IN (SELECT id FROM zimmer WHERE mandant_id = $1)",
         [mandantId]

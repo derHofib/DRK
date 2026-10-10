@@ -130,8 +130,8 @@ describe("Organigramm: schreibende Endpunkte", () => {
     async function neuerBenutzer(label: string): Promise<{ id: string; email: string }> {
       const email = `${label}-${suffix}@organigramm-schreiben.test`;
       const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
         [mandantId, email, `Testperson ${label}`, passwortHash]
       );
       return { id: rows[0].id, email };
@@ -302,8 +302,8 @@ describe("Organigramm: schreibende Endpunkte", () => {
     beforeAll(async () => {
       async function neuerBenutzer(label: string): Promise<string> {
         const { rows } = await admin.query<{ id: string }>(
-          `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-           VALUES ($1, $2, $3, 'x', 'betreuer') RETURNING id`,
+          `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+           VALUES ($1, $2, $3, 'x') RETURNING id`,
           [mandantId, `${label}-${randomUUID().slice(0, 8)}@organigramm-schreiben.test`, label]
         );
         return rows[0].id;
@@ -372,6 +372,80 @@ describe("Organigramm: schreibende Endpunkte", () => {
     it("besetzen mit unbekanntem Benutzer -> 404", async () => {
       const res = await als(tokenGf).post(`/organigramm/positions/${posId}/besetzen`, { benutzerId: randomUUID() });
       expect(res.status).toBe(404);
+    });
+
+    /**
+     * Entwickler-Accounttyp-Umstellung, neu gefundene Sicherheitsluecke:
+     * organigramm.bearbeiten allein reicht NICHT, um jemanden auf eine
+     * Vollzugriff-Position zu setzen -- sonst koennte sich eine Person mit
+     * nur diesem breiten Recht ueber den Umweg "jemanden auf eine
+     * Vollzugriff-Position setzen" selbst Vollzugriff verschaffen. Dafuer
+     * braucht es das engere, strukturell nie delegierbare
+     * organigramm.manage-permissions (siehe besetzen() in
+     * organigramm.service.ts).
+     */
+    it("SICHERHEIT: organigramm.bearbeiten allein reicht nicht, um eine Vollzugriff-Position zu besetzen (403)", async () => {
+      const { rows } = await admin.query<{ id: string }>(
+        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+         VALUES ($1, $2, 'Vollzugriff-Zielkandidat', 'x') RETURNING id`,
+        [mandantId, `vollzugriff-ziel-${randomUUID().slice(0, 8)}@organigramm-schreiben.test`]
+      );
+      const kandidatId = rows[0].id;
+
+      const verweigert = await als(tokenBearbeiten).post(`/organigramm/positions/${posGfId}/besetzen`, {
+        benutzerId: kandidatId,
+      });
+      expect(verweigert.status).toBe(403);
+
+      // Gegenprobe: eine Person mit BEIDEN Rechten (bearbeiten UND
+      // manage-permissions, aber NICHT Vollzugriff) darf es sehr wohl --
+      // das 403 oben liegt also wirklich am fehlenden manage-permissions,
+      // nicht z.B. an einem Tippfehler in der Positions-ID oder einem
+      // generellen Verbot. Bewusst nicht einfach tokenGf (Vollzugriff)
+      // wiederverwendet, sonst waere offen, ob wirklich manage-permissions
+      // oder der Vollzugriff-Kurzschluss den Unterschied macht.
+      const beidesTypId = (
+        await admin.query<{ id: string }>(
+          "INSERT INTO account_typ (mandant_id, name) VALUES ($1, 'Organigramm + Rechteverwaltung') RETURNING id",
+          [mandantId]
+        )
+      ).rows[0].id;
+      await admin.query(
+        `INSERT INTO account_typ_recht (mandant_id, account_typ_id, modul, aktion, scope, erlaubt)
+         VALUES ($1, $2, 'organigramm', 'ansehen', 'tenant', true),
+                ($1, $2, 'organigramm', 'bearbeiten', 'tenant', true),
+                ($1, $2, 'organigramm', 'manage-permissions', 'tenant', true)`,
+        [mandantId, beidesTypId]
+      );
+      const beidesPosId = (
+        await admin.query<{ id: string }>(
+          "INSERT INTO org_position (mandant_id, org_unit_id, titel, account_typ_id) VALUES ($1, $2, 'Beide Rechte', $3) RETURNING id",
+          [mandantId, traegerId, beidesTypId]
+        )
+      ).rows[0].id;
+      const beidesBenutzerId = (
+        await admin.query<{ id: string }>(
+          `INSERT INTO benutzer (mandant_id, email, name, passwort_hash) VALUES ($1, $2, 'Beide Rechte Testperson', $3) RETURNING id`,
+          [mandantId, `beide-rechte-${randomUUID().slice(0, 8)}@organigramm-schreiben.test`, await bcrypt.hash(passwort, 4)]
+        )
+      ).rows[0].id;
+      await admin.query("INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id) VALUES ($1, $2, $3)", [
+        mandantId,
+        beidesPosId,
+        beidesBenutzerId,
+      ]);
+      const loginRes = await request(app.getHttpServer()).post("/auth/login").send({
+        mandantSlug,
+        email: (await admin.query<{ email: string }>("SELECT email FROM benutzer WHERE id = $1", [beidesBenutzerId])).rows[0]
+          .email,
+        passwort,
+      });
+      const tokenBeides = loginRes.body.accessToken as string;
+
+      const erlaubt = await als(tokenBeides).post(`/organigramm/positions/${posGfId}/besetzen`, {
+        benutzerId: kandidatId,
+      });
+      expect(erlaubt.status).toBe(201);
     });
 
     it("deaktiviert die Position (auch bei weiterhin aktiver Besetzung -- kein DB-Constraint verbietet das)", async () => {

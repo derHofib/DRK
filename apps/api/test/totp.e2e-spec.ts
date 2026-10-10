@@ -17,6 +17,7 @@ import { NobleCryptoPlugin, ScureBase32Plugin, TOTP } from "otplib";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 const cryptoPlugin = new NobleCryptoPlugin();
 const base32Plugin = new ScureBase32Plugin();
@@ -67,10 +68,13 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'TOTP Test', $3, 'bereichsleitung')`,
-      [mandantId, email, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email,
+      name: "TOTP Test",
+      passwortHash,
+    });
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -78,6 +82,7 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
   });
 
   afterAll(async () => {
+    await raeumeKontoMitRolleAuf(admin, mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);

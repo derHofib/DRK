@@ -41,6 +41,12 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   // Recht zeigt der Belegungsverlauf anonymisierte Initialen statt des
   // vollen Namens (siehe common/anonymisierung.ts, CLAUDE.md Regel 6).
   { modul: "zimmer", aktion: "voller-verlauf" },
+  // Vier-Augen bei Kapazitaetsaenderungen (zimmer.service.ts,
+  // kapazitaetEntscheiden()) -- eigenes, frei vergebbares Recht statt der
+  // frueheren festen "Gegenrolle": wer bestaetigen darf, legt der Mandant
+  // selbst ueber die Account-Typ-Rechte fest. Selbstbestaetigung bleibt
+  // unabhaengig davon im Service ausgeschlossen.
+  { modul: "zimmer", aktion: "kapazitaet-entscheiden" },
 
   { modul: "kassenbuch", aktion: "ansehen" },
   { modul: "kassenbuch", aktion: "buchen", sensibel: true },

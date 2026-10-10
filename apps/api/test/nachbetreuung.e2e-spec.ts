@@ -24,6 +24,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Nachbetreuung: klientIstErlaubt() nach Auszug", () => {
   let app: INestApplication;
@@ -55,18 +56,21 @@ describe("Nachbetreuung: klientIstErlaubt() nach Auszug", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
 
-    const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
-      [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
-    );
-    einrichtungsleitungS1Id = einrichtungsleitungRows[0].id;
+    einrichtungsleitungS1Id = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "einrichtungsleitung",
+      email: `einrichtungsleitung-s1-${suffix}@beispiel.test`,
+      name: "Einrichtungsleitung S1 Test",
+      passwortHash,
+    });
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
@@ -167,6 +171,7 @@ describe("Nachbetreuung: klientIstErlaubt() nach Auszug", () => {
     await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+    await raeumeKontoMitRolleAuf(admin, mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);

@@ -7,7 +7,6 @@ import type {
   AufgabePrioritaet,
   BelegungsverlaufEintragDto,
   BenutzerListEintragDto,
-  BenutzerRolle,
   DashboardDto,
   DelegationDto,
   HzlRhythmus,
@@ -67,37 +66,9 @@ export function aufSitzungAbgelaufen(fn: () => void): void {
 }
 
 /**
- * Liest die Rolle aus der JWT-Nutzlast -- ohne Signaturpruefung, und das ist
- * Absicht.
- *
- * Das hier ist ausschliesslich ein ANZEIGE-Hinweis: welche Bedienelemente
- * ueberhaupt gezeigt werden. Die einzige Autoritaet bleibt der Server --
- * PATCH /mandant/me prueft die Rolle selbst und antwortet mit 403, egal was
- * hier steht. Wer die Nutzlast manipuliert, sieht hoechstens ein Formular,
- * das ihm dann 403 gibt.
- *
- * Bewusst kein eigener /auth/me-Endpunkt fuer eine reine Anzeigefrage.
- */
-export function tokenRolle(): BenutzerRolle | null {
-  const token = getToken();
-  if (!token) return null;
-  try {
-    const nutzlast = token.split(".")[1];
-    if (!nutzlast) return null;
-    // base64url -> base64, dann dekodieren.
-    const json = atob(nutzlast.replace(/-/g, "+").replace(/_/g, "/"));
-    const rolle = JSON.parse(json)?.rolle;
-    return typeof rolle === "string" ? (rolle as BenutzerRolle) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Gleiches Prinzip wie tokenRolle(): reiner Anzeige-Hinweis ohne
- * Signaturpruefung (z.B. "ist diese Aufgabe mir zugewiesen?" in
- * Aufgaben.tsx). Die Autoritaet bleibt der Server -- RLS und die
- * Rollenpruefung in aufgabe.service.ts werten app.benutzer_id aus dem
+ * Reiner Anzeige-Hinweis ohne Signaturpruefung (z.B. "ist diese Aufgabe mir
+ * zugewiesen?" in Aufgaben.tsx). Die Autoritaet bleibt der Server -- RLS und
+ * die Rechtepruefung in aufgabe.service.ts werten app.benutzer_id aus dem
  * verifizierten JWT aus, nie diesen Wert hier.
  */
 export function tokenBenutzerId(): string | null {
@@ -220,7 +191,7 @@ export const api = {
   mandantDunkelGrundfarbeSetzen: (dunkelGrundfarbe: string) =>
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ dunkelGrundfarbe }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
-  benutzerAnlegen: (payload: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) =>
+  benutzerAnlegen: (payload: { name: string; email: string; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
   passwortResetErstellen: (benutzerId: string) =>
     request<{ token: string; laeuftAbAm: string }>(`/benutzer/${benutzerId}/passwort-reset`, { method: "POST" }),

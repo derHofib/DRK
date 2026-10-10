@@ -46,7 +46,7 @@ import { RechteService } from "../src/rechte/rechte.service";
 import { tenantContextStorage } from "../src/common/tenant-context";
 
 function alsBenutzer<T>(mandantId: string, benutzerId: string, fn: () => Promise<T>): Promise<T> {
-  return tenantContextStorage.run({ mandantId, benutzerId, rolle: "betreuer" }, fn);
+  return tenantContextStorage.run({ mandantId, benutzerId }, fn);
 }
 
 describe("Externe Parteien: Schema-Invarianten (Organigramm-Modul, Schritt 9)", () => {
@@ -125,11 +125,15 @@ describe("Externe Parteien: Schema-Invarianten (Organigramm-Modul, Schritt 9)", 
     );
     posLeerId = posLeerRows[0].id;
 
+    // Bewusst OHNE kontoMitAlterRolle() -- diese Benutzer bekommen ihre
+    // Position (oder bewusst KEINE, siehe benLeer/benLeerRow) direkt im
+    // Test zugewiesen, um Default-Deny/extern-Grenzfaelle isoliert zu
+    // pruefen. Eine zusaetzliche generische Position wuerde das
+    // "eigentlich keine Rechte"-Szenario verfaelschen.
     async function neuerBenutzer(label: string): Promise<{ id: string; email: string }> {
       const email = `${label}-${suffix}@extern-check.test`;
       const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+        "INSERT INTO benutzer (mandant_id, email, name, passwort_hash) VALUES ($1, $2, $3, $4) RETURNING id",
         [mandantId, email, `Testperson ${label}`, passwortHash]
       );
       return { id: rows[0].id, email };

@@ -12,6 +12,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 const TEST_PDF_BASE64 = "data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsO4CQ==";
 const TEST_PNG_BASE64 =
@@ -55,20 +56,20 @@ describe("Tagesberichte", () => {
     );
     mandantBId = mandantBRows[0].id;
 
-    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
+    await admin.query(
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+       VALUES ($1, $2, 'Bereichsleitung Test', $3) RETURNING id`,
       [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
     );
     const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3) RETURNING id`,
       [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
     );
     const einrichtungsleitungS1Id = einrichtungsleitungRows[0].id;
     await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung B Test', $3, 'bereichsleitung')`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+       VALUES ($1, $2, 'Bereichsleitung B Test', $3)`,
       [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
     );
 
@@ -133,6 +134,11 @@ describe("Tagesberichte", () => {
   });
 
   afterAll(async () => {
+    // Seit Migration 0048 bekommt JEDER neu angelegte Mandant automatisch
+    // einen Entwickler-Accounttyp (Seed-Trigger) -- muss vor dem Loeschen
+    // des Mandanten weg, sonst schlaegt es an der FK auf account_typ fehl.
+    await raeumeKontoMitRolleAuf(admin, mandantId);
+    await raeumeKontoMitRolleAuf(admin, mandantBId);
     await admin.query(
       "DELETE FROM tagesbericht_tag WHERE mandant_id = ANY($1)",
       [[mandantId, mandantBId]]

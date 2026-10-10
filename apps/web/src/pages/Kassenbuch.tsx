@@ -7,7 +7,7 @@ import type {
   StandortDto,
   WochenuebersichtEintragDto,
 } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
@@ -127,10 +127,6 @@ export function Kassenbuch() {
   const [offeneUnterschrift, setOffeneUnterschrift] = useState<{ buchungId: string; url: string } | null>(null);
   const [stornoBeantragenBuchung, setStornoBeantragenBuchung] = useState<KassenbuchungDto | null>(null);
   const [stornoAblehnenBuchung, setStornoAblehnenBuchung] = useState<KassenbuchungDto | null>(null);
-
-  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
-  // (siehe ROLLEN_MIT_STORNO_ENTSCHEIDEN in kassenbuchung.service.ts).
-  const darfStornoEntscheiden = tokenRolle() === "bereichsleitung" || tokenRolle() === "einrichtungsleitung";
 
   function ladeBuchungen() {
     api.kassenbuchungenListe().then(setBuchungen).catch((err) => setFehler(err.message));
@@ -735,10 +731,10 @@ export function Kassenbuch() {
                 {!b.storniert && !b.offenerStornoantrag && (
                   <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
                     <IStornieren />
-                    {darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
+                    Storno beantragen
                   </button>
                 )}
-                {b.offenerStornoantrag && darfStornoEntscheiden && (
+                {b.offenerStornoantrag && (
                   <>
                     <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "genehmigt")}>
                       <IGenehmigen />
@@ -894,10 +890,10 @@ export function Kassenbuch() {
                 {!b.storniert && !b.offenerStornoantrag && (
                   <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
                     <IStornieren />
-                    {darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
+                    Storno beantragen
                   </button>
                 )}
-                {b.offenerStornoantrag && darfStornoEntscheiden && (
+                {b.offenerStornoantrag && (
                   <>
                     <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "genehmigt")}>
                       <IGenehmigen />
@@ -922,13 +918,9 @@ export function Kassenbuch() {
 
       {stornoBeantragenBuchung && (
         <GrundAbfrage
-          titel={darfStornoEntscheiden ? "Buchung stornieren" : "Storno beantragen"}
-          label={
-            darfStornoEntscheiden
-              ? `Grund für die Stornierung von „${stornoBeantragenBuchung.verwendungszweck}"`
-              : `Grund für den Storno-Antrag zu „${stornoBeantragenBuchung.verwendungszweck}"`
-          }
-          bestaetigenText={darfStornoEntscheiden ? "Stornieren" : "Storno beantragen"}
+          titel="Storno beantragen"
+          label={`Grund für den Storno-Antrag zu „${stornoBeantragenBuchung.verwendungszweck}"`}
+          bestaetigenText="Storno beantragen"
           onAbbrechen={() => setStornoBeantragenBuchung(null)}
           onBestaetigen={(grund) => {
             stornoBeantragen(stornoBeantragenBuchung, grund);

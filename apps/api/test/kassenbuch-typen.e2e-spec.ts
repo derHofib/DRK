@@ -20,7 +20,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
   let app: INestApplication;
@@ -49,16 +49,20 @@ describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuer Test', $3, 'betreuer')`,
-      [mandantId, `betreuer-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email: `betreuer-${suffix}@beispiel.test`,
+      name: "Betreuer Test",
+      passwortHash,
+    });
 
     const { rows: klientRows } = await admin.query<{ id: string }>(
       `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
@@ -72,11 +76,6 @@ describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
       [mandantId]
     );
     hzlTypId = hzlRows[0].id;
-
-    // Seit Schritt 4 prueft kassenbuchung-typ.service.ts ueber die
-    // Rechte-Engine, nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -92,7 +91,7 @@ describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
@@ -281,15 +280,13 @@ describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
       [`Testmandant Fremd ${suffix}`, fremdSlug]
     );
     const fremdMandantId = fremdMandantRows[0].id;
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Fremde Leitung', $3, 'bereichsleitung')`,
-      [fremdMandantId, `fremd-${suffix}@beispiel.test`, passwortHash]
-    );
-    // Auch dieser (separate) Testmandant braucht die Migration, sonst
-    // scheitert der Zugriffsversuch schon an der Rechte-Engine (403) statt
-    // -- wie hier geprueft -- an der Mandantentrennung (404).
-    await migriereTestmandant(admin, fremdMandantId, fremdSlug);
+    await kontoMitAlterRolle(admin, {
+      mandantId: fremdMandantId,
+      rolle: "bereichsleitung",
+      email: `fremd-${suffix}@beispiel.test`,
+      name: "Fremde Leitung",
+      passwortHash,
+    });
     const loginRes = await request(app.getHttpServer())
       .post("/auth/login")
       .send({ mandantSlug: fremdSlug, email: `fremd-${suffix}@beispiel.test`, passwort });
@@ -305,7 +302,7 @@ describe("Kassenbuch-Typen: Verwaltung, Rollen-Gate, Pflicht-Verhalten", () => {
       });
       expect(fremdZugriff.status).toBe(404);
     } finally {
-      await raeumeRollenMigrationAuf(admin, fremdMandantId);
+      await raeumeKontoMitRolleAuf(admin, fremdMandantId);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [fremdMandantId]);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [fremdMandantId]);
       await admin.query("DELETE FROM mandant WHERE id = $1", [fremdMandantId]);

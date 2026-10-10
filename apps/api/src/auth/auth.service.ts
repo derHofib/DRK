@@ -4,7 +4,7 @@ import * as bcrypt from "bcryptjs";
 import { NobleCryptoPlugin, ScureBase32Plugin, TOTP } from "otplib";
 import * as QRCode from "qrcode";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { entschluesseln, verschluesseln } from "../common/geheimnis";
 import { resetTokenHash } from "../common/reset-token";
 
@@ -36,13 +36,11 @@ interface LoginLookupRow {
   email: string;
   name: string;
   passwort_hash: string;
-  rolle: BenutzerRolle;
   benutzer_aktiv: boolean;
   totp_aktiviert: boolean;
 }
 
 interface TotpLoginLookupRow {
-  rolle: BenutzerRolle;
   mandant_aktiv: boolean;
   benutzer_aktiv: boolean;
   totp_secret: string | null;
@@ -104,7 +102,6 @@ export class AuthService {
       typ: "access",
       sub: row.benutzer_id,
       mandantId: row.mandant_id,
-      rolle: row.rolle,
     });
     return { accessToken };
   }
@@ -162,7 +159,6 @@ export class AuthService {
       typ: "access",
       sub: payload.benutzerId,
       mandantId: payload.mandantId,
-      rolle: row.rolle,
     });
     return { accessToken };
   }

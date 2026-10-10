@@ -3,10 +3,17 @@
  * nur per manuellem SQL-Insert (siehe README "Ersten Benutzer anlegen").
  *
  * Kernaussagen:
- *   1. Bereichsleitung und Einrichtungsleitung duerfen das
- *      (ROLLEN_MIT_BENUTZER_ANLEGEN in benutzer.service.ts), Betreuer nicht.
- *   2. Einrichtungsleitung darf dabei niemanden zur Bereichsleitung machen --
- *      sonst waere die Fuehrungshierarchie ueber diesen Weg aushebelbar.
+ *   1. Wer das Recht mitarbeitende.anlegen hat, darf das (hier: die
+ *      Bereichsleitung-/Einrichtungsleitung-aequivalenten Testkonten,
+ *      siehe konto-mit-rolle.ts), ein Betreuer-aequivalentes Konto nicht.
+ *   2. Anlegen vergibt KEINE Rechte mehr (Entwickler-Accounttyp-Umstellung)
+ *      -- ein frisch angelegter Benutzer hat null Positionen/Rechte, bis
+ *      jemand mit organigramm.manage-permissions ihn auf eine Position
+ *      setzt. Die fruehere Eskalationssperre ("Einrichtungsleitung darf
+ *      niemanden zur Bereichsleitung machen") ist dadurch gegenstandslos --
+ *      es gibt keinen rolle-Parameter mehr, der eskalieren koennte. Die
+ *      eigentliche Schutzstelle liegt jetzt bei
+ *      organigramm.service.ts::besetzen() (eigener Test).
  *   3. Eine doppelte E-Mail IM SELBEN Mandanten wird mit 409 abgelehnt
  *      (UNIQUE(mandant_id, email), migrations/0004_benutzer.sql), dieselbe
  *      E-Mail in einem ANDEREN Mandanten ist erlaubt.
@@ -24,7 +31,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("POST /benutzer -- Mitarbeitende anlegen", () => {
   let app: INestApplication;
@@ -61,38 +68,34 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     );
     mandantBId = mandantBRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung A', $3, 'bereichsleitung')`,
-      [mandantAId, `bereichsleitung-a-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Einrichtungsleitung A', $3, 'einrichtungsleitung')`,
-      [mandantAId, `einrichtungsleitung-a-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuer A', $3, 'betreuer')`,
-      [mandantAId, `betreuer-a-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung B', $3, 'bereichsleitung')`,
-      [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
-    );
-
-    // verarbeiteMandant() braucht eine Einrichtung, um der
-    // Einrichtungsleitung ueberhaupt eine Position zuzuweisen -- in diesem
-    // Test geht es nicht um Standort-Daten, deshalb nur ein minimaler,
-    // sonst unbenutzter Standort. Seit Schritt 4 prueft benutzer.service.ts
-    // ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt --
-    // siehe rollen-migration-test-helper.ts.
-    await admin.query("INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Haus Test', 'Teststr. 1')", [
-      mandantAId,
-    ]);
-    await migriereTestmandant(admin, mandantAId, mandantASlug);
-    await migriereTestmandant(admin, mandantBId, mandantBSlug);
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantAId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-a-${suffix}@beispiel.test`,
+      name: "Bereichsleitung A",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantAId,
+      rolle: "einrichtungsleitung",
+      email: `einrichtungsleitung-a-${suffix}@beispiel.test`,
+      name: "Einrichtungsleitung A",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantAId,
+      rolle: "betreuer",
+      email: `betreuer-a-${suffix}@beispiel.test`,
+      name: "Betreuer A",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantBId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-b-${suffix}@beispiel.test`,
+      name: "Bereichsleitung B",
+      passwortHash,
+    });
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -110,8 +113,8 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantAId);
-      await raeumeRollenMigrationAuf(admin, mandantBId);
+      await raeumeKontoMitRolleAuf(admin, mandantAId);
+      await raeumeKontoMitRolleAuf(admin, mandantBId);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
       await admin.query("DELETE FROM standort WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
@@ -131,53 +134,39 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     };
   }
 
-  it("legt als Bereichsleitung einen neuen Mitarbeiter an", async () => {
+  it("legt als Bereichsleitung einen neuen Mitarbeiter an -- ohne jede Rechtevergabe", async () => {
     const res = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Neuer Betreuer",
       email: `neu-1-${suffix}@beispiel.test`,
-      rolle: "betreuer",
       passwort,
     });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe("Neuer Betreuer");
-    expect(res.body.rolle).toBe("betreuer");
     expect(res.body.aktiv).toBe(true);
     expect(res.body.passwort_hash).toBeUndefined();
     expect(res.body.passwortHash).toBeUndefined();
 
     const liste = await als(tokenBereichsleitungA).get("/benutzer");
-    expect(liste.body.some((b: { email: string }) => b.email === `neu-1-${suffix}@beispiel.test`)).toBe(true);
+    const eintrag = liste.body.find((b: { email: string }) => b.email === `neu-1-${suffix}@beispiel.test`);
+    expect(eintrag).toBeDefined();
+    // Kernaussage 2: Anlegen vergibt keine Rechte -- keine Position, bis
+    // jemand im Organigramm eine zuweist.
+    expect(eintrag.positionen).toEqual([]);
   });
 
   it("legt auch als Einrichtungsleitung einen neuen Mitarbeiter an", async () => {
     const res = await als(tokenEinrichtungsleitungA).post("/benutzer", {
       name: "Von Einrichtungsleitung angelegt",
       email: `neu-el-${suffix}@beispiel.test`,
-      rolle: "betreuer",
       passwort,
     });
     expect(res.status).toBe(201);
-    expect(res.body.rolle).toBe("betreuer");
-  });
-
-  it("Einrichtungsleitung darf niemanden zur Bereichsleitung befoerdern (403)", async () => {
-    const res = await als(tokenEinrichtungsleitungA).post("/benutzer", {
-      name: "Sollte nicht klappen",
-      email: `eskalation-${suffix}@beispiel.test`,
-      rolle: "bereichsleitung",
-      passwort,
-    });
-    expect(res.status).toBe(403);
-
-    const liste = await als(tokenBereichsleitungA).get("/benutzer");
-    expect(liste.body.some((b: { email: string }) => b.email === `eskalation-${suffix}@beispiel.test`)).toBe(false);
   });
 
   it("lehnt das Anlegen durch Betreuer mit 403 ab", async () => {
     const res = await als(tokenBetreuerA).post("/benutzer", {
       name: "Sollte nicht klappen",
       email: `neu-2-${suffix}@beispiel.test`,
-      rolle: "betreuer",
       passwort,
     });
     expect(res.status).toBe(403);
@@ -191,7 +180,6 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     const erstes = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Erster",
       email,
-      rolle: "betreuer",
       passwort,
     });
     expect(erstes.status).toBe(201);
@@ -199,7 +187,6 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     const doppelt = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Zweiter",
       email,
-      rolle: "betreuer",
       passwort,
     });
     expect(doppelt.status).toBe(409);
@@ -207,28 +194,18 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     const andererMandant = await als(tokenBereichsleitungB).post("/benutzer", {
       name: "Auch erlaubt",
       email,
-      rolle: "betreuer",
       passwort,
     });
     expect(andererMandant.status).toBe(201);
   });
 
-  it("lehnt ungueltige Eingaben mit 400 ab (fehlende Felder, unbekannte Rolle, zu kurzes Passwort)", async () => {
+  it("lehnt ungueltige Eingaben mit 400 ab (fehlende Felder, zu kurzes Passwort)", async () => {
     const fehlend = await als(tokenBereichsleitungA).post("/benutzer", { name: "Ohne Rest" });
     expect(fehlend.status).toBe(400);
-
-    const unbekannteRolle = await als(tokenBereichsleitungA).post("/benutzer", {
-      name: "X",
-      email: `x-${suffix}@beispiel.test`,
-      rolle: "springer",
-      passwort,
-    });
-    expect(unbekannteRolle.status).toBe(400);
 
     const kurzesPasswort = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "X",
       email: `y-${suffix}@beispiel.test`,
-      rolle: "betreuer",
       passwort: "zu-kurz",
     });
     expect(kurzesPasswort.status).toBe(400);
@@ -240,7 +217,6 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     const angelegt = await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Kann sich einloggen",
       email,
-      rolle: "betreuer",
       passwort: eigenesPasswort,
     });
     expect(angelegt.status).toBe(201);
@@ -257,7 +233,6 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     await als(tokenBereichsleitungA).post("/benutzer", {
       name: "Nur in A",
       email,
-      rolle: "betreuer",
       passwort,
     });
 

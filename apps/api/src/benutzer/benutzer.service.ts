@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
@@ -16,7 +16,10 @@ export interface BenutzerListEintrag {
   id: string;
   email: string;
   name: string;
-  rolle: string;
+  // Ersetzt die frueher feste "rolle" -- Rechte haengen seit der
+  // Entwickler-Accounttyp-Umstellung ausschliesslich an Organigramm-
+  // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
+  positionen: { titel: string; accountTypName: string }[];
   aktiv: boolean;
   standortIds: string[];
 }
@@ -45,52 +48,57 @@ export class BenutzerService {
         id: string;
         email: string;
         name: string;
-        rolle: string;
         aktiv: boolean;
         standort_ids: string[];
+        positionen: { titel: string; accountTypName: string }[];
       }>(
-        `SELECT b.id, b.email, b.name, b.rolle, b.aktiv,
-                COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids
+        `SELECT b.id, b.email, b.name, b.aktiv,
+                COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
+                COALESCE(
+                  json_agg(DISTINCT jsonb_build_object('titel', p.titel, 'accountTypName', a.name))
+                    FILTER (WHERE p.id IS NOT NULL),
+                  '[]'
+                ) AS positionen
          FROM benutzer b
          LEFT JOIN benutzer_standort bs ON bs.benutzer_id = b.id
-         GROUP BY b.id, b.email, b.name, b.rolle, b.aktiv
+         LEFT JOIN org_position_besetzung pb ON pb.benutzer_id = b.id
+                AND pb.gueltig_ab <= CURRENT_DATE
+                AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+         LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
+         LEFT JOIN account_typ a ON a.id = p.account_typ_id
+         GROUP BY b.id, b.email, b.name, b.aktiv
          ORDER BY b.name`
       );
       return rows.map((r) => ({
         id: r.id,
         email: r.email,
         name: r.name,
-        rolle: r.rolle,
         aktiv: r.aktiv,
         standortIds: r.standort_ids,
+        positionen: r.positionen,
       }));
     });
   }
 
-  // Bereichsleitung darf traegerweit Mitarbeiter anlegen, Einrichtungsleitung
-  // fuer die eigene Einrichtung (siehe Standort-Einschraenkung ueber
-  // benutzer_standort -- diese Methode selbst kennt "eigene Einrichtung"
-  // nicht extra, RLS plus die optionale Standort-Zuordnung reichen).
-  async anlegen(input: { name: string; email: string; rolle: BenutzerRolle; passwort: string }) {
+  // Das Anlegen selbst vergibt keine Rechte mehr (siehe Entwickler-
+  // Accounttyp-Umstellung) -- ein frischer Benutzer hat null Rechte, bis
+  // jemand mit organigramm.manage-permissions ihn auf eine Position setzt
+  // (siehe organigramm.service.ts::besetzen(), dort sitzt der eigentliche
+  // Eskalationsschutz). Hier reicht deshalb das breite mitarbeitende.anlegen.
+  async anlegen(input: { name: string; email: string; passwort: string }) {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("mitarbeitende", "anlegen"))) {
-      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen neue Mitarbeitende anlegen.");
-    }
-    // Sonst koennte eine Einrichtungsleitung ueber diesen Weg jemanden (oder
-    // sich selbst mit einem Zweitaccount) zur Bereichsleitung befoerdern --
-    // genau die Eskalation, vor der die Rollenpruefung oben schuetzen soll.
-    if (ctx.rolle === "einrichtungsleitung" && input.rolle === "bereichsleitung") {
-      throw new ForbiddenException("Einrichtungsleitung darf niemanden zur Bereichsleitung machen.");
+      throw new ForbiddenException("Keine Berechtigung, neue Mitarbeitende anzulegen.");
     }
 
     const passwortHash = await bcrypt.hash(input.passwort, 10);
     try {
       return await this.db.withTenant(async (client) => {
         const { rows } = await client.query(
-          `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, email, name, rolle, aktiv`,
-          [ctx.mandantId, input.email, input.name, passwortHash, input.rolle]
+          `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, email, name, aktiv`,
+          [ctx.mandantId, input.email, input.name, passwortHash]
         );
         return rows[0];
       });
@@ -103,18 +111,17 @@ export class BenutzerService {
   }
 
   /**
-   * "Passwort vergessen" ohne E-Mail-Versand: Bereichs- oder
-   * Einrichtungsleitung stoesst das hier an, bekommt aber nur den ROHEN,
-   * einmaligen Link zurueck -- der wird nirgends gespeichert oder geloggt,
-   * nur dieser eine Rueckgabewert traegt ihn. Die betroffene Person oeffnet
-   * den Link und vergibt ihr Passwort SELBST (siehe
-   * auth.service.ts::passwortZuruecksetzenEinloesen); die Leitung erfaehrt
-   * es zu keinem Zeitpunkt.
+   * "Passwort vergessen" ohne E-Mail-Versand: eine berechtigte Person stoesst
+   * das hier an, bekommt aber nur den ROHEN, einmaligen Link zurueck -- der
+   * wird nirgends gespeichert oder geloggt, nur dieser eine Rueckgabewert
+   * traegt ihn. Die betroffene Person oeffnet den Link und vergibt ihr
+   * Passwort SELBST (siehe auth.service.ts::passwortZuruecksetzenEinloesen);
+   * die Leitung erfaehrt es zu keinem Zeitpunkt.
    */
   async passwortResetErstellen(zielBenutzerId: string): Promise<{ token: string; laeuftAbAm: string }> {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("mitarbeitende", "anlegen"))) {
-      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Passwort-Reset-Links erzeugen.");
+      throw new ForbiddenException("Keine Berechtigung, Passwort-Reset-Links zu erzeugen.");
     }
 
     const token = neuerResetToken();
@@ -155,52 +162,53 @@ export class BenutzerService {
    *
    * Eine leere Liste ist grundsaetzlich erlaubt: sie hebt jede Einschraenkung
    * wieder auf (siehe common/standort-restriction.ts, "keine Zeile = keine
-   * Einschraenkung"). Fuer die Bereichsleitung ist das gewollt (traegerweite
-   * Sicht ist ihr Normalfall). Fuer die Einrichtungsleitung waere es dagegen
-   * eine stille Eskalation -- sie duerfte einen Betreuer damit ausserhalb
-   * ihrer eigenen Standorte befoerdern, siehe die eigene Pruefung weiter
-   * unten.
+   * Einschraenkung"). Fuer eine selbst UNbeschraenkte Person ist das gewollt
+   * (traegerweite Sicht ist ihr Normalfall). Fuer eine selbst
+   * standortbeschraenkte Person waere es dagegen eine stille Eskalation --
+   * sie duerfte jemanden damit ausserhalb ihrer eigenen Standorte
+   * befoerdern, siehe die eigene Pruefung weiter unten. Seit der Entwickler-
+   * Accounttyp-Umstellung gibt es keine feste "Einrichtungsleitung" mehr,
+   * die das abgrenzt -- stattdessen entscheidet, ob die AGIERENDE Person
+   * selbst ueber benutzer_standort eingeschraenkt ist.
    */
   async standorteSetzen(zielBenutzerId: string, standortIds: string[]): Promise<string[]> {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("mitarbeitende", "standort-zuweisen"))) {
-      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Standorte zuweisen.");
+      throw new ForbiddenException("Keine Berechtigung, Standorte zuzuweisen.");
     }
     const eindeutigeIds = [...new Set(standortIds)];
 
     return this.db.withTenant(async (client) => {
-      const { rows: zielRows } = await client.query<{ rolle: BenutzerRolle }>(
-        "SELECT rolle FROM benutzer WHERE id = $1",
-        [zielBenutzerId]
-      );
+      const { rows: zielRows } = await client.query("SELECT id FROM benutzer WHERE id = $1", [zielBenutzerId]);
       if (zielRows.length === 0) {
         throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
       }
 
-      // Eine Einrichtungsleitung verwaltet ausschliesslich Betreuer:innen
-      // (nie andere Leitung -- sonst koennte sie sich selbst oder eine
-      // Kollegin standortmaessig einschraenken oder befreien) und nur
-      // innerhalb ihrer eigenen Standorte, nie darueber hinaus.
-      if (ctx.rolle === "einrichtungsleitung") {
-        if (zielRows[0].rolle !== "betreuer") {
-          throw new ForbiddenException("Einrichtungsleitung darf nur Betreuer:innen Standorte zuweisen.");
+      // Eine standortbeschraenkte Person verwaltet nie einen Vollzugriff-
+      // Account (sonst koennte sie sich selbst oder eine Vollzugriff-Person
+      // standortmaessig einschraenken oder befreien) und nur innerhalb ihrer
+      // eigenen Standorte, nie darueber hinaus -- direkte Entsprechung zum
+      // Vollzugriff-Schutz in organigramm.service.ts::besetzen().
+      const eigeneBeschraenkung = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+      if (eigeneBeschraenkung) {
+        if (await this.rechte.istVollzugriff(client, zielBenutzerId)) {
+          throw new ForbiddenException("Eine standortbeschränkte Person darf keinem Vollzugriff-Account Standorte zuweisen.");
         }
         // Eine leere Liste hebt laut Klassenkommentar oben JEDE Einschraenkung
-        // auf ("keine Zeile = keine Einschraenkung") -- fuer die
-        // Bereichsleitung ist das gewollt, fuer die Einrichtungsleitung waere
-        // es eine stille Eskalation: sie koennte einen Betreuer, den sie nur
-        // innerhalb der eigenen Standorte verwalten darf, zum traegerweiten
-        // Springer machen. Die Pruefung unten (eindeutigeIds.some(...)) greift
-        // bei einem LEEREN Array nicht -- deshalb ein eigener, vorgezogener
-        // Check.
+        // auf ("keine Zeile = keine Einschraenkung") -- fuer eine selbst
+        // unbeschraenkte Person ist das gewollt, fuer eine standortbeschraenkte
+        // Person waere es eine stille Eskalation: sie koennte jemanden, den
+        // sie nur innerhalb der eigenen Standorte verwalten darf, zum
+        // traegerweiten Springer machen. Die Pruefung unten
+        // (eindeutigeIds.some(...)) greift bei einem LEEREN Array nicht --
+        // deshalb ein eigener, vorgezogener Check.
         if (eindeutigeIds.length === 0) {
           throw new ForbiddenException(
-            "Einrichtungsleitung darf die Standort-Einschränkung nicht vollständig aufheben."
+            "Eine standortbeschränkte Person darf die Standort-Einschränkung nicht vollständig aufheben."
           );
         }
-        const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
-        if (erlaubteStandorte && eindeutigeIds.some((id) => !erlaubteStandorte.includes(id))) {
-          throw new ForbiddenException("Einrichtungsleitung darf nur die eigenen Standorte zuweisen.");
+        if (eindeutigeIds.some((id) => !eigeneBeschraenkung.includes(id))) {
+          throw new ForbiddenException("Eine standortbeschränkte Person darf nur die eigenen Standorte zuweisen.");
         }
       }
 

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { AufgabeDto, AufgabePrioritaet, BenutzerListEintragDto } from "@zimmerakte/shared";
-import { api, tokenBenutzerId, tokenRolle } from "../api/client";
+import { api, tokenBenutzerId } from "../api/client";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
@@ -52,7 +52,6 @@ const GRUPPEN_LABEL = {
 
 export function Aufgaben() {
   const benutzerId = tokenBenutzerId();
-  const rolle = tokenRolle();
 
   const [aufgaben, setAufgaben] = useState<AufgabeDto[]>([]);
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
@@ -172,7 +171,6 @@ export function Aufgaben() {
                   aufgabe={a}
                   benutzerListe={benutzerListe}
                   aktuelleBenutzerId={benutzerId}
-                  aktuelleRolle={rolle}
                   zeigeZimmer
                   onErledigen={() => erledigen(a.id)}
                   onZuweisenAendern={(zid) => zuweisenAendern(a.id, zid)}

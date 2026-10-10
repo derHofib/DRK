@@ -1,4 +1,4 @@
-import type { AufgabeDto, BenutzerListEintragDto, BenutzerRolle } from "@zimmerakte/shared";
+import type { AufgabeDto, BenutzerListEintragDto } from "@zimmerakte/shared";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
 import { IGenehmigen, ILoeschen, IPrioritaetHoch, IPrioritaetNiedrig, IPrioritaetNormal } from "./icons";
@@ -23,12 +23,15 @@ export const PRIORITAET_PILL_KLASSE = {
 
 /**
  * Reiner Anzeige-Hinweis, welche Knoepfe angeboten werden -- der Server
- * (aufgabe.service.ts, darfSchreiben()) entscheidet verbindlich. Gleiches
- * Prinzip wie tokenRolle()/darfKapazitaetEntscheiden() in Zimmer.tsx.
+ * (aufgabe.service.ts, darfSchreiben()) entscheidet verbindlich. Frueher
+ * durften Bereichs-/Einrichtungsleitung hier zusaetzlich jede Aufgabe
+ * bearbeiten -- ohne feste Rollen gibt es dafuer keinen clientseitigen
+ * Hinweis mehr; wer eine Aufgabe ohne eigenen Bezug trotzdem bearbeiten
+ * darf (z.B. per Organigramm-Position), sieht die Knoepfe hier nicht,
+ * bleibt serverseitig aber weiterhin erlaubt.
  */
-function darfBearbeiten(aufgabe: AufgabeDto, benutzerId: string | null, rolle: BenutzerRolle | null): boolean {
+function darfBearbeiten(aufgabe: AufgabeDto, benutzerId: string | null): boolean {
   if (!benutzerId) return false;
-  if (rolle === "bereichsleitung" || rolle === "einrichtungsleitung") return true;
   return aufgabe.erstelltVon === benutzerId || aufgabe.zugewiesenAn === benutzerId;
 }
 
@@ -44,7 +47,6 @@ export function AufgabeZeile({
   aufgabe,
   benutzerListe,
   aktuelleBenutzerId,
-  aktuelleRolle,
   zeigeZimmer = false,
   onErledigen,
   onZuweisenAendern,
@@ -53,7 +55,6 @@ export function AufgabeZeile({
   aufgabe: AufgabeDto;
   benutzerListe: BenutzerListEintragDto[];
   aktuelleBenutzerId: string | null;
-  aktuelleRolle: BenutzerRolle | null;
   zeigeZimmer?: boolean;
   onErledigen: () => void;
   onZuweisenAendern: (benutzerId: string | null) => void;
@@ -65,7 +66,7 @@ export function AufgabeZeile({
   // aufgabe.service.ts, Kommentar zu aktualisieren()) -- deshalb hier
   // unabhaengig von darfBearbeiten() immer anbieten, nicht nur wenn
   // darfSchreiben() serverseitig zutreffen wuerde.
-  const darfSchreiben = darfBearbeiten(aufgabe, aktuelleBenutzerId, aktuelleRolle);
+  const darfSchreiben = darfBearbeiten(aufgabe, aktuelleBenutzerId);
 
   return (
     <div className="zv-info-karte" style={{ opacity: aufgabe.erledigtAm ? 0.6 : 1 }}>

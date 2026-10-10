@@ -111,8 +111,8 @@ describe("Rechte-Simulation: GET /rechte/simulation", () => {
     async function neuerBenutzer(label: string): Promise<{ id: string; email: string }> {
       const email = `${label}-${suffix}@rechte-simulation.test`;
       const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
         [mandantId, email, `Testperson ${label}`, passwortHash]
       );
       return { id: rows[0].id, email };

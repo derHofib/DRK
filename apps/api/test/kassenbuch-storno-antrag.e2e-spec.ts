@@ -26,7 +26,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Kassenbuch: Storno-Antragsworkflow", () => {
   let app: INestApplication;
@@ -59,13 +59,14 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     );
     mandantId = mandantRows[0].id;
 
-    async function neuerBenutzer(rolle: string, emailPrefix: string): Promise<string> {
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mandantId, `${emailPrefix}-${suffix}@beispiel.test`, `${emailPrefix} Test`, passwortHash, rolle]
-      );
-      return rows[0].id;
+    async function neuerBenutzer(rolle: AlteRolle, emailPrefix: string): Promise<string> {
+      return kontoMitAlterRolle(admin, {
+        mandantId,
+        rolle,
+        email: `${emailPrefix}-${suffix}@beispiel.test`,
+        name: `${emailPrefix} Test`,
+        passwortHash,
+      });
     }
     const bereichsleitungId = await neuerBenutzer("bereichsleitung", "bereichsleitung");
     const einrichtungsleitungS1Id = await neuerBenutzer("einrichtungsleitung", "einrichtungsleitung-s1");
@@ -117,11 +118,6 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
     );
     einzahlungTypId = typRows[0].id;
 
-    // Seit Schritt 4 prueft kassenbuchung.service.ts (Storno-Entscheidung)
-    // ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt --
-    // siehe rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
-
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -137,7 +133,7 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM kassenbuchung_stornoantrag WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);

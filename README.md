@@ -2247,6 +2247,112 @@ bewusst falsch eingegebenes Passwort zeigt weiterhin normal „Anmeldedaten
 ungültig.", nicht den Sitzungs-Hinweis; ein erneuter Login mit korrektem
 Passwort funktioniert unverändert.
 
+**Nachtrag — Entwickler-Accounttyp: das alte Drei-Rollen-Modell ist
+vollständig abgeschafft.** Bisher setzte jeder Mandant auf ein festes
+Rollenmodell (`bereichsleitung`/`einrichtungsleitung`/`betreuer`, Spalte
+`benutzer.rolle`), während parallel dazu seit dem Organigramm-Modul schon
+die viel flexiblere Account-Typ-/`hatRecht()`-Rechte-Engine existierte. Der
+Auftraggeber wollte das alte Modell jetzt nicht nur für neue Mandanten
+umgehen, sondern **komplett entfernen** -- inklusive der beiden
+verbliebenen Geschäftsregeln, die noch direkt daran hingen, und der alten
+Migrationsbrücke `rollen-migration.ts`.
+
+- **Migration `0048_entwickler_accounttyp.sql`**: `AFTER INSERT ON
+  mandant`-Trigger (gleiches Muster wie `kassenbuchung_typ_standard_anlegen()`
+  aus 0035) legt pro neuem Mandanten automatisch einen **dauerhaften**
+  Vollzugriff-Accounttyp „Entwickler" an (`ist_system=true,
+  ist_vollzugriff=true`) -- kein Einmal-Bootstrap-Schritt, bleibt für immer
+  bestehen, genau wie jeder andere Accounttyp. Backfill für bereits
+  bestehende Mandanten ohne eigenen Vollzugriff-Typ.
+- **Migration `0049_benutzer_rolle_entfernen.sql`**: dieselbe Technik wie in
+  0026 (dort wurden zwei Enum-Werte verschmolzen) -- `login_lookup`/
+  `totp_login_lookup` (SECURITY DEFINER) hängen über ihre Signatur am Typ
+  `benutzer_rolle` und müssen vor dem Spaltenwechsel weg und danach ohne
+  `rolle`-Feld neu angelegt werden. Spalte `benutzer.rolle` und Enum
+  `benutzer_rolle` sind damit vollständig weg.
+- **`scripts/account-anlegen.sh`** erweitert statt eines separaten neuen
+  Scripts (Entscheidung des Auftraggebers): die „Rolle wählen"-Auswahl ist
+  weg. Der **allererste** Account eines Mandanten (erkannt an: noch keine
+  `org_position_besetzung`-Zeile) wird automatisch zum Entwickler -- Position
+  + Besetzung entstehen im selben Schritt. Jeder weitere über das Script
+  angelegte Account bleibt bewusst ohne Position (0 Rechte), bis eine
+  bestehende Entwickler-/Geschäftsführung-Person im Organigramm eine
+  zuweist. „Rolle"-Spalten in der Anzeige/Bearbeiten-Auswahl sind durch
+  „Accounttyp" (aus `org_position_besetzung`/`org_position`/`account_typ`)
+  ersetzt.
+- **`benutzer.service.ts::anlegen()`**: der frühere Eskalationsschutz
+  („Einrichtungsleitung darf niemanden zur Bereichsleitung machen") ist
+  ersatzlos gestrichen -- er wird gegenstandslos, weil Anlegen jetzt
+  grundsätzlich KEINE Rechte mehr vergibt (ein frischer `benutzer` hat null
+  Positionen). Die eigentliche Eskalationsgefahr liegt jetzt exakt bei der
+  Positionszuweisung, siehe `besetzen()`-Fix unten.
+- **`benutzer.service.ts::standorteSetzen()`**: die frühere feste „nur
+  Betreuer:innen"-Grenze für eine Einrichtungsleitung ist durch eine direkte
+  Entsprechung zum Vollzugriff-Schutz ersetzt: eine standortbeschränkte
+  Person (hat selbst Zeilen in `benutzer_standort`) darf jede
+  Standort-Zuweisung ändern, **außer** bei einem Vollzugriff-Account. Neue,
+  öffentliche Hilfsmethode `RechteService.istVollzugriff()` (vorher
+  `private`, jetzt von `benutzer.service.ts` mitbenutzt statt dupliziert).
+- **`zimmer.service.ts`, Vier-Augen bei Kapazitätsänderung**: die frühere
+  feste „Gegenrolle" (Bereichsleitung beantragt → nur Einrichtungsleitung
+  darf bestätigen) ist durch ein neues, eigenständiges Recht
+  `zimmer.kapazitaet-entscheiden` ersetzt (Registry-Eintrag,
+  `rechte/registry.ts`) -- wer bestätigen darf, legt der Mandant jetzt
+  selbst über die Account-Typ-Rechte fest, nicht mehr eine feste
+  Rollenpaarung. Selbstbestätigung bleibt unabhängig davon ausgeschlossen
+  (`ctx.benutzerId === antragstellerBenutzerId` → 403). Bewusste
+  Verhaltensänderung, mit dem Auftraggeber per Rückfrage abgestimmt.
+  `OffenerKapazitaetsantragDto.beantragtVonRolle` → `beantragtVonId`.
+- **Neu gefundene Sicherheitslücke, im selben Zug geschlossen**:
+  `organigramm.service.ts::besetzen()` prüfte bisher nur das breite
+  `organigramm.bearbeiten` (Controller-Gate) -- wer nur das hatte, hätte
+  jemanden (auch sich selbst über einen Zweitaccount) auf eine
+  Vollzugriff-Position setzen und sich damit selbst Vollzugriff verschaffen
+  können. Jetzt zusätzlich: ist die Zielposition `ist_vollzugriff=true`,
+  wird das engere, strukturell nie delegierbare
+  `organigramm.manage-permissions` verlangt. Gegenprobe gefahren (Prüfung
+  auskommentiert, Testlauf wurde rot, wiederhergestellt).
+- **`BenutzerListEintragDto.rolle` → `positionen: { titel,
+  accountTypName }[]`**: die Mitarbeitenden-Liste zeigt jetzt die
+  tatsächliche(n) Position(en) statt einer Rolle, `Mitarbeitende.tsx`
+  entsprechend umgebaut (keine „Rolle"-Spalte/-Formularfeld mehr).
+- **Frontend, 11 Dateien**: `tokenRolle()` (und sein Gegenstück im JWT) ist
+  komplett weg. Jede der elf Stellen war laut eigenem Code-Kommentar schon
+  immer „nur ein Anzeige-Hinweis, der Server entscheidet verbindlich" --
+  genau das Prinzip, das `EinheitPanel` im Organigramm bereits bewusst
+  vorlebt (keine clientseitige Rechteprüfung, Aktion immer sichtbar, 403
+  ist die einzige Instanz). Konsequent übernommen: die `darf*`-Variablen
+  und bedingten Ausblendungen sind ersatzlos entfernt. Einzige Ausnahme mit
+  echter Logik statt reiner Ausblendung: `AufgabeZeile.tsx::darfBearbeiten()`
+  behält seinen `erstelltVon===benutzerId || zugewiesenAn===benutzerId`-Teil
+  (Relevanz-Filterung, keine Rechteprüfung).
+- **Alte Rollen-Migrationsbrücke gelöscht**: `scripts/rollen-migration.ts`,
+  `src/rechte/rollen-mapping.ts`,
+  `test/rollen-migration-abgleich.e2e-spec.ts`,
+  `test/support/rollen-migration-test-helper.ts`. Die darin enthaltene
+  Rechte-Zuordnung (welche `MITARBEITER_RECHTE`/
+  `EINRICHTUNGSLEITUNG_ZUSATZRECHTE` einer alten Rolle entsprachen) lebt als
+  reines Test-Fixture in `test/support/konto-mit-rolle.ts` weiter -- nur
+  damit der große Bestand an e2e-Tests, die über Jahre hinweg mit
+  `rolle: '...'` aufgesetzt wurden, ihre Rechtebedeutung unverändert
+  behalten, ohne produktionsseitig irgendetwas von der alten Rolle
+  wiederzubeleben.
+
+Geprüft: `pnpm build` sauber (api/web/shared). API-Suite 425/425 grün, 41
+Suiten (4 neu: `entwickler-accounttyp.e2e-spec.ts`, neuer
+Vollzugriffssperre-Test + Gegenprobe in `organigramm-schreiben.e2e-spec.ts`,
+neue Vollzugriffssperre-Tests in `benutzer-standort-zuweisung.e2e-spec.ts`,
+umgebautes `zimmer-kapazitaet.e2e-spec.ts`/`benutzer-anlegen.e2e-spec.ts`
+für die neuen Regeln). Live-Browser-Check (Playwright) gegen den echten,
+per `scripts/account-anlegen.sh`-Logik erzeugten Bootstrap-Pfad: neuer
+Mandant → erster Account landet nachweislich auf der Entwickler-Position
+(Organigramm zeigt „Entwickler · Systemvorlage · Alle (Vollzugriff)",
+Umbenennen-Button fehlt) → als Entwickler eingeloggt neuen Accounttyp
+„Geschäftsführung" angelegt → neuer Mitarbeiter ohne jedes Rolle-Feld
+angelegt, erscheint in der Liste mit „Keine Position" statt automatischer
+Rechte; Zimmer/Einstellungen/Kassenbuch/Standorte geladen ohne
+Konsolenfehler, Branding-Abschnitt in Einstellungen durchgängig sichtbar.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

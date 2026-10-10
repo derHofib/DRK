@@ -1,13 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
-import { BenutzerRolle } from "../common/tenant-context";
 
 export interface JwtPayload {
   typ: "access";
   sub: string;
   mandantId: string;
-  rolle: BenutzerRolle;
 }
 
 declare module "express" {

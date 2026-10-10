@@ -14,6 +14,7 @@ import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { isoWoche } from "../src/common/iso-woche";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
   let app: INestApplication;
@@ -50,17 +51,20 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
-    const { rows: einrichtungsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Einrichtungsleitung S1 Test', $3, 'einrichtungsleitung') RETURNING id`,
-      [mandantId, `einrichtungsleitung-s1-${suffix}@beispiel.test`, passwortHash]
-    );
-    const einrichtungsleitungS1Id = einrichtungsleitungRows[0].id;
+    const bereichsleitungId = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    const einrichtungsleitungS1Id = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "einrichtungsleitung",
+      email: `einrichtungsleitung-s1-${suffix}@beispiel.test`,
+      name: "Einrichtungsleitung S1 Test",
+      passwortHash,
+    });
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
@@ -167,20 +171,20 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     const { rows: stornoBuchung1 } = await admin.query<{ id: string }>(
       `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ_id, gebucht_von)
        VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S1', $3, $4) RETURNING id`,
-      [mandantId, klient1, typIds["Sonstiges"], bereichsleitungRows[0].id]
+      [mandantId, klient1, typIds["Sonstiges"], bereichsleitungId]
     );
     await admin.query(
       "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S1', $3)",
-      [mandantId, stornoBuchung1[0].id, bereichsleitungRows[0].id]
+      [mandantId, stornoBuchung1[0].id, bereichsleitungId]
     );
     const { rows: stornoBuchung2 } = await admin.query<{ id: string }>(
       `INSERT INTO kassenbuchung (mandant_id, klient_id, datum, betrag_cent, verwendungszweck, typ_id, gebucht_von)
        VALUES ($1, $2, CURRENT_DATE, 1000, 'Falschbuchung S2', $3, $4) RETURNING id`,
-      [mandantId, klient2, typIds["Sonstiges"], bereichsleitungRows[0].id]
+      [mandantId, klient2, typIds["Sonstiges"], bereichsleitungId]
     );
     await admin.query(
       "INSERT INTO kassenbuchung_stornoantrag (mandant_id, kassenbuchung_id, grund, beantragt_von) VALUES ($1, $2, 'Testantrag S2', $3)",
-      [mandantId, stornoBuchung2[0].id, bereichsleitungRows[0].id]
+      [mandantId, stornoBuchung2[0].id, bereichsleitungId]
     );
 
     // Rechnung: eine offene ("beantragt") fuer klient1, eine bereits genehmigte fuer klient2 (zaehlt nicht mit).
@@ -245,12 +249,12 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     await admin.query(
       `INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von)
        VALUES ($1, 'Unzugewiesen Standort 1', $2, $3)`,
-      [mandantId, zimmer1Rows[0].id, bereichsleitungRows[0].id]
+      [mandantId, zimmer1Rows[0].id, bereichsleitungId]
     );
     await admin.query(
       `INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von)
        VALUES ($1, 'Unzugewiesen Standort 2', $2, $3)`,
-      [mandantId, zimmer2Rows[0].id, bereichsleitungRows[0].id]
+      [mandantId, zimmer2Rows[0].id, bereichsleitungId]
     );
     await admin.query(
       `INSERT INTO aufgabe (mandant_id, titel, erstellt_von, zugewiesen_an)
@@ -284,11 +288,17 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+    await raeumeKontoMitRolleAuf(admin, mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
     await admin.query("DELETE FROM standort WHERE id = $1", [fremderStandortId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [fremdMandantId]);
+    // Seit Migration 0048 bekommt JEDER neu angelegte Mandant automatisch
+    // einen Entwickler-Accounttyp (Seed-Trigger), auch dieser zweite --
+    // muss vor dem Loeschen weg, sonst schlaegt es an der FK auf
+    // account_typ fehl.
+    await raeumeKontoMitRolleAuf(admin, fremdMandantId);
     await admin.query("DELETE FROM mandant WHERE id = $1", [fremdMandantId]);
     await admin.end();
     await app.close();

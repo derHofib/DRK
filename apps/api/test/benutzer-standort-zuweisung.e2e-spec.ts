@@ -5,9 +5,16 @@
  * Modul wirkungslos -- es gab schlicht keine Moeglichkeit, jemanden
  * ueberhaupt einzuschraenken.
  *
- * Aufbau: zwei Standorte S1/S2, eine Bereichsleitung (traegerweit), eine
- * Einrichtungsleitung mit Zuordnung zu S1, ein Betreuer ohne Zuordnung
- * (Zielperson der Zuweisung).
+ * Aufbau: zwei Standorte S1/S2, eine Bereichsleitung (traegerweit, zugleich
+ * Vollzugriff-Testkonto), eine Einrichtungsleitung mit Zuordnung zu S1, ein
+ * Betreuer ohne Zuordnung (Zielperson der meisten Zuweisungen).
+ *
+ * Seit der Entwickler-Accounttyp-Umstellung gibt es keine feste
+ * "Einrichtungsleitung darf nur Betreuer:innen"-Regel mehr (das kannte nur
+ * die alte Rolle) -- die Schutzregel ist jetzt: eine standortbeschraenkte
+ * Person darf JEDE Standort-Zuweisung aendern, AUSSER bei einem
+ * Vollzugriff-Account (direkte Entsprechung zum Vollzugriff-Schutz in
+ * organigramm.service.ts::besetzen()).
  */
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
@@ -17,7 +24,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
   let app: INestApplication;
@@ -31,6 +38,7 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
   let standort1Id: string;
   let standort2Id: string;
   let betreuerId: string;
+  let bereichsleitungId: string;
   let einrichtungsleitungS1Id: string;
 
   const passwort = "correct horse battery staple";
@@ -49,17 +57,27 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
     );
     mandantId = mandantRows[0].id;
 
-    async function neuerBenutzer(rolle: string, emailPrefix: string): Promise<string> {
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mandantId, `${emailPrefix}-${suffix}@beispiel.test`, `${emailPrefix} Test`, passwortHash, rolle]
-      );
-      return rows[0].id;
-    }
-    await neuerBenutzer("bereichsleitung", "bereichsleitung");
-    einrichtungsleitungS1Id = await neuerBenutzer("einrichtungsleitung", "einrichtungsleitung-s1");
-    betreuerId = await neuerBenutzer("betreuer", "betreuer");
+    bereichsleitungId = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    einrichtungsleitungS1Id = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "einrichtungsleitung",
+      email: `einrichtungsleitung-s1-${suffix}@beispiel.test`,
+      name: "Einrichtungsleitung-S1 Test",
+      passwortHash,
+    });
+    betreuerId = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email: `betreuer-${suffix}@beispiel.test`,
+      name: "Betreuer Test",
+      passwortHash,
+    });
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",
@@ -78,11 +96,6 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
       standort1Id,
     ]);
 
-    // Seit Schritt 4 prueft benutzer.service.ts ueber die Rechte-Engine,
-    // nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
-
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -98,7 +111,7 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
@@ -122,7 +135,12 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
   afterEach(async () => {
     // Jeder Test faengt bei "unrestricted" an, damit die Tests unabhaengig
     // voneinander bleiben (keine Reihenfolge-Kopplung ueber den DB-Zustand).
-    await admin.query("DELETE FROM benutzer_standort WHERE benutzer_id = $1", [betreuerId]);
+    await admin.query("DELETE FROM benutzer_standort WHERE benutzer_id = ANY($1)", [[betreuerId, einrichtungsleitungS1Id]]);
+    await admin.query("INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)", [
+      mandantId,
+      einrichtungsleitungS1Id,
+      standort1Id,
+    ]);
   });
 
   it("Bereichsleitung weist dem Betreuer einen Standort zu -- GET /benutzer zeigt ihn danach an", async () => {
@@ -171,8 +189,18 @@ describe("Benutzer: Standort-Zuweisung (benutzer_standort)", () => {
     expect(bereichsleitungDarf.status).toBe(200);
   });
 
-  it("Einrichtungsleitung-S1 darf einer anderen Einrichtungsleitung keine Standorte zuweisen", async () => {
+  it("Einrichtungsleitung-S1 darf einer anderen (nicht-Vollzugriff) Person innerhalb des eigenen Standorts Standorte zuweisen", async () => {
+    // Neu seit der Entwickler-Accounttyp-Umstellung: die frühere feste
+    // "nur Betreuer:innen"-Grenze gibt es nicht mehr -- entscheidend ist nur
+    // noch Vollzugriff ja/nein beim Ziel, nicht mehr dessen frühere Rolle.
     const res = await als(tokenEinrichtungsleitungS1).put(`/benutzer/${einrichtungsleitungS1Id}/standorte`, {
+      standortIds: [standort1Id],
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("Einrichtungsleitung-S1 darf einem Vollzugriff-Account (Bereichsleitung) keine Standorte zuweisen (403)", async () => {
+    const res = await als(tokenEinrichtungsleitungS1).put(`/benutzer/${bereichsleitungId}/standorte`, {
       standortIds: [standort1Id],
     });
     expect(res.status).toBe(403);

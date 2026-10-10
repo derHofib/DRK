@@ -16,6 +16,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Raten-Schranke auf /auth/login", () => {
   let app: INestApplication;
@@ -44,10 +45,13 @@ describe("Raten-Schranke auf /auth/login", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, 'Ratenschranke Test', $3, 'bereichsleitung')`,
-      [mandantId, email, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email,
+      name: "Ratenschranke Test",
+      passwortHash,
+    });
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -56,6 +60,7 @@ describe("Raten-Schranke auf /auth/login", () => {
 
   afterAll(async () => {
     delete process.env.RATE_LIMIT_TESTEN;
+    await raeumeKontoMitRolleAuf(admin, mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);

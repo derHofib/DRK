@@ -1,6 +1,6 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { KassenbuchungTypDto } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import { Leerzustand } from "../components/Leerzustand";
 import {
@@ -14,8 +14,6 @@ import {
   INeu,
   ISpeichern,
 } from "../components/icons";
-
-const ROLLEN_MIT_VERWALTEN = new Set(["bereichsleitung", "einrichtungsleitung"]);
 
 /**
  * Verwaltung der Kassenbuch-Typen eines Traegers -- bislang eine feste
@@ -35,10 +33,6 @@ export function KassenbuchTypen() {
   const [bearbeiteterTyp, setBearbeiteterTyp] = useState<KassenbuchungTypDto | null>(null);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
-
-  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die
-  // Berechtigung (siehe ROLLEN_MIT_KASSENBUCHUNG_TYP_VERWALTEN).
-  const darfVerwalten = ROLLEN_MIT_VERWALTEN.has(tokenRolle() ?? "");
 
   function laden() {
     api.kassenbuchungTypenListe().then(setTypen).catch((err) => setFehler(err.message));
@@ -105,18 +99,16 @@ export function KassenbuchTypen() {
 
       <div className="zv-seiten-kopf">
         <h2>Kassenbuch-Typen</h2>
-        {darfVerwalten && (
-          <button
-            className="zv-btn"
-            onClick={() => {
-              setFormFehler(null);
-              setNeuFormularOffen(true);
-            }}
-          >
-            <INeu />
-            Neuer Typ
-          </button>
-        )}
+        <button
+          className="zv-btn"
+          onClick={() => {
+            setFormFehler(null);
+            setNeuFormularOffen(true);
+          }}
+        >
+          <INeu />
+          Neuer Typ
+        </button>
       </div>
       <p className="zv-sub" style={{ marginTop: -8, marginBottom: 16 }}>
         Legt fest, welche Typen beim Anlegen einer Kassenbuchung zur Auswahl stehen. Ist „Verwendungszweck
@@ -149,7 +141,7 @@ export function KassenbuchTypen() {
                 </span>
               </span>
               <span className="zv-liste-zelle-aktionen">
-                {darfVerwalten && !t.istHzl && (
+                {!t.istHzl && (
                   <>
                     <button
                       className="zv-link-btn"

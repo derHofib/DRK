@@ -22,6 +22,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle } from "./support/konto-mit-rolle";
 
 describe("Audit-Log: GET /audit-log", () => {
   let app: INestApplication;
@@ -89,12 +90,14 @@ describe("Audit-Log: GET /audit-log", () => {
 
     async function neuerBenutzer(label: string): Promise<{ id: string; email: string }> {
       const email = `${label}-${suffix}@audit-check.test`;
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
-        [mandantId, email, `Testperson ${label}`, passwortHash]
-      );
-      return { id: rows[0].id, email };
+      const id = await kontoMitAlterRolle(admin, {
+        mandantId,
+        rolle: "betreuer",
+        email,
+        name: `Testperson ${label}`,
+        passwortHash,
+      });
+      return { id, email };
     }
     async function zuweisen(positionId: string, benutzerId: string) {
       await admin.query("INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id) VALUES ($1, $2, $3)", [

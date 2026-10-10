@@ -29,7 +29,7 @@ import { RechteService } from "../src/rechte/rechte.service";
 import { tenantContextStorage } from "../src/common/tenant-context";
 
 function alsBenutzer<T>(mandantId: string, benutzerId: string, fn: () => Promise<T>): Promise<T> {
-  return tenantContextStorage.run({ mandantId, benutzerId, rolle: "betreuer" }, fn);
+  return tenantContextStorage.run({ mandantId, benutzerId }, fn);
 }
 
 describe("RechteService (Rechte-Engine, Organigramm-Modul)", () => {
@@ -72,10 +72,16 @@ describe("RechteService (Rechte-Engine, Organigramm-Modul)", () => {
   let benOhneSensibel: string;
   let benOhneSensibelVertreter: string;
 
+  // Bewusst OHNE kontoMitAlterRolle() -- dieser Test baut fuer jeden
+  // Benutzer seine eigene, exakte Position/Rechtematrix von Hand auf (siehe
+  // neuePosition()/zuweisen() unten), gerade um Scope-/Deny-/Vertretungs-
+  // Grenzfaelle isoliert zu pruefen. Eine zusaetzliche, generische Position
+  // aus kontoMitAlterRolle() wuerde genau diese Isolation unterlaufen --
+  // z.B. haette ein eigentlich rechtloser "extern"-Benutzer dann ploetzlich
+  // auch noch die MITARBEITER_RECHTE-Grundausstattung.
   async function neuerBenutzer(label: string): Promise<string> {
     const { rows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, $3, 'x', 'betreuer') RETURNING id`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash) VALUES ($1, $2, $3, 'x') RETURNING id`,
       [mandantId, `${label}-${randomUUID().slice(0, 8)}@rechte-check.test`, label]
     );
     return rows[0].id;

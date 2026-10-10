@@ -24,7 +24,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 // Seit Migration 0021: DRK Rot statt Petrol.
 const STANDARDFARBE = "#e3000f";
@@ -50,17 +50,19 @@ async function legeBenutzerAn(
   admin: Client,
   mandantId: string,
   label: string,
-  rolle: string
+  rolle: AlteRolle
 ): Promise<Testbenutzer> {
   const email = `${label}-${randomUUID().slice(0, 8)}@beispiel.test`;
   // Niedrige Kostenstufe: Tests, kein Produktivsystem.
   const passwortHash = await bcrypt.hash(PASSWORT, 4);
-  const { rows } = await admin.query<{ id: string }>(
-    `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [mandantId, email, `Test ${rolle} ${label}`, passwortHash, rolle]
-  );
-  return { benutzerId: rows[0].id, email, passwort: PASSWORT };
+  const benutzerId = await kontoMitAlterRolle(admin, {
+    mandantId,
+    rolle,
+    email,
+    name: `Test ${rolle} ${label}`,
+    passwortHash,
+  });
+  return { benutzerId, email, passwort: PASSWORT };
 }
 
 async function seedMandant(admin: Client, label: string): Promise<Testmandant> {
@@ -70,15 +72,14 @@ async function seedMandant(admin: Client, label: string): Promise<Testmandant> {
     [`Testmandant ${label}`, slug]
   );
   const mandantId = rows[0].id;
+  // Seit Schritt 4 prueft mandant.service.ts ueber die Rechte-Engine, nicht
+  // mehr ueber benutzer.rolle direkt -- siehe konto-mit-rolle.ts.
   const testmandant: Testmandant = {
     mandantId,
     slug,
     bereichsleitung: await legeBenutzerAn(admin, mandantId, `bereichsleitung-${label}`, "bereichsleitung"),
     einrichtungsleitung: await legeBenutzerAn(admin, mandantId, `einrichtungsleitung-${label}`, "einrichtungsleitung"),
   };
-  // Seit Schritt 4 prueft mandant.service.ts ueber die Rechte-Engine, nicht
-  // mehr ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
-  await migriereTestmandant(admin, mandantId, slug);
   return testmandant;
 }
 
@@ -107,8 +108,8 @@ describe("Akzentfarbe je Mandant (Branding)", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantA.mandantId);
-      await raeumeRollenMigrationAuf(admin, mandantB.mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantA.mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantB.mandantId);
       await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [
         mandantA.mandantId,
         mandantB.mandantId,

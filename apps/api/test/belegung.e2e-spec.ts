@@ -16,7 +16,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
   let app: INestApplication;
@@ -47,16 +47,20 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
-    const { rows: betreuerRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuer Test', $3, 'betreuer') RETURNING id`,
-      [mandantId, `betreuer-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email: `betreuer-${suffix}@beispiel.test`,
+      name: "Betreuer Test",
+      passwortHash,
+    });
 
     const { rows: standortRows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Teststandort', 'Teststr. 1') RETURNING id",
@@ -95,11 +99,6 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
       [mandantId, zimmerId, klientAktuell.id]
     );
 
-    // Seit Schritt 4 prueft zimmer.service.ts (voller-verlauf) ueber die
-    // Rechte-Engine, nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
-
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -114,7 +113,7 @@ describe("Belegung: Überlappungssperre und Belegungsverlauf", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM belegung WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);

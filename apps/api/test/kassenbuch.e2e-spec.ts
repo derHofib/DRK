@@ -12,7 +12,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 // Eine winzige, aber gueltige 1x1-PNG-Datei -- reicht als Testsignatur.
 const TEST_PNG_BASE64 =
@@ -52,16 +52,20 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     mandantId = mandantRows[0].id;
 
-    const { rows: bereichsleitungRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung') RETURNING id`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Zweite Leitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `zweite-leitung-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `zweite-leitung-${suffix}@beispiel.test`,
+      name: "Zweite Leitung Test",
+      passwortHash,
+    });
 
     const { rows: klientWoRows } = await admin.query<{ id: string }>(
       `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt, hzl_rhythmus)
@@ -83,12 +87,13 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
     );
     standortHaus = standortRows[0].id;
 
-    const { rows: mitarbeiterRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Betreuerin Teilnahme', $3, 'betreuer') RETURNING id`,
-      [mandantId, `betreuerin-${suffix}@beispiel.test`, passwortHash]
-    );
-    mitarbeiterTeilnehmerId = mitarbeiterRows[0].id;
+    mitarbeiterTeilnehmerId = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email: `betreuerin-${suffix}@beispiel.test`,
+      name: "Betreuerin Teilnahme",
+      passwortHash,
+    });
 
     // Vom Trigger mandant_kassenbuchung_typ_standard automatisch angelegt
     // (siehe migrations/0035_kassenbuchung_typ.sql) -- hier nur nachgeschlagen,
@@ -98,11 +103,6 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
       [mandantId]
     );
     typIds = Object.fromEntries(typRows.map((r) => [r.bezeichnung, r.id])) as Record<string, string>;
-
-    // Seit Schritt 4 prueft kassenbuchung.service.ts (Storno-Selbstbewilligung
-    // der Leitung) ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle
-    // direkt -- siehe rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -121,7 +121,7 @@ describe("Kassenbuch: HZL-Eindeutigkeit, Unterschriftspflicht, Aenderungsschutz"
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query(
         "DELETE FROM unterschrift WHERE kassenbuchung_id IN (SELECT id FROM kassenbuchung WHERE mandant_id = $1)",
         [mandantId]

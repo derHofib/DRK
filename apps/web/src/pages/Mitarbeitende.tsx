@@ -1,7 +1,6 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, BenutzerRolle, StandortDto } from "@zimmerakte/shared";
-import { BENUTZER_ROLLE_LABEL } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import type { BenutzerListEintragDto, StandortDto } from "@zimmerakte/shared";
+import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
@@ -18,22 +17,11 @@ export function Mitarbeitende() {
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
   const [wirdZugewiesen, setWirdZugewiesen] = useState(false);
 
-  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
-  // (siehe ROLLEN_MIT_BENUTZER_ANLEGEN in benutzer.service.ts).
-  const rolle = tokenRolle();
-  const darfAnlegen = rolle === "bereichsleitung" || rolle === "einrichtungsleitung";
-  // Standort-Zuweisung ist ein eigenes Recht (ROLLEN_MIT_STANDORT_ZUWEISEN),
-  // faellt hier aber mit darfAnlegen zusammen -- gleiches Rollenpaar.
-  const darfStandorteZuweisen = darfAnlegen;
-
   function laden() {
     api.benutzerListe().then(setBenutzer).catch((err) => setFehler(err.message));
     // Liefert bereits nur die eigenen erlaubten Standorte (siehe
-    // StandortService.findeAlle) -- eine Einrichtungsleitung sieht hier von
-    // selbst nur das, was sie auch zuweisen darf.
-    if (darfStandorteZuweisen) {
-      api.standorteListe().then(setStandorte).catch(() => {});
-    }
+    // StandortService.findeAlle).
+    api.standorteListe().then(setStandorte).catch(() => {});
   }
 
   useEffect(laden, []);
@@ -66,7 +54,6 @@ export function Mitarbeitende() {
       await api.benutzerAnlegen({
         name: String(form.get("name")),
         email: String(form.get("email")),
-        rolle: form.get("rolle") as BenutzerRolle,
         passwort: String(form.get("passwort")),
       });
       setFormularOffen(false);
@@ -105,18 +92,16 @@ export function Mitarbeitende() {
 
       <div className="zv-seiten-kopf">
         <h2>Mitarbeitende</h2>
-        {darfAnlegen && (
-          <button
-            className="zv-btn"
-            onClick={() => {
-              setFormFehler(null);
-              setFormularOffen(true);
-            }}
-          >
-            <INeu />
-            Neuer Mitarbeiter
-          </button>
-        )}
+        <button
+          className="zv-btn"
+          onClick={() => {
+            setFormFehler(null);
+            setFormularOffen(true);
+          }}
+        >
+          <INeu />
+          Neuer Mitarbeiter
+        </button>
       </div>
 
       {formularOffen && (
@@ -140,21 +125,14 @@ export function Mitarbeitende() {
             </div>
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Rolle</label>
-                <select name="rolle" defaultValue="betreuer">
-                  <option value="betreuer">Betreuer</option>
-                  <option value="einrichtungsleitung">Einrichtungsleitung</option>
-                  {/* Server lehnt das bei Einrichtungsleitung ohnehin ab (siehe
-                      benutzer.service.ts) -- hier zusaetzlich ausgeblendet,
-                      damit es gar nicht erst zur Fehlermeldung kommt. */}
-                  {rolle === "bereichsleitung" && <option value="bereichsleitung">Bereichsleitung</option>}
-                </select>
-              </div>
-              <div className="zv-field">
                 <label>Initialpasswort</label>
                 <input name="passwort" type="password" required minLength={8} />
               </div>
             </div>
+            <p className="zv-sub">
+              Rechte gibt es erst über eine Position im Organigramm -- direkt nach dem Anlegen hat {`der neue Account`}
+              {" "}noch keine.
+            </p>
             <button className="zv-btn zv-btn-block" type="submit">
               <ISpeichern />
               Anlegen
@@ -194,19 +172,15 @@ export function Mitarbeitende() {
       ) : (
         <div
           className="zv-karten-liste"
-          style={
-            {
-              "--zv-liste-spalten": darfAnlegen ? "1.2fr 1.5fr 0.9fr 0.8fr 1.6fr 1.7fr" : "1.3fr 1.6fr 1fr 1fr",
-            } as CSSProperties
-          }
+          style={{ "--zv-liste-spalten": "1.2fr 1.5fr 1.2fr 0.8fr 1.6fr 1.7fr" } as CSSProperties}
         >
           <div className="zv-liste-kopf">
             <span>Name</span>
             <span>E-Mail</span>
-            <span>Rolle</span>
+            <span>Position(en)</span>
             <span>Status</span>
-            {darfAnlegen && <span>Standorte</span>}
-            {darfAnlegen && <span></span>}
+            <span>Standorte</span>
+            <span></span>
           </div>
           {benutzer.map((b) => (
             <div key={b.id} className="zv-info-karte">
@@ -214,47 +188,51 @@ export function Mitarbeitende() {
               <span className="zv-liste-zelle" data-label="E-Mail">
                 <strong>{b.email}</strong>
               </span>
-              <span className="zv-liste-zelle" data-label="Rolle">
-                <span className="zv-pill">{BENUTZER_ROLLE_LABEL[b.rolle]}</span>
+              <span className="zv-liste-zelle" data-label="Position(en)">
+                {b.positionen.length === 0 ? (
+                  <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                    Keine Position
+                  </span>
+                ) : (
+                  b.positionen.map((p, i) => (
+                    <span key={i} className="zv-pill" style={{ marginRight: 4 }}>
+                      {p.titel} ({p.accountTypName})
+                    </span>
+                  ))
+                )}
               </span>
               <span className="zv-liste-zelle" data-label="Status">
                 <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
               </span>
-              {darfAnlegen && (
-                <span className="zv-liste-zelle" data-label="Standorte">
-                  {b.standortIds.length === 0 ? (
-                    <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
-                      Alle
+              <span className="zv-liste-zelle" data-label="Standorte">
+                {b.standortIds.length === 0 ? (
+                  <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                    Alle
+                  </span>
+                ) : (
+                  b.standortIds.map((id) => (
+                    <span key={id} className="zv-pill" style={{ marginRight: 4 }}>
+                      {standortName(id)}
                     </span>
-                  ) : (
-                    b.standortIds.map((id) => (
-                      <span key={id} className="zv-pill" style={{ marginRight: 4 }}>
-                        {standortName(id)}
-                      </span>
-                    ))
-                  )}
-                </span>
-              )}
-              {darfAnlegen && (
-                <span className="zv-liste-zelle-aktionen">
-                  <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
-                    <IResetLink />
-                    Passwort zurücksetzen
-                  </button>
-                  {darfStandorteZuweisen && b.rolle === "betreuer" && (
-                    <button
-                      className="zv-link-btn"
-                      onClick={() => {
-                        setZuweisungFehler(null);
-                        setStandortZuweisung(b);
-                      }}
-                    >
-                      <IStandort />
-                      Standorte zuweisen
-                    </button>
-                  )}
-                </span>
-              )}
+                  ))
+                )}
+              </span>
+              <span className="zv-liste-zelle-aktionen">
+                <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
+                  <IResetLink />
+                  Passwort zurücksetzen
+                </button>
+                <button
+                  className="zv-link-btn"
+                  onClick={() => {
+                    setZuweisungFehler(null);
+                    setStandortZuweisung(b);
+                  }}
+                >
+                  <IStandort />
+                  Standorte zuweisen
+                </button>
+              </span>
             </div>
           ))}
         </div>

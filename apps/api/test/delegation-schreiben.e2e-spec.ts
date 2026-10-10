@@ -35,6 +35,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 const DELEGATION_VIER_AUGEN_VERLETZT = "ZA003";
 
@@ -60,12 +61,14 @@ describe("Delegation: anlegen/genehmigen/widerrufen", () => {
     const email = `${label}-${suffix}@delegation-schreiben.test`;
     const name = `Testperson ${label}`;
     const passwortHash = await bcrypt.hash(passwort, 4);
-    const { rows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
-      [mandantId, email, name, passwortHash]
-    );
-    return { id: rows[0].id, email, name };
+    const id = await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "betreuer",
+      email,
+      name,
+      passwortHash,
+    });
+    return { id, email, name };
   }
 
   async function login(email: string): Promise<string> {
@@ -133,6 +136,7 @@ describe("Delegation: anlegen/genehmigen/widerrufen", () => {
       await admin.query("DELETE FROM audit_log WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM delegation_recht WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM delegation WHERE mandant_id = $1", [mandantId]);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM org_unit WHERE mandant_id = $1", [mandantId]);

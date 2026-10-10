@@ -3,7 +3,6 @@
  * hier steht nur, was in der jeweiligen Migration auch tatsächlich existiert.
  */
 
-export type BenutzerRolle = "bereichsleitung" | "einrichtungsleitung" | "betreuer";
 export type HzlRhythmus = "monatlich" | "woechentlich";
 export type Zimmerstatus = "vergeben" | "teilweise" | "zugeordnet";
 
@@ -116,17 +115,14 @@ export interface BenutzerListEintragDto {
   id: string;
   email: string;
   name: string;
-  rolle: BenutzerRolle;
+  // Ersetzt die frühere feste "rolle" -- Rechte hängen seit der
+  // Entwickler-Accounttyp-Umstellung ausschließlich an Organigramm-
+  // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
+  positionen: { titel: string; accountTypName: string }[];
   aktiv: boolean;
   // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
   standortIds: string[];
 }
-
-export const BENUTZER_ROLLE_LABEL: Record<BenutzerRolle, string> = {
-  bereichsleitung: "Bereichsleitung",
-  einrichtungsleitung: "Einrichtungsleitung",
-  betreuer: "Betreuer",
-};
 
 export interface StandortDto {
   id: string;
@@ -150,15 +146,16 @@ export interface ZimmerBewohnerDto {
 /**
  * Ein Kapazitaetsantrag wirkt NIE sofort (anders als Nummer/Etage) --
  * siehe zimmer.service.ts, kapazitaetAendern()/kapazitaetEntscheiden().
- * Vier-Augen: die entscheidende Person muss die jeweils ANDERE
- * Leitungsrolle als beantragtVonRolle haben.
+ * Vier-Augen: die entscheidende Person braucht das eigene Recht
+ * zimmer.kapazitaet-entscheiden und darf nie die eigene Anfrage bestätigen
+ * (beantragtVonId dient clientseitig nur fürs Erkennen der eigenen Anfrage).
  */
 export interface OffenerKapazitaetsantragDto {
   id: string;
   alteKapazitaet: number;
   neueKapazitaet: number;
   beantragtVonName: string;
-  beantragtVonRolle: BenutzerRolle;
+  beantragtVonId: string;
   beantragtAm: string;
 }
 

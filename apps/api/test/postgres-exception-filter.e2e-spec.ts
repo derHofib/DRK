@@ -22,7 +22,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
   let app: INestApplication;
@@ -48,18 +48,19 @@ describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
 
     // Seit Schritt 4 prueft zimmer.service.ts ueber die Rechte-Engine, nicht
-    // mehr ueber benutzer.rolle direkt -- siehe rollen-migration-test-helper.ts.
-    // Ohne das wuerde der PATCH /zimmer/undefined-Test schon an der
-    // Rechte-Engine mit 403 scheitern statt -- wie hier geprueft -- am
-    // Postgres-Exception-Filter mit 400.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
+    // mehr ueber benutzer.rolle direkt -- siehe konto-mit-rolle.ts. Ohne das
+    // wuerde der PATCH /zimmer/undefined-Test schon an der Rechte-Engine mit
+    // 403 scheitern statt -- wie hier geprueft -- am Postgres-Exception-Filter
+    // mit 400.
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -73,7 +74,7 @@ describe("Globaler Filter: ungueltiges UUID-Format wird 400 statt 500", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);

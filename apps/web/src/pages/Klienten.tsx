@@ -1,7 +1,7 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { formatDatum } from "../format";
 import type { KlientenAnsicht } from "../navigation";
 import { GrundAbfrage } from "../components/GrundAbfrage";
@@ -23,7 +23,6 @@ import {
 } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 
-const ROLLEN_MIT_ENTSCHEIDUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
 
 // Die Ansicht wird jetzt ausschliesslich ueber die Navigation gewaehlt
 // (Sidebar-Unterpunkte bzw. mobiles Panel, siehe Shell.tsx) -- der
@@ -60,7 +59,6 @@ export function Klienten({
   const [anwaerterAblehnenEintrag, setAnwaerterAblehnenEintrag] = useState<AnwaerterDto | null>(null);
   const [anwaerterFormFehler, setAnwaerterFormFehler] = useState<string | null>(null);
 
-  const darfEntscheiden = ROLLEN_MIT_ENTSCHEIDUNG.has(tokenRolle() ?? "");
 
   function laden() {
     api
@@ -428,24 +426,20 @@ export function Klienten({
                         <ILoeschen />
                         Löschen
                       </button>
-                      {darfEntscheiden && (
-                        <>
-                          <button
-                            className="zv-link-btn"
-                            onClick={() => {
-                              setAnwaerterFormFehler(null);
-                              setAnwaerterAnnehmenEintrag(a);
-                            }}
-                          >
-                            <IGenehmigen />
-                            Annehmen
-                          </button>
-                          <button className="zv-link-btn" onClick={() => setAnwaerterAblehnenEintrag(a)}>
-                            <IAblehnen />
-                            Ablehnen
-                          </button>
-                        </>
-                      )}
+                      <button
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setAnwaerterFormFehler(null);
+                          setAnwaerterAnnehmenEintrag(a);
+                        }}
+                      >
+                        <IGenehmigen />
+                        Annehmen
+                      </button>
+                      <button className="zv-link-btn" onClick={() => setAnwaerterAblehnenEintrag(a)}>
+                        <IAblehnen />
+                        Ablehnen
+                      </button>
                     </span>
                   )}
                 </div>

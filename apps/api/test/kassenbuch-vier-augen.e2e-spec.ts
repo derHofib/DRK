@@ -34,11 +34,12 @@ import { RechteModule } from "../src/rechte/rechte.module";
 import { KassenbuchungService } from "../src/kassenbuch/kassenbuchung.service";
 import { RechteService } from "../src/rechte/rechte.service";
 import { tenantContextStorage } from "../src/common/tenant-context";
+import { kontoMitAlterRolle } from "./support/konto-mit-rolle";
 
 const STORNO_VIER_AUGEN_VERLETZT = "ZA002";
 
 function alsBenutzer<T>(mandantId: string, benutzerId: string, fn: () => Promise<T>): Promise<T> {
-  return tenantContextStorage.run({ mandantId, benutzerId, rolle: "betreuer" }, fn);
+  return tenantContextStorage.run({ mandantId, benutzerId }, fn);
 }
 
 describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", () => {
@@ -57,7 +58,7 @@ describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", ()
   let benLeitungA: string; // bucht selbst, stellt eigenen Storno-Antrag
   let benLeitungB: string; // entscheidet ueber Antrag von A (Normalfall)
   let benLeitungX: string; // delegiert ihr Recht an Y
-  let benY: string; // keine eigene Position, bucht selbst, entscheidet unter geliehenem Recht
+  let benY: string; // nur die generische Mitarbeiter-Testposition (kein kassenbuch.storno-entscheiden daraus), bucht selbst, entscheidet unter geliehenem Recht
 
   beforeAll(async () => {
     if (!process.env.MIGRATIONS_DATABASE_URL || !process.env.APP_DATABASE_URL) {
@@ -110,12 +111,13 @@ describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", ()
     );
 
     async function neuerBenutzer(label: string): Promise<string> {
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, 'x', 'betreuer') RETURNING id`,
-        [mandantId, `${label}-${suffix}@vier-augen-check.test`, label]
-      );
-      return rows[0].id;
+      return kontoMitAlterRolle(admin, {
+        mandantId,
+        rolle: "betreuer",
+        email: `${label}-${suffix}@vier-augen-check.test`,
+        name: label,
+        passwortHash: "x",
+      });
     }
     async function neuePosition(titel: string): Promise<string> {
       const { rows } = await admin.query<{ id: string }>(
@@ -258,7 +260,8 @@ describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", ()
 
   it('"unter Vertretung": Y hat kein eigenes Recht, leiht es sich per Delegation von Leitung X -- darf trotzdem nicht ueber den EIGENEN Antrag entscheiden', async () => {
     // Gegenprobe zur Gegenprobe: Y hat das Recht wirklich NUR ueber die
-    // Delegation (keine eigene Position) -- ohne das waere der Testfall
+    // Delegation (die eigene Testposition traegt kein
+    // kassenbuch.storno-entscheiden) -- ohne das waere der Testfall
     // bedeutungslos.
     const hatEigenesRecht = await alsBenutzer(mandantId, benY, () =>
       app.get(RechteService).hatRecht("kassenbuch", "storno-entscheiden")

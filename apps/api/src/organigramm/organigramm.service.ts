@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
@@ -604,6 +604,25 @@ export class OrganigrammService {
     try {
       return await this.db.withTenant(async (client) => {
         await this.pruefeBenutzerErlaubt(client, input.benutzerId);
+
+        // Das breite organigramm.bearbeiten (Controller-Gate dieser Route)
+        // reicht hier NICHT: wer nur das hat, koennte sonst jemanden auf eine
+        // Vollzugriff-Position setzen und sich darueber selbst Vollzugriff
+        // verschaffen -- genau das ist Rechteverwaltung, nicht
+        // Organigramm-Pflege, und braucht deshalb das engere, strukturell nie
+        // delegierbare organigramm.manage-permissions.
+        const { rows: posRows } = await client.query<{ ist_vollzugriff: boolean }>(
+          `SELECT a.ist_vollzugriff
+           FROM org_position p
+           JOIN account_typ a ON a.id = p.account_typ_id
+           WHERE p.id = $1`,
+          [positionId]
+        );
+        if (posRows.length === 0) throw new NotFoundException("Position nicht gefunden.");
+        if (posRows[0].ist_vollzugriff && !(await this.rechte.hatRecht("organigramm", "manage-permissions"))) {
+          throw new ForbiddenException("Nur Rechteverwaltung darf jemanden auf eine Vollzugriff-Position setzen.");
+        }
+
         const vorher = await this.findeEinzelnePosition(client, positionId, zeigeNamen);
 
         const spalten = ["mandant_id", "position_id", "benutzer_id", "erstellt_von"];
@@ -841,8 +860,9 @@ export class OrganigrammService {
 
   /**
    * ist_system/ist_vollzugriff sind NIEMALS ueber die API setzbar (bleiben
-   * false) -- die drei Systemvorlagen entstehen ausschliesslich ueber
-   * scripts/rollen-migration.ts, siehe Kommentar in migrations/0041.
+   * false) -- der einzige Vollzugriff-Systemtyp ("Entwickler") entsteht
+   * ausschliesslich ueber den Seed-Trigger auf mandant (migrations/0048),
+   * siehe Kommentar in migrations/0041.
    */
   async legeAccountTypAn(input: { name: string; kategorie?: "intern" | "extern" }): Promise<AccountTypDto> {
     const ctx = requireTenantContext();

@@ -14,6 +14,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Kostenuebernahme: Zeitraum direkt beim Anlegen befristen", () => {
   let app: INestApplication;
@@ -40,11 +41,13 @@ describe("Kostenuebernahme: Zeitraum direkt beim Anlegen befristen", () => {
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
 
     const { rows: klientRows } = await admin.query<{ id: string }>(
       `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
@@ -66,6 +69,7 @@ describe("Kostenuebernahme: Zeitraum direkt beim Anlegen befristen", () => {
   afterAll(async () => {
     await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
+    await raeumeKontoMitRolleAuf(admin, mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);

@@ -19,6 +19,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 interface Testmandant {
   mandantId: string;
@@ -41,12 +42,13 @@ async function seedMandantMitBenutzer(admin: Client, label: string): Promise<Tes
   );
   const mandantId = mandantRows[0].id;
 
-  const { rows: benutzerRows } = await admin.query<{ id: string }>(
-    `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-     VALUES ($1, $2, $3, $4, 'bereichsleitung') RETURNING id`,
-    [mandantId, email, `Testbereichsleitung ${label}`, passwortHash]
-  );
-  const benutzerId = benutzerRows[0].id;
+  const benutzerId = await kontoMitAlterRolle(admin, {
+    mandantId,
+    rolle: "bereichsleitung",
+    email,
+    name: `Testbereichsleitung ${label}`,
+    passwortHash,
+  });
 
   return { mandantId, slug, benutzerId, email, passwort };
 }
@@ -77,6 +79,8 @@ describe("Mandantentrennung (RLS end-to-end)", () => {
   });
 
   afterAll(async () => {
+    await raeumeKontoMitRolleAuf(admin, mandantA.mandantId);
+    await raeumeKontoMitRolleAuf(admin, mandantB.mandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id IN ($1, $2)", [
       mandantA.mandantId,
       mandantB.mandantId,

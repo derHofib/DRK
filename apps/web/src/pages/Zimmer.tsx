@@ -10,8 +10,8 @@ import type {
   ZimmerBewohnerDto,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
-import { BENUTZER_ROLLE_LABEL, ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
-import { api, tokenBenutzerId, tokenRolle } from "../api/client";
+import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
+import { api, tokenBenutzerId } from "../api/client";
 import { formatDatum } from "../format";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { GrundAbfrage } from "../components/GrundAbfrage";
@@ -64,13 +64,7 @@ const STATUS_ICON = {
  * (siehe zimmer.service.ts), das Frontend ist hier absichtlich dumm.
  */
 export function Zimmer() {
-  // Nur ein Anzeige-Hinweis -- der Server entscheidet ueber die Berechtigung
-  // (siehe ROLLEN_MIT_ZIMMER_STAMMDATEN in zimmer.service.ts). Klient
-  // zuweisen/Auszug eintragen/Belegungsverlauf bleiben davon unberuehrt --
-  // das ist Tagesgeschaeft, keine Stammdatenpflege.
-  const rolleZimmer = tokenRolle();
   const aktuelleBenutzerId = tokenBenutzerId();
-  const darfStammdatenBearbeiten = rolleZimmer === "bereichsleitung" || rolleZimmer === "einrichtungsleitung";
 
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
@@ -338,15 +332,14 @@ export function Zimmer() {
 
   /**
    * Reiner Anzeige-Hinweis (der Server prueft es erneut, siehe
-   * kapazitaetEntscheiden() in zimmer.service.ts): Bestaetigen/Ablehnen nur
-   * fuer die jeweils ANDERE Leitungsrolle als die antragstellende --
-   * niemals fuer dieselbe Rolle, auch nicht fuer die antragstellende
-   * Person selbst.
+   * kapazitaetEntscheiden() in zimmer.service.ts): wer das Recht
+   * zimmer.kapazitaet-entscheiden hat, darf bestaetigen/ablehnen -- aber
+   * nie die eigene Anfrage. Das Recht selbst kann clientseitig nicht
+   * geprueft werden, deshalb nur die Selbstantrags-Sperre als Hinweis;
+   * alles andere entscheidet ausschliesslich der Server.
    */
   function darfKapazitaetEntscheiden(antrag: OffenerKapazitaetsantragDto): boolean {
-    if (rolleZimmer !== "bereichsleitung" && rolleZimmer !== "einrichtungsleitung") return false;
-    const gegenrolle = antrag.beantragtVonRolle === "bereichsleitung" ? "einrichtungsleitung" : "bereichsleitung";
-    return rolleZimmer === gegenrolle;
+    return antrag.beantragtVonId !== aktuelleBenutzerId;
   }
 
   async function verlaufAnzeigen(zimmerId: string) {
@@ -483,12 +476,10 @@ export function Zimmer() {
 
       <div className="zv-seiten-kopf">
         <h2>Zimmer</h2>
-        {darfStammdatenBearbeiten && (
-          <button className="zv-btn" onClick={formularOeffnen}>
-            <INeu />
-            Neues Zimmer
-          </button>
-        )}
+        <button className="zv-btn" onClick={formularOeffnen}>
+          <INeu />
+          Neues Zimmer
+        </button>
       </div>
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
@@ -565,8 +556,7 @@ export function Zimmer() {
                       <div className="zv-hinweis zv-hinweis-info" style={{ marginTop: "var(--zv-space-2)" }}>
                         Kapazitätsänderung {z.offenerKapazitaetsantrag.alteKapazitaet} →{" "}
                         {z.offenerKapazitaetsantrag.neueKapazitaet} beantragt von{" "}
-                        {z.offenerKapazitaetsantrag.beantragtVonName} (
-                        {BENUTZER_ROLLE_LABEL[z.offenerKapazitaetsantrag.beantragtVonRolle]})
+                        {z.offenerKapazitaetsantrag.beantragtVonName}
                         {darfKapazitaetEntscheiden(z.offenerKapazitaetsantrag) && (
                           <div className="zv-vorschau-zeile" style={{ marginTop: "var(--zv-space-1)" }}>
                             <button
@@ -617,19 +607,17 @@ export function Zimmer() {
                           : `Warteliste${z.warteliste.length ? ` (${z.warteliste.length})` : ""}`}
                         {offeneWarteliste !== z.id && <IAufklappen />}
                       </button>
-                      {darfStammdatenBearbeiten && (
-                        <button
-                          className="zv-link-btn"
-                          onClick={() => {
-                            setBearbeitenFehler(null);
-                            setBearbeitetesZimmer(z);
-                          }}
-                        >
-                          <IBearbeiten />
-                          Bearbeiten
-                        </button>
-                      )}
-                      {darfStammdatenBearbeiten && !z.offenerKapazitaetsantrag && (
+                      <button
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setBearbeitenFehler(null);
+                          setBearbeitetesZimmer(z);
+                        }}
+                      >
+                        <IBearbeiten />
+                        Bearbeiten
+                      </button>
+                      {!z.offenerKapazitaetsantrag && (
                         <button
                           className="zv-link-btn"
                           onClick={() => {
@@ -653,7 +641,7 @@ export function Zimmer() {
                           Klient zuweisen
                         </button>
                       )}
-                      {darfStammdatenBearbeiten && z.bewohner.length === 0 && (
+                      {z.bewohner.length === 0 && (
                         <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
                           <IDeaktivieren />
                           Deaktivieren
@@ -763,7 +751,6 @@ export function Zimmer() {
                                 aufgabe={a}
                                 benutzerListe={benutzerListe}
                                 aktuelleBenutzerId={aktuelleBenutzerId}
-                                aktuelleRolle={rolleZimmer}
                                 onErledigen={() => aufgabeErledigen(z.id, a.id)}
                                 onZuweisenAendern={(bid) => aufgabeZuweisenAendern(z.id, a.id, bid)}
                                 onLoeschen={() => aufgabeImZimmerLoeschen(z.id, a.id)}

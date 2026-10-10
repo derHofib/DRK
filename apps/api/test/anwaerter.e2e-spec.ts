@@ -15,7 +15,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Anwärter", () => {
   let app: INestApplication;
@@ -42,21 +42,17 @@ describe("Anwärter", () => {
     );
     mandantId = mandantRows[0].id;
 
-    async function neuerBenutzer(rolle: string, emailPrefix: string): Promise<string> {
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mandantId, `${emailPrefix}-${suffix}@beispiel.test`, `${emailPrefix} Test`, passwortHash, rolle]
-      );
-      return rows[0].id;
+    async function neuerBenutzer(rolle: AlteRolle, emailPrefix: string): Promise<string> {
+      return kontoMitAlterRolle(admin, {
+        mandantId,
+        rolle,
+        email: `${emailPrefix}-${suffix}@beispiel.test`,
+        name: `${emailPrefix} Test`,
+        passwortHash,
+      });
     }
     await neuerBenutzer("bereichsleitung", "bereichsleitung");
     await neuerBenutzer("betreuer", "betreuer");
-
-    // Seit Schritt 4 prueft anwaerter.service.ts ueber die Rechte-Engine,
-    // nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -72,7 +68,7 @@ describe("Anwärter", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM anwaerter WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM klient WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
@@ -252,11 +248,13 @@ describe("Anwärter", () => {
       [`Anderer Mandant ${suffix}`, `test-anwaerter-anderer-${suffix}`]
     );
     const andererMandantId = anderMandantRows[0].id;
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Fremd Test', $3, 'bereichsleitung')`,
-      [andererMandantId, `fremd-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId: andererMandantId,
+      rolle: "bereichsleitung",
+      email: `fremd-${suffix}@beispiel.test`,
+      name: "Fremd Test",
+      passwortHash,
+    });
     const fremderToken = (
       await request(app.getHttpServer())
         .post("/auth/login")
@@ -269,6 +267,7 @@ describe("Anwärter", () => {
     expect(liste.status).toBe(200);
     expect(liste.body).toHaveLength(0);
 
+    await raeumeKontoMitRolleAuf(admin, andererMandantId);
     await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [andererMandantId]);
     await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [andererMandantId]);
     await admin.query("DELETE FROM mandant WHERE id = $1", [andererMandantId]);

@@ -20,7 +20,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () => {
   let app: INestApplication;
@@ -66,13 +66,14 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
     );
     mandantBId = mandantBRows[0].id;
 
-    async function neuerBenutzer(mId: string, rolle: string, emailPrefix: string): Promise<string> {
-      const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mId, `${emailPrefix}-${suffix}@beispiel.test`, `${emailPrefix} Test`, passwortHash, rolle]
-      );
-      return rows[0].id;
+    async function neuerBenutzer(mId: string, rolle: AlteRolle, emailPrefix: string): Promise<string> {
+      return kontoMitAlterRolle(admin, {
+        mandantId: mId,
+        rolle,
+        email: `${emailPrefix}-${suffix}@beispiel.test`,
+        name: `${emailPrefix} Test`,
+        passwortHash,
+      });
     }
 
     await neuerBenutzer(mandantId, "bereichsleitung", "bereichsleitung");
@@ -113,12 +114,6 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
       standort2Id,
     ]);
 
-    // Seit Schritt 4 prueft aufgabe.service.ts (Koordinationsrecht) ueber
-    // die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
-    await migriereTestmandant(admin, mandantBId, mandantBSlug);
-
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -141,8 +136,8 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
-      await raeumeRollenMigrationAuf(admin, mandantBId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantBId);
       await admin.query("DELETE FROM aufgabe WHERE mandant_id IN ($1, $2)", [mandantId, mandantBId]);
       await admin.query("DELETE FROM zimmer WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);

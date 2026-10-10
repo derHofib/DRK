@@ -124,8 +124,8 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
 
     async function neuerBenutzer(label: string): Promise<string> {
       const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
         [mandantId, `${label}-${suffix}@flexibilitaet.test`, `Testperson ${label}`, passwortHash]
       );
       return rows[0].id;
@@ -292,7 +292,7 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
 
   it("weitere-einheiten: setzt die Zuordnung und die Rechte-Engine unioniert den Scope über beide Einheiten", async () => {
     // Vorher: posElId (Konto benEl) hat klienten.ansehen nur in einrichtungAId.
-    const vorher = await tenantContextStorage.run({ mandantId, benutzerId: benEl, rolle: "betreuer" }, () =>
+    const vorher = await tenantContextStorage.run({ mandantId, benutzerId: benEl }, () =>
       rechte.ermittleErlaubteOrgUnitIds("klienten", "ansehen")
     );
     expect(vorher).toEqual([einrichtungAId]);
@@ -310,7 +310,7 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
     // Nachher: dieselbe Position, derselbe Scope ("einrichtung") -- jetzt
     // ueber BEIDE Einheiten unioniert, ohne dass sich sonst irgendetwas an
     // der Zuweisung des Benutzers geaendert haette.
-    const nachher = await tenantContextStorage.run({ mandantId, benutzerId: benEl, rolle: "betreuer" }, () =>
+    const nachher = await tenantContextStorage.run({ mandantId, benutzerId: benEl }, () =>
       rechte.ermittleErlaubteOrgUnitIds("klienten", "ansehen")
     );
     expect(new Set(nachher)).toEqual(new Set([einrichtungAId, einrichtungBId]));
@@ -323,7 +323,7 @@ describe("Organigramm: Flexibilität (Reihenfolge + weitere Einheiten)", () => {
     expect(res.status).toBe(200);
     expect(res.body.weitereOrgUnitIds).toEqual([]);
 
-    const nachher = await tenantContextStorage.run({ mandantId, benutzerId: benEl, rolle: "betreuer" }, () =>
+    const nachher = await tenantContextStorage.run({ mandantId, benutzerId: benEl }, () =>
       rechte.ermittleErlaubteOrgUnitIds("klienten", "ansehen")
     );
     expect(nachher).toEqual([einrichtungAId]);

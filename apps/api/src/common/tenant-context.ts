@@ -1,11 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export type BenutzerRolle = "bereichsleitung" | "einrichtungsleitung" | "betreuer";
-
 export interface TenantContext {
   mandantId: string;
   benutzerId: string;
-  rolle: BenutzerRolle;
 }
 
 /**

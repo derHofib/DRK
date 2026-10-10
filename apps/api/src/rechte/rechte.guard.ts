@@ -38,7 +38,7 @@ export class RechteGuard implements CanActivate {
     if (!benutzer) throw new ForbiddenException("Kein Zugriff.");
 
     const erlaubt = await tenantContextStorage.run(
-      { mandantId: benutzer.mandantId, benutzerId: benutzer.sub, rolle: benutzer.rolle },
+      { mandantId: benutzer.mandantId, benutzerId: benutzer.sub },
       () => this.rechte.hatRecht(anforderung.modul, anforderung.aktion)
     );
     if (!erlaubt) {

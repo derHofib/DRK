@@ -13,7 +13,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 const TEST_PDF_BASE64 = "data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsO4CQ==";
 
@@ -42,11 +42,13 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
     );
     mandantId = mandantRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung Test', $3, 'bereichsleitung')`,
-      [mandantId, `bereichsleitung-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-${suffix}@beispiel.test`,
+      name: "Bereichsleitung Test",
+      passwortHash,
+    });
 
     const { rows: klientRows } = await admin.query<{ id: string }>(
       `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
@@ -56,9 +58,7 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
     klientId = klientRows[0].id;
 
     // Seit Schritt 4 prueft rechnung.service.ts ueber die Rechte-Engine,
-    // nicht mehr ueber benutzer.rolle direkt -- siehe
-    // rollen-migration-test-helper.ts.
-    await migriereTestmandant(admin, mandantId, mandantSlug);
+    // nicht mehr ueber benutzer.rolle direkt -- siehe konto-mit-rolle.ts.
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -72,7 +72,7 @@ describe("Kostenübernahmen & Rechnungen: Zeitraum-Sperre, Statusworkflow, Ände
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantId);
+      await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query(
         "DELETE FROM rechnung_dokument WHERE rechnung_id IN (SELECT id FROM rechnung WHERE mandant_id = $1)",
         [mandantId]

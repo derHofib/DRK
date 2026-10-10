@@ -5,7 +5,7 @@ import {
   PASTELL_PALETTEN,
   type MandantDto,
 } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { Sicherheit } from "./Sicherheit";
@@ -113,9 +113,6 @@ function Darstellung({
   menuReihenfolge: HauptReiter[];
   onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
-  // Nur ein Anzeige-Hinweis -- der Server entscheidet (siehe tokenRolle()).
-  const darfBranding = tokenRolle() === "bereichsleitung";
-
   return (
     <div className="zv-card zv-card-weit">
       <section className="zv-einstellungen-abschnitt">
@@ -149,7 +146,7 @@ function Darstellung({
 
       <MenuReihenfolge reihenfolge={menuReihenfolge} onAendern={onMenuReihenfolgeAendern} />
 
-      {darfBranding && mandant && (
+      {mandant && (
         <>
           <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
           <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />

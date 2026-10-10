@@ -2,11 +2,15 @@
 # Interaktive Mitarbeiter-Verwaltung ueber das Terminal -- fuer den
 # allerersten Account eines frischen Mandanten gibt es dafuer keinen
 # anderen Weg: es existiert bewusst kein oeffentlicher Registrierungs-
-# Endpunkt (siehe auth.controller.ts) und POST /benutzer setzt schon
-# einen eingeloggten "bereichsleitung"- oder "einrichtungsleitung"-
-# Account voraus. Fuer den taeglichen Betrieb (weitere Accounts anlegen,
-# Rollen aendern) ist die "Mitarbeitende"-Seite in der App meist der
-# bequemere Weg -- dieses Script deckt zusaetzlich ab, was die
+# Endpunkt (siehe auth.controller.ts) und POST /benutzer setzt schon einen
+# eingeloggten Account mit dem Recht mitarbeitende.anlegen voraus. Dieser
+# allererste Account wird automatisch zum dauerhaften, mandantenweiten
+# Vollzugriff-"Entwickler" (Organigramm-Plan, "Entwickler-Accounttyp") --
+# er richtet darueber im Organigramm den echten ersten Accounttyp des
+# Traegers ein (z.B. "Geschaeftsfuehrung"), vergibt dessen Rechte, und erst
+# danach faengt der Traeger an zu arbeiten. Fuer den taeglichen Betrieb
+# (weitere Accounts anlegen) ist die "Mitarbeitende"-Seite in der App meist
+# der bequemere Weg -- dieses Script deckt zusaetzlich ab, was die
 # Oberflaeche (noch) nicht kann: Passwort-Hash direkt setzen, 2FA im
 # Notfall zuruecksetzen, den allerersten Account ueberhaupt anlegen.
 #
@@ -143,44 +147,89 @@ neuen_account_anlegen() {
   read -rp "E-Mail-Adresse: " EMAIL
   read -rp "Anzeigename: " NAME
 
-  echo "Rolle waehlen:"
-  PS3="Nummer eingeben: "
-  select ROLLE in bereichsleitung einrichtungsleitung betreuer; do
-    [ -n "$ROLLE" ] && break
-  done
-
   passwort_abfragen
   local hash
   hash=$(hash_erzeugen "$PW1")
   unset PW1
 
-  local ergebnis
-  ergebnis=$(psql_admin -tAq \
-    -v slug="$SLUG" -v email="$EMAIL" -v name="$NAME" -v hash="$hash" -v rolle="$ROLLE" <<'SQL'
+  local benutzer_id
+  benutzer_id=$(psql_admin -tAq \
+    -v slug="$SLUG" -v email="$EMAIL" -v name="$NAME" -v hash="$hash" <<'SQL'
 WITH m AS (SELECT id FROM mandant WHERE slug = :'slug')
-INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-SELECT m.id, :'email', :'name', :'hash', :'rolle'::benutzer_rolle FROM m
+INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+SELECT m.id, :'email', :'name', :'hash' FROM m
 RETURNING id;
 SQL
   )
 
-  if [ -z "$ergebnis" ]; then
+  if [ -z "$benutzer_id" ]; then
     echo "Fehler: Account konnte nicht angelegt werden (E-Mail bei diesem Mandanten evtl. schon vergeben)." >&2
     return 1
   fi
 
-  echo
-  echo "Fertig: $EMAIL ($ROLLE) bei Mandant \"$SLUG\" angelegt."
-  echo "Login-Daten: Traeger-Kennung \"$SLUG\", E-Mail \"$EMAIL\", das eben vergebene Passwort."
+  # Der allererste Account eines Mandanten wird automatisch der Entwickler
+  # (Organigramm-Plan, "Entwickler-Accounttyp") -- erkennbar daran, dass
+  # dieser Mandant noch gar keine aktive Positionsbesetzung hat. Der
+  # Entwickler-Accounttyp selbst existiert bereits (Seed-Trigger aus
+  # Migration 0048, laeuft beim INSERT INTO mandant) -- hier fehlt nur noch
+  # eine Position dafuer plus die Besetzung durch genau diesen Account.
+  local anzahl_besetzungen
+  anzahl_besetzungen=$(psql_admin -tAq -v slug="$SLUG" <<'SQL'
+SELECT count(*)
+FROM org_position_besetzung b
+JOIN mandant m ON m.id = b.mandant_id
+WHERE m.slug = :'slug';
+SQL
+  )
+
+  if [ "$anzahl_besetzungen" -eq 0 ]; then
+    if ! psql_admin -v ON_ERROR_STOP=1 -v slug="$SLUG" -v benutzer_id="$benutzer_id" <<'SQL'
+WITH m AS (SELECT id FROM mandant WHERE slug = :'slug'),
+     entwickler_typ AS (
+       SELECT id FROM account_typ WHERE mandant_id = (SELECT id FROM m) AND ist_vollzugriff LIMIT 1
+     ),
+     traeger AS (
+       SELECT id FROM org_unit WHERE mandant_id = (SELECT id FROM m) AND typ = 'traeger'
+     ),
+     neue_position AS (
+       INSERT INTO org_position (mandant_id, org_unit_id, account_typ_id, titel)
+       SELECT m.id, traeger.id, entwickler_typ.id, 'Entwickler'
+       FROM m, traeger, entwickler_typ
+       RETURNING id
+     )
+INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id)
+SELECT m.id, neue_position.id, :'benutzer_id' FROM m, neue_position;
+SQL
+    then
+      echo "Fehler: Entwickler-Position konnte nicht angelegt werden." >&2
+      return 1
+    fi
+    echo
+    echo "Fertig: $EMAIL ist der erste Account bei Mandant \"$SLUG\" -- automatisch als Entwickler eingerichtet (Vollzugriff)."
+    echo "Login-Daten: Traeger-Kennung \"$SLUG\", E-Mail \"$EMAIL\", das eben vergebene Passwort."
+    echo "Naechster Schritt: als Entwickler anmelden, im Organigramm den echten ersten Accounttyp des Traegers anlegen (z. B. \"Geschäftsführung\"), dessen Rechte vergeben, dann eine Position dafuer besetzen -- danach kann der Traeger normal arbeiten."
+  else
+    echo
+    echo "Fertig: $EMAIL bei Mandant \"$SLUG\" angelegt -- noch OHNE Position, also ohne Rechte."
+    echo "Naechster Schritt: eine bestehende Entwickler- oder Geschaeftsfuehrung-Person weist im Organigramm eine Position zu."
+  fi
 }
 
 accounts_anzeigen() {
   mandant_waehlen "n" || return 1
   echo
   psql_admin -v slug="$SLUG" <<'SQL'
-SELECT b.email, b.name, b.rolle, b.aktiv, b.totp_aktiviert AS zwei_fa
-FROM benutzer b JOIN mandant m ON m.id = b.mandant_id
+SELECT b.email, b.name,
+       COALESCE(string_agg(a.name, ', ' ORDER BY a.name), '(keine Position)') AS accounttyp,
+       b.aktiv, b.totp_aktiviert AS zwei_fa
+FROM benutzer b
+JOIN mandant m ON m.id = b.mandant_id
+LEFT JOIN org_position_besetzung pb ON pb.benutzer_id = b.id
+       AND pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
+LEFT JOIN account_typ a ON a.id = p.account_typ_id
 WHERE m.slug = :'slug'
+GROUP BY b.id, b.email, b.name, b.aktiv, b.totp_aktiviert
 ORDER BY b.name;
 SQL
 }
@@ -190,9 +239,16 @@ SQL
 benutzer_waehlen() {
   local zeilen
   zeilen=$(psql_admin -tAq -F'|' -v slug="$SLUG" <<'SQL'
-SELECT b.id, b.email, b.name, b.rolle
-FROM benutzer b JOIN mandant m ON m.id = b.mandant_id
+SELECT b.id, b.email, b.name,
+       COALESCE(string_agg(a.name, ', ' ORDER BY a.name), '(keine Position)')
+FROM benutzer b
+JOIN mandant m ON m.id = b.mandant_id
+LEFT JOIN org_position_besetzung pb ON pb.benutzer_id = b.id
+       AND pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
+LEFT JOIN account_typ a ON a.id = p.account_typ_id
 WHERE m.slug = :'slug'
+GROUP BY b.id, b.email, b.name
 ORDER BY b.name;
 SQL
   )
@@ -202,9 +258,9 @@ SQL
   fi
 
   local ids=() anzeige=()
-  while IFS='|' read -r id email name rolle; do
+  while IFS='|' read -r id email name accounttyp; do
     ids+=("$id")
-    anzeige+=("$name <$email> ($rolle)")
+    anzeige+=("$name <$email> ($accounttyp)")
   done <<< "$zeilen"
 
   echo "Mitarbeitende bei \"$SLUG\":"
@@ -229,7 +285,7 @@ account_bearbeiten() {
   echo "Was moechtest du fuer $BENUTZER_EMAIL aendern?"
   PS3="Nummer eingeben: "
   local AUSWAHL
-  select AUSWAHL in "Name" "E-Mail" "Rolle" "Aktiv/Inaktiv umschalten" "Passwort zuruecksetzen" "2FA zuruecksetzen (Notfall)" "Abbrechen"; do
+  select AUSWAHL in "Name" "E-Mail" "Aktiv/Inaktiv umschalten" "Passwort zuruecksetzen" "2FA zuruecksetzen (Notfall)" "Abbrechen"; do
     [ -n "$AUSWAHL" ] && break
   done
 
@@ -251,18 +307,6 @@ SQL
         return 1
       fi
       echo "E-Mail geaendert."
-      ;;
-    "Rolle")
-      echo "Neue Rolle waehlen:"
-      PS3="Nummer eingeben: "
-      local NEUE_ROLLE
-      select NEUE_ROLLE in bereichsleitung einrichtungsleitung betreuer; do
-        [ -n "$NEUE_ROLLE" ] && break
-      done
-      psql_admin -v ON_ERROR_STOP=1 -v id="$BENUTZER_ID" -v rolle="$NEUE_ROLLE" <<'SQL'
-UPDATE benutzer SET rolle = :'rolle'::benutzer_rolle WHERE id = :'id';
-SQL
-      echo "Rolle geaendert zu \"$NEUE_ROLLE\"."
       ;;
     "Aktiv/Inaktiv umschalten")
       local neuer_stand

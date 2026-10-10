@@ -72,7 +72,7 @@ describe("Organigramm-Hauptszenario (Organigramm-Plan, Schritt 10)", () => {
       [mandantId, traegerId, "Geschäftsführung", gfTypRows[0].id]
     );
     const { rows: adminBenRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, $3, $4, 'bereichsleitung') RETURNING id`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash) VALUES ($1, $2, $3, $4) RETURNING id`,
       [mandantId, `admin-${suffix}@hauptszenario.test`, "Testperson Admin", passwortHash]
     );
     await admin.query("INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id) VALUES ($1, $2, $3)", [
@@ -84,7 +84,7 @@ describe("Organigramm-Hauptszenario (Organigramm-Plan, Schritt 10)", () => {
     // Der spaetere Zielbenutzer existiert von Anfang an, aber OHNE jede
     // Position -- genau der Zustand "vor der Zuweisung" aus dem Szenario.
     const { rows: zielBenRows } = await admin.query<{ id: string }>(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle) VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash) VALUES ($1, $2, $3, $4) RETURNING id`,
       [mandantId, `ziel-${suffix}@hauptszenario.test`, "Testperson Ziel", passwortHash]
     );
     zielBenutzerId = zielBenRows[0].id;

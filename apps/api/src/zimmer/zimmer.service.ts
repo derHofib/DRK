@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
-import { BenutzerRolle, requireTenantContext } from "../common/tenant-context";
+import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientIstArchiviert } from "../common/standort-restriction";
 import { initialen } from "../common/anonymisierung";
 import { isPgError } from "../common/pg-error";
@@ -33,7 +33,9 @@ export interface OffenerKapazitaetsantragEintrag {
   alteKapazitaet: number;
   neueKapazitaet: number;
   beantragtVonName: string;
-  beantragtVonRolle: BenutzerRolle;
+  // Clientseitig nur fuer "ist das meine eigene Anfrage" -- die eigentliche
+  // Selbstbestaetigungssperre prueft kapazitaetEntscheiden() serverseitig.
+  beantragtVonId: string;
   beantragtAm: string;
 }
 
@@ -71,17 +73,6 @@ export interface BelegungsverlaufEintrag {
 // Custom-SQLSTATE aus dem Trigger belegung_kapazitaet_pruefen()
 // (migrations/0032), kein Standard-Code -- siehe dort.
 const KAPAZITAET_UEBERSCHRITTEN = "ZA001";
-
-// Vier-Augen: wer eine Kapazitaet aendern darf, entscheidet dasselbe Recht
-// wie ueberall sonst bei Zimmer-Stammdaten (zimmer.bearbeiten). Wer sie
-// BESTAETIGEN darf, ist keine feste Rollenmenge, sondern haengt von der
-// literalen Rolle des Antragstellers ab -- bewusst weiterhin ueber
-// benutzer.rolle, nicht die Rechte-Engine: das ist keine der 14
-// ROLLEN_MIT_*-Prüfungen, sondern eine eigene Anwendungsregel ("die jeweils
-// andere Leitungsrolle entscheidet"), siehe kapazitaetEntscheiden().
-function gegenrolle(rolle: BenutzerRolle): BenutzerRolle {
-  return rolle === "bereichsleitung" ? "einrichtungsleitung" : "bereichsleitung";
-}
 
 @Injectable()
 export class ZimmerService {
@@ -127,8 +118,8 @@ export class ZimmerService {
       `
       SELECT
         z.id, z.nummer, z.etage, z.standort_id, s.name AS standort_name, z.kapazitaet,
-        ka.id AS antrag_id, ka.alte_kapazitaet, ka.neue_kapazitaet, ka.beantragt_am,
-        kab.name AS antrag_beantragt_von_name, kab.rolle AS antrag_beantragt_von_rolle
+        ka.id AS antrag_id, ka.alte_kapazitaet, ka.neue_kapazitaet, ka.beantragt_am, ka.beantragt_von,
+        kab.name AS antrag_beantragt_von_name
       FROM zimmer z
       JOIN standort s ON s.id = z.standort_id
       LEFT JOIN zimmer_kapazitaetsantrag ka ON ka.zimmer_id = z.id AND ka.status = 'beantragt'
@@ -168,7 +159,7 @@ export class ZimmerService {
               alteKapazitaet: r.alte_kapazitaet,
               neueKapazitaet: r.neue_kapazitaet,
               beantragtVonName: r.antrag_beantragt_von_name,
-              beantragtVonRolle: r.antrag_beantragt_von_rolle,
+              beantragtVonId: r.beantragt_von,
               beantragtAm: r.beantragt_am,
             }
           : null,
@@ -360,13 +351,13 @@ export class ZimmerService {
   }
 
   /**
-   * Vier-Augen-Kern: die entscheidende Person muss die jeweils ANDERE
-   * Leitungsrolle haben als die antragstellende -- nie dieselbe, nie
-   * dieselbe Person. Anders als beim Kassenbuch-Storno-Antrag
-   * (kassenbuchung.service.ts) gibt es hier bewusst keine Selbstbewilligung.
-   * Bereichsleitung entscheidet standortuebergreifend, Einrichtungsleitung
-   * nur fuer Zimmer des eigenen Standorts (dieselbe Pruefung wie bei jeder
-   * anderen Zimmer-Stammdatenaenderung).
+   * Vier-Augen-Kern: die entscheidende Person braucht das eigene, frei
+   * vergebbare Recht zimmer.kapazitaet-entscheiden (nicht nur
+   * zimmer.bearbeiten) und darf nie die eigene Anfrage bestaetigen --
+   * anders als beim Kassenbuch-Storno-Antrag (kassenbuchung.service.ts)
+   * gibt es hier bewusst keine Selbstbewilligung. Welche konkrete(n)
+   * Person(en)/Accounttypen das Recht bekommen, legt der Mandant ueber die
+   * Account-Typ-Rechte selbst fest (frueher: feste "Gegenrolle").
    */
   async kapazitaetEntscheiden(
     antragId: string,
@@ -374,8 +365,8 @@ export class ZimmerService {
     ablehnungGrund?: string
   ): Promise<ZimmerListEintrag> {
     const ctx = requireTenantContext();
-    if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
-      throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen über eine Kapazitätsänderung entscheiden.");
+    if (!(await this.rechte.hatRecht("zimmer", "kapazitaet-entscheiden"))) {
+      throw new ForbiddenException("Keine Berechtigung, über eine Kapazitätsänderung zu entscheiden.");
     }
     if (entscheidung === "abgelehnt" && !ablehnungGrund) {
       throw new BadRequestException("Für eine Ablehnung ist ein Grund erforderlich.");
@@ -384,34 +375,28 @@ export class ZimmerService {
       const { rows } = await client.query<{
         zimmer_id: string;
         neue_kapazitaet: number;
-        beantragt_von_rolle: BenutzerRolle;
+        beantragt_von: string;
       }>(
-        `SELECT ka.zimmer_id, ka.neue_kapazitaet, b.rolle AS beantragt_von_rolle
+        `SELECT ka.zimmer_id, ka.neue_kapazitaet, ka.beantragt_von
          FROM zimmer_kapazitaetsantrag ka
-         JOIN benutzer b ON b.id = ka.beantragt_von
          WHERE ka.id = $1 AND ka.status = 'beantragt'`,
         [antragId]
       );
       if (rows.length === 0) {
         throw new NotFoundException("Antrag nicht gefunden oder bereits entschieden.");
       }
-      const { zimmer_id: zimmerId, neue_kapazitaet: neueKapazitaet, beantragt_von_rolle: antragstellerRolle } = rows[0];
+      const { zimmer_id: zimmerId, neue_kapazitaet: neueKapazitaet, beantragt_von: antragstellerBenutzerId } = rows[0];
 
-      if (ctx.rolle !== gegenrolle(antragstellerRolle)) {
-        throw new ForbiddenException(
-          antragstellerRolle === "bereichsleitung"
-            ? "Diese Änderung wurde von der Bereichsleitung gestellt und muss von einer Einrichtungsleitung bestätigt werden."
-            : "Diese Änderung wurde von einer Einrichtungsleitung gestellt und muss von der Bereichsleitung bestätigt werden."
-        );
+      if (ctx.benutzerId === antragstellerBenutzerId) {
+        throw new ForbiddenException("Niemand darf die eigene Kapazitätsänderung bestätigen.");
       }
 
-      // Einrichtungsleitung nur fuer den eigenen Standort -- Bereichsleitung
-      // (ctx.rolle hier immer die Gegenrolle des Antragstellers) hat per
-      // ermittleErlaubteStandortIds() ohnehin keine Standort-Zuordnung.
-      if (ctx.rolle === "einrichtungsleitung") {
-        if (!(await this.standortDesZimmersErlaubt(client, ctx.benutzerId, zimmerId))) {
-          throw new NotFoundException("Zimmer nicht gefunden.");
-        }
+      // Unconditional statt nur fuer eine frueher feste "Einrichtungsleitung"
+      // -- standortDesZimmersErlaubt() liefert fuer eine standortmaessig
+      // unbeschraenkte Person ueber ermittleErlaubteStandortIds() ohnehin
+      // "erlaubt".
+      if (!(await this.standortDesZimmersErlaubt(client, ctx.benutzerId, zimmerId))) {
+        throw new NotFoundException("Zimmer nicht gefunden.");
       }
 
       if (entscheidung === "bestaetigt") {

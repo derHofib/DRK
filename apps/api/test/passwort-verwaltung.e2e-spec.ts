@@ -22,7 +22,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
-import { migriereTestmandant, raeumeRollenMigrationAuf } from "./support/rollen-migration-test-helper";
+import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Passwort aendern + Passwort-Reset per Link", () => {
   let app: INestApplication;
@@ -57,24 +57,26 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
     );
     mandantBId = mandantBRows[0].id;
 
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung A', $3, 'bereichsleitung')`,
-      [mandantAId, `bereichsleitung-a-${suffix}@beispiel.test`, passwortHash]
-    );
-    await admin.query(
-      `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-       VALUES ($1, $2, 'Bereichsleitung B', $3, 'bereichsleitung')`,
-      [mandantBId, `bereichsleitung-b-${suffix}@beispiel.test`, passwortHash]
-    );
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantAId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-a-${suffix}@beispiel.test`,
+      name: "Bereichsleitung A",
+      passwortHash,
+    });
+    await kontoMitAlterRolle(admin, {
+      mandantId: mandantBId,
+      rolle: "bereichsleitung",
+      email: `bereichsleitung-b-${suffix}@beispiel.test`,
+      name: "Bereichsleitung B",
+      passwortHash,
+    });
 
     // Seit Schritt 4 pruefen benutzer.service.ts/passwortResetErstellen()
     // ueber die Rechte-Engine, nicht mehr ueber benutzer.rolle direkt --
-    // siehe rollen-migration-test-helper.ts. Keine Einrichtung noetig:
-    // bereichsleitung wird zur Geschaeftsfuehrung (Vollzugriff), die
-    // unabhaengig von jeder Einrichtung greift.
-    await migriereTestmandant(admin, mandantAId, mandantASlug);
-    await migriereTestmandant(admin, mandantBId, mandantBSlug);
+    // siehe konto-mit-rolle.ts. Keine Einrichtung noetig: bereichsleitung
+    // wird zur Geschaeftsfuehrung (Vollzugriff), die unabhaengig von jeder
+    // Einrichtung greift.
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -90,8 +92,8 @@ describe("Passwort aendern + Passwort-Reset per Link", () => {
 
   afterAll(async () => {
     try {
-      await raeumeRollenMigrationAuf(admin, mandantAId);
-      await raeumeRollenMigrationAuf(admin, mandantBId);
+      await raeumeKontoMitRolleAuf(admin, mandantAId);
+      await raeumeKontoMitRolleAuf(admin, mandantBId);
       await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = ANY($1)", [[mandantAId, mandantBId]]);

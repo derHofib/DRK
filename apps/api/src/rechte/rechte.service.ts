@@ -107,7 +107,12 @@ export class RechteService {
     });
   }
 
-  private async istVollzugriff(client: import("pg").PoolClient, benutzerId: string): Promise<boolean> {
+  /**
+   * Oeffentlich, weil auch benutzer.service.ts::standorteSetzen() sie
+   * braucht (Vollzugriff-Schutz: eine standortbeschraenkte Person darf
+   * keinem Vollzugriff-Account die Standort-Zuweisung aendern).
+   */
+  async istVollzugriff(client: import("pg").PoolClient, benutzerId: string): Promise<boolean> {
     const { rows } = await client.query(
       `SELECT 1
        FROM org_position_besetzung b

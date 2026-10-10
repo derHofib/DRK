@@ -13,7 +13,7 @@ import type {
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
@@ -66,11 +66,6 @@ const eingabeFeldStil = {
   fontSize: 14,
 };
 
-const ROLLEN_MIT_ANONYMISIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
-// Gleiches Rollenpaar wie bei der Anonymisierung -- Archivieren ist eine
-// traegerweite Statusaenderung, keine alltaegliche Betreuungsaktion.
-const ROLLEN_MIT_ARCHIVIERUNG = new Set(["bereichsleitung", "einrichtungsleitung"]);
-
 export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
   const [tab, setTab] = useState<Tab>("uebersicht");
@@ -80,11 +75,6 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   const [archivierenOffen, setArchivierenOffen] = useState(false);
   const [entarchivierenOffen, setEntarchivierenOffen] = useState(false);
   const [wirdArchiviert, setWirdArchiviert] = useState(false);
-
-  // Nur ein Anzeige-Hinweis, der den Knopf ausblendet -- der Server prueft
-  // dieselbe Rolle nochmal in KlientService.anonymisieren() (siehe tokenRolle()).
-  const darfAnonymisieren = ROLLEN_MIT_ANONYMISIERUNG.has(tokenRolle() ?? "");
-  const darfArchivieren = ROLLEN_MIT_ARCHIVIERUNG.has(tokenRolle() ?? "");
 
   function laden() {
     api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
@@ -181,12 +171,10 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
                 Anonymisiert am {formatDatum(klient.anonymisiertAm.slice(0, 10))}
               </span>
             ) : (
-              darfAnonymisieren && (
-                <button className="zv-link-btn" onClick={() => setAnonymisierenOffen(true)}>
-                  <ILoeschen />
-                  Klient anonymisieren
-                </button>
-              )
+              <button className="zv-link-btn" onClick={() => setAnonymisierenOffen(true)}>
+                <ILoeschen />
+                Klient anonymisieren
+              </button>
             )}
           </div>
 
@@ -209,14 +197,12 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
                   {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
                 </span>
               ) : (
-                darfArchivieren && (
-                  <button className="zv-link-btn" onClick={() => setArchivierenOffen(true)}>
-                    <IArchivieren />
-                    Klient archivieren
-                  </button>
-                )
+                <button className="zv-link-btn" onClick={() => setArchivierenOffen(true)}>
+                  <IArchivieren />
+                  Klient archivieren
+                </button>
               )}
-              {klient.archiviertAm && darfArchivieren && (
+              {klient.archiviertAm && (
                 <button className="zv-link-btn" onClick={() => setEntarchivierenOffen(true)}>
                   <IEntarchivieren />
                   Entarchivieren

@@ -1,7 +1,7 @@
 import { CSSProperties, useEffect, useState } from "react";
 import type { DashboardDto, StandortDto } from "@zimmerakte/shared";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
-import { api, tokenRolle } from "../api/client";
+import { api } from "../api/client";
 import { faelligkeitsHinweis, PRIORITAET_ICON, PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
@@ -61,7 +61,11 @@ function standortAuswahlSpeichern(standortId: string | null): void {
 }
 
 export function Dashboard() {
-  const istLeitung = tokenRolle() === "bereichsleitung" || tokenRolle() === "einrichtungsleitung";
+  // Frueher ein Rollen-Hinweis (Bereichs-/Einrichtungsleitung sehen mehr
+  // Widgets per Default) -- ohne feste Rollen gibt es dafuer keine Grundlage
+  // mehr, also zeigt der Standard jetzt fuer alle den volleren Satz. Wer
+  // einzelne Widgets nicht braucht, blendet sie ueber "Anpassen" aus.
+  const istLeitung = true;
   const [daten, setDaten] = useState<DashboardDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [sichtbarkeit, setSichtbarkeit] = useState(() => geleseneSichtbarkeit(istLeitung));

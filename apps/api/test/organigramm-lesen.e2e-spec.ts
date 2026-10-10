@@ -124,8 +124,8 @@ describe("Organigramm: lesende Endpunkte", () => {
       const email = `${label}-${suffix}@organigramm-check.test`;
       const name = `Testperson ${label}`;
       const { rows } = await admin.query<{ id: string }>(
-        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash, rolle)
-         VALUES ($1, $2, $3, $4, 'betreuer') RETURNING id`,
+        `INSERT INTO benutzer (mandant_id, email, name, passwort_hash)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
         [mandantId, email, name, passwortHash]
       );
       return { id: rows[0].id, email, name };
