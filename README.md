@@ -2401,6 +2401,27 @@ Dateien auf, Sidebar (Desktop) und Topbar (Mobil, 420 px) zeigen Icon +
 Schriftzug ohne Konsolenfehler. API-Suite danach erneut vollständig grün
 (dieser Nachtrag ändert ausschließlich `apps/web/`).
 
+### Nachtrag: „Auch zugeordnet" im Organigramm-Seitenpanel
+
+Jede Besetzung im Positions-Seitenpanel (`PositionPanel` in
+`Organigramm.tsx`) zeigt jetzt zusätzlich, auf welchen anderen aktiven
+Positionen dieselbe Person sonst noch sitzt -- z. B. eine Mehrfachbesetzung
+über zwei Einheiten hinweg. Reine Anzeige, kein neuer Endpunkt: die
+Positionsliste (`api.organigrammPositionen()`) liegt bereits vollständig im
+Frontend-State, `andereZuordnungenVon()` filtert sie clientseitig nach
+`besetztMit[].benutzerId`. Ohne das Recht
+„organigramm.personendaten-sehen" liefert der Server `benutzerId: null`
+(siehe `BesetzungDto`-Kommentar) -- dann bleibt die Zeile leer, statt falsch
+zu raten.
+
+Geprüft: `pnpm build` sauber. Live-Browser-Check (Playwright) mit einer
+eigens angelegten Testperson auf zwei Positionen in zwei verschiedenen
+Bereichen: das Panel der ersten Position zeigt unter der Besetzung die
+Zeile „Auch zugeordnet: Zweitrolle · Zweiter Bereich". Rein
+Frontend-Änderung (`apps/web/src/pages/Organigramm.tsx`,
+`apps/web/src/styles/app.css`) -- API-Suite unverändert, kein erneuter Lauf
+nötig.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

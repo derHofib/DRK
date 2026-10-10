@@ -1137,6 +1137,7 @@ function PositionPanel({
   benutzerListe,
   orgUnits,
   orgUnitNamen,
+  positionen,
   verschiebenZiele,
   aufVerschieben,
   istWeitereZuordnung,
@@ -1149,6 +1150,9 @@ function PositionPanel({
   benutzerListe: BenutzerListEintragDto[];
   orgUnits: OrgUnitDto[];
   orgUnitNamen: Map<string, string>;
+  /** Alle Positionen des Mandanten -- fuer "wo ist diese Person sonst noch
+   *  zugeordnet" unter jeder Besetzung (siehe andereZuordnungenVon unten). */
+  positionen: PositionDto[];
   verschiebenZiele: ZielOption[];
   aufVerschieben: (zielId: string) => Promise<void>;
   istWeitereZuordnung: boolean;
@@ -1164,6 +1168,20 @@ function PositionPanel({
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
   const status = positionsStatus(position);
+
+  /**
+   * Alle anderen aktiven Positionen, auf denen dieselbe Person gerade
+   * sitzt -- z.B. eine Bezugsbetreuung, die zusaetzlich Mitglied einer
+   * zweiten Einheit ist. Ohne "organigramm.personendaten-sehen" liefert
+   * der Server ueberall benutzerId=null (siehe BesetzungDto-Kommentar in
+   * packages/shared), dann bleibt die Liste leer statt falsch zu raten.
+   */
+  function andereZuordnungenVon(benutzerId: string | null): PositionDto[] {
+    if (!benutzerId) return [];
+    return positionen.filter(
+      (p) => p.id !== position.id && p.aktiv && p.besetztMit.some((b) => b.benutzerId === benutzerId)
+    );
+  }
 
   async function verschieben(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1286,18 +1304,34 @@ function PositionPanel({
 
       <h4 style={{ marginTop: 20 }}>Besetzungen</h4>
       <ul className="zv-verlauf-liste">
-        {position.besetztMit.map((b) => (
-          <li key={b.besetzungId}>
-            <strong>{b.benutzerName ?? "Namen ausgeblendet"}</strong>
-            <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
-              seit {datumAnzeige(b.gueltigAb)}
-            </span>
-            <button className="zv-link-btn" type="button" onClick={() => setBeendenBesetzung(b)}>
-              <IAuszug />
-              Beenden
-            </button>
-          </li>
-        ))}
+        {position.besetztMit.map((b) => {
+          const andereZuordnungen = andereZuordnungenVon(b.benutzerId);
+          return (
+            <li key={b.besetzungId}>
+              <strong>{b.benutzerName ?? "Namen ausgeblendet"}</strong>
+              <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
+                seit {datumAnzeige(b.gueltigAb)}
+              </span>
+              <button className="zv-link-btn" type="button" onClick={() => setBeendenBesetzung(b)}>
+                <IAuszug />
+                Beenden
+              </button>
+              {andereZuordnungen.length > 0 && (
+                <div className="zv-sub-inline-zeile zv-weitere-zuordnungen">
+                  <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
+                    Auch zugeordnet:
+                  </span>
+                  {andereZuordnungen.map((p) => (
+                    <span key={p.id} className="zv-pill zv-pill-vergeben">
+                      <IPosition />
+                      {p.titel} · {orgUnitNamen.get(p.orgUnitId) ?? "?"}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
         {position.besetztMit.length === 0 && <li className="zv-sub-inline">Derzeit nicht besetzt.</li>}
       </ul>
 
@@ -2567,6 +2601,7 @@ export function Organigramm() {
                 benutzerListe={benutzerListe}
                 orgUnits={orgUnits}
                 orgUnitNamen={orgUnitNamen}
+                positionen={positionen}
                 verschiebenZiele={verschiebenZiele}
                 aufVerschieben={(zielId) => verschiebenNachId(ausgewaehlterKnoten, zielId)}
                 istWeitereZuordnung={ausgewaehlterKnoten.istWeitereZuordnung ?? false}

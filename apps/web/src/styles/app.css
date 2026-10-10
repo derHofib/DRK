@@ -1229,6 +1229,19 @@
   margin-left: 0;
 }
 
+/* "Auch: ..." unter einer Besetzung im Organigramm-Seitenpanel -- die
+   anderen aktiven Positionen derselben Person, siehe PositionPanel in
+   Organigramm.tsx. Eigene Zeile (zv-sub-inline-zeile) + Pills statt
+   Fliesstext, weil mehrere Zuordnungen sonst schwer auseinanderzuhalten
+   waeren. */
+.zv-weitere-zuordnungen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-1);
+}
+
 /* white-space: nowrap, weil Bindestriche in Kennungen (Aktenzeichen wie
    "AZ-2026-001") sonst regulaere Umbruchpunkte sind und der Text in
    schmalen Spalten mitten im Wort umbricht. */
