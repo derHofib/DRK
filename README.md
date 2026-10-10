@@ -2422,6 +2422,49 @@ Frontend-Änderung (`apps/web/src/pages/Organigramm.tsx`,
 `apps/web/src/styles/app.css`) -- API-Suite unverändert, kein erneuter Lauf
 nötig.
 
+### Nachtrag: Mitarbeitende deaktivieren und reaktivieren
+
+Eine Führungskraft kann Mitarbeitende jetzt „entfernen" -- als
+**Deaktivieren**, nicht als Löschen: `benutzer` hängt an Audit-Log,
+Tagesberichten, Kassenbuch und Aufgaben, ein Löschen würde genau die
+Nachvollziehbarkeit zerstören, für die diese Tabellen da sind. Dieselbe
+Aktion macht es rückgängig (Reaktivieren); die Besetzungen bleiben
+unangetastet, die Rechte sind danach unverändert wieder da.
+
+- **Neues Recht `mitarbeitende.deaktivieren`** (sensibel) in der Registry --
+  erscheint damit von selbst in der Account-Typ-Matrix und wird dort wie jedes
+  andere Recht an Accounttypen vergeben. `PATCH /benutzer/:id/aktiv`,
+  Oberfläche: Mitarbeitende → „Deaktivieren"/„Reaktivieren" mit Bestätigung.
+- **Die Sperre wirkt sofort.** Das JWT gilt 8 Stunden und kannte `aktiv` bis
+  dahin nicht -- eine deaktivierte Person wäre bis zum Ablauf weitergelaufen.
+  `AuthGuard` prüft deshalb pro Request `benutzer.aktiv` (eine Abfrage mehr
+  je Request, bewusst in Kauf genommen); laufende Sitzung → 401, Login → 401.
+- **Drei Schutzregeln.** Nicht das eigene Konto (403). Ein Vollzugriff-Account
+  nur mit zusätzlich `organigramm.manage-permissions` (403) -- das breite
+  Recht allein wäre sonst ein Weg, die höchsten Konten auszuschalten, direkte
+  Entsprechung zu `besetzen()`. Und der **letzte aktive Vollzugriff bleibt
+  bestehen**: das erzwingt die Datenbank (Trigger `benutzer_vollzugriff_schutz`,
+  Migration 0050; API übersetzt es in 409), nicht der Code. Dafür zählt
+  `org_vollzugriff_anzahl()` jetzt nur noch Besetzungen *aktiver* Benutzer --
+  sonst wäre ein Mandant ausgesperrt, obwohl die Zählung „1" sagt.
+- Spaltenscharf (CLAUDE.md Regel 3): die App-Rolle bekommt `UPDATE (aktiv)`
+  auf `benutzer`, mehr nicht. Jede Änderung geht ins `audit_log`.
+- Das Besetzen-Dropdown im Organigramm bietet inaktive Personen nicht mehr an.
+  Offen (bewusst nicht Teil dieser Änderung): Aufgaben-Zuweisung u. ä. listen
+  inaktive Personen weiterhin mit.
+
+Geprüft: gesamte API-Suite 432/432 grün, 42 Suiten; neue Spec
+`benutzer-deaktivieren.e2e-spec.ts` (7 Tests: bestehendes
+Token und Login nach Deaktivierung → 401, Reaktivierung, ohne Recht 403,
+Selbst-Deaktivierung 403, Vollzugriff-Ziel mit/ohne manage-permissions, letzter
+Vollzugriff 409, 404/400). **Gegenproben**: Aktiv-Prüfung im `AuthGuard`
+abgeschaltet → der Sofort-Sperre-Test wird rot; manage-permissions-Prüfung
+abgeschaltet → der Vollzugriff-Test wird rot; Trigger abgeschaltet → der
+Letzter-Vollzugriff-Test wird rot; jeweils wiederhergestellt. Live-Browser-Check
+(Playwright): Deaktivieren per Dialog → Status „Inaktiv", Marias parallel
+laufende Sitzung landet nach Reload auf der Anmeldung, Reaktivieren → „Aktiv",
+Selbst-Deaktivierung zeigt die Server-Meldung im Dialog.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

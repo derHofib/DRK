@@ -1344,11 +1344,13 @@ function PositionPanel({
                 <option value="" disabled>
                   Bitte wählen…
                 </option>
-                {benutzerListe.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
+                {benutzerListe
+                  .filter((b) => b.aktiv)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="zv-field">

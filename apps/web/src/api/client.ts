@@ -195,6 +195,11 @@ export const api = {
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
   passwortResetErstellen: (benutzerId: string) =>
     request<{ token: string; laeuftAbAm: string }>(`/benutzer/${benutzerId}/passwort-reset`, { method: "POST" }),
+  benutzerAktivSetzen: (benutzerId: string, aktiv: boolean) =>
+    request<{ id: string; aktiv: boolean }>(`/benutzer/${benutzerId}/aktiv`, {
+      method: "PATCH",
+      body: JSON.stringify({ aktiv }),
+    }),
   benutzerStandorteSetzen: (benutzerId: string, standortIds: string[]) =>
     request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),
 

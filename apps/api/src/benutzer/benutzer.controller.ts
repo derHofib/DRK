@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { BenutzerService } from "./benutzer.service";
@@ -14,6 +14,8 @@ const anlegenSchema = z.object({
 const standorteSetzenSchema = z.object({
   standortIds: z.array(z.string().uuid()),
 });
+
+const aktivSetzenSchema = z.object({ aktiv: z.boolean() });
 
 @Controller("benutzer")
 @Authenticated()
@@ -39,5 +41,16 @@ export class BenutzerController {
   async standorteSetzen(@Param("id") id: string, @Body() body: unknown) {
     const { standortIds } = standorteSetzenSchema.parse(body);
     return this.benutzer.standorteSetzen(id, standortIds);
+  }
+
+  @Patch(":id/aktiv")
+  async aktivSetzen(@Param("id") id: string, @Body() body: unknown) {
+    // safeParse statt parse: es gibt keinen globalen ZodError-Filter, ein
+    // durchgereichter ZodError waere ein 500 (siehe CLAUDE.md).
+    const eingabe = aktivSetzenSchema.safeParse(body);
+    if (!eingabe.success) {
+      throw new BadRequestException("Erwartet { aktiv: true | false }.");
+    }
+    return this.benutzer.aktivSetzen(id, eingabe.data.aktiv);
   }
 }

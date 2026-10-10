@@ -65,6 +65,10 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "mitarbeitende", aktion: "anlegen" },
   // Heutiges ROLLEN_MIT_STANDORT_ZUWEISEN (benutzer.service.ts).
   { modul: "mitarbeitende", aktion: "standort-zuweisen" },
+  // Deaktivieren UND Reaktivieren (benutzer.aktiv) -- "Entfernen" loescht nie,
+  // siehe migrations/0050_benutzer_deaktivieren.sql. Sensibel: sperrt eine
+  // Person sofort aus.
+  { modul: "mitarbeitende", aktion: "deaktivieren", sensibel: true },
 
   { modul: "aufgaben", aktion: "ansehen" },
   { modul: "aufgaben", aktion: "bearbeiten" },

@@ -6,6 +6,7 @@ import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { AuditService } from "../audit/audit.service";
 
 // 30 Minuten: lang genug, um den Link auf einem beliebigen Weg (Teams,
 // muendlich, ...) weiterzugeben, kurz genug, dass ein liegengelassener,
@@ -28,12 +29,15 @@ export interface BenutzerListEintrag {
 // siehe migrations/0004_benutzer.sql) -- kein geratener String, siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
 const UNIQUE_VIOLATION = "23505";
+// RAISE EXCEPTION ohne eigenen SQLSTATE (benutzer_vollzugriff_schutz, 0050).
+const RAISE_EXCEPTION = "P0001";
 
 @Injectable()
 export class BenutzerService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly rechte: RechteService
+    private readonly rechte: RechteService,
+    private readonly audit: AuditService
   ) {}
 
   /**
@@ -230,5 +234,68 @@ export class BenutzerService {
       }
       return eindeutigeIds;
     });
+  }
+
+  /**
+   * "Entfernen" einer Person = Deaktivieren (siehe
+   * migrations/0050_benutzer_deaktivieren.sql), und genauso rueckgaengig
+   * machbar. Drei Schutzregeln, alle serverseitig:
+   *  - nicht sich selbst (sonst sperrt sich die einzige berechtigte Person
+   *    versehentlich aus),
+   *  - ein Vollzugriff-Account nur mit organigramm.manage-permissions -- das
+   *    breite mitarbeitende.deaktivieren allein reicht nicht, sonst waere es
+   *    ein Weg, die hoechsten Konten auszuschalten (Entsprechung zu
+   *    organigramm.service.ts::besetzen()),
+   *  - der letzte aktive Vollzugriff bleibt bestehen -- das erzwingt der
+   *    Datenbank-Trigger benutzer_vollzugriff_schutz, nicht dieser Code.
+   */
+  async aktivSetzen(zielBenutzerId: string, aktiv: boolean): Promise<{ id: string; aktiv: boolean }> {
+    const ctx = requireTenantContext();
+    if (!(await this.rechte.hatRecht("mitarbeitende", "deaktivieren"))) {
+      throw new ForbiddenException("Keine Berechtigung, Mitarbeitende zu deaktivieren oder zu reaktivieren.");
+    }
+    if (zielBenutzerId === ctx.benutzerId) {
+      throw new ForbiddenException("Das eigene Konto kann nicht selbst deaktiviert werden.");
+    }
+
+    try {
+      return await this.db.withTenant(async (client) => {
+        const { rows } = await client.query<{ aktiv: boolean }>("SELECT aktiv FROM benutzer WHERE id = $1", [
+          zielBenutzerId,
+        ]);
+        if (rows.length === 0) {
+          throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
+        }
+        const vorher = rows[0].aktiv;
+
+        if (await this.rechte.istVollzugriff(client, zielBenutzerId)) {
+          if (!(await this.rechte.hatRecht("organigramm", "manage-permissions"))) {
+            throw new ForbiddenException(
+              "Ein Vollzugriff-Account lässt sich nur mit dem Recht „Rechte verwalten“ deaktivieren oder reaktivieren."
+            );
+          }
+        }
+
+        if (vorher !== aktiv) {
+          await client.query("UPDATE benutzer SET aktiv = $1 WHERE id = $2", [aktiv, zielBenutzerId]);
+          await this.audit.protokollieren(client, {
+            modul: "mitarbeitende",
+            aktion: aktiv ? "reaktivieren" : "deaktivieren",
+            objektTyp: "benutzer",
+            objektId: zielBenutzerId,
+            vorher: { aktiv: vorher },
+            nachher: { aktiv },
+          });
+        }
+        return { id: zielBenutzerId, aktiv };
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === RAISE_EXCEPTION) {
+        throw new ConflictException(
+          "Mindestens ein aktiver Account mit Vollzugriff muss bestehen bleiben — dieser hier ist der letzte."
+        );
+      }
+      throw err;
+    }
   }
 }

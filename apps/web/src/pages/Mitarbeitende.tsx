@@ -3,7 +3,7 @@ import type { BenutzerListEintragDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
+import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
 
 export function Mitarbeitende() {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
@@ -16,6 +16,9 @@ export function Mitarbeitende() {
   const [standortZuweisung, setStandortZuweisung] = useState<BenutzerListEintragDto | null>(null);
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
   const [wirdZugewiesen, setWirdZugewiesen] = useState(false);
+  const [statusAenderung, setStatusAenderung] = useState<BenutzerListEintragDto | null>(null);
+  const [statusFehler, setStatusFehler] = useState<string | null>(null);
+  const [statusWirdGespeichert, setStatusWirdGespeichert] = useState(false);
 
   function laden() {
     api.benutzerListe().then(setBenutzer).catch((err) => setFehler(err.message));
@@ -72,6 +75,26 @@ export function Mitarbeitende() {
       setResetLink({ name: b.name, url, laeuftAbAm });
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
+    }
+  }
+
+  // Beide Richtungen ueber denselben Dialog: Deaktivieren sperrt sofort
+  // (auch ein bereits eingeloggtes Token, siehe auth.guard.ts), loescht aber
+  // nichts -- Tagesberichte, Kassenbuch und Audit-Log behalten ihren Bezug.
+  // Wie bei den anderen Aktionen hier entscheidet allein der Server, ob die
+  // Person das darf (403 landet im Dialog).
+  async function statusBestaetigen() {
+    if (!statusAenderung) return;
+    setStatusFehler(null);
+    setStatusWirdGespeichert(true);
+    try {
+      await api.benutzerAktivSetzen(statusAenderung.id, !statusAenderung.aktiv);
+      setStatusAenderung(null);
+      laden();
+    } catch (err) {
+      setStatusFehler(err instanceof Error ? err.message : "Status konnte nicht geändert werden.");
+    } finally {
+      setStatusWirdGespeichert(false);
     }
   }
 
@@ -232,10 +255,49 @@ export function Mitarbeitende() {
                   <IStandort />
                   Standorte zuweisen
                 </button>
+                <button
+                  className="zv-link-btn"
+                  onClick={() => {
+                    setStatusFehler(null);
+                    setStatusAenderung(b);
+                  }}
+                >
+                  {b.aktiv ? <IDeaktivieren /> : <IAktivieren />}
+                  {b.aktiv ? "Deaktivieren" : "Reaktivieren"}
+                </button>
               </span>
             </div>
           ))}
         </div>
+      )}
+
+      {statusAenderung && (
+        <Modal
+          titel={`${statusAenderung.aktiv ? "Deaktivieren" : "Reaktivieren"} — ${statusAenderung.name}`}
+          onClose={() => setStatusAenderung(null)}
+        >
+          {statusFehler && (
+            <div className="zv-hinweis zv-hinweis-fehler">
+              <IFehler />
+              {statusFehler}
+            </div>
+          )}
+          <p className="zv-sub" style={{ marginTop: 0 }}>
+            {statusAenderung.aktiv
+              ? `${statusAenderung.name} kann sich danach nicht mehr anmelden; eine laufende Sitzung endet sofort. Nichts wird gelöscht — Tagesberichte, Kassenbuch und Protokoll behalten ihren Bezug, und die Person lässt sich jederzeit reaktivieren.`
+              : `${statusAenderung.name} kann sich danach wieder anmelden und hat dieselben Rechte wie vor der Deaktivierung.`}
+          </p>
+          <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
+            <button className="zv-btn" type="button" onClick={statusBestaetigen} disabled={statusWirdGespeichert}>
+              {statusAenderung.aktiv ? <IDeaktivieren /> : <IAktivieren />}
+              {statusWirdGespeichert ? "Speichert…" : statusAenderung.aktiv ? "Deaktivieren" : "Reaktivieren"}
+            </button>
+            <button className="zv-btn zv-btn-still" type="button" onClick={() => setStatusAenderung(null)}>
+              <IAbbrechen />
+              Abbrechen
+            </button>
+          </div>
+        </Modal>
       )}
 
       {standortZuweisung && (
