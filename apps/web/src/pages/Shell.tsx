@@ -3,6 +3,7 @@ import type { MandantDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { MarkenIcon } from "../components/MarkenZeichen";
 import {
   IAbmelden,
   IAnwaerter,
@@ -261,9 +262,11 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
       >
         <div className="zv-sidebar-inner">
           <div className="zv-sidebar-brand">
-            <span className="zv-brand-mark">ZA</span>
+            <span className="zv-brand-mark">
+              <MarkenIcon groesse={24} />
+            </span>
             <div className="zv-brand-text">
-              <strong>Zimmerakte</strong>
+              <strong>hecaso</strong>
               {mandant && <span>{mandant.name}</span>}
             </div>
           </div>
@@ -371,7 +374,8 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
       <div className="zv-shell-app">
         <div className="zv-topbar">
           <div className="zv-topbar-marke">
-            <strong>Zimmerakte</strong>
+            <MarkenIcon groesse={20} />
+            <strong>hecaso</strong>
             {mandant && (
               <span>
                 <ITraeger style={{ verticalAlign: "-3px", marginRight: 4 }} />

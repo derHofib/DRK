@@ -283,6 +283,22 @@
      bleibt. */
   --zv-font-body: "Source Sans 3 Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --zv-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* Nur fuer die hecaso-Wortmarke (MarkenZeichen.tsx) -- bewusst nicht
+     --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
+     Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
+  --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /*
+   * Feste hecaso-Markenfarben (Haus-Umriss + Sonnenbogen in
+   * MarkenZeichen.tsx) -- bewusst NICHT an --zv-accent-h/-c gekoppelt: die
+   * Markenfarbe ist Produktidentitaet und bleibt unabhaengig von der je
+   * Mandant einstellbaren Akzentfarbe. Passt sich nur dem Hell/Dunkel-Thema
+   * an, ueber dieselbe light-dark()-Mechanik wie der Rest des Systems.
+   * Werte aus der Markenvorgabe: Tannengruen/Nebel (Haus), Koralle/Koralle
+   * hell (Sonne) -- siehe README, "hecaso-Markenzeichen".
+   */
+  --zv-marke-haus: light-dark(#2d6a4f, #f3f6f0);
+  --zv-marke-sonne: light-dark(#e07a5f, #f6a58b);
 
   --zv-text-xs: 11.5px;
   --zv-text-s: 12.5px;

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { api, setToken } from "../api/client";
+import { MarkenZeichen } from "../components/MarkenZeichen";
 import {
   IAnmelden,
   IBestaetigen,
@@ -68,7 +69,9 @@ export function Login({
     return (
       <div className="zv-shell">
         <form className="zv-card" onSubmit={submitCode}>
-          <h1>Zimmerakte</h1>
+          <h1>
+            <MarkenZeichen iconGroesse={26} />
+          </h1>
           <p className="zv-sub">Zwei-Faktor-Bestätigung</p>
 
           {fehler && (
@@ -116,7 +119,9 @@ export function Login({
   return (
     <div className="zv-shell">
       <form className="zv-card" onSubmit={submitPasswort}>
-        <h1>Zimmerakte</h1>
+        <h1>
+          <MarkenZeichen iconGroesse={26} />
+        </h1>
         <p className="zv-sub">Anmeldung</p>
 
         {fehler ? (

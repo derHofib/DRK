@@ -209,17 +209,9 @@
 
 .zv-brand-mark {
   flex: none;
-  height: 34px;
-  padding: 0 var(--zv-space-2);
-  border-radius: var(--zv-radius-s);
-  background: var(--zv-accent);
-  color: var(--zv-accent-contrast);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: var(--zv-weight-semibold);
-  font-size: var(--zv-text-s);
-  letter-spacing: 0.02em;
 }
 
 .zv-brand-text {
@@ -229,10 +221,15 @@
   min-width: 0;
 }
 
+/* hecaso-Schriftzug: eigene Markenschrift/-farbe, siehe tokens.css
+   --zv-font-marke/--zv-marke-haus -- bewusst nicht --zv-weight-semibold
+   (Source Sans 3), Figtree hat ein eigenes Gewicht dafuer. */
 .zv-brand-text strong {
+  font-family: var(--zv-font-marke);
   font-size: var(--zv-text-l);
-  font-weight: var(--zv-weight-semibold);
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--zv-marke-haus);
 }
 
 .zv-brand-text span {
@@ -849,9 +846,11 @@
 }
 
 .zv-topbar strong {
+  font-family: var(--zv-font-marke);
   font-size: var(--zv-text-l);
-  font-weight: var(--zv-weight-semibold);
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--zv-marke-haus);
 }
 
 .zv-topbar span {

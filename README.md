@@ -2353,6 +2353,54 @@ angelegt, erscheint in der Liste mit „Keine Position" statt automatischer
 Rechte; Zimmer/Einstellungen/Kassenbuch/Standorte geladen ohne
 Konsolenfehler, Branding-Abschnitt in Einstellungen durchgängig sichtbar.
 
+### Nachtrag: hecaso-Markenzeichen
+
+Die Anwendung trägt ab jetzt die feste Produktmarke „hecaso" statt des
+bisherigen Arbeitstitels „Zimmerakte" -- Browser-Tab-Titel, Favicon,
+PWA-Manifest, Login-/Passwort-Reset-Seite, Sidebar- und Topbar-Logo. Zwei
+bewusste Abgrenzungen zum Rest der Anwendung:
+
+- **Nicht betroffen: die je Mandant einstellbare Akzentfarbe**
+  (`--zv-accent-h`/`-c`, OKLCH, siehe `theme/`). Die hecaso-Markenfarben
+  (Tannengrün `#2D6A4F`, Nebel `#F3F6F0`, Koralle `#E07A5F`/`#F6A58B` hell)
+  sind fest in `tokens.css` als `--zv-marke-haus`/`--zv-marke-sonne`
+  hinterlegt -- Produktidentität, unabhängig vom Trägerakzent. Nur das
+  Hell/Dunkel-Thema (`light-dark()`, dieselbe Mechanik wie der Rest des
+  Systems) wirkt noch darauf. Das Anmelde-Formular in den Screenshots zeigt
+  weiterhin den DRK-roten Standardakzent (`#e3000f`) -- unverändert korrekt,
+  weil dieser Mandant seine Akzentfarbe nicht selbst gesetzt hat.
+- **Nicht betroffen: die Arbeitsschrift der Anwendung.** Figtree
+  (`@fontsource-variable/figtree`, selbst ausgeliefert -- siehe
+  schrift.css-Kommentar zum LG-München-Google-Fonts-Urteil, dasselbe gilt
+  hier) erscheint ausschließlich in der hecaso-Wortmarke
+  (`components/MarkenZeichen.tsx`, neue CSS-Variable `--zv-font-marke`).
+  Tabellen, Formulare und Fließtext bleiben bei Source Sans 3 + IBM Plex
+  Mono. Beide Entscheidungen explizit vom Auftraggeber bestätigt (Rückfrage
+  vor der Umsetzung), um nicht versehentlich das token-basierte
+  Mandanten-Designsystem (CLAUDE.md Regel 7) mit der Produktmarke zu
+  vermischen.
+
+Das Markenzeichen (Haus-Umriss + Koralle-Sonnenbogen) ist eine einzige
+React-Komponente (`MarkenIcon`/`MarkenZeichen`) mit den unveränderten
+SVG-Pfaddaten aus der Markenvorgabe -- kein Rasterbild im Code. Die
+PNG/SVG-Dateien in `public/` (`favicon.svg`, `favicon-16/32.png`,
+`apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png`) sind
+daraus mit Playwright/Chromium exakt nach Vorgabe gerendert: App-Icon/
+PWA-Manifest-Icons als volle Kantenfläche ohne eigene Rundung (die
+übernehmen iOS/Android selbst über ihre Maske), Favicons mit eigener
+Rundung und dickerem Strich (13 statt 9 px), wie in der Vorgabe für
+Größen ≤128 px vorgesehen.
+
+Geprüft: `pnpm build` sauber (die Figtree-woff2-Datei erscheint im
+PWA-Precache neben Source Sans 3/IBM Plex Mono). Live-Browser-Check
+(Playwright) gegen echten Login (Hell- und Dunkel-Theme) und eine echte
+eingeloggte Sitzung: `document.title`/`<h1>`-Text ist „hecaso", die
+Wortmarke lädt nachweislich Figtree 600 in der jeweils themagerechten
+Markenfarbe, alle vier Favicon-/Touch-Icon-Links lösen auf die neuen
+Dateien auf, Sidebar (Desktop) und Topbar (Mobil, 420 px) zeigen Icon +
+Schriftzug ohne Konsolenfehler. API-Suite danach erneut vollständig grün
+(dieser Nachtrag ändert ausschließlich `apps/web/`).
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

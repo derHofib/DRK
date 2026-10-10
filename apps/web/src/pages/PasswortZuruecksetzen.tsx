@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { api } from "../api/client";
 import { IBestaetigen, IErfolg, IFehler, ISichtbar, IVerborgen } from "../components/icons";
+import { MarkenZeichen } from "../components/MarkenZeichen";
 
 /**
  * Zweite Haelfte des "Leitung stoesst Reset an, sieht aber nur einen
@@ -49,7 +50,9 @@ export function PasswortZuruecksetzen({ token }: { token: string }) {
     return (
       <div className="zv-shell">
         <div className="zv-card">
-          <h1>Zimmerakte</h1>
+          <h1>
+            <MarkenZeichen iconGroesse={26} />
+          </h1>
           <p className="zv-sub">Neues Passwort gesetzt</p>
           <div className="zv-hinweis zv-hinweis-erfolg">
             <IErfolg />
@@ -66,7 +69,9 @@ export function PasswortZuruecksetzen({ token }: { token: string }) {
   return (
     <div className="zv-shell">
       <form className="zv-card" onSubmit={submit}>
-        <h1>Zimmerakte</h1>
+        <h1>
+          <MarkenZeichen iconGroesse={26} />
+        </h1>
         <p className="zv-sub">Neues Passwort festlegen</p>
 
         {fehler && (

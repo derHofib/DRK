@@ -23,19 +23,20 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       },
       manifest: {
-        name: "Zimmerakte",
-        short_name: "Zimmerakte",
+        name: "hecaso",
+        short_name: "hecaso",
         description: "Verwaltung für Betreutes Wohnen",
         lang: "de",
-        // Standard-Markenfarbe (Palette "DRK Rot", siehe PASTELL_PALETTEN in
-        // packages/shared). Diese beiden Werte sind zwangslaeufig
-        // BAUZEITLICH und damit NICHT mandantenindividuell: das Manifest
-        // wird einmal gebaut und von allen Traegern geteilt. Der
-        // Startbildschirm und der Splash zeigen deshalb fuer alle dieselbe
-        // Farbe -- eingefaerbt ist erst die laufende Anwendung. Als bewusste
+        // Feste hecaso-Markenfarben (Tannengruen/Nebel, siehe
+        // --zv-marke-haus/-sonne in tokens.css). Diese beiden Werte sind
+        // zwangslaeufig BAUZEITLICH und damit NICHT mandantenindividuell:
+        // das Manifest wird einmal gebaut und von allen Traegern geteilt.
+        // Der Startbildschirm und der Splash zeigen deshalb fuer alle
+        // dieselbe Farbe -- eingefaerbt ist erst die laufende Anwendung
+        // (ueber die je Mandant einstellbare Akzentfarbe). Als bewusste
         // Grenze in der README vermerkt.
-        theme_color: "#e3000f",
-        background_color: "#fbfbfc",
+        theme_color: "#2D6A4F",
+        background_color: "#F3F6F0",
         display: "standalone",
         start_url: "/",
         icons: [
