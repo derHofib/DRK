@@ -28,6 +28,7 @@ import {
 } from "../navigation";
 import { Dashboard } from "./Dashboard";
 import { Zimmer } from "./Zimmer";
+import { StandortUebersicht } from "./StandortUebersicht";
 import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
@@ -66,6 +67,7 @@ const KLIENTEN_MOBIL_PANEL: { ansicht: KlientenAnsicht; label: string; icon: typ
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
 const BREITE_REITER = new Set<Tab>([
   "dashboard",
+  "standorte",
   "zimmer",
   "kassenbuch",
   "klienten",
@@ -569,6 +571,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
 
         <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
           {tab === "dashboard" && <Dashboard />}
+          {tab === "standorte" && <StandortUebersicht />}
           {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
           {tab === "kassenbuch" && <Kassenbuch />}

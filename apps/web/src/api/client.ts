@@ -28,6 +28,7 @@ import type {
   RechtRegistryEintragDto,
   SimulationDto,
   StandortDto,
+  StandortUebersichtDto,
   TagDto,
   TagesberichtDto,
   TotpEinrichtenResponse,
@@ -204,6 +205,7 @@ export const api = {
     request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),
 
   standorteListe: () => request<StandortDto[]>("/standorte"),
+  standortUebersicht: (id: string) => request<StandortUebersichtDto>(`/standorte/${id}/uebersicht`),
   standortAnlegen: (payload: { name: string; adresse: string }) =>
     request<StandortDto>("/standorte", { method: "POST", body: JSON.stringify(payload) }),
   standortAktualisieren: (id: string, payload: { name?: string; adresse?: string; aktiv?: boolean }) =>

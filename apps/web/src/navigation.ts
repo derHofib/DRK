@@ -12,6 +12,7 @@ import {
   IKlienten,
   IMitarbeitende,
   IOrganigramm,
+  IStandort,
   ITagesberichte,
   IVertretung,
   IZimmer,
@@ -21,6 +22,7 @@ import {
 export type HauptReiter =
   | "dashboard"
   | "mitarbeitende"
+  | "standorte"
   | "zimmer"
   | "klienten"
   | "kassenbuch"
@@ -80,6 +82,7 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
+  { wert: "standorte", label: "Standorte", icon: IStandort },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },

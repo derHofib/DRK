@@ -131,6 +131,46 @@ export interface StandortDto {
   aktiv: boolean;
 }
 
+export interface StandortUebersichtDto {
+  standort: StandortDto;
+  zimmer: {
+    anzahl: number;
+    plaetzeGesamt: number;
+    plaetzeBelegt: number;
+    plaetzeFrei: number;
+    liste: {
+      id: string;
+      nummer: string;
+      etage: string;
+      kapazitaet: number;
+      bewohner: { klientId: string; name: string }[];
+    }[];
+  };
+  klienten: {
+    id: string;
+    name: string;
+    aktenzeichen: string | null;
+    amt: string | null;
+    zimmerNummer: string;
+    einzug: string;
+    hzlWoechentlich: boolean;
+  }[];
+  kassenbuch: {
+    hausSaldoCent: number;
+    klientenSaldoCent: number;
+    hzl: { bezahlt: number; gesamt: number; isoJahr: number; isoWoche: number };
+    offeneStornoantraege: number;
+    letzteBuchungen: {
+      id: string;
+      datum: string;
+      betragCent: number;
+      verwendungszweck: string;
+      typBezeichnung: string;
+      klientName: string | null;
+    }[];
+  };
+}
+
 export interface ZimmerBewohnerDto {
   id: string;
   name: string;

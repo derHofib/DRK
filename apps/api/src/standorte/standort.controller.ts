@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { StandortService } from "./standort.service";
@@ -22,6 +22,11 @@ export class StandortController {
   @Get()
   async list() {
     return this.standorte.findeAlle();
+  }
+
+  @Get(":id/uebersicht")
+  async uebersicht(@Param("id", new ParseUUIDPipe()) id: string) {
+    return this.standorte.uebersicht(id);
   }
 
   @Post()
