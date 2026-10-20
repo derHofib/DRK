@@ -63,7 +63,16 @@ const STATUS_ICON = {
  * hier nie berechnet, nur anzeigt. Die Ableitung passiert serverseitig
  * (siehe zimmer.service.ts), das Frontend ist hier absichtlich dumm.
  */
-export function Zimmer() {
+/**
+ * Mit "standortId" arbeitet die Seite eingebettet im Standort-Bereich
+ * (StandortRaeume.tsx, Ansicht "Verwalten"): dieselben Funktionen wie im
+ * Hauptmenue "Zimmer" -- anlegen, bearbeiten, deaktivieren, einziehen,
+ * Auszug, Warteliste, Kapazitaet, Verlauf, Aufgaben --, aber nur fuer diesen
+ * einen Standort, ohne Standortwahl und ohne eigene Ueberschrift. Bewusst
+ * KEINE zweite Kopie der Logik: zwei Implementierungen derselben
+ * Belegungsregeln wuerden auseinanderlaufen.
+ */
+export function Zimmer({ standortId }: { standortId?: string } = {}) {
   const aktuelleBenutzerId = tokenBenutzerId();
 
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
@@ -74,7 +83,7 @@ export function Zimmer() {
   const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
 
   const [formularOffen, setFormularOffen] = useState(false);
-  const [standortAuswahl, setStandortAuswahl] = useState<string>(NEUER_STANDORT);
+  const [standortAuswahl, setStandortAuswahl] = useState<string>(standortId ?? NEUER_STANDORT);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
@@ -132,7 +141,7 @@ export function Zimmer() {
         // nicht erst auf (siehe unten), darf also auch nicht vorausgewaehlt
         // werden.
         const ersterAktiver = liste.find((s) => s.aktiv);
-        if (ersterAktiver) setStandortAuswahl(ersterAktiver.id);
+        if (ersterAktiver && !standortId) setStandortAuswahl(ersterAktiver.id);
       })
       .catch((err) => setFehler(err.message));
   }
@@ -160,14 +169,14 @@ export function Zimmer() {
     setFormFehler(null);
     setWirdGespeichert(true);
     try {
-      let standortId = standortAuswahl;
-      if (standortId === NEUER_STANDORT) {
+      let zielStandortId = standortAuswahl;
+      if (zielStandortId === NEUER_STANDORT) {
         const name = String(form.get("standortName") ?? "").trim();
         const adresse = String(form.get("standortAdresse") ?? "").trim();
         const neuerStandort = await api.standortAnlegen({ name, adresse });
-        standortId = neuerStandort.id;
+        zielStandortId = neuerStandort.id;
       }
-      await api.zimmerAnlegen({ standortId, nummer, etage: etage || undefined, kapazitaet });
+      await api.zimmerAnlegen({ standortId: zielStandortId, nummer, etage: etage || undefined, kapazitaet });
       setFormularOffen(false);
       ladeZimmer();
       ladeStandorte();
@@ -424,10 +433,12 @@ export function Zimmer() {
     }
   }
 
-  const gruppen = zimmer.reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
-    (acc[z.standortName] ??= []).push(z);
-    return acc;
-  }, {});
+  const gruppen = zimmer
+    .filter((z) => !standortId || z.standortId === standortId)
+    .reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
+      (acc[z.standortName] ??= []).push(z);
+      return acc;
+    }, {});
 
   /**
    * Etage ist Freitext (bewusste Entscheidung, da Gebaeude Stockwerke nicht
@@ -475,7 +486,7 @@ export function Zimmer() {
       )}
 
       <div className="zv-seiten-kopf">
-        <h2>Zimmer</h2>
+        {standortId ? <span /> : <h2>Zimmer</h2>}
         <button className="zv-btn" onClick={formularOeffnen}>
           <INeu />
           Neues Zimmer
@@ -484,12 +495,14 @@ export function Zimmer() {
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
         <div key={standortName} style={{ marginBottom: 28 }}>
-          <div className="zv-seiten-kopf">
-            <h2>
-              <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
-              {standortName}
-            </h2>
-          </div>
+          {!standortId && (
+            <div className="zv-seiten-kopf">
+              <h2>
+                <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
+                {standortName}
+              </h2>
+            </div>
+          )}
           {nachEtageGruppieren(raum).map(([etage, raumInEtage]) => (
             <div key={etage} style={{ marginBottom: 20 }}>
               <h3 className="zv-etagen-kopf">{etage}</h3>
@@ -813,6 +826,8 @@ export function Zimmer() {
               </div>
             )}
 
+            {!standortId && (
+              <>
             <div className="zv-field">
               <label htmlFor="zimmer-standort">Standort</label>
               <select
@@ -842,6 +857,8 @@ export function Zimmer() {
                   <input id="zimmer-standort-adresse" name="standortAdresse" placeholder="Straße, PLZ Ort" required />
                 </div>
               </div>
+            )}
+              </>
             )}
 
             <div className="zv-field-row">

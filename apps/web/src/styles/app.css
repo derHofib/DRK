@@ -2283,3 +2283,59 @@ button.zv-raumknoten:focus-visible {
   width: 11px;
   height: 11px;
 }
+
+/* Detail-Seitenpanel eines Zimmers/Raums (StandortRaeume.tsx) */
+.zv-detail-abschnitt {
+  margin-top: var(--zv-space-5);
+}
+
+.zv-detail-abschnitt h3 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-l);
+}
+
+.zv-detail-kennzahlen {
+  display: flex;
+  gap: var(--zv-space-5);
+}
+
+.zv-detail-kennzahlen > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-detail-label {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-detail-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-detail-liste li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-grundriss-karte-klickbar {
+  cursor: pointer;
+}
+
+.zv-grundriss-karte-klickbar:hover,
+.zv-grundriss-karte-klickbar:focus-visible {
+  border-width: 2px;
+  outline: none;
+  box-shadow: var(--zv-shadow-2);
+}

@@ -16,7 +16,12 @@ export interface RaumplanZimmer {
   id: string;
   nummer: string;
   kapazitaet: number;
-  bewohner: { klientId: string; name: string }[];
+  bewohner: { klientId: string; name: string; einzug: string; auszug: string | null }[];
+  // Noch nicht begonnene Belegungen (vorausschauende Planung).
+  geplanteEinzuege: { klientId: string; name: string; einzug: string }[];
+  warteliste: { name: string; eingetragenAm: string }[];
+  offeneAufgaben: { id: string; titel: string; prioritaet: "niedrig" | "normal" | "hoch"; faelligAm: string | null }[];
+  kapazitaetsantrag: { alteKapazitaet: number; neueKapazitaet: number; beantragtVonName: string | null } | null;
   position: PlanPosition | null;
 }
 
@@ -90,12 +95,48 @@ export class StandortPlanService {
         [standortId]
       );
       const { rows: bewohnerRows } = await client.query(
-        `SELECT b.zimmer_id, k.id AS klient_id, k.vorname, k.nachname
+        `SELECT b.zimmer_id, b.einzug, b.auszug, k.id AS klient_id, k.vorname, k.nachname
          FROM belegung b
          JOIN zimmer z ON z.id = b.zimmer_id
          JOIN klient k ON k.id = b.klient_id
          WHERE z.standort_id = $1 AND b.einzug <= CURRENT_DATE AND (b.auszug IS NULL OR b.auszug > CURRENT_DATE)
          ORDER BY b.einzug`,
+        [standortId]
+      );
+      const { rows: geplantRows } = await client.query(
+        `SELECT b.zimmer_id, b.einzug, k.id AS klient_id, k.vorname, k.nachname
+         FROM belegung b
+         JOIN zimmer z ON z.id = b.zimmer_id
+         JOIN klient k ON k.id = b.klient_id
+         WHERE z.standort_id = $1 AND b.einzug > CURRENT_DATE
+         ORDER BY b.einzug`,
+        [standortId]
+      );
+      const { rows: wartelisteRows } = await client.query(
+        `SELECT w.zimmer_id, w.eingetragen_am, k.vorname, k.nachname
+         FROM zimmer_warteliste w
+         JOIN zimmer z ON z.id = w.zimmer_id
+         JOIN klient k ON k.id = w.klient_id
+         WHERE z.standort_id = $1
+         ORDER BY w.eingetragen_am`,
+        [standortId]
+      );
+      // Zimmer-Aufgaben sind standortgebunden sichtbar (siehe Dashboard);
+      // persoenliche Aufgaben ohne Zimmer tauchen hier nie auf.
+      const { rows: aufgabeRows } = await client.query(
+        `SELECT a.id, a.zimmer_id, a.titel, a.prioritaet, a.faellig_am
+         FROM aufgabe a
+         JOIN zimmer z ON z.id = a.zimmer_id
+         WHERE z.standort_id = $1 AND a.erledigt_am IS NULL
+         ORDER BY a.faellig_am ASC NULLS LAST, a.titel`,
+        [standortId]
+      );
+      const { rows: antragRows } = await client.query(
+        `SELECT ka.zimmer_id, ka.alte_kapazitaet, ka.neue_kapazitaet, u.name AS beantragt_von_name
+         FROM zimmer_kapazitaetsantrag ka
+         JOIN zimmer z ON z.id = ka.zimmer_id
+         LEFT JOIN benutzer u ON u.id = ka.beantragt_von
+         WHERE z.standort_id = $1 AND ka.status = 'beantragt'`,
         [standortId]
       );
       const { rows: positionRows } = await client.query(
@@ -116,12 +157,46 @@ export class StandortPlanService {
         if (p.zimmer_id) positionJeZimmer.set(p.zimmer_id, eintrag);
         if (p.raum_id) positionJeRaum.set(p.raum_id, eintrag);
       }
-      const bewohnerJeZimmer = new Map<string, { klientId: string; name: string }[]>();
-      for (const r of bewohnerRows) {
-        const liste = bewohnerJeZimmer.get(r.zimmer_id) ?? [];
-        liste.push({ klientId: r.klient_id, name: `${r.vorname} ${r.nachname}` });
-        bewohnerJeZimmer.set(r.zimmer_id, liste);
-      }
+      const gruppiere = <T,>(rows: { zimmer_id: string }[], abbilden: (r: any) => T) => {
+        const map = new Map<string, T[]>();
+        for (const r of rows) {
+          const liste = map.get(r.zimmer_id) ?? [];
+          liste.push(abbilden(r));
+          map.set(r.zimmer_id, liste);
+        }
+        return map;
+      };
+      const bewohnerJeZimmer = gruppiere(bewohnerRows, (r) => ({
+        klientId: r.klient_id as string,
+        name: `${r.vorname} ${r.nachname}`,
+        einzug: r.einzug as string,
+        auszug: (r.auszug as string | null) ?? null,
+      }));
+      const geplantJeZimmer = gruppiere(geplantRows, (r) => ({
+        klientId: r.klient_id as string,
+        name: `${r.vorname} ${r.nachname}`,
+        einzug: r.einzug as string,
+      }));
+      const wartelisteJeZimmer = gruppiere(wartelisteRows, (r) => ({
+        name: `${r.vorname} ${r.nachname}`,
+        eingetragenAm: new Date(r.eingetragen_am).toISOString().slice(0, 10),
+      }));
+      const aufgabenJeZimmer = gruppiere(aufgabeRows, (r) => ({
+        id: r.id as string,
+        titel: r.titel as string,
+        prioritaet: r.prioritaet as "niedrig" | "normal" | "hoch",
+        faelligAm: (r.faellig_am as string | null) ?? null,
+      }));
+      const antragJeZimmer = new Map(
+        antragRows.map((r) => [
+          r.zimmer_id as string,
+          {
+            alteKapazitaet: Number(r.alte_kapazitaet),
+            neueKapazitaet: Number(r.neue_kapazitaet),
+            beantragtVonName: (r.beantragt_von_name as string | null) ?? null,
+          },
+        ])
+      );
 
       const etagen = new Map<string, RaumplanEtage>();
       const etageHolen = (name: string) => {
@@ -139,6 +214,10 @@ export class StandortPlanService {
           nummer: z.nummer,
           kapazitaet: Number(z.kapazitaet),
           bewohner: bewohnerJeZimmer.get(z.id) ?? [],
+          geplanteEinzuege: geplantJeZimmer.get(z.id) ?? [],
+          warteliste: wartelisteJeZimmer.get(z.id) ?? [],
+          offeneAufgaben: aufgabenJeZimmer.get(z.id) ?? [],
+          kapazitaetsantrag: antragJeZimmer.get(z.id) ?? null,
           position: pos && pos.etage === z.etage ? pos.position : null,
         });
       }

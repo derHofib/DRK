@@ -57,6 +57,31 @@ describe("Raumplan", () => {
     zimmerOg = await ins("INSERT INTO zimmer (mandant_id, standort_id, nummer, etage) VALUES ($1, $2, '21', '1. OG') RETURNING id", [mandantId, s1]);
     zimmerS2 = await ins("INSERT INTO zimmer (mandant_id, standort_id, nummer, etage) VALUES ($1, $2, '9', 'EG') RETURNING id", [mandantId, s2]);
 
+    // Details fuer das Seitenpanel: Bewohner, geplanter Einzug, Warteliste,
+    // offene/erledigte Aufgabe, offener Kapazitaetsantrag -- alles an Zimmer "1" (EG, Standort 1).
+    const klientNeu = async (vor: string) =>
+      ins(
+        `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt)
+         VALUES ($1, $2, 'Test', '1990-01-01', $3, 'Amt') RETURNING id`,
+        [mandantId, vor, `AZ-${vor}-${suffix}`]
+      );
+    const kBewohner = await klientNeu("Bewohner");
+    const kGeplant = await klientNeu("Geplant");
+    const kWarte = await klientNeu("Wartend");
+    await admin.query("INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug, auszug) VALUES ($1, $2, $3, '2024-03-01', CURRENT_DATE + 20)", [mandantId, zimmerEg, kBewohner]);
+    await admin.query("INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug) VALUES ($1, $2, $3, CURRENT_DATE + 30)", [mandantId, zimmerEg, kGeplant]);
+    await admin.query("INSERT INTO zimmer_warteliste (mandant_id, zimmer_id, klient_id) VALUES ($1, $2, $3)", [mandantId, zimmerEg, kWarte]);
+    await admin.query("INSERT INTO aufgabe (mandant_id, titel, prioritaet, zimmer_id, erstellt_von) VALUES ($1, 'Fenster pruefen', 'hoch', $2, $3)", [mandantId, zimmerEg, elId]);
+    await admin.query(
+      "INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von, erledigt_am, erledigt_von) VALUES ($1, 'Schon erledigt', $2, $3, now(), $3)",
+      [mandantId, zimmerEg, elId]
+    );
+    await admin.query("INSERT INTO aufgabe (mandant_id, titel, zimmer_id, erstellt_von) VALUES ($1, 'Anderer Standort', $2, $3)", [mandantId, zimmerS2, elId]);
+    await admin.query(
+      "INSERT INTO zimmer_kapazitaetsantrag (mandant_id, zimmer_id, alte_kapazitaet, neue_kapazitaet, beantragt_von) VALUES ($1, $2, 1, 2, $3)",
+      [mandantId, zimmerEg, elId]
+    );
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -94,6 +119,19 @@ describe("Raumplan", () => {
     const betreuer = await als(tokenBetreuer).get(`/standorte/${s1}/raumplan`);
     expect(betreuer.status).toBe(200);
     expect(betreuer.body.darfBearbeiten).toBe(false);
+  });
+
+  it("liefert die Details fuers Seitenpanel nur fuer den eigenen Standort", async () => {
+    const res = await als(tokenELS1).get(`/standorte/${s1}/raumplan`);
+    const z = res.body.etagen.find((e: { etage: string }) => e.etage === "EG").zimmer.find((x: { id: string }) => x.id === zimmerEg);
+    expect(z.bewohner).toEqual([expect.objectContaining({ name: "Bewohner Test", einzug: "2024-03-01", auszug: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })]);
+    expect(z.geplanteEinzuege.map((g: { name: string }) => g.name)).toEqual(["Geplant Test"]);
+    expect(z.warteliste.map((w: { name: string }) => w.name)).toEqual(["Wartend Test"]);
+    // Nur die OFFENE Aufgabe dieses Zimmers -- nicht die erledigte, nicht die des anderen Standorts.
+    expect(z.offeneAufgaben.map((a: { titel: string }) => a.titel)).toEqual(["Fenster pruefen"]);
+    expect(z.offeneAufgaben[0].prioritaet).toBe("hoch");
+    expect(z.kapazitaetsantrag).toMatchObject({ alteKapazitaet: 1, neueKapazitaet: 2, beantragtVonName: "EL" });
+    expect(JSON.stringify(res.body)).not.toContain("Anderer Standort");
   });
 
   it("Gemeinschaftsraum: anlegen klappt fuer Leitung, nicht fuer Betreuer", async () => {

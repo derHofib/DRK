@@ -183,7 +183,11 @@ export interface RaumplanEtageDto {
     id: string;
     nummer: string;
     kapazitaet: number;
-    bewohner: { klientId: string; name: string }[];
+    bewohner: { klientId: string; name: string; einzug: string; auszug: string | null }[];
+    geplanteEinzuege: { klientId: string; name: string; einzug: string }[];
+    warteliste: { name: string; eingetragenAm: string }[];
+    offeneAufgaben: { id: string; titel: string; prioritaet: "niedrig" | "normal" | "hoch"; faelligAm: string | null }[];
+    kapazitaetsantrag: { alteKapazitaet: number; neueKapazitaet: number; beantragtVonName: string | null } | null;
     position: RaumplanPositionDto | null;
   }[];
   raeume: { id: string; name: string; position: RaumplanPositionDto | null }[];
