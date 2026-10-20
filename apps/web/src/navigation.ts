@@ -25,10 +25,39 @@ export type HauptReiter =
   | "klienten"
   | "kassenbuch"
   | "tagesberichte"
-  | "aufgaben"
-  | "vertretung"
-  | "organigramm"
   | "einstellungen";
+
+/**
+ * Seiten, die nicht als eigener Hauptpunkt in der Sidebar stehen, sondern
+ * als Unterpunkt unter einem Hauptpunkt (siehe UNTERPUNKTE) -- so wie
+ * Anwaerter/Archiv unter "Klienten". Eigene Tab-Werte, aber nicht Teil der
+ * frei sortierbaren Hauptreihenfolge.
+ */
+export type UnterReiter = "aufgaben" | "vertretung" | "organigramm";
+
+export type Tab = HauptReiter | UnterReiter;
+
+export interface UnterpunktEintrag {
+  wert: UnterReiter;
+  label: string;
+  icon: IconKomponente;
+}
+
+export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
+  dashboard: [{ wert: "aufgaben", label: "Aufgaben", icon: IAufgaben }],
+  mitarbeitende: [
+    { wert: "vertretung", label: "Vertretung", icon: IVertretung },
+    { wert: "organigramm", label: "Organigramm", icon: IOrganigramm },
+  ],
+};
+
+/** Zu welchem Hauptpunkt eine Seite in der Navigation gehoert (Unterpunkt -> Elternpunkt). */
+export function hauptreiterVon(tab: Tab): HauptReiter {
+  for (const [haupt, unter] of Object.entries(UNTERPUNKTE)) {
+    if (unter?.some((u) => u.wert === tab)) return haupt as HauptReiter;
+  }
+  return tab as HauptReiter;
+}
 
 export type KlientenAnsicht = "aktiv" | "archiv" | "anwaerter";
 
@@ -51,11 +80,8 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
-  { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
   { wert: "zimmer", label: "Zimmer", icon: IZimmer },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
-  { wert: "vertretung", label: "Vertretung", icon: IVertretung },
-  { wert: "organigramm", label: "Organigramm", icon: IOrganigramm },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
 

@@ -2465,6 +2465,29 @@ Letzter-Vollzugriff-Test wird rot; jeweils wiederhergestellt. Live-Browser-Check
 laufende Sitzung landet nach Reload auf der Anmeldung, Reaktivieren → „Aktiv",
 Selbst-Deaktivierung zeigt die Server-Meldung im Dialog.
 
+### Nachtrag: Navigation -- Unterpunkte unter Dashboard und Mitarbeitende
+
+„Aufgaben" steht jetzt als Unterpunkt unter „Dashboard", „Vertretung" und
+„Organigramm" als Unterpunkte unter „Mitarbeitende" -- dasselbe Muster wie
+Anwärter/Archiv unter „Klienten". Die Seiten selbst sind unverändert, nur
+ihr Platz im Menü. Technisch: `UNTERPUNKTE` in `navigation.ts` ist die eine
+Quelle für „welcher Hauptpunkt hat welche Unterpunkte"; die drei Seiten sind
+keine Hauptreiter mehr und damit auch nicht mehr in der frei sortierbaren
+Reihenfolge (Einstellungen → Darstellung). Eine zuvor gespeicherte Reihenfolge
+räumt `ladeMenuReihenfolge()` selbst auf. Sidebar: Auf-/Zuklappen je Gruppe,
+pro Gerät gemerkt (Standard: aufgeklappt). Mobil: ein Tipp auf „Dashboard"
+bzw. „Mitarbeitende" öffnet ein Panel mit dem Hauptpunkt und seinen
+Unterpunkten, wie schon bei „Klienten".
+
+Geprüft: `tsc -b` sauber. Live-Browser-Check (Playwright), Desktop: die
+Hauptpunkte sind Dashboard, Klienten, Tagesberichte, Kassenbuch, Zimmer,
+Mitarbeitende, Einstellungen; Unterpunkte Aufgaben, Anwärter, Archiv,
+Vertretung, Organigramm lassen sich anklicken und werden als aktiv markiert,
+Einklappen bleibt nach Reload erhalten. Mobil (420 px): Dashboard-Panel zeigt
+„Dashboard | Aufgaben", Mitarbeitende-Panel „Mitarbeitende | Vertretung |
+Organigramm", „Mehr" enthält Zimmer/Mitarbeitende/Einstellungen; keine
+Konsolenfehler. Reine Frontend-Änderung, API unverändert.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

@@ -20,8 +20,11 @@ import {
   ladeMenuReihenfolge,
   reiterNachReihenfolge,
   speichereMenuReihenfolge,
+  UNTERPUNKTE,
+  hauptreiterVon,
   type HauptReiter,
   type KlientenAnsicht,
+  type Tab,
 } from "../navigation";
 import { Dashboard } from "./Dashboard";
 import { Zimmer } from "./Zimmer";
@@ -33,8 +36,6 @@ import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
-
-type Tab = HauptReiter;
 
 /** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
 const MOBIL_SICHTBAR_ANZAHL = 4;
@@ -78,6 +79,7 @@ const BREITE_REITER = new Set<Tab>([
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
 const SIDEBAR_HOVER_SPEICHER = "zimmerakte_sidebar_hover_ausklappen";
 const SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER = "zimmerakte_sidebar_klienten_aufgeklappt";
+const sidebarGruppeSpeicher = (haupt: HauptReiter) => `zimmerakte_sidebar_${haupt}_aufgeklappt`;
 
 // Reine Anzeigepraeferenzen dieses Geraets -- wie das Theme (siehe
 // ThemeProvider) gehoert das bewusst nicht in die Datenbank und ist nach
@@ -122,6 +124,13 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [klientenUnterpunkteOffen, setKlientenUnterpunkteOffen] = useState(() =>
     ladeBooleanDefaultAn(SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER)
   );
+  // Auf-/Zuklappzustand der uebrigen Gruppen (Dashboard, Mitarbeitende),
+  // je Gruppe getrennt gemerkt wie bei Klienten.
+  const [gruppeOffen, setGruppeOffen] = useState<Partial<Record<HauptReiter, boolean>>>(() =>
+    Object.fromEntries(
+      (Object.keys(UNTERPUNKTE) as HauptReiter[]).map((h) => [h, ladeBooleanDefaultAn(sidebarGruppeSpeicher(h))])
+    )
+  );
   // Reihenfolge der Hauptmenuepunkte -- frei einstellbar (Einstellungen >
   // Darstellung), siehe navigation.ts.
   const [menuReihenfolge, setMenuReihenfolge] = useState<HauptReiter[]>(() => ladeMenuReihenfolge());
@@ -135,6 +144,9 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
     () => speichereBoolean(SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER, klientenUnterpunkteOffen),
     [klientenUnterpunkteOffen]
   );
+  useEffect(() => {
+    for (const [h, offen] of Object.entries(gruppeOffen)) speichereBoolean(sidebarGruppeSpeicher(h as HauptReiter), !!offen);
+  }, [gruppeOffen]);
   useEffect(() => speichereMenuReihenfolge(menuReihenfolge), [menuReihenfolge]);
 
   // Ueberlagerndes Panel auf dem Handy -- entweder das Sammelmenue ("Mehr")
@@ -143,18 +155,24 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   // gemeinsamer Zustand statt zwei Booleans, damit nie beide gleichzeitig
   // offen sind. Die Sidebar (Desktop) kennt dieses Konzept nicht, sie
   // zeigt immer alle Eintraege direkt.
-  const [offenesPanel, setOffenesPanel] = useState<"mehr" | "klienten" | null>(null);
+  const [offenesPanel, setOffenesPanel] = useState<"mehr" | "klienten" | HauptReiter | null>(null);
   const mehrKnopfRef = useRef<HTMLButtonElement>(null);
   const mehrPanelRef = useRef<HTMLDivElement>(null);
   const klientenKnopfRef = useRef<HTMLButtonElement>(null);
   const klientenPanelRef = useRef<HTMLDivElement>(null);
-  const aktuelleRouteImMehr = REITER_MOBIL_MEHR.some((r) => r.wert === tab);
+  // Gruppen mit Unterpunkten (Dashboard, Mitarbeitende) auf dem Handy: es ist
+  // immer nur ein Panel offen, daher genuegt EIN Panel-Ref; die Knoepfe
+  // brauchen je Gruppe einen eigenen (Fokus zurueck beim Schliessen).
+  const gruppenKnopfRefs = useRef<Partial<Record<HauptReiter, HTMLButtonElement | null>>>({});
+  const gruppenPanelRef = useRef<HTMLDivElement>(null);
+  const aktuelleRouteImMehr = REITER_MOBIL_MEHR.some((r) => r.wert === hauptreiterVon(tab));
 
   function panelSchliessen() {
     const vorheriges = offenesPanel;
     setOffenesPanel(null);
     if (vorheriges === "mehr") mehrKnopfRef.current?.focus();
     if (vorheriges === "klienten") klientenKnopfRef.current?.focus();
+    if (vorheriges && vorheriges !== "mehr" && vorheriges !== "klienten") gruppenKnopfRefs.current[vorheriges]?.focus();
   }
 
   function tabWaehlen(wert: Tab) {
@@ -169,9 +187,9 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
    * navigieren, weil ein einzelner Tastendruck sonst keinen Weg zu
    * Archiv/Anwärter haette.
    */
-  function reiterKlick(wert: Tab) {
-    if (wert === "klienten") {
-      setOffenesPanel((p) => (p === "klienten" ? null : "klienten"));
+  function reiterKlick(wert: HauptReiter) {
+    if (wert === "klienten" || UNTERPUNKTE[wert]) {
+      setOffenesPanel((p) => (p === wert ? null : wert));
     } else {
       tabWaehlen(wert);
     }
@@ -181,8 +199,14 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   // Panel gefangen, solange eins offen ist.
   useEffect(() => {
     if (!offenesPanel) return;
-    const panelRef = offenesPanel === "mehr" ? mehrPanelRef : klientenPanelRef;
-    const knopfRef = offenesPanel === "mehr" ? mehrKnopfRef : klientenKnopfRef;
+    const panelRef =
+      offenesPanel === "mehr" ? mehrPanelRef : offenesPanel === "klienten" ? klientenPanelRef : gruppenPanelRef;
+    const knopfRef =
+      offenesPanel === "mehr"
+        ? mehrKnopfRef
+        : offenesPanel === "klienten"
+          ? klientenKnopfRef
+          : { current: gruppenKnopfRefs.current[offenesPanel] ?? null };
     panelRef.current?.querySelector<HTMLElement>("button")?.focus();
 
     function beiEscape(e: KeyboardEvent) {
@@ -273,6 +297,51 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
 
           <nav className="zv-sidebar-nav">
             {REITER.map(({ wert, label, icon: Icon }) => {
+              const unterpunkte = UNTERPUNKTE[wert];
+              if (unterpunkte) {
+                const offen = gruppeOffen[wert] ?? true;
+                return (
+                  <div key={wert} className="zv-sidebar-gruppe">
+                    <div className="zv-sidebar-gruppe-zeile">
+                      <button
+                        className={tab === wert ? "active" : ""}
+                        onClick={() => tabWaehlen(wert)}
+                        aria-current={tab === wert ? "page" : undefined}
+                        title={label}
+                      >
+                        <Icon />
+                        <span className="zv-sidebar-label">{label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="zv-icon-btn zv-sidebar-gruppe-pfeil"
+                        onClick={() => setGruppeOffen((g) => ({ ...g, [wert]: !offen }))}
+                        aria-expanded={offen}
+                        aria-label={offen ? `Unterpunkte von ${label} einklappen` : `Unterpunkte von ${label} ausklappen`}
+                        title={offen ? "Einklappen" : "Ausklappen"}
+                      >
+                        {offen ? <IZuklappen /> : <IAufklappen />}
+                      </button>
+                    </div>
+                    {offen && (
+                      <div className="zv-sidebar-unterpunkte">
+                        {unterpunkte.map((u) => (
+                          <button
+                            key={u.wert}
+                            className={tab === u.wert ? "active" : ""}
+                            onClick={() => tabWaehlen(u.wert)}
+                            aria-current={tab === u.wert ? "page" : undefined}
+                            title={u.label}
+                          >
+                            <u.icon />
+                            <span className="zv-sidebar-label">{u.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
               if (wert !== "klienten") {
                 return (
                   <button
@@ -403,15 +472,15 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
             {REITER_MOBIL_MEHR.map(({ wert, label, icon: Icon }) => (
               <button
                 key={wert}
-                ref={wert === "klienten" ? klientenKnopfRef : undefined}
+                ref={wert === "klienten" ? klientenKnopfRef : (el) => void (gruppenKnopfRefs.current[wert] = el)}
                 role="menuitem"
-                className={tab === wert ? "active" : ""}
+                className={hauptreiterVon(tab) === wert ? "active" : ""}
                 onClick={() => reiterKlick(wert)}
-                aria-current={tab === wert ? "page" : undefined}
+                aria-current={hauptreiterVon(tab) === wert ? "page" : undefined}
                 // In diesem Zweig ist offenesPanel immer "mehr" (TS narrowt das),
                 // das Klienten-Panel also nie gleichzeitig offen -- daher hier
                 // schlicht false statt eines Vergleichs mit demselben Ergebnis.
-                aria-expanded={wert === "klienten" ? false : undefined}
+                aria-expanded={wert === "klienten" || UNTERPUNKTE[wert] ? false : undefined}
               >
                 <Icon />
                 {label}
@@ -446,15 +515,40 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         )}
 
+        {offenesPanel && offenesPanel !== "mehr" && offenesPanel !== "klienten" && UNTERPUNKTE[offenesPanel] && (
+          <div
+            className="zv-sammelmenue"
+            ref={gruppenPanelRef}
+            role="menu"
+            aria-label={`${REITER.find((r) => r.wert === offenesPanel)?.label ?? ""}: Bereiche`}
+          >
+            {[
+              REITER.find((r) => r.wert === offenesPanel)!,
+              ...UNTERPUNKTE[offenesPanel]!.map((u) => ({ wert: u.wert, label: u.label, icon: u.icon })),
+            ].map(({ wert, label, icon: Icon }) => (
+              <button
+                key={wert}
+                role="menuitem"
+                className={tab === wert ? "active" : ""}
+                onClick={() => tabWaehlen(wert)}
+                aria-current={tab === wert ? "page" : undefined}
+              >
+                <Icon />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="zv-tabbar zv-tabbar-app">
           {REITER_MOBIL_SICHTBAR.map(({ wert, label, icon: Icon }) => (
             <button
               key={wert}
-              ref={wert === "klienten" ? klientenKnopfRef : undefined}
-              className={tab === wert ? "active" : ""}
+              ref={wert === "klienten" ? klientenKnopfRef : (el) => void (gruppenKnopfRefs.current[wert] = el)}
+              className={hauptreiterVon(tab) === wert ? "active" : ""}
               onClick={() => reiterKlick(wert)}
-              aria-current={tab === wert ? "page" : undefined}
-              aria-expanded={wert === "klienten" ? offenesPanel === "klienten" : undefined}
+              aria-current={hauptreiterVon(tab) === wert ? "page" : undefined}
+              aria-expanded={wert === "klienten" || UNTERPUNKTE[wert] ? offenesPanel === wert : undefined}
             >
               <Icon />
               {label}
