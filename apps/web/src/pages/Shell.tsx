@@ -29,7 +29,6 @@ import {
   type UnterpunktEintrag,
 } from "../navigation";
 import { Dashboard } from "./Dashboard";
-import { Zimmer } from "./Zimmer";
 import { StandortUebersicht } from "./StandortUebersicht";
 import { StandortRaeume } from "./StandortRaeume";
 import { Klienten } from "./Klienten";
@@ -71,7 +70,6 @@ const KLIENTEN_MOBIL_PANEL: { ansicht: KlientenAnsicht; label: string; icon: typ
 const BREITE_REITER = new Set<Tab>([
   "dashboard",
   "standorte",
-  "zimmer",
   "kassenbuch",
   "hzl",
   "klienten",
@@ -598,7 +596,6 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "dashboard" && <Dashboard />}
           {tab === "standorte" && <StandortUebersicht />}
           {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
-          {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
           {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" />}

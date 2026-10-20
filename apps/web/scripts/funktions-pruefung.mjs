@@ -283,7 +283,7 @@ console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
 
     // Zimmer/Mitarbeitende/Einstellungen liegen seit Phase 8 im
     // Sammelmenue -- reiterWaehlen() oeffnet es bei Bedarf automatisch.
-    for (const reiter of ["Zimmer", "Klienten", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
+    for (const reiter of ["Standorte", "Klienten", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
       await reiterWaehlen(page, reiter);
       await page.waitForTimeout(250);
       const ueberlauf = await page.evaluate(() =>
