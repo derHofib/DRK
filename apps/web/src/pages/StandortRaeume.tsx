@@ -476,7 +476,7 @@ function Raumgrundriss({
                 draggable={false}
                 onError={() =>
                   onFehler(
-                    "Das Bild kann vom Browser nicht angezeigt werden (vermutlich zu viele Pixel). Bitte „Grundriss ersetzen“ mit einer kleineren Datei."
+                    "Das Bild kann vom Browser nicht angezeigt werden (vermutlich zu viele Pixel). Bitte „Grundriss ersetzen“ und die Datei erneut hochladen."
                   )
                 }
               />

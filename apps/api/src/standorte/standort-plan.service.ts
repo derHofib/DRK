@@ -5,6 +5,7 @@ import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { standortIstErlaubt } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { verkleinereBild } from "../common/bild";
 
 export interface PlanPosition {
   x: number;
@@ -248,11 +249,15 @@ export class StandortPlanService {
   async grundrissSetzen(
     standortId: string,
     etage: string,
-    bild: { inhalt: Buffer; mimeType: string; dateiname: string }
-  ): Promise<void> {
+    bild: { inhalt: Buffer; mimeType: "image/jpeg" | "image/png" | "image/webp"; dateiname: string }
+  ): Promise<{ verkleinert: boolean }> {
     const ctx = requireTenantContext();
     await this.pruefeBearbeiten();
-    const hash = createHash("sha256").update(bild.inhalt).digest("hex");
+    // Vor der Transaktion: das Verkleinern kann Sekunden dauern, in der Zeit
+    // soll keine Datenbankverbindung gehalten werden. Der Hash gehoert zu den
+    // tatsaechlich gespeicherten Bytes, nicht zum Original.
+    const { inhalt, verkleinert } = await verkleinereBild(bild.inhalt, bild.mimeType);
+    const hash = createHash("sha256").update(inhalt).digest("hex");
     await this.db.withTenant(async (client) => {
       await this.pruefeSichtbar(client, ctx.benutzerId, standortId);
       await client.query("DELETE FROM standort_grundriss WHERE standort_id = $1 AND etage = $2", [standortId, etage]);
@@ -260,9 +265,10 @@ export class StandortPlanService {
         `INSERT INTO standort_grundriss
            (mandant_id, standort_id, etage, dateiname, mime_type, inhalt, inhalt_hash, hochgeladen_von)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [ctx.mandantId, standortId, etage, bild.dateiname, bild.mimeType, bild.inhalt, hash, ctx.benutzerId]
+        [ctx.mandantId, standortId, etage, bild.dateiname, bild.mimeType, inhalt, hash, ctx.benutzerId]
       );
     });
+    return { verkleinert };
   }
 
   async grundrissBild(

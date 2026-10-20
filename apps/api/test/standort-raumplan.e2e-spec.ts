@@ -11,6 +11,7 @@ import { Test } from "@nestjs/testing";
 import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
+import sharp from "sharp";
 import { AppModule } from "../src/app.module";
 import { kontoMitAlterRolle } from "./support/konto-mit-rolle";
 import { etageSortSchluessel, vergleicheEtagen } from "../src/standorte/standort-plan.service";
@@ -141,20 +142,45 @@ describe("Raumplan", () => {
     expect((await als(tokenELS1).get(`/standorte/${s1}/grundriss?etage=EG`)).status).toBe(404);
   });
 
-  it("Grundriss mit zu vielen Pixeln wird abgelehnt, ein normal grosser nicht", async () => {
+  it("Zu grosses Bild wird verkleinert statt abgelehnt; kleines bleibt bytegenau", async () => {
+    const put = (body: Buffer) =>
+      als(tokenELS1).put(`/standorte/${s1}/grundriss?etage=UG`).set("Content-Type", "image/png").send(body);
+    // Echtes PNG mit 9000 x 6000 px (54 MP), nicht nur ein gefaelschter Kopf.
+    const gross = await sharp({ limitInputPixels: false, create: { width: 9000, height: 6000, channels: 3, background: "#dde" } })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    const res = await put(gross);
+    expect(res.status).toBe(200);
+    expect(res.body.verkleinert).toBe(true);
+    const abruf = await als(tokenELS1).get(`/standorte/${s1}/grundriss?etage=UG`).buffer(true).parse((r, cb) => {
+      const teile: Buffer[] = [];
+      r.on("data", (t: Buffer) => teile.push(t));
+      r.on("end", () => cb(null, Buffer.concat(teile)));
+    });
+    const meta = await sharp(abruf.body as Buffer).metadata();
+    expect(meta.width).toBe(4000);
+    expect(meta.height).toBe(2667);
+    await als(tokenELS1).del(`/standorte/${s1}/grundriss?etage=UG`);
+    // Klein genug: unveraendert (siehe Round-Trip im Grundriss-Test oben).
+    expect((await put(PNG_1X1)).body.verkleinert).toBe(false);
+    await als(tokenELS1).del(`/standorte/${s1}/grundriss?etage=UG`);
+  });
+
+  it("Nicht dekodierbares oder absurd grosses Bild -> 400 mit Meldung", async () => {
+    const put = (body: Buffer) =>
+      als(tokenELS1).put(`/standorte/${s1}/grundriss?etage=UG`).set("Content-Type", "image/png").send(body);
     const mitMassen = (b: number, h: number) => {
       const kopie = Buffer.from(PNG_1X1);
       kopie.writeUInt32BE(b, 16);
       kopie.writeUInt32BE(h, 20);
       return kopie;
     };
-    const put = (body: Buffer) =>
-      als(tokenELS1).put(`/standorte/${s1}/grundriss?etage=UG`).set("Content-Type", "image/png").send(body);
-    const zuGross = await put(mitMassen(35640, 25200));
-    expect(zuGross.status).toBe(400);
-    expect(zuGross.body.message).toContain("35640");
-    expect((await put(mitMassen(6000, 4000))).status).toBe(200); // 24 MP
-    await als(tokenELS1).del(`/standorte/${s1}/grundriss?etage=UG`);
+    const kaputt = await put(mitMassen(35640, 25200)); // Kopf behauptet 900 MP, Inhalt ist es nicht
+    expect(kaputt.status).toBe(400);
+    expect(kaputt.body.message).toContain("verarbeitet");
+    const bombe = await put(mitMassen(100000, 100000));
+    expect(bombe.status).toBe(400);
+    expect(bombe.body.message).toContain("zu groß");
   });
 
   it("Grundriss ueber dem Limit wird abgelehnt (413)", async () => {

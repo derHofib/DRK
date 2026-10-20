@@ -2,16 +2,11 @@ import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, 
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
-import { bildAbmessungen, erkenneBildTyp } from "../common/datei";
+import { erkenneBildTyp } from "../common/datei";
 import { leseRohKoerper } from "../common/roh-koerper";
 import { StandortPlanService } from "./standort-plan.service";
 
 const MAX_GRUNDRISS_BYTES = 8_000_000;
-// Grenze der Pixelzahl, nicht nur der Bytes: ein stark komprimiertes
-// Linienplan-PNG kann bei wenigen MB mehrere hundert Megapixel haben und wird
-// dann von keinem Browser mehr dargestellt (gemessen: 35640 x 25200 px, 2,9 MB).
-// 50 MP entsprechen etwa A3 bei 300 dpi und bleiben darstellbar.
-const MAX_GRUNDRISS_PIXEL = 50_000_000;
 
 const etageSchema = z.string().trim().min(1).max(50);
 
@@ -95,13 +90,6 @@ export class StandortPlanController {
     if (!erkannt || erkannt !== deklariert) {
       throw new BadRequestException("Bitte ein Bild im Format JPG, PNG oder WebP hochladen.");
     }
-    const masse = bildAbmessungen(inhalt, erkannt);
-    if (masse && masse.breite * masse.hoehe > MAX_GRUNDRISS_PIXEL) {
-      throw new BadRequestException(
-        `Das Bild ist mit ${masse.breite} × ${masse.hoehe} Pixeln zu groß für die Anzeige (maximal 50 Megapixel). ` +
-          "Bitte mit höchstens etwa 6000 Pixeln Kantenlänge exportieren."
-      );
-    }
     const roherName = String(req.headers["x-dateiname"] ?? "grundriss");
     let dateiname = "grundriss";
     try {
@@ -109,8 +97,10 @@ export class StandortPlanController {
     } catch {
       // Ungueltig kodierter Name: beim Standardnamen bleiben.
     }
-    await this.plan.grundrissSetzen(id, etage, { inhalt, mimeType: erkannt, dateiname });
-    return { gespeichert: true };
+    // Verkleinern passiert im Service, NACH der Rechtepruefung -- wer nicht
+    // bearbeiten darf, soll keine mehrsekuendige Bildverarbeitung anstossen.
+    const { verkleinert } = await this.plan.grundrissSetzen(id, etage, { inhalt, mimeType: erkannt, dateiname });
+    return { gespeichert: true, verkleinert };
   }
 
   @Get(":id/grundriss")
