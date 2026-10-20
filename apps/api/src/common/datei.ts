@@ -22,3 +22,21 @@ export function dateiAusBase64(input: string): Buffer {
  * Passt zum accept="application/pdf,image/*" der Datei-Felder im Frontend.
  */
 export const ERLAUBTE_DOKUMENT_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"] as const;
+
+/**
+ * Erkennt den Bildtyp an den ersten Bytes, nicht am erklaerten Content-Type:
+ * ein Upload darf nur dann als Bild gespeichert werden, wenn Inhalt UND
+ * Deklaration uebereinstimmen. Sonst lieferte der GET-Endpunkt spaeter
+ * beliebige Bytes unter einem Bild-Content-Type aus (siehe
+ * ERLAUBTE_DOKUMENT_MIME_TYPES oben fuer die Begruendung).
+ */
+export function erkenneBildTyp(daten: Buffer): "image/jpeg" | "image/png" | "image/webp" | null {
+  if (daten.length >= 3 && daten[0] === 0xff && daten[1] === 0xd8 && daten[2] === 0xff) return "image/jpeg";
+  if (daten.length >= 8 && daten.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (daten.length >= 12 && daten.toString("ascii", 0, 4) === "RIFF" && daten.toString("ascii", 8, 12) === "WEBP") {
+    return "image/webp";
+  }
+  return null;
+}

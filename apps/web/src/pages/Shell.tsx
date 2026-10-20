@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MandantDto } from "@zimmerakte/shared";
+import type { MandantDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -13,6 +13,7 @@ import {
   IEinklappen,
   IKlienten,
   IMehr,
+  IStandort,
   ITraeger,
   IZuklappen,
 } from "../components/icons";
@@ -25,10 +26,12 @@ import {
   type HauptReiter,
   type KlientenAnsicht,
   type Tab,
+  type UnterpunktEintrag,
 } from "../navigation";
 import { Dashboard } from "./Dashboard";
 import { Zimmer } from "./Zimmer";
 import { StandortUebersicht } from "./StandortUebersicht";
+import { StandortRaeume } from "./StandortRaeume";
 import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
@@ -131,12 +134,22 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   // je Gruppe getrennt gemerkt wie bei Klienten.
   const [gruppeOffen, setGruppeOffen] = useState<Partial<Record<HauptReiter, boolean>>>(() =>
     Object.fromEntries(
-      (Object.keys(UNTERPUNKTE) as HauptReiter[]).map((h) => [h, ladeBooleanDefaultAn(sidebarGruppeSpeicher(h))])
+      ([...Object.keys(UNTERPUNKTE), "standorte"] as HauptReiter[]).map((h) => [h, ladeBooleanDefaultAn(sidebarGruppeSpeicher(h))])
     )
   );
   // Reihenfolge der Hauptmenuepunkte -- frei einstellbar (Einstellungen >
   // Darstellung), siehe navigation.ts.
   const [menuReihenfolge, setMenuReihenfolge] = useState<HauptReiter[]>(() => ladeMenuReihenfolge());
+  // Die dem Konto zugeordneten, aktiven Standorte -- die Unterpunkte unter
+  // "Standorte". Serverseitig schon auf die erlaubten gefiltert
+  // (StandortService.findeAlle), hier kommt nichts dazu.
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  const standortUnterpunkte: UnterpunktEintrag[] | undefined =
+    standorte.length > 0
+      ? standorte.map((s) => ({ wert: `standort:${s.id}` as const, label: s.name, icon: IStandort }))
+      : undefined;
+  const unterpunkteVon = (haupt: HauptReiter): UnterpunktEintrag[] | undefined =>
+    haupt === "standorte" ? standortUnterpunkte : UNTERPUNKTE[haupt];
   const REITER = reiterNachReihenfolge(menuReihenfolge);
   const REITER_MOBIL_SICHTBAR = REITER.slice(0, MOBIL_SICHTBAR_ANZAHL);
   const REITER_MOBIL_MEHR = REITER.slice(MOBIL_SICHTBAR_ANZAHL);
@@ -191,7 +204,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
    * Archiv/Anwärter haette.
    */
   function reiterKlick(wert: HauptReiter) {
-    if (wert === "klienten" || UNTERPUNKTE[wert]) {
+    if (wert === "klienten" || unterpunkteVon(wert)) {
       setOffenesPanel((p) => (p === wert ? null : wert));
     } else {
       tabWaehlen(wert);
@@ -244,6 +257,17 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offenesPanel]);
+
+  // Neu laden, sobald man die Einstellungen verlaesst oder betritt: dort
+  // werden Standorte angelegt, umbenannt und deaktiviert -- sonst bliebe das
+  // Menue bis zum naechsten Seitenaufruf veraltet.
+  const inEinstellungen = tab === "einstellungen";
+  useEffect(() => {
+    api
+      .standorteListe()
+      .then((liste) => setStandorte(liste.filter((s) => s.aktiv)))
+      .catch(() => {});
+  }, [inEinstellungen]);
 
   useEffect(() => {
     api
@@ -300,7 +324,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
 
           <nav className="zv-sidebar-nav">
             {REITER.map(({ wert, label, icon: Icon }) => {
-              const unterpunkte = UNTERPUNKTE[wert];
+              const unterpunkte = unterpunkteVon(wert);
               if (unterpunkte) {
                 const offen = gruppeOffen[wert] ?? true;
                 return (
@@ -483,7 +507,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
                 // In diesem Zweig ist offenesPanel immer "mehr" (TS narrowt das),
                 // das Klienten-Panel also nie gleichzeitig offen -- daher hier
                 // schlicht false statt eines Vergleichs mit demselben Ergebnis.
-                aria-expanded={wert === "klienten" || UNTERPUNKTE[wert] ? false : undefined}
+                aria-expanded={wert === "klienten" || unterpunkteVon(wert) ? false : undefined}
               >
                 <Icon />
                 {label}
@@ -518,7 +542,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         )}
 
-        {offenesPanel && offenesPanel !== "mehr" && offenesPanel !== "klienten" && UNTERPUNKTE[offenesPanel] && (
+        {offenesPanel && offenesPanel !== "mehr" && offenesPanel !== "klienten" && unterpunkteVon(offenesPanel) && (
           <div
             className="zv-sammelmenue"
             ref={gruppenPanelRef}
@@ -527,7 +551,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           >
             {[
               REITER.find((r) => r.wert === offenesPanel)!,
-              ...UNTERPUNKTE[offenesPanel]!.map((u) => ({ wert: u.wert, label: u.label, icon: u.icon })),
+              ...unterpunkteVon(offenesPanel)!.map((u) => ({ wert: u.wert, label: u.label, icon: u.icon })),
             ].map(({ wert, label, icon: Icon }) => (
               <button
                 key={wert}
@@ -551,7 +575,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
               className={hauptreiterVon(tab) === wert ? "active" : ""}
               onClick={() => reiterKlick(wert)}
               aria-current={hauptreiterVon(tab) === wert ? "page" : undefined}
-              aria-expanded={wert === "klienten" || UNTERPUNKTE[wert] ? offenesPanel === wert : undefined}
+              aria-expanded={wert === "klienten" || unterpunkteVon(wert) ? offenesPanel === wert : undefined}
             >
               <Icon />
               {label}
@@ -570,9 +594,10 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           </button>
         </div>
 
-        <div className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}`}>
+        <div className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}`}>
           {tab === "dashboard" && <Dashboard />}
           {tab === "standorte" && <StandortUebersicht />}
+          {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
           {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
           {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}

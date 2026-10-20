@@ -36,7 +36,15 @@ export type HauptReiter =
  * Anwaerter/Archiv unter "Klienten". Eigene Tab-Werte, aber nicht Teil der
  * frei sortierbaren Hauptreihenfolge.
  */
-export type UnterReiter = "aufgaben" | "vertretung" | "organigramm" | "hzl";
+export type UnterReiter =
+  | "aufgaben"
+  | "vertretung"
+  | "organigramm"
+  | "hzl"
+  // Ein einzelner Standort unter "Standorte". Die Unterpunkte dort entstehen
+  // aus den dem Konto zugeordneten Standorten (siehe Shell.tsx), nicht aus der
+  // festen Liste UNTERPUNKTE unten -- deshalb die ID im Tab-Wert selbst.
+  | `standort:${string}`;
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -57,6 +65,7 @@ export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
 
 /** Zu welchem Hauptpunkt eine Seite in der Navigation gehoert (Unterpunkt -> Elternpunkt). */
 export function hauptreiterVon(tab: Tab): HauptReiter {
+  if (tab.startsWith("standort:")) return "standorte";
   for (const [haupt, unter] of Object.entries(UNTERPUNKTE)) {
     if (unter?.some((u) => u.wert === tab)) return haupt as HauptReiter;
   }

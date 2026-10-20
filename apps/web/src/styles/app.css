@@ -2042,3 +2042,244 @@
   text-overflow: ellipsis;
   width: 100%;
 }
+
+/* ==================================================================
+   Raumplan eines Standorts (StandortRaeume.tsx)
+   Baumansicht: Etage links, Zimmer/Gemeinschaftsraeume rechts davon
+   abzweigend. Die Verbindungslinien sind reines CSS (Rahmen an Pseudo-
+   Elementen) statt SVG: jeder Zweig weiss selbst, ob er der erste, letzte
+   oder einzige ist, und die Hoehe jeder Zeile richtet sich nach ihrem
+   Inhalt -- bei SVG muesste die Hoehe vorher in JS vermessen werden.
+   ================================================================== */
+.zv-raumbaum {
+  overflow-x: auto;
+  padding: var(--zv-space-2) 0 var(--zv-space-4);
+}
+
+.zv-raumbaum-zeile {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-raumbaum-etage {
+  position: relative;
+  flex: none;
+  width: 150px;
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  border: 2px solid var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-raumbaum-etage strong {
+  display: block;
+  font-size: var(--zv-text-l);
+}
+
+.zv-raumbaum-etage span {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-raumbaum-aeste {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-left: 40px;
+}
+
+/* Linie von der Etage zum senkrechten Strang */
+.zv-raumbaum-aeste::before {
+  content: "";
+  position: absolute;
+  left: -40px;
+  top: 50%;
+  width: 40px;
+  border-top: 1.5px solid var(--zv-border-strong);
+}
+
+.zv-raumbaum-ast {
+  position: relative;
+  padding: 4px 0;
+  margin-left: 20px;
+}
+
+/* waagerechter Abzweig zum Knoten */
+.zv-raumbaum-ast::before {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  width: 20px;
+  border-top: 1.5px solid var(--zv-border-strong);
+}
+
+/* senkrechter Strang: zwischen erstem und letztem Abzweig */
+.zv-raumbaum-ast::after {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px solid var(--zv-border-strong);
+}
+
+.zv-raumbaum-ast:first-child::after {
+  top: 50%;
+}
+
+.zv-raumbaum-ast:last-child::after {
+  bottom: 50%;
+}
+
+.zv-raumbaum-ast:only-child::after {
+  display: none;
+}
+
+.zv-raumknoten {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 230px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.zv-raumknoten {
+  cursor: pointer;
+}
+
+button.zv-raumknoten:hover,
+button.zv-raumknoten:focus-visible {
+  border-color: var(--zv-accent);
+}
+
+.zv-raumknoten-gemeinschaft {
+  background: var(--zv-surface-2);
+  border-style: dashed;
+}
+
+.zv-raumknoten-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-weight: var(--zv-weight-semibold);
+  font-size: var(--zv-text-m);
+}
+
+.zv-raumknoten-kopf .zv-pill {
+  margin-left: auto;
+}
+
+.zv-raumknoten-sub {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Grundriss-Ansicht: Bild mit frei platzierbaren Karten darueber. Positionen
+   sind Prozent der Bildflaeche, nie Pixel -- so bleibt jede Karte bei jeder
+   Anzeigegroesse an derselben Stelle des Plans. */
+.zv-grundriss {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+  background: var(--zv-surface-2);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.zv-grundriss img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.zv-grundriss-karte {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  max-width: 34%;
+  padding: 3px var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-accent);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  box-shadow: var(--zv-shadow-1);
+  font-size: var(--zv-text-xs);
+  line-height: var(--zv-leading-tight);
+  text-align: left;
+}
+
+.zv-grundriss-karte strong {
+  display: block;
+  font-size: var(--zv-text-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-grundriss-karte-gemeinschaft {
+  border-style: dashed;
+  background: var(--zv-surface-2);
+}
+
+.zv-grundriss-karte-bewegbar {
+  cursor: grab;
+  touch-action: none;
+}
+
+.zv-grundriss-karte-zieht {
+  cursor: grabbing;
+  z-index: 2;
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-grundriss-ablage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-3);
+}
+
+/* Eigener kleiner Knopf in der Ecke der Karte statt mitten im Text: sonst
+   liegt der Mittelpunkt der Karte auf dem Knopf, und ein Zugriff dort
+   startet kein Ziehen -- im echten Browser so gemessen, nicht vermutet. */
+.zv-grundriss-karte-entfernen {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  color: var(--zv-text-muted);
+  cursor: pointer;
+}
+
+.zv-grundriss-karte-entfernen:hover,
+.zv-grundriss-karte-entfernen:focus-visible {
+  color: var(--zv-status-danger);
+  border-color: var(--zv-status-danger);
+}
+
+.zv-grundriss-karte-entfernen svg {
+  width: 11px;
+  height: 11px;
+}

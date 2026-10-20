@@ -64,9 +64,11 @@ import {
   Link,
   Link2,
   ListChecks,
+  ListTree,
   ListTodo,
   LogIn,
   LogOut,
+  Map as KartenSymbol,
   MapPin,
   MapPinOff,
   Maximize2,
@@ -97,10 +99,12 @@ import {
   SignalLow,
   SignalMedium,
   SlidersHorizontal,
+  Sofa,
   Sun,
   Table2,
   Tag,
   TriangleAlert,
+  Upload,
   UserRound,
   UserRoundCheck,
   UserRoundMinus,
@@ -299,3 +303,9 @@ export const IVerschiebenRechts = baue(ArrowRight);
 export const IAnzeigenAls = baue(Glasses);
 /** Tabellenansicht/Export -- vierter Reiter neben Baum/Account-Typen/Anzeigen als…. */
 export const ITabelle = baue(Table2);
+
+/* Raumplan (Standorte) */
+export const IGemeinschaftsraum = baue(Sofa);
+export const IBaumAnsicht = baue(ListTree);
+export const IGrundrissAnsicht = baue(KartenSymbol);
+export const IHochladen = baue(Upload);

@@ -171,6 +171,30 @@ export interface StandortUebersichtDto {
   };
 }
 
+export interface RaumplanPositionDto {
+  x: number;
+  y: number;
+}
+
+export interface RaumplanEtageDto {
+  etage: string;
+  hatGrundriss: boolean;
+  zimmer: {
+    id: string;
+    nummer: string;
+    kapazitaet: number;
+    bewohner: { klientId: string; name: string }[];
+    position: RaumplanPositionDto | null;
+  }[];
+  raeume: { id: string; name: string; position: RaumplanPositionDto | null }[];
+}
+
+export interface RaumplanDto {
+  standort: { id: string; name: string };
+  darfBearbeiten: boolean;
+  etagen: RaumplanEtageDto[];
+}
+
 export interface ZimmerBewohnerDto {
   id: string;
   name: string;

@@ -29,6 +29,7 @@ import type {
   SimulationDto,
   StandortDto,
   StandortUebersichtDto,
+  RaumplanDto,
   TagDto,
   TagesberichtDto,
   TotpEinrichtenResponse,
@@ -206,6 +207,42 @@ export const api = {
 
   standorteListe: () => request<StandortDto[]>("/standorte"),
   standortUebersicht: (id: string) => request<StandortUebersichtDto>(`/standorte/${id}/uebersicht`),
+  raumplan: (standortId: string) => request<RaumplanDto>(`/standorte/${standortId}/raumplan`),
+  raumAnlegen: (standortId: string, payload: { name: string; etage: string }) =>
+    request<{ id: string }>(`/standorte/${standortId}/raeume`, { method: "POST", body: JSON.stringify(payload) }),
+  raumAktualisieren: (standortId: string, raumId: string, payload: { name?: string; etage?: string; aktiv?: boolean }) =>
+    request<{ id: string }>(`/standorte/${standortId}/raeume/${raumId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  raumplanPositionenSetzen: (
+    standortId: string,
+    payload: { etage: string; positionen: { art: "zimmer" | "raum"; id: string; x: number; y: number }[] }
+  ) => request<{ gespeichert: number }>(`/standorte/${standortId}/raumplan/positionen`, { method: "PUT", body: JSON.stringify(payload) }),
+  grundrissUrl: (standortId: string, etage: string) =>
+    blobUrl(`/standorte/${standortId}/grundriss?etage=${encodeURIComponent(etage)}`),
+  grundrissLoeschen: (standortId: string, etage: string) =>
+    request<{ geloescht: boolean }>(`/standorte/${standortId}/grundriss?etage=${encodeURIComponent(etage)}`, { method: "DELETE" }),
+  // Roher Body statt JSON/Base64 (siehe api/src/common/roh-koerper.ts) --
+  // deshalb kein request(), das Content-Type fest auf JSON setzt.
+  grundrissHochladen: async (standortId: string, etage: string, datei: File): Promise<void> => {
+    const token = getToken();
+    const res = await fetch(`/api/standorte/${standortId}/grundriss?etage=${encodeURIComponent(etage)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": datei.type,
+        "X-Dateiname": encodeURIComponent(datei.name),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: datei,
+    });
+    if (res.status === 401 && token) {
+      clearToken();
+      beiSitzungAbgelaufen?.();
+    }
+    if (!res.ok) {
+      if (res.status === 413) throw new Error("Die Datei ist zu groß (maximal 8 MB).");
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(body.message ?? `Upload fehlgeschlagen (${res.status})`);
+    }
+  },
   standortAnlegen: (payload: { name: string; adresse: string }) =>
     request<StandortDto>("/standorte", { method: "POST", body: JSON.stringify(payload) }),
   standortAktualisieren: (id: string, payload: { name?: string; adresse?: string; aktiv?: boolean }) =>
