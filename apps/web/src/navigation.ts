@@ -5,6 +5,7 @@
  * brauchen.
  */
 import {
+  IAuszahlen,
   IAufgaben,
   IDashboard,
   IEinstellungen,
@@ -35,7 +36,7 @@ export type HauptReiter =
  * Anwaerter/Archiv unter "Klienten". Eigene Tab-Werte, aber nicht Teil der
  * frei sortierbaren Hauptreihenfolge.
  */
-export type UnterReiter = "aufgaben" | "vertretung" | "organigramm";
+export type UnterReiter = "aufgaben" | "vertretung" | "organigramm" | "hzl";
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -47,6 +48,7 @@ export interface UnterpunktEintrag {
 
 export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
   dashboard: [{ wert: "aufgaben", label: "Aufgaben", icon: IAufgaben }],
+  kassenbuch: [{ wert: "hzl", label: "HZL", icon: IAuszahlen }],
   mitarbeitende: [
     { wert: "vertretung", label: "Vertretung", icon: IVertretung },
     { wert: "organigramm", label: "Organigramm", icon: IOrganigramm },

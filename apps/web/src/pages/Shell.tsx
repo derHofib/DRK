@@ -70,6 +70,7 @@ const BREITE_REITER = new Set<Tab>([
   "standorte",
   "zimmer",
   "kassenbuch",
+  "hzl",
   "klienten",
   "mitarbeitende",
   "tagesberichte",
@@ -574,7 +575,8 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "standorte" && <StandortUebersicht />}
           {tab === "zimmer" && <Zimmer />}
           {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
-          {tab === "kassenbuch" && <Kassenbuch />}
+          {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}
+          {tab === "hzl" && <Kassenbuch ansicht="hzl" />}
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}

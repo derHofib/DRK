@@ -312,8 +312,13 @@ export const api = {
   belegungBearbeiten: (id: string, payload: { einzug: string; auszug: string | null }) =>
     request(`/belegungen/${id}/bearbeiten`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  kassenbuchungenListe: (klientId?: string) =>
-    request<KassenbuchungDto[]>(`/kassenbuchungen${klientId ? `?klientId=${klientId}` : ""}`),
+  kassenbuchungenListe: (filter?: { klientId?: string; standortId?: string }) => {
+    const query = new URLSearchParams();
+    if (filter?.klientId) query.set("klientId", filter.klientId);
+    if (filter?.standortId) query.set("standortId", filter.standortId);
+    const text = query.toString();
+    return request<KassenbuchungDto[]>(`/kassenbuchungen${text ? `?${text}` : ""}`);
+  },
   kassenbuchungAnlegen: (payload: {
     klientId?: string;
     standortId?: string;
@@ -349,8 +354,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ entscheidung, grund }),
     }),
-  wochenuebersicht: (isoJahr: number, isoWoche: number) =>
-    request<WochenuebersichtEintragDto[]>(`/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}`),
+  wochenuebersicht: (isoJahr: number, isoWoche: number, standortId?: string) =>
+    request<WochenuebersichtEintragDto[]>(
+      `/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}${standortId ? `&standortId=${standortId}` : ""}`
+    ),
 
   unterschriftBildUrl: (kassenbuchungId: string) => blobUrl(`/kassenbuchungen/${kassenbuchungId}/unterschrift`),
 
