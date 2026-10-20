@@ -310,8 +310,13 @@ export const api = {
   belegungBearbeiten: (id: string, payload: { einzug: string; auszug: string | null }) =>
     request(`/belegungen/${id}/bearbeiten`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  kassenbuchungenListe: (klientId?: string) =>
-    request<KassenbuchungDto[]>(`/kassenbuchungen${klientId ? `?klientId=${klientId}` : ""}`),
+  kassenbuchungenListe: (filter?: { klientId?: string; standortId?: string }) => {
+    const query = new URLSearchParams();
+    if (filter?.klientId) query.set("klientId", filter.klientId);
+    if (filter?.standortId) query.set("standortId", filter.standortId);
+    const text = query.toString();
+    return request<KassenbuchungDto[]>(`/kassenbuchungen${text ? `?${text}` : ""}`);
+  },
   kassenbuchungAnlegen: (payload: {
     klientId?: string;
     standortId?: string;

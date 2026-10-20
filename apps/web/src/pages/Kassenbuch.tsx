@@ -128,8 +128,15 @@ export function Kassenbuch() {
   const [stornoBeantragenBuchung, setStornoBeantragenBuchung] = useState<KassenbuchungDto | null>(null);
   const [stornoAblehnenBuchung, setStornoAblehnenBuchung] = useState<KassenbuchungDto | null>(null);
 
-  function ladeBuchungen() {
-    api.kassenbuchungenListe().then(setBuchungen).catch((err) => setFehler(err.message));
+  // Der Standort-Filter oben wirkt serverseitig (GET /kassenbuchungen
+  // ?standortId=) -- dort gilt zusaetzlich die Standort-Zuordnung der
+  // angemeldeten Person; die Auswahl unten enthaelt ohnehin nur eigene
+  // Standorte (api.standorteListe()).
+  function ladeBuchungen(standortId: string = filterStandortId) {
+    api
+      .kassenbuchungenListe(standortId ? { standortId } : undefined)
+      .then(setBuchungen)
+      .catch((err) => setFehler(err.message));
   }
 
   function ladeUebersicht(jahr: number, woche: number) {
@@ -141,8 +148,12 @@ export function Kassenbuch() {
     api.standorteListe().then(setStandorte).catch((err) => setFehler(err.message));
     api.benutzerListe().then(setMitarbeitende).catch((err) => setFehler(err.message));
     api.kassenbuchungTypenListe().then(setTypen).catch((err) => setFehler(err.message));
-    ladeBuchungen();
   }, []);
+
+  useEffect(() => {
+    ladeBuchungen(filterStandortId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStandortId]);
 
   // Der HZL-Systemtyp (kassenbuchung_typ.ist_hzl) ist der Standard beim
   // Oeffnen des Formulars fuer eine Klienten-Buchung -- entspricht dem
@@ -307,13 +318,8 @@ export function Kassenbuch() {
   const gesamtsaldo = summeCent(aktiveGesamt);
   const summeFilter = summeCent(aktiveGefiltert);
 
-  const gefilterteStandortBuchungen = filterStandortId
-    ? standortBuchungen.filter((b) => b.standortId === filterStandortId)
-    : standortBuchungen;
   const aktiveStandortGesamt = aktive(standortBuchungen);
-  const aktiveStandortGefiltert = aktive(gefilterteStandortBuchungen);
   const standortGesamtsaldo = summeCent(aktiveStandortGesamt);
-  const standortSummeFilter = summeCent(aktiveStandortGefiltert);
 
   // Vorschlag fuer die Teilnehmer-Klienten-Auswahl: nur Klienten, die
   // aktuell am gewählten Standort wohnen -- fällt (z. B. bei fehlender
@@ -338,7 +344,11 @@ export function Kassenbuch() {
         <div>
           <h2>Kassenbuch</h2>
           <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            Alle Buchungen aller Klienten
+            {filterStandortId
+              ? `Buchungen am Standort ${standorte.find((s) => s.id === filterStandortId)?.name ?? ""}`
+              : standorte.length === 1
+                ? `Buchungen am Standort ${standorte[0].name}`
+                : "Alle Buchungen aller Klienten"}
           </p>
         </div>
         <button
@@ -358,6 +368,23 @@ export function Kassenbuch() {
           Neue Buchung
         </button>
       </div>
+
+      {standorte.length > 0 && (
+        <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
+          <select
+            aria-label="Nach Standort filtern"
+            value={filterStandortId}
+            onChange={(e) => setFilterStandortId(e.target.value)}
+          >
+            <option value="">Alle Standorte</option>
+            {standorte.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {formularOffen && (
         <Modal titel="Neue Buchung" onClose={() => setFormularOffen(false)}>
@@ -772,29 +799,9 @@ export function Kassenbuch() {
           <p className="zv-stat-wert">{formatBetrag(standortGesamtsaldo)}</p>
           <p className="zv-stat-sub">{aktiveStandortGesamt.length} Buchungen gesamt</p>
         </div>
-        <div className="zv-stat-karte">
-          <p className="zv-stat-label">Summe (Filter)</p>
-          <p className="zv-stat-wert">{formatBetrag(standortSummeFilter)}</p>
-          <p className="zv-stat-sub">{aktiveStandortGefiltert.length} Buchungen</p>
-        </div>
       </div>
 
-      <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
-        <select
-          aria-label="Nach Standort filtern"
-          value={filterStandortId}
-          onChange={(e) => setFilterStandortId(e.target.value)}
-        >
-          <option value="">Alle Standorte</option>
-          {standorte.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {gefilterteStandortBuchungen.length === 0 ? (
+      {standortBuchungen.length === 0 ? (
         <Leerzustand icon={ILeerStandorte}>Noch keine Standort-Buchungen erfasst.</Leerzustand>
       ) : (
         <div
@@ -812,7 +819,7 @@ export function Kassenbuch() {
             <span>Status</span>
             <span></span>
           </div>
-          {gefilterteStandortBuchungen.map((b) => (
+          {standortBuchungen.map((b) => (
             <div key={b.id} className="zv-info-karte">
               <span className="zv-liste-zelle-titel">{b.standortName}</span>
               <span className="zv-liste-zelle" data-label="Datum">

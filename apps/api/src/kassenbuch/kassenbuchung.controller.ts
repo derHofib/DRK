@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
@@ -64,8 +64,12 @@ export class KassenbuchungController {
   constructor(private readonly kassenbuch: KassenbuchungService) {}
 
   @Get()
-  async list(@Query("klientId") klientId?: string) {
-    return this.kassenbuch.findeAlle(klientId ? { klientId } : undefined);
+  async list(@Query("klientId") klientId?: string, @Query("standortId") standortId?: string) {
+    // safeParse statt parse: kein globaler ZodError-Filter, ein ZodError waere ein 500.
+    if (standortId !== undefined && !z.string().uuid().safeParse(standortId).success) {
+      throw new BadRequestException("standortId muss eine gültige ID sein.");
+    }
+    return this.kassenbuch.findeAlle(klientId || standortId ? { klientId, standortId } : undefined);
   }
 
   @Get("wochenuebersicht")

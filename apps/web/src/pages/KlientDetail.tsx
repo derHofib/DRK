@@ -1475,7 +1475,7 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
   const [fehler, setFehler] = useState<string | null>(null);
 
   useEffect(() => {
-    api.kassenbuchungenListe(klientId).then(setBuchungen).catch((err) => setFehler(err.message));
+    api.kassenbuchungenListe({ klientId }).then(setBuchungen).catch((err) => setFehler(err.message));
   }, [klientId]);
 
   return (

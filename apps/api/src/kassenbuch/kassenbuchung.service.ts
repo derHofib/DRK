@@ -404,9 +404,19 @@ export class KassenbuchungService {
     );
   }
 
-  async findeAlle(filter?: { klientId?: string }): Promise<KassenbuchungDto[]> {
+  /**
+   * `standortId` filtert auf einen Standort: Standort-Buchungen dieses
+   * Standorts PLUS Buchungen von Klient:innen, die aktuell dort wohnen. Die
+   * Sichtbarkeitsregel unten bleibt unabhaengig davon bestehen (AND) -- und
+   * ein Standort ausserhalb der eigenen Zuordnung ist ein 404 (wie beim
+   * Buchen auf einen fremden Standort), kein stilles "keine Treffer".
+   */
+  async findeAlle(filter?: { klientId?: string; standortId?: string }): Promise<KassenbuchungDto[]> {
     const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      if (filter?.standortId && !(await standortIstErlaubt(client, benutzerId, filter.standortId))) {
+        throw new NotFoundException("Standort nicht gefunden.");
+      }
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       const params: unknown[] = [];
       // Eine Buchung ist sichtbar, wenn ENTWEDER ihr Klient ueber eine
@@ -419,6 +429,19 @@ export class KassenbuchungService {
       if (filter?.klientId) {
         params.push(filter.klientId);
         bedingungen.push(`b.klient_id = $${params.length}`);
+      }
+      if (filter?.standortId) {
+        params.push(filter.standortId);
+        const p = params.length;
+        bedingungen.push(`(
+          b.standort_id = $${p}
+          OR (b.klient_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM belegung fb
+            JOIN zimmer fz ON fz.id = fb.zimmer_id
+            WHERE fb.klient_id = k.id AND fb.auszug IS NULL AND fb.einzug <= CURRENT_DATE
+              AND fz.standort_id = $${p}
+          ))
+        )`);
       }
       const { rows } = await client.query(
         `${BUCHUNG_SELECT}
