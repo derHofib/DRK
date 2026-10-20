@@ -1,6 +1,7 @@
 import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { RaumplanDto, RaumplanEtageDto, RaumplanPositionDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Leerzustand } from "../components/Leerzustand";
 import {
@@ -391,7 +392,7 @@ function Raumgrundriss({
     if (!datei) return;
     onFehler(null);
     try {
-      await api.grundrissHochladen(standortId, etage.etage, datei);
+      await api.grundrissHochladen(standortId, etage.etage, await bildVerkleinern(datei));
       setBildVersion((v) => v + 1);
       onGeaendert();
     } catch (err) {
@@ -468,7 +469,18 @@ function Raumgrundriss({
       ) : (
         <>
           <div className="zv-grundriss" ref={flaecheRef}>
-            {bildUrl && <img src={bildUrl} alt={`Grundriss ${etage.etage}`} draggable={false} />}
+            {bildUrl && (
+              <img
+                src={bildUrl}
+                alt={`Grundriss ${etage.etage}`}
+                draggable={false}
+                onError={() =>
+                  onFehler(
+                    "Das Bild kann vom Browser nicht angezeigt werden (vermutlich zu viele Pixel). Bitte „Grundriss ersetzen“ mit einer kleineren Datei."
+                  )
+                }
+              />
+            )}
             {karten.map((k) => {
               const pos = positionVon(k);
               if (!pos) return null;

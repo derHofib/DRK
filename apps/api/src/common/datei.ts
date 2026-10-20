@@ -40,3 +40,43 @@ export function erkenneBildTyp(daten: Buffer): "image/jpeg" | "image/png" | "ima
   }
   return null;
 }
+
+/**
+ * Pixelmasse aus dem Dateikopf, ohne das Bild zu dekodieren (kein
+ * Bildverarbeitungspaket noetig). null = Format nicht lesbar -- der Aufrufer
+ * entscheidet, ob er das durchlaesst. Wird fuer die Obergrenze beim
+ * Grundriss-Upload gebraucht: ein 900-Megapixel-PNG (A2 bei 1:100 exportiert)
+ * lag nur 2,9 MB gross in der Datenbank, liess sich aber in keinem Browser
+ * anzeigen -- die Dateigroesse allein sagt darueber nichts.
+ */
+export function bildAbmessungen(daten: Buffer, typ: "image/jpeg" | "image/png" | "image/webp"): { breite: number; hoehe: number } | null {
+  try {
+    if (typ === "image/png") {
+      if (daten.length < 24) return null;
+      return { breite: daten.readUInt32BE(16), hoehe: daten.readUInt32BE(20) };
+    }
+    if (typ === "image/webp") {
+      const art = daten.toString("ascii", 12, 16);
+      if (art === "VP8X") return { breite: (daten.readUIntLE(24, 3) & 0xffffff) + 1, hoehe: (daten.readUIntLE(27, 3) & 0xffffff) + 1 };
+      if (art === "VP8 ") return { breite: daten.readUInt16LE(26) & 0x3fff, hoehe: daten.readUInt16LE(28) & 0x3fff };
+      if (art === "VP8L") {
+        const bits = daten.readUInt32LE(21);
+        return { breite: (bits & 0x3fff) + 1, hoehe: ((bits >> 14) & 0x3fff) + 1 };
+      }
+      return null;
+    }
+    // JPEG: Segmente ueberspringen bis zum Start-of-Frame (SOF0..SOF15 ausser DHT/JPG/DAC).
+    let pos = 2;
+    while (pos + 9 < daten.length) {
+      if (daten[pos] !== 0xff) return null;
+      const marker = daten[pos + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { hoehe: daten.readUInt16BE(pos + 5), breite: daten.readUInt16BE(pos + 7) };
+      }
+      pos += 2 + daten.readUInt16BE(pos + 2);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

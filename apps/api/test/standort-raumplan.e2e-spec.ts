@@ -141,6 +141,22 @@ describe("Raumplan", () => {
     expect((await als(tokenELS1).get(`/standorte/${s1}/grundriss?etage=EG`)).status).toBe(404);
   });
 
+  it("Grundriss mit zu vielen Pixeln wird abgelehnt, ein normal grosser nicht", async () => {
+    const mitMassen = (b: number, h: number) => {
+      const kopie = Buffer.from(PNG_1X1);
+      kopie.writeUInt32BE(b, 16);
+      kopie.writeUInt32BE(h, 20);
+      return kopie;
+    };
+    const put = (body: Buffer) =>
+      als(tokenELS1).put(`/standorte/${s1}/grundriss?etage=UG`).set("Content-Type", "image/png").send(body);
+    const zuGross = await put(mitMassen(35640, 25200));
+    expect(zuGross.status).toBe(400);
+    expect(zuGross.body.message).toContain("35640");
+    expect((await put(mitMassen(6000, 4000))).status).toBe(200); // 24 MP
+    await als(tokenELS1).del(`/standorte/${s1}/grundriss?etage=UG`);
+  });
+
   it("Grundriss ueber dem Limit wird abgelehnt (413)", async () => {
     const gross = Buffer.concat([PNG_1X1, Buffer.alloc(8_100_000)]);
     const res = await als(tokenELS1).put(`/standorte/${s1}/grundriss?etage=EG`).set("Content-Type", "image/png").send(gross);
