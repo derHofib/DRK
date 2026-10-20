@@ -99,7 +99,13 @@ function summeCent(buchungen: KassenbuchungDto[]): number {
   return buchungen.reduce((summe, b) => summe + b.betragCent, 0);
 }
 
-export function Kassenbuch() {
+/**
+ * "buchungen": die Buchungslisten. "hzl": die HZL-Wochenuebersicht -- ein
+ * eigener Menue-Unterpunkt unter Kassenbuch (siehe navigation.ts), damit das
+ * Kassenbuch selbst nur Buchungen zeigt. Beide teilen sich Formular, Daten
+ * und den Standort-Filter, deshalb eine Komponente statt zwei.
+ */
+export function Kassenbuch({ ansicht = "buchungen" }: { ansicht?: "buchungen" | "hzl" }) {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [mitarbeitende, setMitarbeitende] = useState<BenutzerListEintragDto[]>([]);
@@ -133,14 +139,19 @@ export function Kassenbuch() {
   // angemeldeten Person; die Auswahl unten enthaelt ohnehin nur eigene
   // Standorte (api.standorteListe()).
   function ladeBuchungen(standortId: string = filterStandortId) {
+    if (ansicht === "hzl") return;
     api
       .kassenbuchungenListe(standortId ? { standortId } : undefined)
       .then(setBuchungen)
       .catch((err) => setFehler(err.message));
   }
 
-  function ladeUebersicht(jahr: number, woche: number) {
-    api.wochenuebersicht(jahr, woche).then(setUebersicht).catch((err) => setFehler(err.message));
+  function ladeUebersicht(jahr: number, woche: number, standortId: string = filterStandortId) {
+    if (ansicht !== "hzl") return;
+    api
+      .wochenuebersicht(jahr, woche, standortId || undefined)
+      .then(setUebersicht)
+      .catch((err) => setFehler(err.message));
   }
 
   useEffect(() => {
@@ -152,6 +163,7 @@ export function Kassenbuch() {
 
   useEffect(() => {
     ladeBuchungen(filterStandortId);
+    ladeUebersicht(uebersichtJahr, uebersichtWoche, filterStandortId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStandortId]);
 
@@ -342,15 +354,24 @@ export function Kassenbuch() {
 
       <div className="zv-seiten-kopf">
         <div>
-          <h2>Kassenbuch</h2>
+          <h2>{ansicht === "hzl" ? "HZL" : "Kassenbuch"}</h2>
           <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            {filterStandortId
-              ? `Buchungen am Standort ${standorte.find((s) => s.id === filterStandortId)?.name ?? ""}`
-              : standorte.length === 1
-                ? `Buchungen am Standort ${standorte[0].name}`
-                : "Alle Buchungen aller Klienten"}
+            {(() => {
+              const standortName = filterStandortId
+                ? standorte.find((s) => s.id === filterStandortId)?.name
+                : standorte.length === 1
+                  ? standorte[0].name
+                  : undefined;
+              if (ansicht === "hzl") {
+                return standortName
+                  ? `Wöchentliche Auszahlungen am Standort ${standortName}`
+                  : "Wöchentliche Auszahlungen (Hilfe zum Lebensunterhalt)";
+              }
+              return standortName ? `Buchungen am Standort ${standortName}` : "Alle Buchungen aller Klienten";
+            })()}
           </p>
         </div>
+        {ansicht === "buchungen" && (
         <button
           className="zv-btn"
           onClick={() => {
@@ -367,6 +388,7 @@ export function Kassenbuch() {
           <INeu />
           Neue Buchung
         </button>
+        )}
       </div>
 
       {standorte.length > 0 && (
@@ -561,6 +583,7 @@ export function Kassenbuch() {
         </Modal>
       )}
 
+      {ansicht === "hzl" && (
       <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <div>
@@ -655,7 +678,10 @@ export function Kassenbuch() {
           </div>
         )}
       </div>
+      )}
 
+      {ansicht === "buchungen" && (
+      <>
       <div className="zv-stat-grid">
         <div className="zv-stat-karte">
           <p className="zv-stat-label">Gesamtsaldo alle Klienten</p>
@@ -921,6 +947,8 @@ export function Kassenbuch() {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
 
       {stornoBeantragenBuchung && (

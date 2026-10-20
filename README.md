@@ -2506,8 +2506,7 @@ man zugeordnet ist (`GET /standorte` liefert ohnehin nur diese). Das gilt auch
 serverseitig: ein Filter auf einen fremden Standort ist ein 404, nicht eine
 leere Liste. Der Klienten-Filter bleibt unverändert darunter.
 
-Bewusst nicht Teil davon: die HZL-Wochenübersicht weiter unten folgt dem
-Standort-Filter nicht (sie ist weiterhin nach der Zuordnung eingeschränkt).
+Die HZL-Wochenübersicht folgt dem Filter seit dem nächsten Nachtrag (unten).
 
 Geprüft: gesamte API-Suite 437/437 grün, 43 Suiten; neue Spec
 `kassenbuch-standort-filter.e2e-spec.ts` (5 Tests:
@@ -2519,6 +2518,33 @@ jeweils wiederhergestellt. Live-Browser-Check (Playwright) mit zwei Standorten:
 Leitung sieht beide, der Filter „Haus Nord"/„Haus Süd" zeigt jeweils nur die
 Buchungen des Standorts; die zugeordnete Person sieht ohne Filter nur
 Haus Nord und hat nur „Alle Standorte | Haus Nord" zur Auswahl.
+
+### Nachtrag: HZL als eigener Unterpunkt unter Kassenbuch
+
+Die HZL-Wochenübersicht ist aus dem Kassenbuch herausgelöst und steht jetzt
+als eigener Menü-Unterpunkt **„HZL"** unter „Kassenbuch" (`UNTERPUNKTE` in
+`navigation.ts`, Tab-Wert `hzl`). Das Kassenbuch selbst zeigt damit nur noch
+Buchungen. Technisch bleibt es eine Komponente: `Kassenbuch` bekommt
+`ansicht="buchungen" | "hzl"`, weil beide Formular (für „Jetzt auszahlen"),
+Daten und Standort-Filter teilen -- zwei Komponenten hätten das Buchungsformular
+duplizieren müssen.
+
+Der Standort-Filter wirkt jetzt auch auf HZL
+(`GET /kassenbuchungen/wochenuebersicht?...&standortId=`): nur Klient:innen, die
+aktuell am gewählten Standort wohnen, gleiche Regel wie bei den Buchungen
+(fremder Standort = 404, die Zuordnungs-Einschränkung gilt zusätzlich). Die
+Filterleiste steht auf beiden Seiten oben.
+
+Geprüft: API-Suite 439/439 grün, 43 Suiten; die Spec
+`kassenbuch-standort-filter.e2e-spec.ts` hat zwei neue Tests für die
+Wochenübersicht (Leitung ohne/mit Filter, zugeordnete Person ohne Filter und
+fremder Standort 404). **Gegenprobe**: Filterbedingung in `wochenuebersicht()`
+abgeschaltet → der Leitungs-Test wird rot; wiederhergestellt. (Ein erster
+Versuch scheiterte an einem Kompilierfehler und zählte nicht -- wiederholt.)
+Live-Browser-Check (Playwright): Kassenbuch ohne Wochenübersicht, Unterpunkt
+„HZL" öffnet die Übersicht, Filter „Haus Süd" lässt nur den dortigen Klienten
+übrig, „Jetzt auszahlen" öffnet das Buchungsformular, die zugeordnete Person
+sieht nur Haus Nord.
 
 ## Lokale Entwicklung
 

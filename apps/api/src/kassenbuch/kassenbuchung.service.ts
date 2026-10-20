@@ -454,12 +454,24 @@ export class KassenbuchungService {
     });
   }
 
-  async wochenuebersicht(isoJahr: number, isoWoche: number): Promise<WochenuebersichtEintrag[]> {
+  /**
+   * `standortId` schraenkt auf Klient:innen ein, die aktuell an diesem
+   * Standort wohnen -- gleiche Regel und gleiches Verhalten wie bei
+   * findeAlle() (fremder Standort = 404, Zuordnungs-Einschraenkung gilt
+   * zusaetzlich).
+   */
+  async wochenuebersicht(isoJahr: number, isoWoche: number, standortId?: string): Promise<WochenuebersichtEintrag[]> {
     const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      if (standortId && !(await standortIstErlaubt(client, benutzerId, standortId))) {
+        throw new NotFoundException("Standort nicht gefunden.");
+      }
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       const params: unknown[] = [isoJahr, isoWoche];
-      const standortBedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+      let standortBedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+      if (standortId) {
+        standortBedingung += ` AND ${klientStandortBedingung([standortId], "k", params)}`;
+      }
 
       const { rows } = await client.query(
         `

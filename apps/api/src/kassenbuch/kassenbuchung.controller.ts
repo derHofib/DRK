@@ -56,6 +56,7 @@ const stornoEntscheidenSchema = z.object({
 const wochenuebersichtSchema = z.object({
   jahr: z.coerce.number().int().min(2000).max(2100),
   kw: z.coerce.number().int().min(1).max(53),
+  standortId: z.string().uuid().optional(),
 });
 
 @Controller("kassenbuchungen")
@@ -74,8 +75,8 @@ export class KassenbuchungController {
 
   @Get("wochenuebersicht")
   async wochenuebersicht(@Query() query: unknown) {
-    const { jahr, kw } = wochenuebersichtSchema.parse(query);
-    return this.kassenbuch.wochenuebersicht(jahr, kw);
+    const { jahr, kw, standortId } = wochenuebersichtSchema.parse(query);
+    return this.kassenbuch.wochenuebersicht(jahr, kw, standortId);
   }
 
   @Post()

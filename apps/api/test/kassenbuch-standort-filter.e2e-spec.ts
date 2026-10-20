@@ -76,7 +76,7 @@ describe("Kassenbuch: Standort-Sichtbarkeit und Standort-Filter", () => {
       const klient = (
         await admin.query<{ id: string }>(
           `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt, hzl_rhythmus)
-           VALUES ($1, 'Test', $2, '1990-01-01', $3, 'Amt', 'monatlich') RETURNING id`,
+           VALUES ($1, 'Test', $2, '1990-01-01', $3, 'Amt', 'woechentlich') RETURNING id`,
           [mandantId, nachname, az]
         )
       ).rows[0].id;
@@ -167,6 +167,26 @@ describe("Kassenbuch: Standort-Sichtbarkeit und Standort-Filter", () => {
     expect(ids(await liste(tokenS1, `?standortId=${s1}`))).toEqual(erwartet("k1", "sb1"));
     const fremd = await liste(tokenS1, `?standortId=${s2}`);
     expect(fremd.status).toBe(404);
+  });
+
+  describe("HZL-Wochenuebersicht folgt demselben Filter", () => {
+    const woche = (token: string, query = "") =>
+      request(app.getHttpServer())
+        .get(`/kassenbuchungen/wochenuebersicht?jahr=2026&kw=31${query}`)
+        .set("Authorization", `Bearer ${token}`);
+    const namen = (res: request.Response) => (res.body as { klientName: string }[]).map((e) => e.klientName).sort();
+
+    it("Leitung: ohne Filter beide Klienten, mit Filter nur der des Standorts", async () => {
+      expect(namen(await woche(tokenLeitung))).toEqual(["Test EinsKlient", "Test ZweiKlient"]);
+      expect(namen(await woche(tokenLeitung, `&standortId=${s1}`))).toEqual(["Test EinsKlient"]);
+      expect(namen(await woche(tokenLeitung, `&standortId=${s2}`))).toEqual(["Test ZweiKlient"]);
+    });
+
+    it("zugeordnete Person: ohne Filter nur eigener Standort, fremder Standort 404", async () => {
+      expect(namen(await woche(tokenS1))).toEqual(["Test EinsKlient"]);
+      expect(namen(await woche(tokenS1, `&standortId=${s1}`))).toEqual(["Test EinsKlient"]);
+      expect((await woche(tokenS1, `&standortId=${s2}`)).status).toBe(404);
+    });
   });
 
   it("ungueltige standortId -> 400", async () => {

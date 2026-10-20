@@ -352,8 +352,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ entscheidung, grund }),
     }),
-  wochenuebersicht: (isoJahr: number, isoWoche: number) =>
-    request<WochenuebersichtEintragDto[]>(`/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}`),
+  wochenuebersicht: (isoJahr: number, isoWoche: number, standortId?: string) =>
+    request<WochenuebersichtEintragDto[]>(
+      `/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}${standortId ? `&standortId=${standortId}` : ""}`
+    ),
 
   unterschriftBildUrl: (kassenbuchungId: string) => blobUrl(`/kassenbuchungen/${kassenbuchungId}/unterschrift`),
 
