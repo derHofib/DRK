@@ -773,3 +773,61 @@ export interface DelegationDto {
   status: DelegationStatus;
   effektiverStatus: DelegationEffektiverStatus;
 }
+
+/**
+ * Kalender (migrations/0053, kalender.service.ts). Termine gehoeren ihren
+ * Beteiligten, nicht dem Mandanten. Abgesagt ist, wer abgesagtAm hat -- es
+ * gibt keinen Status und kein Loeschen.
+ */
+export type TerminAntwort = "offen" | "zugesagt" | "abgelehnt";
+
+export const TERMIN_ANTWORT_LABEL: Record<TerminAntwort, string> = {
+  offen: "Offen",
+  zugesagt: "Zugesagt",
+  abgelehnt: "Abgelehnt",
+};
+
+export interface TerminPersonDto {
+  art: "benutzer" | "klient";
+  id: string;
+  /** Klient:innen: Mitarbeitende je nach Sichtbarkeit voll oder als Initialen, andere Klient:innen nur Vorname. */
+  name: string;
+}
+
+export interface TerminTeilnehmerDto extends TerminPersonDto {
+  antwort: TerminAntwort;
+  geantwortetAm: string | null;
+}
+
+/**
+ * ganztaegig=true: beginn/ende sind reine Datumsangaben "YYYY-MM-DD", ende ist
+ * der letzte Tag (inklusive). Sonst ISO-8601-Zeitpunkte (UTC, "...Z").
+ */
+export interface TerminDto {
+  id: string;
+  titel: string;
+  beschreibung: string | null;
+  ort: string | null;
+  beginn: string;
+  ende: string;
+  ganztaegig: boolean;
+  erstelltVon: TerminPersonDto;
+  erstelltAm: string;
+  abgesagtAm: string | null;
+  binErsteller: boolean;
+  /** null = ich bin nicht eingetragen (z. B. nur ueber einen Chat sichtbar) -- dann hilft "uebernehmen". */
+  meineAntwort: TerminAntwort | null;
+  teilnehmer: TerminTeilnehmerDto[];
+}
+
+export type TerminTeilnehmerEingabe = { benutzerId: string } | { klientId: string };
+
+export interface TerminAnlegenEingabe {
+  titel: string;
+  beschreibung?: string | null;
+  ort?: string | null;
+  beginn: string;
+  ende: string;
+  ganztaegig?: boolean;
+  teilnehmer?: TerminTeilnehmerEingabe[];
+}
