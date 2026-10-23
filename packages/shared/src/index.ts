@@ -831,3 +831,23 @@ export interface TerminAnlegenEingabe {
   ganztaegig?: boolean;
   teilnehmer?: TerminTeilnehmerEingabe[];
 }
+
+// --- Klient-Zugang: E-Mail aendern (Chat-Plan 1b) ---
+
+export interface KlientZugangDto {
+  status: "keiner" | "eingeladen" | "aktiv" | "deaktiviert";
+  email: string | null;
+  einladungLaeuftAbAm: string | null;
+  einladungAbgelaufen: boolean;
+  /** Ablauf eines offenen Links zum Aendern der E-Mail, sonst null. */
+  emailAenderungOffenBis: string | null;
+}
+
+export interface KlientEmailAenderungLinkDto {
+  link: string;
+  laeuftAbAm: string;
+}
+
+export interface KlientEmailAendernPruefungDto {
+  emailMaskiert: string;
+}

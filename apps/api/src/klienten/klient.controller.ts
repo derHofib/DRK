@@ -81,6 +81,7 @@ const kontaktAktualisierenSchema = z.object({
 });
 
 const zugangEinladenSchema = z.object({ email: z.string().email() });
+const zugangNeuEinladenSchema = z.object({ email: z.string().email().optional() });
 const zugangAktivSchema = z.object({ aktiv: z.boolean() });
 
 @Controller("klienten")
@@ -157,8 +158,13 @@ export class KlientController {
   }
 
   @Post(":id/zugang/neu-einladen")
-  async zugangNeuEinladen(@Param("id") id: string) {
-    return this.zugang.neuEinladen(id);
+  async zugangNeuEinladen(@Param("id") id: string, @Body() body: unknown) {
+    return this.zugang.neuEinladen(id, zugangNeuEinladenSchema.parse(body ?? {}).email);
+  }
+
+  @Post(":id/zugang/email-aendern-link")
+  async zugangEmailAendernLink(@Param("id") id: string) {
+    return this.zugang.emailAenderungLink(id);
   }
 
   @Patch(":id/zugang")

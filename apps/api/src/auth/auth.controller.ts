@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
 import { Authenticated, TeilnehmerAuthenticated } from "../common/authenticated.decorator";
@@ -38,6 +38,12 @@ const passwortResetEinloesenSchema = z.object({
 const klientEinladungEinloesenSchema = z.object({
   token: z.string().min(1),
   neuesPasswort: z.string().min(8),
+});
+
+const klientEmailAendernSchema = z.object({
+  token: z.string().min(1),
+  neueEmail: z.string().email(),
+  passwort: z.string().min(1),
 });
 
 @Controller("auth")
@@ -123,6 +129,21 @@ export class AuthController {
   async klientEinladungEinloesen(@Body() body: unknown) {
     const { token, neuesPasswort } = klientEinladungEinloesenSchema.parse(body);
     await this.auth.klientEinladungEinloesen(token, neuesPasswort);
+    return { ok: true };
+  }
+
+  // Ohne Auth wie die Einladung; der Pfad-Parameter ist ein Roh-Token.
+  @Throttle(RATEN_SCHRANKE)
+  @Get("klient/email-aendern/:token")
+  async klientEmailAendernPruefen(@Param("token") token: string) {
+    return this.auth.klientEmailAendernPruefen(token);
+  }
+
+  @Throttle(RATEN_SCHRANKE)
+  @Post("klient/email-aendern/einloesen")
+  async klientEmailAendernEinloesen(@Body() body: unknown) {
+    const { token, neueEmail, passwort } = klientEmailAendernSchema.parse(body);
+    await this.auth.klientEmailAendernEinloesen(token, neueEmail, passwort);
     return { ok: true };
   }
 

@@ -19,6 +19,13 @@ export interface KlientZugangDto {
   /** Nur bei "eingeladen": wann der offene Link ablaeuft bzw. abgelaufen ist. */
   einladungLaeuftAbAm: string | null;
   einladungAbgelaufen: boolean;
+  /** Ablauf eines offenen Links zum Aendern der E-Mail, sonst null. */
+  emailAenderungOffenBis: string | null;
+}
+
+export interface KlientEmailAenderungLinkDto {
+  link: string;
+  laeuftAbAm: string;
 }
 
 export interface KlientEinladungDto {
@@ -33,6 +40,7 @@ interface ZugangRow {
   passwort_hash: string | null;
   aktiv: boolean;
   einladung_ablauf: Date | null;
+  email_aenderung_ablauf: Date | null;
 }
 
 @Injectable()
@@ -84,7 +92,7 @@ export class KlientZugangService {
    * dabei NICHT still reaktiviert -- das waere eine versteckte
    * Freischaltung; dafuer gibt es PATCH.
    */
-  async neuEinladen(klientId: string): Promise<KlientEinladungDto> {
+  async neuEinladen(klientId: string, neueEmail?: string): Promise<KlientEinladungDto> {
     const ctx = requireTenantContext();
     return this.mitBerechtigung(klientId, async (client) => {
       const zugang = await ladeZugang(client, klientId);
@@ -92,6 +100,28 @@ export class KlientZugangService {
       await verlangeNichtGesperrt(client, klientId);
       if (!zugang.aktiv) {
         throw new ConflictException("Der Zugang ist deaktiviert — bitte zuerst wieder aktivieren.");
+      }
+      const korrigiert = neueEmail !== undefined && neueEmail.toLowerCase() !== zugang.email.toLowerCase();
+      if (neueEmail !== undefined && zugang.passwort_hash) {
+        throw new ConflictException(
+          "Das Passwort wurde bereits gesetzt — die E-Mail-Adresse lässt sich nur noch über den Änderungslink ändern."
+        );
+      }
+      if (korrigiert) {
+        const { rows } = await client.query<{ ergebnis: string }>(
+          "SELECT klient_zugang_email_korrigieren($1, $2) AS ergebnis",
+          [klientId, neueEmail]
+        );
+        const ergebnis = rows[0].ergebnis;
+        if (ergebnis === "vergeben") {
+          throw new ConflictException("Diese E-Mail-Adresse wird bereits für einen anderen Zugang verwendet.");
+        }
+        if (ergebnis === "passwort_gesetzt") {
+          throw new ConflictException(
+            "Das Passwort wurde bereits gesetzt — die E-Mail-Adresse lässt sich nur noch über den Änderungslink ändern."
+          );
+        }
+        if (ergebnis !== "ok") throw new NotFoundException("Für diese Person besteht noch kein Zugang.");
       }
       const einladung = neueEinladung();
       await client.query(
@@ -103,7 +133,10 @@ export class KlientZugangService {
         aktion: "zugang-neu-einladen",
         objektTyp: "klient_zugang",
         objektId: zugang.id,
-        nachher: { klientId },
+        // Wie beim Einladen (E-Mail im nachher) gehoert die Adresse ins Protokoll.
+        ...(korrigiert
+          ? { vorher: { email: zugang.email }, nachher: { klientId, email: neueEmail, emailKorrigiert: true } }
+          : { nachher: { klientId } }),
       });
       return einladung.dto;
     });
@@ -115,7 +148,16 @@ export class KlientZugangService {
       if (!zugang) throw new NotFoundException("Für diese Person besteht noch kein Zugang.");
       if (aktiv) await verlangeNichtGesperrt(client, klientId);
       if (zugang.aktiv !== aktiv) {
-        await client.query("UPDATE klient_zugang SET aktiv = $2 WHERE id = $1", [zugang.id, aktiv]);
+        // Ein offener E-Mail-Link faellt mit der Deaktivierung weg: sonst waere er
+        // nach spaeterem Reaktivieren wieder gueltig, ohne dass jemand daran denkt.
+        await client.query(
+          `UPDATE klient_zugang SET aktiv = $2,
+             email_aenderung_token_hash = CASE WHEN $2 THEN email_aenderung_token_hash END,
+             email_aenderung_ablauf = CASE WHEN $2 THEN email_aenderung_ablauf END,
+             email_aenderung_von = CASE WHEN $2 THEN email_aenderung_von END
+           WHERE id = $1`,
+          [zugang.id, aktiv]
+        );
         await this.audit.protokollieren(client, {
           modul: "klienten",
           aktion: aktiv ? "zugang-aktivieren" : "zugang-deaktivieren",
@@ -126,6 +168,40 @@ export class KlientZugangService {
         });
       }
       return zuDto(await ladeZugang(client, klientId));
+    });
+  }
+
+  /**
+   * Nur bei aktivem Zugang mit Passwort: vorher gibt es nichts zu "aendern",
+   * dort korrigiert Neu-Einladen die Adresse direkt. Ein neuer Link ersetzt
+   * einen offenen.
+   */
+  async emailAenderungLink(klientId: string): Promise<KlientEmailAenderungLinkDto> {
+    const ctx = requireTenantContext();
+    return this.mitBerechtigung(klientId, async (client) => {
+      const zugang = await ladeZugang(client, klientId);
+      if (!zugang) throw new NotFoundException("Für diese Person besteht noch kein Zugang.");
+      await verlangeNichtGesperrt(client, klientId);
+      if (!zugang.aktiv) throw new ConflictException("Der Zugang ist deaktiviert — bitte zuerst wieder aktivieren.");
+      if (!zugang.passwort_hash) {
+        throw new ConflictException(
+          "Die Einladung wurde noch nicht eingelöst — die E-Mail-Adresse lässt sich über „Neu einladen“ direkt korrigieren."
+        );
+      }
+      const token = neuerResetToken();
+      const ablauf = new Date(Date.now() + EINLADUNG_GUELTIGKEIT_TAGE * 24 * 60 * 60 * 1000);
+      await client.query(
+        `UPDATE klient_zugang SET email_aenderung_token_hash = $2, email_aenderung_ablauf = $3, email_aenderung_von = $4 WHERE id = $1`,
+        [zugang.id, resetTokenHash(token), ablauf, ctx.benutzerId]
+      );
+      await this.audit.protokollieren(client, {
+        modul: "klienten",
+        aktion: "zugang-email-link",
+        objektTyp: "klient_zugang",
+        objektId: zugang.id,
+        nachher: { klientId },
+      });
+      return { link: `/?klient-email=${token}`, laeuftAbAm: ablauf.toISOString() };
     });
   }
 
@@ -152,7 +228,7 @@ export class KlientZugangService {
 
 async function ladeZugang(client: PoolClient, klientId: string): Promise<ZugangRow | null> {
   const { rows } = await client.query<ZugangRow>(
-    "SELECT id, email, passwort_hash, aktiv, einladung_ablauf FROM klient_zugang WHERE klient_id = $1",
+    "SELECT id, email, passwort_hash, aktiv, einladung_ablauf, email_aenderung_ablauf FROM klient_zugang WHERE klient_id = $1",
     [klientId]
   );
   return rows[0] ?? null;
@@ -179,7 +255,7 @@ function neueEinladung(): { hash: string; ablauf: Date; dto: KlientEinladungDto 
 }
 
 function zuDto(zugang: ZugangRow | null): KlientZugangDto {
-  if (!zugang) return { status: "keiner", email: null, einladungLaeuftAbAm: null, einladungAbgelaufen: false };
+  if (!zugang) return { status: "keiner", email: null, einladungLaeuftAbAm: null, einladungAbgelaufen: false, emailAenderungOffenBis: null };
   const status: KlientZugangStatus = !zugang.aktiv ? "deaktiviert" : zugang.passwort_hash ? "aktiv" : "eingeladen";
   const ablauf = zugang.einladung_ablauf;
   return {
@@ -187,5 +263,9 @@ function zuDto(zugang: ZugangRow | null): KlientZugangDto {
     email: zugang.email,
     einladungLaeuftAbAm: ablauf ? ablauf.toISOString() : null,
     einladungAbgelaufen: ablauf ? ablauf.getTime() < Date.now() : false,
+    emailAenderungOffenBis:
+      zugang.email_aenderung_ablauf && zugang.email_aenderung_ablauf.getTime() > Date.now()
+        ? zugang.email_aenderung_ablauf.toISOString()
+        : null,
   };
 }

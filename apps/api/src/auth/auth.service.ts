@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { NobleCryptoPlugin, ScureBase32Plugin, TOTP } from "otplib";
@@ -371,6 +371,46 @@ export class AuthService {
     }
   }
 
+  /** 404 bei ungueltig/abgelaufen: die Seite zeigt dann "Link ungueltig". */
+  async klientEmailAendernPruefen(token: string): Promise<{ emailMaskiert: string }> {
+    const row = await this.db.withoutTenant(async (client) => {
+      const { rows } = await client.query<{ email: string }>(
+        "SELECT email FROM klient_email_aendern_pruefen($1)",
+        [resetTokenHash(token)]
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) throw new NotFoundException("Link ungültig oder abgelaufen.");
+    return { emailMaskiert: maskiereEmail(row.email) };
+  }
+
+  /**
+   * Falscher Token und falsches Passwort geben dieselbe Meldung, damit sich
+   * mit einem erbeuteten Link nicht erkennen laesst, ob er noch lebt. Der
+   * Passwort-Hash geht an die DB-Funktion zurueck (Begruendung 0054).
+   */
+  async klientEmailAendernEinloesen(token: string, neueEmail: string, passwort: string): Promise<void> {
+    const abgelehnt = new UnauthorizedException("Link oder Passwort ungültig.");
+    const tokenHash = resetTokenHash(token);
+    const ergebnis = await this.db.withoutTenant(async (client) => {
+      const { rows } = await client.query<{ passwort_hash: string }>(
+        "SELECT passwort_hash FROM klient_email_aendern_pruefen($1)",
+        [tokenHash]
+      );
+      const hash = rows[0]?.passwort_hash;
+      if (!hash || !(await bcrypt.compare(passwort, hash))) return "ungueltig";
+      const res = await client.query<{ ergebnis: string }>(
+        "SELECT klient_email_aendern_einloesen($1, $2, $3) AS ergebnis",
+        [tokenHash, neueEmail, hash]
+      );
+      return res.rows[0].ergebnis;
+    });
+    if (ergebnis === "vergeben") {
+      throw new ConflictException("Diese E-Mail-Adresse wird bereits für einen anderen Zugang verwendet.");
+    }
+    if (ergebnis !== "ok") throw abgelehnt;
+  }
+
   /**
    * Nur fuer Klient-Sitzungen sinnvoll. Ein Benutzer-Token ist an diesem
    * Endpunkt zwar authentifiziert (TeilnehmerGuard), aber ohne Klient-Bezug
@@ -395,4 +435,9 @@ export class AuthService {
       };
     });
   }
+}
+
+function maskiereEmail(email: string): string {
+  const [lokal, domain] = email.split("@");
+  return `${lokal.slice(0, 1)}***@${domain}`;
 }
