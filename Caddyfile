@@ -17,5 +17,9 @@
 }
 
 app.hecaso.de, office.hecaso.de {
+	# Der Chat-Stream (/api/chat/ereignisse, text/event-stream) braucht hier keine
+	# Sonderbehandlung: Caddy leert Antworten vom Typ text/event-stream von selbst
+	# sofort. Das Puffern verhindert
+	# der eigene Block in apps/web/nginx.conf, hinter dem Caddy hier steht.
 	reverse_proxy web:80
 }
