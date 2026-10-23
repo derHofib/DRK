@@ -50,7 +50,10 @@ CREATE TABLE chat_teilnehmer (
   benutzer_id      uuid REFERENCES benutzer(id),
   klient_id        uuid REFERENCES klient(id),
   ist_admin        boolean NOT NULL DEFAULT false,
-  beigetreten_am   timestamptz NOT NULL DEFAULT now(),
+  -- clock_timestamp(): mehrere Teilnehmende eines Statements bekommen so verschiedene,
+  -- aufsteigende Zeitpunkte -- die Reihenfolge der Einladung bestimmt, wer bei
+  -- Admin-Vererbung als "dienstaeltester" gilt (mit now() waeren alle gleich alt).
+  beigetreten_am   timestamptz NOT NULL DEFAULT clock_timestamp(),
   verlassen_am     timestamptz,
   zuletzt_gelesen_am timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -443,7 +446,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   ereignis_art text := TG_ARGV[0];
-  chat_ref uuid := CASE WHEN TG_TABLE_NAME = 'chat' THEN NEW.id ELSE NEW.chat_id END;
+  -- Spaltenname als Argument und ueber to_jsonb gelesen: plpgsql wuerde NEW.chat_id
+  -- schon beim Parsen aufloesen und fuer die Tabelle chat (Spalte id) scheitern.
+  chat_ref uuid := (to_jsonb(NEW) ->> TG_ARGV[1])::uuid;
 BEGIN
   PERFORM pg_notify(
     'chat_ereignis',
@@ -455,14 +460,14 @@ $$;
 
 CREATE TRIGGER chat_nachricht_melden
   AFTER INSERT OR UPDATE ON chat_nachricht
-  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('nachricht');
+  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('nachricht', 'chat_id');
 
 -- Nicht bei jedem Lesestand (zuletzt_gelesen_am): jedes "gelesen" wuerde sonst
 -- allen Chat-Mitgliedern ein Ereignis schicken, das fuer sie nichts aendert.
 CREATE TRIGGER chat_teilnehmer_melden
   AFTER INSERT OR UPDATE OF ist_admin, verlassen_am ON chat_teilnehmer
-  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('teilnehmer');
+  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('teilnehmer', 'chat_id');
 
 CREATE TRIGGER chat_melden
   AFTER UPDATE OF name ON chat
-  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('chat');
+  FOR EACH ROW EXECUTE FUNCTION chat_ereignis_melden('chat', 'id');

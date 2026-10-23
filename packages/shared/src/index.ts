@@ -851,3 +851,129 @@ export interface KlientEmailAenderungLinkDto {
 export interface KlientEmailAendernPruefungDto {
   emailMaskiert: string;
 }
+
+// --- Chat (migrations/0055, apps/api/src/chat) ---
+
+export type ChatArt = "direkt" | "gruppe";
+export type ChatNachrichtArt = "text" | "bild" | "termin" | "standort" | "system";
+
+export interface ChatPersonDto {
+  art: "benutzer" | "klient";
+  id: string;
+  /** Klient:innen: Mitarbeitende je nach Sichtbarkeit voll oder als Initialen, andere Klient:innen nur Vorname. */
+  name: string;
+}
+
+export interface ChatTeilnehmerDto extends ChatPersonDto {
+  /** ID der Teilnahme (fuer DELETE /chat/:id/teilnehmer/:teilnehmerId), nicht der Person. */
+  teilnehmerId: string;
+  istAdmin: boolean;
+  beigetretenAm: string;
+}
+
+export interface ChatVorschauDto {
+  nachrichtId: string;
+  art: ChatNachrichtArt;
+  /** Kurztext; bei Bild/Standort/Termin ein Platzhalter, bei geloeschten Nachrichten "Nachricht gelöscht". */
+  vorschau: string;
+  absender: ChatPersonDto | null;
+  eigene: boolean;
+  geloescht: boolean;
+  erstelltAm: string;
+}
+
+export interface ChatDto {
+  id: string;
+  art: ChatArt;
+  /** Gruppenname; null bei Direktchats. */
+  name: string | null;
+  /** Direktchat: Name des Gegenuebers; Gruppe: name. */
+  anzeigename: string;
+  erstelltAm: string;
+  binAdmin: boolean;
+  /** Nachrichten anderer nach dem eigenen Lesestand (ohne geloeschte). */
+  ungelesen: number;
+  /** Aktive Teilnehmende inkl. der eigenen Person. */
+  teilnehmer: ChatTeilnehmerDto[];
+  letzteNachricht: ChatVorschauDto | null;
+  letzteAktivitaetAm: string;
+}
+
+export interface ChatKontaktDto extends ChatPersonDto {
+  /** Bestehender Direktchat mit dieser Person, falls vorhanden. */
+  direktChatId: string | null;
+}
+
+export interface ChatTerminKurzDto {
+  id: string;
+  titel: string;
+  ort: string | null;
+  /** Format wie TerminDto: bei ganztaegig reine Datumsangaben, sonst ISO-Zeitpunkte. */
+  beginn: string;
+  ende: string;
+  ganztaegig: boolean;
+  abgesagtAm: string | null;
+  meineAntwort: TerminAntwort | null;
+  /** true = ich bin eingetragen und habe zugesagt; false = Button "In meinen Kalender uebernehmen" anbieten. */
+  uebernommen: boolean;
+}
+
+export interface ChatStandortDto {
+  lat: number;
+  lng: number;
+  genauigkeitM: number | null;
+  bezeichnung: string | null;
+}
+
+export interface ChatAnhangDto {
+  id: string;
+  dateiname: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  groesse: number;
+}
+
+export interface ChatNachrichtDto {
+  id: string;
+  chatId: string;
+  art: ChatNachrichtArt;
+  erstelltAm: string;
+  absender: ChatPersonDto | null;
+  eigene: boolean;
+  geloescht: boolean;
+  /** Text bzw. Bildunterschrift; null bei geloeschten Nachrichten. */
+  text: string | null;
+  standort: ChatStandortDto | null;
+  termin: ChatTerminKurzDto | null;
+  anhaenge: ChatAnhangDto[];
+}
+
+export interface ChatNachrichtenSeiteDto {
+  /** Neueste zuerst. Naechste Seite: GET ...?vor=<id der letzten Nachricht dieser Seite>. */
+  nachrichten: ChatNachrichtDto[];
+  weitere: boolean;
+}
+
+export type ChatKontaktEingabe = { benutzerId: string } | { klientId: string };
+
+export interface ChatGruppeAnlegenEingabe {
+  name: string;
+  teilnehmer: ChatKontaktEingabe[];
+}
+
+export type ChatNachrichtEingabe =
+  | { art: "text"; text: string }
+  | { art: "standort"; lat: number; lng: number; genauigkeitM?: number; bezeichnung?: string | null }
+  | { art: "termin"; terminId: string }
+  | { art: "termin"; termin: TerminAnlegenEingabe };
+
+/** Server-Sent-Event "chat" von GET /chat/ereignisse (Daten: JSON). */
+export interface ChatEreignisDto {
+  /** null bei art "resync". */
+  chatId: string | null;
+  /**
+   * nachricht: neue/geloeschte Nachricht; teilnehmer: Mitgliedschaft oder Adminrechte geaendert
+   * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; resync: Verbindung zur Datenbank
+   * war unterbrochen -- alles neu laden.
+   */
+  art: "nachricht" | "teilnehmer" | "chat" | "resync";
+}

@@ -7,5 +7,6 @@ import { KalenderService } from "./kalender.service";
   imports: [AuthModule],
   controllers: [KalenderController],
   providers: [KalenderService],
+  exports: [KalenderService],
 })
 export class KalenderModule {}

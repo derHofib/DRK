@@ -9,8 +9,8 @@ import type {
   TerminTeilnehmerDto,
   TerminTeilnehmerEingabe,
 } from "@zimmerakte/shared";
-import { initialen } from "../common/anonymisierung";
-import { klientIstErlaubt } from "../common/standort-restriction";
+import { KlientNamen } from "../common/klient-namen";
+import { pruefeKontakt } from "../common/kontakt-pruefung";
 import { aktuellerTeilnehmer, requireTenantContext, type Teilnehmer } from "../common/tenant-context";
 import { DatabaseService } from "../database/database.service";
 import { terminAlsIcs } from "./ics";
@@ -102,6 +102,16 @@ export class KalenderService {
   }
 
   async anlegen(eingabe: TerminAnlegenEingabe): Promise<TerminDto> {
+    const ich = aktuellerTeilnehmer();
+    return this.db.withTenant(async (client) => this.ladeEinzeln(client, ich, await this.anlegenIn(client, eingabe)));
+  }
+
+  /**
+   * Legt den Termin in der Transaktion des Aufrufers an und liefert seine ID.
+   * Der Chat nutzt das, damit "Termin im Chat anlegen" Termin und Nachricht
+   * gemeinsam festschreibt oder gemeinsam verwirft.
+   */
+  async anlegenIn(client: PoolClient, eingabe: TerminAnlegenEingabe): Promise<string> {
     const ctx = requireTenantContext();
     const ich = aktuellerTeilnehmer();
     const zeitraum = berechneZeitraum(eingabe.ganztaegig ?? false, eingabe.beginn, eingabe.ende);
@@ -109,43 +119,46 @@ export class KalenderService {
     if (eingeladen.length > MAX_TEILNEHMER) {
       throw new BadRequestException(`Höchstens ${MAX_TEILNEHMER} Teilnehmende pro Termin.`);
     }
-    // Klient:innen laden vorerst niemanden ein: ohne Chat-Beziehung (Schritt 3)
-    // gaebe es keine Regel, WEN sie sehen duerfen. Dort wird das auf
-    // Gespraechspartner erweitert.
-    if (ich.art === "klient" && eingeladen.length > 0) {
-      throw new ForbiddenException("Als Klient:in kannst du keine weiteren Teilnehmenden eintragen.");
+    if (ich.art === "klient") {
+      // Klient:innen laden nur Mitarbeitende ein, mit denen sie einen aktiven
+      // Chat teilen: das ist die einzige Beziehung, die ihnen einen Kontakt
+      // erlaubt -- ein Chat entsteht nur durch Mitarbeitende (Chat-Plan).
+      for (const t of eingeladen) {
+        if (!("benutzerId" in t)) {
+          throw new ForbiddenException("Als Klient:in kannst du nur Mitarbeitende aus deinen Chats eintragen.");
+        }
+        await this.pruefeGemeinsamenChat(client, ich.id, t.benutzerId);
+      }
+    } else {
+      for (const t of eingeladen) await pruefeKontakt(client, ich.id, t);
     }
 
-    return this.db.withTenant(async (client) => {
-      for (const t of eingeladen) await this.pruefeEinladbar(client, ctx.benutzerId, t);
-
-      // ID vorab erzeugen und Termin vor den Teilnehmerzeilen einfuegen: die
-      // Insert-Policy von termin_teilnehmer fragt termin_ist_ersteller(), das den
-      // Termin nur sieht, wenn er in einem frueheren Statement angelegt wurde.
-      const id = randomUUID();
+    // ID vorab erzeugen und Termin vor den Teilnehmerzeilen einfuegen: die
+    // Insert-Policy von termin_teilnehmer fragt termin_ist_ersteller(), das den
+    // Termin nur sieht, wenn er in einem frueheren Statement angelegt wurde.
+    const id = randomUUID();
+    await client.query(
+      `INSERT INTO termin (id, mandant_id, titel, beschreibung, ort, beginn, ende, ganztaegig,
+                           erstellt_von_benutzer_id, erstellt_von_klient_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        id, ctx.mandantId, eingabe.titel.trim(), leerZuNull(eingabe.beschreibung), leerZuNull(eingabe.ort),
+        zeitraum.beginn, zeitraum.ende, eingabe.ganztaegig ?? false,
+        ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null,
+      ]
+    );
+    await client.query(
+      `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id, antwort, geantwortet_am)
+       VALUES ($1, $2, $3, $4, 'zugesagt', now())`,
+      [ctx.mandantId, id, ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null]
+    );
+    for (const t of eingeladen) {
       await client.query(
-        `INSERT INTO termin (id, mandant_id, titel, beschreibung, ort, beginn, ende, ganztaegig,
-                             erstellt_von_benutzer_id, erstellt_von_klient_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          id, ctx.mandantId, eingabe.titel.trim(), leerZuNull(eingabe.beschreibung), leerZuNull(eingabe.ort),
-          zeitraum.beginn, zeitraum.ende, eingabe.ganztaegig ?? false,
-          ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null,
-        ]
+        `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id) VALUES ($1, $2, $3, $4)`,
+        [ctx.mandantId, id, "benutzerId" in t ? t.benutzerId : null, "klientId" in t ? t.klientId : null]
       );
-      await client.query(
-        `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id, antwort, geantwortet_am)
-         VALUES ($1, $2, $3, $4, 'zugesagt', now())`,
-        [ctx.mandantId, id, ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null]
-      );
-      for (const t of eingeladen) {
-        await client.query(
-          `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id) VALUES ($1, $2, $3, $4)`,
-          [ctx.mandantId, id, "benutzerId" in t ? t.benutzerId : null, "klientId" in t ? t.klientId : null]
-        );
-      }
-      return this.ladeEinzeln(client, ich, id);
-    });
+    }
+    return id;
   }
 
   async aendern(id: string, eingabe: TerminAendernEingabe): Promise<TerminDto> {
@@ -236,27 +249,18 @@ export class KalenderService {
     if (termin.abgesagtAm) throw new ConflictException("Der Termin wurde abgesagt und kann nicht mehr geändert werden.");
   }
 
-  /**
-   * Mitarbeitende duerfen aktive Kolleg:innen und Klient:innen mit aktivem
-   * Zugang eintragen, die sie auch in der Klientenliste sehen duerften. Alle
-   * Fehlschlaege klingen gleich: ob die Person gar nicht existiert oder nur
-   * fuer einen unsichtbar ist, soll sich nicht erkennen lassen.
-   */
-  private async pruefeEinladbar(client: PoolClient, benutzerId: string, t: TerminTeilnehmerEingabe): Promise<void> {
-    if ("benutzerId" in t) {
-      const { rows } = await client.query("SELECT 1 FROM benutzer WHERE id = $1 AND aktiv", [t.benutzerId]);
-      if (rows.length === 0) throw new BadRequestException("Mitarbeitende:r nicht gefunden oder nicht aktiv.");
-      return;
-    }
+  /** Laeuft als Klient:in: chat_teilnehmer zeigt nur Chats, in denen die Person selbst aktiv ist (RLS). */
+  private async pruefeGemeinsamenChat(client: PoolClient, klientId: string, benutzerId: string): Promise<void> {
     const { rows } = await client.query(
-      `SELECT 1 FROM klient k
-       JOIN klient_zugang z ON z.klient_id = k.id
-       WHERE k.id = $1 AND z.aktiv AND k.archiviert_am IS NULL AND k.anonymisiert_am IS NULL`,
-      [t.klientId]
+      `SELECT 1
+       FROM chat_teilnehmer ich
+       JOIN chat_teilnehmer er ON er.chat_id = ich.chat_id AND er.verlassen_am IS NULL AND er.benutzer_id = $2
+       JOIN benutzer b ON b.id = er.benutzer_id AND b.aktiv
+       WHERE ich.klient_id = $1 AND ich.verlassen_am IS NULL
+       LIMIT 1`,
+      [klientId, benutzerId]
     );
-    if (rows.length === 0 || !(await klientIstErlaubt(client, benutzerId, t.klientId))) {
-      throw new BadRequestException("Klient:in nicht gefunden oder ohne aktiven Zugang.");
-    }
+    if (rows.length === 0) throw new ForbiddenException("Du kannst nur Mitarbeitende eintragen, mit denen du einen gemeinsamen Chat hast.");
   }
 
   private async ladeEinzeln(client: PoolClient, ich: Teilnehmer, id: string): Promise<TerminDto> {
@@ -317,28 +321,6 @@ export class KalenderService {
   }
 }
 
-/**
- * Klientennamen beim Lesen anonymisieren (CLAUDE.md Regel 6): Klient:innen
- * sehen andere Klient:innen (und sich selbst) nur mit Vornamen; Mitarbeitende
- * sehen den vollen Namen, wenn sie die Person auch in der Klientenliste sehen
- * duerften, sonst nur Initialen -- ein standortbeschraenkter Kollege, der zu
- * einem Termin eingeladen wurde, soll dadurch keine fremde Akte erkennen.
- */
-class KlientNamen {
-  private readonly erlaubt = new Map<string, boolean>();
-  constructor(private readonly client: PoolClient, private readonly ich: Teilnehmer) {}
-
-  async name(klientId: string, vorname: string, nachname: string): Promise<string> {
-    if (this.ich.art === "klient") return vorname;
-    let darf = this.erlaubt.get(klientId);
-    if (darf === undefined) {
-      darf = await klientIstErlaubt(this.client, this.ich.id, klientId);
-      this.erlaubt.set(klientId, darf);
-    }
-    return darf ? `${vorname} ${nachname}` : initialen(vorname, nachname);
-  }
-}
-
 /** $1 = benutzer_id, $2 = klient_id des Aufrufers (je eines NULL); weitere Parameter ab $3. */
 function prinzipalParameter(ich: Teilnehmer): [string | null, string | null] {
   return ich.art === "benutzer" ? [ich.id, null] : [null, ich.id];
@@ -361,7 +343,7 @@ async function ladeTermine(client: PoolClient, ich: Teilnehmer, bedingung: strin
   return rows;
 }
 
-function zeitraumFuerAusgabe(r: TerminRow): { beginn: string; ende: string } {
+export function zeitraumFuerAusgabe(r: { beginn: Date; ende: Date; ganztaegig: boolean }): { beginn: string; ende: string } {
   if (!r.ganztaegig) return { beginn: r.beginn.toISOString(), ende: r.ende.toISOString() };
   // Gespeichert ist ende exklusiv (Tag nach dem letzten Tag), ausgegeben der letzte Tag.
   return {

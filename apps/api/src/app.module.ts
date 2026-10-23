@@ -23,6 +23,7 @@ import { OrganigrammModule } from "./organigramm/organigramm.module";
 import { DelegationModule } from "./delegation/delegation.module";
 import { AuditModule } from "./audit/audit.module";
 import { KalenderModule } from "./kalender/kalender.module";
+import { ChatModule } from "./chat/chat.module";
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { KalenderModule } from "./kalender/kalender.module";
     DelegationModule,
     AuditModule,
     KalenderModule,
+    ChatModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

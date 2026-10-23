@@ -408,7 +408,7 @@ describe("Kalender", () => {
     expect(kl.body.teilnehmer.find((t: any) => t.id === klient1Id).name).toBe("Max");
   });
 
-  it("Klient-Sitzung: eigener Termin ohne Teilnehmende, keine Einladungen, Mitarbeitende sehen ihn nicht", async () => {
+  it("Klient-Sitzung: eigener Termin ohne Teilnehmende, keine Einladungen ohne gemeinsamen Chat (mit Chat: chat.e2e-spec.ts), Mitarbeitende sehen ihn nicht", async () => {
     const k = als(tokenKlient1);
     const basis = { titel: "Arzttermin", ort: "Praxis", beginn: zeit("11-20", "09:00"), ende: zeit("11-20", "09:30") };
     const eingeladen = await k.post("/kalender/termine", { ...basis, teilnehmer: [{ benutzerId: leitungId }] });

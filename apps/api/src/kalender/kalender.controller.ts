@@ -3,23 +3,7 @@ import type { Response } from "express";
 import { z } from "zod";
 import { TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { KalenderService } from "./kalender.service";
-
-const teilnehmerSchema = z.union([
-  z.object({ benutzerId: z.string().uuid() }).strict(),
-  z.object({ klientId: z.string().uuid() }).strict(),
-]);
-
-// Zeitformat (Datum bei ganztaegig, sonst Zeitpunkt mit Zeitzone) haengt von
-// ganztaegig ab und wird deshalb im Service geprueft, nicht hier.
-const anlegenSchema = z.object({
-  titel: z.string().trim().min(1, "Titel darf nicht leer sein.").max(200, "Titel ist zu lang (höchstens 200 Zeichen)."),
-  beschreibung: z.string().max(5000, "Beschreibung ist zu lang.").nullable().optional(),
-  ort: z.string().max(300, "Ort ist zu lang.").nullable().optional(),
-  beginn: z.string(),
-  ende: z.string(),
-  ganztaegig: z.boolean().optional(),
-  teilnehmer: z.array(teilnehmerSchema).optional(),
-});
+import { terminAnlegenSchema } from "./termin.schemas";
 
 const aendernSchema = z
   .object({
@@ -66,7 +50,7 @@ export class KalenderController {
 
   @Post("termine")
   async anlegen(@Body() body: unknown) {
-    return this.kalender.anlegen(anlegenSchema.parse(body));
+    return this.kalender.anlegen(terminAnlegenSchema.parse(body));
   }
 
   @Patch("termine/:id")
