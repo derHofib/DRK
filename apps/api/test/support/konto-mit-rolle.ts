@@ -62,6 +62,7 @@ const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "zimmer", aktion: "voller-verlauf", scope: "einrichtung" },
   { modul: "zimmer", aktion: "bearbeiten", scope: "einrichtung" },
   { modul: "klienten", aktion: "anonymisieren", scope: "einrichtung" },
+  { modul: "klienten", aktion: "zugang-verwalten", scope: "einrichtung" },
   { modul: "mitarbeitende", aktion: "anlegen", scope: "einrichtung" },
   { modul: "mitarbeitende", aktion: "standort-zuweisen", scope: "einrichtung" },
   // Ersetzt die alte feste Vier-Augen-Gegenrolle (zimmer.service.ts,

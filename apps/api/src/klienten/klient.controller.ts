@@ -5,6 +5,7 @@ import { Authenticated } from "../common/authenticated.decorator";
 import { KlientService } from "./klient.service";
 import { KlientStammdatenService } from "./klient-stammdaten.service";
 import { KlientArchivService } from "./klient-archiv.service";
+import { KlientZugangService } from "./klient-zugang.service";
 
 const anlegenSchema = z.object({
   vorname: z.string().min(1),
@@ -79,13 +80,17 @@ const kontaktAktualisierenSchema = z.object({
   telefon: z.string().optional(),
 });
 
+const zugangEinladenSchema = z.object({ email: z.string().email() });
+const zugangAktivSchema = z.object({ aktiv: z.boolean() });
+
 @Controller("klienten")
 @Authenticated()
 export class KlientController {
   constructor(
     private readonly klienten: KlientService,
     private readonly stammdaten: KlientStammdatenService,
-    private readonly archiv: KlientArchivService
+    private readonly archiv: KlientArchivService,
+    private readonly zugang: KlientZugangService
   ) {}
 
   @Get()
@@ -139,6 +144,26 @@ export class KlientController {
   async entarchivieren(@Param("id") id: string) {
     await this.archiv.entarchivieren(id);
     return this.klienten.findeEinen(id);
+  }
+
+  @Get(":id/zugang")
+  async zugangStatus(@Param("id") id: string) {
+    return this.zugang.status(id);
+  }
+
+  @Post(":id/zugang")
+  async zugangEinladen(@Param("id") id: string, @Body() body: unknown) {
+    return this.zugang.einladen(id, zugangEinladenSchema.parse(body).email);
+  }
+
+  @Post(":id/zugang/neu-einladen")
+  async zugangNeuEinladen(@Param("id") id: string) {
+    return this.zugang.neuEinladen(id);
+  }
+
+  @Patch(":id/zugang")
+  async zugangAktivSetzen(@Param("id") id: string, @Body() body: unknown) {
+    return this.zugang.aktivSetzen(id, zugangAktivSchema.parse(body).aktiv);
   }
 
   @Get(":id/archiv/:archivId/pdf")

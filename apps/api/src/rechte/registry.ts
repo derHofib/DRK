@@ -33,6 +33,7 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "klienten", aktion: "bearbeiten" },
   { modul: "klienten", aktion: "archivieren" },
   { modul: "klienten", aktion: "anonymisieren" },
+  { modul: "klienten", aktion: "zugang-verwalten", sensibel: true },
 
   { modul: "zimmer", aktion: "ansehen" },
   { modul: "zimmer", aktion: "bearbeiten" },
