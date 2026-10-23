@@ -18,7 +18,7 @@ types.setTypeParser(1082, (value) => value);
  *
  * Zwei Betriebsarten:
  *  - withTenant(fn): oeffnet eine Transaktion, setzt SET LOCAL app.mandant_id
- *    / app.benutzer_id aus dem AsyncLocalStorage-Kontext, fuehrt
+ *    / app.benutzer_id / app.klient_id aus dem AsyncLocalStorage-Kontext, fuehrt
  *    fn aus, committet. RLS greift automatisch -- niemand kann diesen Pfad
  *    aus Versehen ohne Tenant-Kontext benutzen, requireTenantContext() wirft
  *    sonst.
@@ -47,6 +47,8 @@ export class DatabaseService implements OnModuleDestroy {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.mandant_id', $1, true)", [ctx.mandantId]);
       await client.query("SELECT set_config('app.benutzer_id', $1, true)", [ctx.benutzerId]);
+      // Leer = ausdruecklich kein Klient; Policies vergleichen per NULLIF(..., '').
+      await client.query("SELECT set_config('app.klient_id', $1, true)", [ctx.klientId ?? ""]);
       const result = await fn(client);
       await client.query("COMMIT");
       return result;

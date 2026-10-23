@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Patch, Post } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
-import { Authenticated } from "../common/authenticated.decorator";
+import { Authenticated, TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { AuthService } from "./auth.service";
 
 // Enger als die globale Schranke (100/min, app.module.ts) -- das hier sind
@@ -31,6 +31,11 @@ const passwortAendernSchema = z.object({
 });
 
 const passwortResetEinloesenSchema = z.object({
+  token: z.string().min(1),
+  neuesPasswort: z.string().min(8),
+});
+
+const klientEinladungEinloesenSchema = z.object({
   token: z.string().min(1),
   neuesPasswort: z.string().min(8),
 });
@@ -102,5 +107,28 @@ export class AuthController {
     const { token, neuesPasswort } = passwortResetEinloesenSchema.parse(body);
     await this.auth.passwortZuruecksetzenEinloesen(token, neuesPasswort);
     return { ok: true };
+  }
+
+  @Throttle(RATEN_SCHRANKE)
+  @Post("klient/login")
+  async klientLogin(@Body() body: unknown) {
+    const { mandantSlug, email, passwort } = loginSchema.parse(body);
+    return this.auth.klientLogin(mandantSlug, email, passwort);
+  }
+
+  // Wie passwort-reset/einloesen bewusst ohne Auth: die Person hat noch kein
+  // Passwort. Schutz = 256-Bit-Token + Raten-Schranke.
+  @Throttle(RATEN_SCHRANKE)
+  @Post("klient/einladung/einloesen")
+  async klientEinladungEinloesen(@Body() body: unknown) {
+    const { token, neuesPasswort } = klientEinladungEinloesenSchema.parse(body);
+    await this.auth.klientEinladungEinloesen(token, neuesPasswort);
+    return { ok: true };
+  }
+
+  @Get("klient/ich")
+  @TeilnehmerAuthenticated()
+  async klientIch() {
+    return this.auth.klientIch();
   }
 }

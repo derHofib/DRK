@@ -2,7 +2,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface TenantContext {
   mandantId: string;
+  /** Leer bei Klient-Sitzungen -- siehe aktuellerTeilnehmer(). */
   benutzerId: string;
+  /** Nur bei Klient-Sitzungen gesetzt (Zugang aus klient_zugang). */
+  klientId?: string;
 }
 
 /**
@@ -26,4 +29,18 @@ export function requireTenantContext(): TenantContext {
     );
   }
   return ctx;
+}
+
+export type Teilnehmer = { art: "benutzer"; id: string } | { art: "klient"; id: string };
+
+/**
+ * Ein Request gehoert entweder einem Benutzer oder einem Klient-Zugang. Die
+ * Klient-Seite hat bewusst benutzerId = "": Code, der benutzerId als uuid in
+ * SQL einsetzt, scheitert dann laut (22P02) statt etwas Falsches zu
+ * liefern -- fail closed.
+ */
+export function aktuellerTeilnehmer(): Teilnehmer {
+  const ctx = requireTenantContext();
+  if (ctx.klientId) return { art: "klient", id: ctx.klientId };
+  return { art: "benutzer", id: ctx.benutzerId };
 }

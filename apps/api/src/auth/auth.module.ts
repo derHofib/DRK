@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { AuthGuard } from "./auth.guard";
+import { AuthGuard, TeilnehmerGuard } from "./auth.guard";
 
 // Derselbe Wert, der frueher als stiller Fallback diente -- hier nur noch
 // als Erkennungsmerkmal, um auch ein versehentlich aus .env.example
@@ -38,7 +38,7 @@ function jwtSecret(): string {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthGuard],
-  exports: [AuthGuard, JwtModule],
+  providers: [AuthService, AuthGuard, TeilnehmerGuard],
+  exports: [AuthGuard, TeilnehmerGuard, JwtModule],
 })
 export class AuthModule {}

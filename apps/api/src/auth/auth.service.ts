@@ -1,10 +1,10 @@
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { NobleCryptoPlugin, ScureBase32Plugin, TOTP } from "otplib";
 import * as QRCode from "qrcode";
 import { DatabaseService } from "../database/database.service";
-import { requireTenantContext } from "../common/tenant-context";
+import { aktuellerTeilnehmer, requireTenantContext } from "../common/tenant-context";
 import { entschluesseln, verschluesseln } from "../common/geheimnis";
 import { resetTokenHash } from "../common/reset-token";
 
@@ -38,6 +38,16 @@ interface LoginLookupRow {
   passwort_hash: string;
   benutzer_aktiv: boolean;
   totp_aktiviert: boolean;
+}
+
+interface KlientLoginLookupRow {
+  zugang_id: string;
+  klient_id: string;
+  mandant_id: string;
+  mandant_aktiv: boolean;
+  passwort_hash: string | null;
+  zugang_aktiv: boolean;
+  klient_gesperrt: boolean;
 }
 
 interface TotpLoginLookupRow {
@@ -313,5 +323,76 @@ export class AuthService {
     if (!erfolgreich) {
       throw new UnauthorizedException("Link ungültig oder abgelaufen.");
     }
+  }
+
+  /**
+   * Gleiche nichtssagende Fehlermeldung wie login() fuer jede Ablehnung --
+   * auch fuer "Zugang deaktiviert" oder "Einladung noch nicht eingeloest",
+   * sonst liesse sich per Antwort erraten, welche Klient:innen einen Zugang
+   * haben. Lookup ueber die SECURITY DEFINER-Funktion klient_login_lookup()
+   * (migrations/0052), dieselbe dokumentierte Ausnahme wie bei login().
+   */
+  async klientLogin(mandantSlug: string, email: string, passwort: string): Promise<{ accessToken: string }> {
+    const row = await this.db.withoutTenant(async (client) => {
+      const { rows } = await client.query<KlientLoginLookupRow>("SELECT * FROM klient_login_lookup($1, $2)", [
+        mandantSlug,
+        email,
+      ]);
+      return rows[0] ?? null;
+    });
+
+    if (!row || !row.mandant_aktiv || !row.zugang_aktiv || row.klient_gesperrt || !row.passwort_hash) {
+      throw new UnauthorizedException("Anmeldedaten ungültig.");
+    }
+    if (!(await bcrypt.compare(passwort, row.passwort_hash))) {
+      throw new UnauthorizedException("Anmeldedaten ungültig.");
+    }
+
+    const accessToken = this.jwt.sign({
+      typ: "klient_access",
+      sub: row.klient_id,
+      zugangId: row.zugang_id,
+      mandantId: row.mandant_id,
+    });
+    return { accessToken };
+  }
+
+  async klientEinladungEinloesen(token: string, neuesPasswort: string): Promise<void> {
+    const neuerHash = await bcrypt.hash(neuesPasswort, 10);
+    const erfolgreich = await this.db.withoutTenant(async (client) => {
+      const { rows } = await client.query<{ ok: boolean }>(
+        "SELECT klient_einladung_einloesen($1, $2) AS ok",
+        [resetTokenHash(token), neuerHash]
+      );
+      return rows[0].ok;
+    });
+    if (!erfolgreich) {
+      throw new UnauthorizedException("Link ungültig oder abgelaufen.");
+    }
+  }
+
+  /**
+   * Nur fuer Klient-Sitzungen sinnvoll. Ein Benutzer-Token ist an diesem
+   * Endpunkt zwar authentifiziert (TeilnehmerGuard), aber ohne Klient-Bezug
+   * -- 403 statt 401, weil die Identitaet feststeht und nur die Art falsch ist.
+   */
+  async klientIch(): Promise<{ klientId: string; anzeigename: string; mandant: { id: string; name: string } }> {
+    const teilnehmer = aktuellerTeilnehmer();
+    if (teilnehmer.art !== "klient") {
+      throw new ForbiddenException("Dieser Endpunkt ist nur für Klient-Zugänge.");
+    }
+    const { mandantId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{ vorname: string; mandant_name: string }>(
+        "SELECT k.vorname, m.name AS mandant_name FROM klient k, mandant m WHERE k.id = $1 AND m.id = $2",
+        [teilnehmer.id, mandantId]
+      );
+      if (rows.length === 0) throw new UnauthorizedException("Zugang ungültig.");
+      return {
+        klientId: teilnehmer.id,
+        anzeigename: rows[0].vorname,
+        mandant: { id: mandantId, name: rows[0].mandant_name },
+      };
+    });
   }
 }
