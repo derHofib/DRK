@@ -2546,6 +2546,157 @@ Live-Browser-Check (Playwright): Kassenbuch ohne Wochenübersicht, Unterpunkt
 übrig, „Jetzt auszahlen" öffnet das Buchungsformular, die zugeordnete Person
 sieht nur Haus Nord.
 
+### Phase 9 -- Klienten-Zugang, Kalender, Chat, Chat-Anfragen
+
+Klient:innen bekommen einen eigenen Login und sehen **ausschließlich** Chat
+und ihre eigenen Termine -- nichts aus der Akte. Mitarbeitende chatten
+untereinander und mit Klient:innen (1:1 und in Gruppen), teilen Bilder,
+einmalige Standorte und Termine. Neu sind Migrationen 0052 bis 0057, die
+Module `kalender/` und `chat/` im Backend sowie die Seiten „Nachrichten" und
+„Kalender" (Mitarbeitende) und die `KlientShell` (Klient:innen).
+
+**Was gebaut wurde**
+- **Klienten-Zugang** (0052, 0054): Tabelle `klient_zugang` (RLS + FORCE,
+  spaltenscharfe Rechte, kein DELETE), Einladung per einmaligem Link, nur der
+  Hash liegt in der Datenbank (7 Tage gültig). Verwaltung in der Klientenakte
+  unter „Zugang zur App", neues sensibles Recht `klienten.zugang-verwalten`,
+  jede Aktion im Audit-Log (nie mit dem Token). Archivieren/Anonymisieren
+  einer Klient:in deaktiviert den Zugang per Trigger.
+- **Kalender** (0053): `termin` und `termin_teilnehmer`; Absagen statt
+  Löschen. Sichtbar ist ein Termin nur für Ersteller:in und Eingetragene, über
+  die `SECURITY DEFINER`-Funktion `termin_sichtbar()` -- auch ein
+  `ist_vollzugriff`-Konto sieht fremde Termine nicht. `.ics`-Export von Hand
+  erzeugt, ohne neue Abhängigkeit.
+- **Chat** (0055): Direktchats (je Paar eindeutig) und Gruppen, Text, Bilder
+  (wie der Grundriss: `bytea`, verkleinert, MIME aus Magic Bytes), einmaliger
+  Standort, geteilte Termine mit „In meinen Kalender übernehmen".
+- **Chat-Anfragen** (0056, 0057): Klient:innen legen keine Chats an, sie
+  *fragen an* -- die Bezugsbetreuung, Mitarbeitende des Standorts der aktuellen
+  Belegung oder das Team dieses Standorts. Annehmen erzeugt (oder öffnet) den
+  Direktchat, der Anfragetext wird dessen erste Nachricht. Höchstens 5 offene
+  Anfragen je Klient:in (Trigger mit Advisory-Lock), höchstens eine je Ziel
+  (partieller Unique-Index), Raten-Schranke am Endpunkt.
+- **Echtzeit per SSE** (`GET /chat/ereignisse`): eine dedizierte
+  `LISTEN`-Verbindung, je Abonnent:in Mitgliedschaftsprüfung, Heartbeat alle
+  25 s (`CHAT_HEARTBEAT_MS`, nur für Tests anders), Wiederverbindung mit
+  `resync`. Das Frontend nutzt `fetch`-Streaming statt `EventSource`, weil der
+  Token im `Authorization`-Header laufen soll und nicht in der URL (Logs).
+- **Web**: Hauptreiter „Nachrichten" (mit Ungelesen- und Anfragen-Badge) und
+  „Kalender"; `KlientShell` mit genau zwei Bereichen, Trägerfarbe wie bei den
+  Mitarbeitenden (`GET /auth/klient/ich` liefert die beiden Hex-Werte, die
+  Helligkeiten bleiben im CSS), Zielgrößen mindestens 44 px, gemessen bei
+  320/768/1280 px in Hell und Dunkel.
+
+**Bewusste Entscheidungen**
+- **Prinzipal-Modell mit leerem `benutzerId` = fail closed.** Eine
+  Klient-Sitzung hat `benutzerId = ""` und `klientId` gesetzt. Jeder
+  bestehende Code, der `benutzerId` als `uuid` in SQL nutzt, wirft dann einen
+  Fehler, statt etwas Falsches zu liefern. Zusätzlich lässt der `AuthGuard`
+  nur `typ: "access"` durch -- Klient-Token (`klient_access`) bekommen an
+  allen bestehenden Endpunkten 401; nur `@TeilnehmerAuthenticated()` nimmt
+  beide Arten. Klient:innen landen nie in `benutzer` und laufen damit durch
+  keine Rechteprüfung, die eine `benutzer_id` voraussetzt.
+- **Nachrichten sieht nur, wer Teilnehmer:in ist -- auch mit Vollzugriff.**
+  Durchgesetzt per RLS (`chat_ist_teilnehmer()`), es gibt keinen
+  Admin-Lesepfad. `rechte/registry.ts` sagt dasselbe: der Chat steuert
+  Kanalzugriff, nie Nachrichteninhalte. Ein Admin-Pfad wäre das genaue
+  Gegenteil dessen, was Sozialdaten nach SGB X erlauben.
+- **Historien-Grenze in Gruppen** (0056): wer aufgenommen wird, sieht nur
+  Nachrichten ab dem `beigetreten_am` der *aktuellen* Teilnahme. Wiedereintritt
+  ist eine neue Zeile, die frühere Unterhaltung bleibt auch Wiederkehrenden
+  verschlossen. In der Datenbank (`chat_nachricht_lesbar()` in Policy,
+  Anhang und `termin_sichtbar()`), weil sie für *jede* Abfrage gelten muss --
+  Verlauf, Vorschau, Ungelesen-Zähler. Direktchats sind ausgenommen: man kann
+  sie nicht verlassen, und eine angenommene Anfrage soll in den bestehenden
+  Verlauf führen.
+- **Nachrichten sind append-only, Löschen leert den Inhalt.** `REVOKE UPDATE,
+  DELETE`, `GRANT UPDATE` nur auf Text, `geloescht_am` und Standortfelder;
+  der Absender leert den Inhalt, die Zeile bleibt als „Nachricht gelöscht".
+  Bearbeiten gibt es nicht (siehe unten).
+- **Keine System-Nachrichten** („X hat die Gruppe verlassen"). Der Wert
+  `system` existiert im Enum, wird aber nie erzeugt: eine solche Nachricht
+  müsste einen Klientennamen *speichern*, und Anonymisierung passiert beim
+  Lesen (Regel 6) -- je nach Leser:in ist es der volle Name, Initialen oder nur
+  der Vorname. Ein gespeicherter Text kann das nicht.
+- **SSE ohne Inhalte.** `pg_notify` und Stream tragen nur `{chatId, art}` bzw.
+  `{anfrageId}`; Inhalte lädt der Client per REST, also unter RLS und mit
+  Anonymisierung beim Lesen. Wer ein Ereignis bekommt, entscheidet der Server
+  je Abonnent:in unter dessen Identität.
+- **Keine Kartenkacheln.** Ein Standort erscheint als Karte mit Koordinaten
+  und Link „In Karten-App öffnen"; kein iframe, keine Kacheln -- sonst ginge
+  bei jeder Anzeige die IP an den Kartenanbieter. Der Standort ist einmalig,
+  kein Live-Standort.
+- **`mailto:` statt Server-Mailversand.** Es gibt keinen Mailversand. Einladungs-
+  und E-Mail-Änderungslinks werden einmalig angezeigt und per „Link kopieren"
+  oder vorbefülltem `mailto:` über das Mailprogramm der Mitarbeitenden
+  weitergegeben.
+- **Team-Ablehnung beendet die Anfrage für das ganze Team.** Eine
+  Team-Anfrage hat genau eine Antwort: wer zuerst annimmt, bekommt sie (`FOR
+  UPDATE` in `chat_anfrage_annehmen()`, der zweite scheitert mit 409 und
+  hinterlässt weder Chat noch Nachricht); wer ablehnt, lehnt für alle ab.
+  Sonst sähe die Klient:in je nach Teammitglied widersprüchliche Antworten.
+- **`chat_anfrage_annehmen()` ist `SECURITY DEFINER`**, weil die Annahme eine
+  Nachricht im Namen der Klient:in einfügt, was die Insert-Policy von
+  `chat_nachricht` bewusst nicht erlaubt. Statt die Policy aufzuweichen, bekommt
+  genau dieser Weg das Recht und prüft vorher Ziel/Team, aktive Konten und
+  aktiven Zugang selbst; der Text stammt aus der gespeicherten Anfrage.
+- **Standort-Sichtbarkeit auch hier in der Datenbank** (0057):
+  `chat_anfrage_klient_sichtbar()` bildet `klientIstErlaubt()` nach (aktuelle
+  Belegung, Bezugsbetreuung, letzte Belegung; ohne Belegung und Bezug für
+  Standortbeschränkte unsichtbar). Wer die Klient:in nicht sehen darf, kann die
+  Anfrage weder lesen noch ablehnen noch annehmen -- auch bei direktem Aufruf
+  mit der App-Rolle. Die Funktion prüft zusätzlich Mandant und aktives Konto
+  selbst (nur strenger als der Service).
+- **E-Mail-Änderung nur per Link *und* Passwort über `SECURITY DEFINER`**
+  (0054): die Spalte `email` bleibt für die App-Rolle gesperrt (Regel 3).
+  Einlösen verlangt zusätzlich das Passwort des Zugangs, damit ein
+  abgegriffener Link die Login-Adresse nicht umbiegen kann; falscher Link und
+  falsches Passwort liefern dieselbe nichtssagende 401.
+
+**Geprüft**
+- `pnpm test:api`: 51 Suites / 584 Tests grün (Baseline vor der Phase 45 / 455).
+  Neu u. a. `klient-zugang` (36), `klient-zugang-email` (15), `kalender` (21),
+  `chat` (29), `chat-ereignisse` (9, echte HTTP-Streams), `chat-anfrage` (30).
+- **Gegenproben** (Prüfung ausgehebelt, Test wurde rot, wiederhergestellt):
+  Typ-Allowlist im `AuthGuard` (401-Test rot), `chat_ist_teilnehmer()` auf
+  `true` (6 Tests rot), Mitgliedschaftsprüfung im SSE-Dienst auf `true` (2 rot),
+  Passwortprüfung bei der E-Mail-Änderung (1 rot), Lese-Policy von `termin`
+  auf nur-Mandant (4 rot), Historien-Policy bzw. Anfrage-Lesepolicy
+  zurückgesetzt (je 4 rot), `chat_anfrage_klient_sichtbar()` auf `true` (2 rot).
+- Browser (Playwright, Chromium, echte API, eigener Testmandant): Chat,
+  Kalender, Anfragen, Klient-Oberfläche; kein horizontaler Überlauf bei
+  320/768/1280 px in Hell und Dunkel; keine externen Requests;
+  `funktions-pruefung.mjs` Abschnitt 8 (Klient) 16/16, Abschnitte 5 und 6
+  wieder mit echten Messungen (44 bzw. 8 Prüfungen);
+  `design-pruefung.mjs` um neun Kontrastpaare erweitert.
+
+**Was hier bewusst fehlt / offen bleibt**
+- **Kein 2FA für Klient:innen.** Der Login ist nur E-Mail und Passwort, mit
+  derselben Raten-Schranke und derselben nichtssagenden Fehlermeldung wie bei
+  Mitarbeitenden. Ein zweiter Faktor wäre sinnvoll, bräuchte aber einen
+  Zustellweg, den es ohne Mailversand nicht gibt.
+- **Kein Server-Mailversand, keine Push-Benachrichtigungen.** Wer die App
+  nicht geöffnet hat, erfährt von neuen Nachrichten, Anfragen und
+  Einladungen nichts. Der Stream gilt nur für offene Sitzungen.
+- **Keine Nachrichten-Bearbeitung**, nur Löschen (siehe append-only).
+- **Kein Live-Standort**, nur ein einmaliger.
+- **Eine Gruppe kann admin-los werden**, wenn nur Klient:innen übrig bleiben:
+  Verlässt der letzte Admin die Gruppe, erbt die dienstälteste andere
+  *Benutzer*-Teilnahme die Adminrechte -- Klient:innen können nicht Admin
+  sein. Gibt es keine, läuft die Gruppe weiter, ist aber nicht mehr zu
+  verwalten (kein Umbenennen, Hinzufügen, Entfernen). Nicht ausgebaut, weil
+  Gruppen nur aus Klient:innen fachlich nicht vorgesehen sind.
+- **Der nginx-SSE-Block ist nicht getestet.** Der eigene `location`-Block für
+  `/api/chat/ereignisse` in `apps/web/nginx.conf` (Pufferung aus, 1 h
+  Lesetimeout) und der Caddy-Hinweis wurden nur von Hand auf Syntax geprüft;
+  in dieser Umgebung gibt es weder nginx noch einen Docker-Daemon, also
+  kein `nginx -t` und keinen Lauf durch den Proxy. Vor dem ersten Produktiveinsatz
+  einmal mit einem offenen Chat hinter `caddy` und `web` prüfen, dass
+  Ereignisse sofort ankommen und der Stream nach 60 s nicht abreißt.
+- **Nur Chromium getestet.** Firefox und Safari (inkl. iOS) sind für die neuen
+  Seiten nicht gemessen, auch nicht das Verhalten von `fetch`-Streaming und
+  `navigator.geolocation` dort.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

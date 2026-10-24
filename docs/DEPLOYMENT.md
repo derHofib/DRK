@@ -247,6 +247,39 @@ certbot, Traefik, ein vorgelagerter Load Balancer), lässt sich der
 `localhost:8080` weiterleiten -- das Prinzip bleibt: TLS terminieren, dann
 an Port 8080 reichen.
 
+### Chat-Stream (SSE) hinter einem Reverse Proxy
+
+Der Chat nutzt einen Server-Sent-Events-Stream (`GET /api/chat/ereignisse`,
+`text/event-stream`), der lange offen bleibt. Im mitgelieferten Stack ist das
+erledigt: `apps/web/nginx.conf` hat dafür einen eigenen `location = /api/chat/ereignisse`
+mit `proxy_buffering off`, `proxy_http_version 1.1` und `proxy_read_timeout 1h`
+(sonst puffert nginx die Ereignisse und kappt den Stream nach 60 s), und Caddy
+leert `text/event-stream` von selbst. Der Server sendet alle 25 s einen
+Heartbeat (`CHAT_HEARTBEAT_MS`, optional); jeder Proxy-Timeout muss darüber
+liegen.
+
+Wer einen **eigenen** Proxy vor `web` oder direkt vor die API setzt, braucht
+dieselben Einstellungen für diesen Pfad. nginx:
+
+```nginx
+location = /api/chat/ereignisse {
+  proxy_pass http://api:3000/chat/ereignisse;
+  proxy_http_version 1.1;
+  proxy_set_header Connection "";
+  proxy_buffering off;
+  proxy_cache off;
+  gzip off;
+  proxy_read_timeout 1h;
+}
+```
+
+Caddy und Traefik brauchen in der Regel nichts Besonderes, solange kein
+Antwort-Timeout kürzer als der Heartbeat gesetzt ist. Der Block in
+`apps/web/nginx.conf` ist in dieser Entwicklungsumgebung **nicht** mit
+`nginx -t` oder durch einen laufenden Proxy geprüft worden (kein nginx, kein
+Docker) -- nach dem ersten Deployment mit einem offenen Chat prüfen, dass
+Nachrichten sofort ankommen.
+
 ## 8. Updates einspielen
 
 ```bash
