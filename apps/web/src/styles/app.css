@@ -3136,3 +3136,17 @@ li:last-child > .zv-kontakt-zeile,
     min-width: 0;
   }
 }
+
+.zv-zugang-link .zv-field-inline {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-s);
+}
+
+/* Lange Knopfbeschriftungen duerfen auf schmalen Bildschirmen umbrechen,
+   statt die Karte ueber den Rand zu schieben. */
+.zv-aktionszeile > .zv-btn,
+.zv-inline-zeile > .zv-btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}

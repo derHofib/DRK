@@ -15,6 +15,7 @@ import type {
 import { HZL_RHYTHMUS_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { GrundAbfrage } from "../components/GrundAbfrage";
+import { KlientZugang } from "../components/KlientZugang";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -726,6 +727,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     />
 
     <KontakteAbschnitt klientId={klient.id} kontakte={klient.kontakte} onGeaendert={onGeaendert} />
+    <KlientZugang klientId={klient.id} />
     </div>
   );
 }
