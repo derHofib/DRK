@@ -3228,3 +3228,233 @@ li:last-child > .zv-kontakt-zeile,
   color: var(--zv-accent-strong);
   font-weight: var(--zv-weight-semibold);
 }
+
+/* ==================================================================
+   Klient-Oberflaeche (KlientShell)
+   ================================================================== */
+/* Eigene Spalte ueber die volle dynamische Viewporthoehe (kein position:fixed,
+   Begruendung bei .zv-tabbar-app): Kopf und Navigation stehen fest, nur der
+   Inhalt scrollt bzw. der Chat scrollt in sich. */
+.zv-klient {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--zv-bg);
+}
+
+.zv-klient-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2) var(--zv-space-3);
+  flex-shrink: 0;
+  padding: var(--zv-space-3) var(--zv-space-4);
+  background: var(--zv-surface);
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-klient-marke {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-klient-marke-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.zv-klient-marke-text strong {
+  font-family: var(--zv-font-marke);
+  font-size: var(--zv-text-l);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--zv-marke-haus);
+  line-height: 1.1;
+}
+
+.zv-klient-marke-text span {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-klient-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
+}
+
+.zv-klient-gruss {
+  font-size: var(--zv-text-m);
+  color: var(--zv-text-muted);
+}
+
+.zv-klient-inhalt {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--zv-space-4);
+  display: flex;
+  flex-direction: column;
+  order: 2;
+}
+
+/* Der Chat fuellt die Hoehe und scrollt in sich; der Kalender scrollt als Seite. */
+.zv-klient-inhalt[data-bereich="nachrichten"] {
+  overflow: hidden;
+}
+
+.zv-klient-inhalt > .zv-chat {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.zv-klient-inhalt > .zv-kalender {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.zv-klient-nav {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--zv-space-1);
+  padding: 0 var(--zv-space-4);
+  background: var(--zv-surface);
+  border-bottom: 1px solid var(--zv-border);
+  order: 1;
+}
+
+.zv-klient-nav button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-2);
+  min-height: 48px;
+  padding: 0 var(--zv-space-4);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-l);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+}
+
+.zv-klient-nav button:hover {
+  color: var(--zv-text);
+}
+
+.zv-klient-nav button.active {
+  color: var(--zv-accent-strong);
+  border-bottom-color: var(--zv-accent);
+}
+
+.zv-klient-nav .zv-nav-badge {
+  margin-left: 0;
+}
+
+/* Grosse Bedienelemente: mindestens 44 px Zielgroesse fuer alles Anklickbare. */
+.zv-klient button:not(.zv-chat-eintrag):not(.zv-kal-tag),
+.zv-klient input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.zv-klient select,
+.zv-klient a.zv-btn {
+  min-height: 44px;
+}
+
+.zv-klient .zv-icon-btn {
+  min-width: 44px;
+}
+
+.zv-klient .zv-kontakt-zeile,
+.zv-klient .zv-checkbox-zeile,
+.zv-klient .zv-chat-eintrag {
+  min-height: 56px;
+}
+
+.zv-klient .zv-kal-tag {
+  min-height: 44px;
+}
+
+.zv-klient .zv-kontakt-zeile input[type="checkbox"],
+.zv-klient .zv-checkbox-zeile input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+}
+
+@media (min-width: 641px) {
+  .zv-klient-inhalt {
+    padding: var(--zv-space-5);
+  }
+}
+
+/* Handy: Navigation unten (Daumen), Chat randlos wie in der Shell der Mitarbeitenden. */
+@media (max-width: 640px) {
+  .zv-klient-gruss {
+    display: none;
+  }
+
+  .zv-klient-nav {
+    order: 3;
+    justify-content: space-around;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    border-bottom: none;
+    border-top: 1px solid var(--zv-border);
+  }
+
+  .zv-klient-nav button {
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 56px;
+    padding: var(--zv-space-2);
+    font-size: var(--zv-text-s);
+    border-bottom: none;
+    border-top: 3px solid transparent;
+  }
+
+  .zv-klient-nav button.active {
+    border-top-color: var(--zv-accent);
+  }
+
+  .zv-klient-nav .zv-nav-badge {
+    position: absolute;
+    top: 4px;
+    left: calc(50% + 6px);
+    margin: 0;
+  }
+
+  .zv-klient-inhalt[data-bereich="nachrichten"] {
+    padding: 0;
+  }
+
+  .zv-klient-inhalt > .zv-chat {
+    gap: 0;
+  }
+
+  .zv-klient .zv-chat-liste,
+  .zv-klient .zv-chat-verlauf {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .zv-klient .zv-blase-loeschen {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

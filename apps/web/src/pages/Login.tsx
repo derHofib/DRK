@@ -1,11 +1,12 @@
 import { FormEvent, useState } from "react";
-import { api, setToken } from "../api/client";
+import { api, clearToken, setToken } from "../api/client";
 import { MarkenZeichen } from "../components/MarkenZeichen";
 import {
   IAnmelden,
   IBestaetigen,
   IFehler,
   IInfo,
+  IKlienten,
   ISichtbar,
   IVerborgen,
   IZurueck,
@@ -14,13 +15,17 @@ import {
 export function Login({
   onLoggedIn,
   sitzungAbgelaufen,
+  startAlsKlient = false,
 }: {
   onLoggedIn: () => void;
   /** true, wenn App.tsx wegen eines abgelaufenen/ungueltigen Tokens hierher
    *  zurueckgeschaltet hat (statt eines normalen, ersten Logins) -- zeigt
    *  eine kurze, dezente Erklaerung statt der rohen Server-Meldung. */
   sitzungAbgelaufen?: boolean;
+  /** Nach dem Einloesen eines Klient-Links: gleich die Klient-Anmeldung zeigen. */
+  startAlsKlient?: boolean;
 }) {
+  const [klient, setKlient] = useState(startAlsKlient);
   const [mandantSlug, setMandantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [passwort, setPasswort] = useState("");
@@ -35,6 +40,14 @@ export function Login({
     setFehler(null);
     setLadt(true);
     try {
+      if (klient) {
+        // Kein TOTP-Schritt: Klient-Zugaenge haben kein Zwei-Faktor-Verfahren.
+        const { accessToken } = await api.klientLogin({ mandantSlug, email, passwort });
+        clearToken();
+        setToken(accessToken);
+        onLoggedIn();
+        return;
+      }
       const ergebnis = await api.login({ mandantSlug, email, passwort });
       if ("totpErforderlich" in ergebnis) {
         setPendingToken(ergebnis.pendingToken);
@@ -122,7 +135,7 @@ export function Login({
         <h1>
           <MarkenZeichen iconGroesse={26} />
         </h1>
-        <p className="zv-sub">Anmeldung</p>
+        <p className="zv-sub">{klient ? "Anmeldung für Klient:innen" : "Anmeldung"}</p>
 
         {fehler ? (
           <div className="zv-hinweis zv-hinweis-fehler">
@@ -186,6 +199,22 @@ export function Login({
         <button className="zv-btn zv-btn-block" type="submit" disabled={ladt}>
           <IAnmelden />
           {ladt ? "Meldet an…" : "Anmelden"}
+        </button>
+
+        {/* Eigener, deutlich sichtbarer Knopf statt eines Textlinks: wer als Klient:in
+            hierher kommt, soll den Weg ohne Suchen finden. */}
+        <button
+          type="button"
+          className="zv-btn zv-btn-sekundaer zv-btn-block"
+          style={{ marginTop: 14 }}
+          onClick={() => {
+            setKlient((k) => !k);
+            setFehler(null);
+          }}
+          aria-pressed={klient}
+        >
+          <IKlienten />
+          {klient ? "Zurück zur Anmeldung für Mitarbeitende" : "Anmeldung für Klient:innen"}
         </button>
       </form>
     </div>

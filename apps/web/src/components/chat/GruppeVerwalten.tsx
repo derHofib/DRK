@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { ChatDto, ChatKontaktDto } from "@zimmerakte/shared";
-import { api, tokenBenutzerId } from "../../api/client";
+import { api, istKlientToken, tokenBenutzerId } from "../../api/client";
 import { Modal } from "../Modal";
 import { IAbbrechen, IAbmelden, IFehler, ISpeichern } from "../icons";
 import { KontaktAuswahl, kontaktEingabe } from "./KontaktAuswahl";
@@ -22,7 +22,9 @@ export function GruppeVerwalten({
   const [laeuft, setLaeuft] = useState(false);
   const [verlassenFrage, setVerlassenFrage] = useState(false);
   const ichId = tokenBenutzerId();
-  const ich = chat.teilnehmer.find((t) => t.art === "benutzer" && t.id === ichId);
+  // Bei Klient-Sitzungen ist `sub` die Klient-ID.
+  const istKlient = istKlientToken();
+  const ich = chat.teilnehmer.find((t) => t.art === (istKlient ? "klient" : "benutzer") && t.id === ichId);
 
   useEffect(() => {
     if (!chat.binAdmin) return;
@@ -88,7 +90,7 @@ export function GruppeVerwalten({
         </form>
       ) : (
         <p className="zv-sub" style={{ marginTop: 0 }}>
-          Nur Gruppen-Admins können Namen und Teilnehmende ändern.
+          {istKlient ? "Hier siehst du, wer in der Gruppe ist." : "Nur Gruppen-Admins können Namen und Teilnehmende ändern."}
         </p>
       )}
 

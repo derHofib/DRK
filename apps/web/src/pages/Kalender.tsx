@@ -46,7 +46,13 @@ function sortiere(a: TerminDto, b: TerminDto): number {
   return a.beginn.localeCompare(b.beginn);
 }
 
-export function Kalender() {
+/**
+ * `kontakteLaden`: woher die waehlbaren Teilnehmenden kommen. Mitarbeitende
+ * nutzen die Voreinstellung (/chat/kontakte); fuer Klient:innen liefert
+ * dieser Endpunkt bewusst nichts -- sie koennen nur Personen eintragen, mit
+ * denen sie einen gemeinsamen Chat haben (KlientShell leitet sie daraus ab).
+ */
+export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKontakte() }: { titel?: string; kontakteLaden?: () => Promise<ChatKontaktDto[]> }) {
   const heute = lokalesDatum(new Date());
   const [gewaehlt, setGewaehlt] = useState(heute);
   const [monat, setMonat] = useState(() => heute.slice(0, 7));
@@ -114,7 +120,7 @@ export function Kalender() {
         </div>
       )}
       <div className="zv-seiten-kopf">
-        <h2>Kalender</h2>
+        <h2>{titel}</h2>
         <button className="zv-btn" onClick={() => setNeuOffen(true)}>
           <INeu />
           Neuer Termin
@@ -218,6 +224,7 @@ export function Kalender() {
       {neuOffen && (
         <NeuerTermin
           standardDatum={gewaehlt}
+          kontakteLaden={kontakteLaden}
           onClose={() => setNeuOffen(false)}
           onAngelegt={(t) => {
             setNeuOffen(false);
@@ -231,13 +238,24 @@ export function Kalender() {
   );
 }
 
-function NeuerTermin({ standardDatum, onClose, onAngelegt }: { standardDatum: string; onClose: () => void; onAngelegt: (t: TerminDto) => void }) {
+function NeuerTermin({
+  standardDatum,
+  kontakteLaden,
+  onClose,
+  onAngelegt,
+}: {
+  standardDatum: string;
+  kontakteLaden: () => Promise<ChatKontaktDto[]>;
+  onClose: () => void;
+  onAngelegt: (t: TerminDto) => void;
+}) {
   const [kontakte, setKontakte] = useState<ChatKontaktDto[] | null>(null);
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
 
   useEffect(() => {
-    api.chatKontakte().then(setKontakte).catch(() => setKontakte([]));
+    kontakteLaden().then(setKontakte).catch(() => setKontakte([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function absenden(eingabe: TerminAnlegenEingabe) {
