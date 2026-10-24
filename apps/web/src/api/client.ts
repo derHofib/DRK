@@ -1,5 +1,9 @@
 import type {
   AnwaerterDto,
+  ChatAnfrageAnnahmeDto,
+  ChatAnfrageDto,
+  ChatAnfrageEingabe,
+  ChatAnfrageZielDto,
   ChatDto,
   ChatKontaktDto,
   ChatKontaktEingabe,
@@ -7,6 +11,7 @@ import type {
   ChatNachrichtEingabe,
   ChatNachrichtenSeiteDto,
   KlientEmailAenderungLinkDto,
+  KlientEmailAendernPruefungDto,
   KlientZugangDto,
   TerminAnlegenEingabe,
   TerminAntwort,
@@ -112,8 +117,35 @@ export function tokenBenutzerId(): string | null {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Welche Art Sitzung der gespeicherte Token ist. Bewusst aus dem JWT-Feld
+ * `typ` gelesen statt in einem zweiten localStorage-Schluessel gemerkt: ein
+ * zweiter Schluessel koennte vom Token abweichen (z. B. nach einem
+ * ueberschriebenen Token in einem anderen Tab) und dann die falsche Shell
+ * waehlen -- die Mitarbeitenden-Shell erzeugt mit einem Klient-Token nur
+ * 401-Antworten und beendet damit die Sitzung. Reiner Anzeige-Hinweis wie
+ * tokenBenutzerId(); die Autoritaet bleibt der Server.
+ */
+export function istKlientToken(): boolean {
   const token = getToken();
+  if (!token) return false;
+  try {
+    const nutzlast = token.split(".")[1];
+    if (!nutzlast) return false;
+    return JSON.parse(atob(nutzlast.replace(/-/g, "+").replace(/_/g, "/")))?.typ === "klient_access";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ohneToken: fuer Aufrufe vor/ausserhalb einer Sitzung (Klient-Login,
+ * Einladungs- und E-Mail-Links). Ein noch gespeicherter Mitarbeitenden-Token
+ * wuerde sonst mitgeschickt, und ein 401 der Link-Pruefung wuerde als
+ * "Sitzung abgelaufen" die fremde Sitzung beenden.
+ */
+async function request<T>(path: string, init?: RequestInit, ohneToken = false): Promise<T> {
+  const token = ohneToken ? null : getToken();
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: {
@@ -130,7 +162,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // eine verstaendliche Rueckmeldung -- deshalb hier fest uebersetzt, vor
     // jedem Body-Parsing.
     if (res.status === 429) {
-      throw new Error("Zu viele Anmeldeversuche. Bitte warten Sie eine Minute, bevor Sie es erneut versuchen.");
+      throw new Error(
+        path.startsWith("/auth")
+          ? "Zu viele Anmeldeversuche. Bitte warten Sie eine Minute, bevor Sie es erneut versuchen."
+          : "Zu viele Anfragen in kurzer Zeit. Bitte warten Sie einen Moment."
+      );
     }
     // Nur wenn WIR einen Token mitgeschickt haben, ist ein 401 ein
     // abgelaufener/ungueltiger Token (siehe auth.guard.ts) -- ein
@@ -185,8 +221,13 @@ async function dateiHerunterladen(path: string, dateiname: string): Promise<void
 
 export interface ChatUngelesenDto {
   ungelesen: number;
-  /** Kommt mit den Chat-Anfragen von Klient:innen; bis dahin nicht vorhanden. */
   offeneAnfragen?: number;
+}
+
+export interface KlientIchDto {
+  klientId: string;
+  anzeigename: string;
+  mandant: { id: string; name: string };
 }
 
 export interface KlientEinladungDto {
@@ -194,10 +235,11 @@ export interface KlientEinladungDto {
   laeuftAbAm: string;
 }
 
-/** Server-Sent-Event aus GET /chat/ereignisse; "anfrage" kommt mit den Chat-Anfragen, daher bewusst offen typisiert. */
+/** Server-Sent-Event aus GET /chat/ereignisse; bewusst offen typisiert, damit neue Arten den Client nicht brechen. */
 export interface ChatEreignis {
   chatId: string | null;
   art: "nachricht" | "teilnehmer" | "chat" | "resync" | "anfrage" | (string & {});
+  anfrageId?: string;
 }
 
 const SSE_BACKOFF_START_MS = 1000;
@@ -695,6 +737,38 @@ export const api = {
   }) => request<DelegationDto>("/delegationen", { method: "POST", body: JSON.stringify(payload) }),
   delegationGenehmigen: (id: string) => request<DelegationDto>(`/delegationen/${id}/genehmigen`, { method: "PATCH" }),
   delegationWiderrufen: (id: string) => request<DelegationDto>(`/delegationen/${id}/widerrufen`, { method: "PATCH" }),
+
+  // Klient-Zugang: Anmeldung und Links (ohne Mitarbeitenden-Token, siehe request())
+  klientLogin: (payload: LoginRequest) =>
+    request<{ accessToken: string }>("/auth/klient/login", { method: "POST", body: JSON.stringify(payload) }, true),
+  klientEinladungEinloesen: (token: string, neuesPasswort: string) =>
+    request<{ ok: true }>(
+      "/auth/klient/einladung/einloesen",
+      { method: "POST", body: JSON.stringify({ token, neuesPasswort }) },
+      true
+    ),
+  klientEmailAendernPruefen: (token: string) =>
+    request<KlientEmailAendernPruefungDto>(`/auth/klient/email-aendern/${encodeURIComponent(token)}`, undefined, true),
+  klientEmailAendernEinloesen: (token: string, neueEmail: string, passwort: string) =>
+    request<{ ok: true }>(
+      "/auth/klient/email-aendern/einloesen",
+      { method: "POST", body: JSON.stringify({ token, neueEmail, passwort }) },
+      true
+    ),
+  klientIch: () => request<KlientIchDto>("/auth/klient/ich"),
+
+  // Chat-Anfragen: Klient:innen stellen sie, Mitarbeitende beantworten sie.
+  chatAnfrageZiele: () => request<ChatAnfrageZielDto[]>("/chat/anfragen/ziele"),
+  chatAnfragen: () => request<ChatAnfrageDto[]>("/chat/anfragen"),
+  chatAnfrageStellen: (eingabe: ChatAnfrageEingabe) =>
+    request<ChatAnfrageDto>("/chat/anfragen", { method: "POST", body: JSON.stringify(eingabe) }),
+  chatAnfrageAnnehmen: (id: string) => request<ChatAnfrageAnnahmeDto>(`/chat/anfragen/${id}/annehmen`, { method: "POST" }),
+  chatAnfrageAblehnen: (id: string, begruendung?: string) =>
+    request<ChatAnfrageDto>(`/chat/anfragen/${id}/ablehnen`, {
+      method: "POST",
+      body: JSON.stringify(begruendung ? { begruendung } : {}),
+    }),
+  chatAnfrageZurueckziehen: (id: string) => request<ChatAnfrageDto>(`/chat/anfragen/${id}`, { method: "DELETE" }),
 
   // Chat (Mitarbeitende und Klient:innen teilen sich diese Endpunkte).
   chatListe: () => request<ChatDto[]>("/chat"),

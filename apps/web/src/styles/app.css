@@ -3150,3 +3150,81 @@ li:last-child > .zv-kontakt-zeile,
   white-space: normal;
   text-align: center;
 }
+
+/* ==================================================================
+   Anfragen (Chat-Anfragen von Klient:innen)
+   ================================================================== */
+.zv-anfragen {
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface-2);
+}
+
+.zv-anfragen-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-anfragen > .zv-hinweis {
+  margin: 0 var(--zv-space-3) var(--zv-space-2);
+}
+
+.zv-anfragen-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--zv-space-3) var(--zv-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-anfrage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  padding: var(--zv-space-3);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+}
+
+.zv-anfrage-kopf {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-anfrage-kopf strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-anfrage-ziel {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-anfrage-text {
+  margin: var(--zv-space-1) 0;
+  font-size: var(--zv-text-s);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.zv-anfrage .zv-aktionszeile {
+  margin-top: var(--zv-space-1);
+}
+
+.zv-ziel.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}

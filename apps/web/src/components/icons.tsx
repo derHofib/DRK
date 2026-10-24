@@ -112,6 +112,7 @@ import {
   Tag,
   Trash2,
   TriangleAlert,
+  Undo2,
   Upload,
   UserRound,
   UserRoundCheck,
@@ -208,6 +209,7 @@ export const IEntarchivieren = baue(ArchiveRestore);
 export const IHerunterladen = baue(Download);
 export const IVerlauf = baue(History);
 export const IZurueck = baue(ArrowLeft);
+export const IZurueckziehen = baue(Undo2);
 export const IKopieren = baue(Copy);
 export const IZuruecksetzen = baue(RotateCcw);
 export const IBearbeiten = baue(Pencil);

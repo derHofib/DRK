@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChatDto } from "@zimmerakte/shared";
 import { formatChatZeit } from "../../format";
 import { Leerzustand } from "../Leerzustand";
@@ -17,27 +18,39 @@ export function ChatListe({
   fehler,
   onWaehlen,
   onNeuerChat,
+  kopfAktion,
+  oben,
+  leerText,
 }: {
   chats: ChatDto[];
   aktivId: string | null;
   geladen: boolean;
   fehler: string | null;
   onWaehlen: (id: string) => void;
-  onNeuerChat: () => void;
+  onNeuerChat?: () => void;
+  /** Ersetzt den Knopf "Neuer Chat" (Klient:innen duerfen keine Chats anlegen, sondern nur anfragen). */
+  kopfAktion?: ReactNode;
+  /** Bereich ueber der Chatliste, z. B. offene Anfragen. */
+  oben?: ReactNode;
+  leerText?: string;
 }) {
   return (
     <aside className="zv-chat-liste" aria-label="Chats">
       <div className="zv-chat-liste-kopf">
         <h2>Nachrichten</h2>
-        <button type="button" className="zv-btn zv-btn-klein" onClick={onNeuerChat}>
-          <INeuerChat />
-          Neuer Chat
-        </button>
+        {kopfAktion ??
+          (onNeuerChat && (
+            <button type="button" className="zv-btn zv-btn-klein" onClick={onNeuerChat}>
+              <INeuerChat />
+              Neuer Chat
+            </button>
+          ))}
       </div>
       <div className="zv-chat-liste-inhalt">
+        {oben}
         {fehler && <div className="zv-hinweis zv-hinweis-fehler">{fehler}</div>}
         {geladen && chats.length === 0 && !fehler && (
-          <Leerzustand icon={ILeerNachrichten}>Noch keine Chats. Starten Sie einen Chat mit „Neuer Chat“.</Leerzustand>
+          <Leerzustand icon={ILeerNachrichten}>{leerText ?? "Noch keine Chats. Starten Sie einen Chat mit „Neuer Chat“."}</Leerzustand>
         )}
         <ul>
           {chats.map((c) => (
