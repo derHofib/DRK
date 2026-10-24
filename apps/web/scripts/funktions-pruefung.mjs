@@ -117,25 +117,41 @@ async function anmelden(page, email = LEITUNG) {
 }
 
 /**
+ * Unterpunkte (navigation.ts/UNTERPUNKTE) haben keinen eigenen Knopf in der
+ * mobilen Leiste: man erreicht sie ueber das Gruppen-Panel ihres Elternpunkts.
+ */
+const ELTERN_VON_UNTERPUNKT = { Aufgaben: "Dashboard", HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende" };
+
+/**
  * Funktioniert unabhaengig von der Fensterbreite: die Desktop-Sidebar
  * zeigt immer alle Reiter direkt (kein Sammelmenue-Konzept dort). Auf der
- * mobilen Reiterleiste liegen seit Phase 8 nur vier Reiter direkt, der Rest
- * (Dashboard/Zimmer/Mitarbeitende/Einstellungen) im Sammelmenue ("Mehr").
+ * mobilen Reiterleiste liegen nur vier Reiter direkt (heute Dashboard,
+ * Klienten, Nachrichten, Kalender), der Rest im Sammelmenue ("Mehr").
+ * Punkte mit Unterpunkten (Dashboard, Klienten, Kassenbuch, Mitarbeitende)
+ * oeffnen mobil zuerst ein Gruppen-Panel statt zu navigieren; das Ziel
+ * steht darin als Menueeintrag.
  */
 async function reiterWaehlen(page, label) {
   const sidebarEintrag = page.locator(`.zv-sidebar-nav button:has-text("${label}")`);
-  if (await sidebarEintrag.isVisible().catch(() => false)) {
-    await sidebarEintrag.click();
+  if (await sidebarEintrag.first().isVisible().catch(() => false)) {
+    await sidebarEintrag.first().click();
     return;
   }
-  const direkt = page.locator(`.zv-tabbar-app button:has-text("${label}")`);
-  if (await direkt.isVisible().catch(() => false)) {
-    await direkt.click();
-    return;
+  const knopf = ELTERN_VON_UNTERPUNKT[label] ?? label;
+  const direkt = page.locator(`.zv-tabbar-app button:has-text("${knopf}")`);
+  if (await direkt.first().isVisible().catch(() => false)) {
+    await direkt.first().click();
+  } else {
+    await page.click('.zv-tabbar-app button:has-text("Mehr")');
+    await page.waitForSelector("#zv-sammelmenue-panel");
+    await page.click(`#zv-sammelmenue-panel button:has-text("${knopf}")`);
   }
-  await page.click('.zv-tabbar-app button:has-text("Mehr")');
-  await page.waitForSelector("#zv-sammelmenue-panel");
-  await page.click(`#zv-sammelmenue-panel button:has-text("${label}")`);
+  const gruppenPanel = page.locator('.zv-sammelmenue:not(#zv-sammelmenue-panel)');
+  if (await gruppenPanel.first().isVisible({ timeout: 600 }).catch(() => false)) {
+    await gruppenPanel.first().locator(`button:has-text("${label}")`).first().click();
+  } else if (knopf !== label) {
+    throw new Error(`Unterpunkt "${label}" nicht erreichbar: Gruppen-Panel von "${knopf}" blieb zu`);
+  }
 }
 
 // ---------------------------------------------------------------- 1
@@ -294,12 +310,16 @@ if (laufe(5)) {
 
     // Zimmer/Mitarbeitende/Einstellungen liegen seit Phase 8 im
     // Sammelmenue -- reiterWaehlen() oeffnet es bei Bedarf automatisch.
-    for (const reiter of ["Standorte", "Klienten", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
+    // Aufgaben ist Unterpunkt von Dashboard (ueber dessen Gruppen-Panel erreichbar).
+    for (const reiter of ["Dashboard", "Standorte", "Klienten", "Nachrichten", "Kalender", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
       await reiterWaehlen(page, reiter);
       await page.waitForTimeout(250);
       const ueberlauf = await page.evaluate(() =>
         document.documentElement.scrollWidth > document.documentElement.clientWidth);
       ok(!ueberlauf, `${theme}/390px "${reiter}": kein horizontaler Ueberlauf`);
+      // Einstellungen hat keine h2, sondern eine eigene Reiterleiste -- daher "irgendein Inhalt" statt einer Ueberschrift.
+      const inhalt = (await page.locator(".zv-content").innerText().catch(() => "")).trim();
+      ok(inhalt.length > 0, `${theme}/390px "${reiter}": Seite gerendert (${inhalt.split("\n")[0].slice(0, 30)})`);
     }
 
     const nav = await page.evaluate(() => {
@@ -344,11 +364,12 @@ if (laufe(6)) {
     "aria-controls verweist auf das Panel"
   );
 
-  // Zieleintrag anklicken -> Route wechselt, Menue ist zu.
-  await page.click('#zv-sammelmenue-panel button:has-text("Dashboard")');
+  // Zieleintrag anklicken -> Route wechselt, Menue ist zu. "Tagesberichte" liegt im Sammelmenue
+  // und hat keine Unterpunkte (Dashboard/Klienten/Nachrichten/Kalender sind seit den Chat-Commits direkt sichtbar).
+  await page.click('#zv-sammelmenue-panel button:has-text("Tagesberichte")');
   await page.waitForTimeout(300);
   ok((await page.locator("#zv-sammelmenue-panel").count()) === 0, "Panel ist nach Auswahl geschlossen");
-  ok(await page.locator("h2:has-text('Dashboard')").isVisible(), "Route ist zu Dashboard gewechselt");
+  ok(await page.locator("h2:has-text('Tagesberichte')").isVisible(), "Route ist zu Tagesberichte gewechselt");
   ok(
     (await mehrKnopf.getAttribute("class"))?.includes("active") ?? false,
     "Mehr-Knopf zeigt aktiven Zustand, wenn die aktuelle Route im Sammelmenue liegt"
