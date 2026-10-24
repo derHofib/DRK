@@ -1,5 +1,16 @@
 import type {
   AnwaerterDto,
+  ChatDto,
+  ChatKontaktDto,
+  ChatKontaktEingabe,
+  ChatNachrichtDto,
+  ChatNachrichtEingabe,
+  ChatNachrichtenSeiteDto,
+  KlientEmailAenderungLinkDto,
+  KlientZugangDto,
+  TerminAnlegenEingabe,
+  TerminAntwort,
+  TerminDto,
   AnwaerterStatus,
   AccountTypDto,
   AufgabeDto,
@@ -38,6 +49,20 @@ import type {
 } from "@zimmerakte/shared";
 
 const TOKEN_KEY = "zimmerakte_token";
+
+/**
+ * Fehler mit HTTP-Status: manche Aufrufer muessen 403 ("dieses Recht fehlt,
+ * den Bereich gar nicht erst zeigen") von echten Fehlern unterscheiden --
+ * allein am Meldungstext ginge das nicht.
+ */
+export class ApiFehler extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -117,7 +142,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       beiSitzungAbgelaufen?.();
     }
     const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(body.message ?? `Anfrage fehlgeschlagen (${res.status})`);
+    throw new ApiFehler(body.message ?? `Anfrage fehlgeschlagen (${res.status})`, res.status);
   }
 
   if (res.status === 204) return undefined as T;
@@ -156,6 +181,99 @@ async function dateiHerunterladen(path: string, dateiname: string): Promise<void
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export interface ChatUngelesenDto {
+  ungelesen: number;
+  /** Kommt mit den Chat-Anfragen von Klient:innen; bis dahin nicht vorhanden. */
+  offeneAnfragen?: number;
+}
+
+export interface KlientEinladungDto {
+  einladungsLink: string;
+  laeuftAbAm: string;
+}
+
+/** Server-Sent-Event aus GET /chat/ereignisse; "anfrage" kommt mit den Chat-Anfragen, daher bewusst offen typisiert. */
+export interface ChatEreignis {
+  chatId: string | null;
+  art: "nachricht" | "teilnehmer" | "chat" | "resync" | "anfrage" | (string & {});
+}
+
+const SSE_BACKOFF_START_MS = 1000;
+const SSE_BACKOFF_MAX_MS = 30000;
+
+/**
+ * Abonniert den Chat-Stream per fetch statt EventSource: EventSource kann
+ * keinen Authorization-Header senden, und den Token in die URL zu legen
+ * wuerde ihn in Server- und Proxy-Logs tragen. Nach jedem Abbruch wird mit
+ * wachsender Wartezeit (1 bis 30 s) neu verbunden; weil dabei Ereignisse
+ * verloren gegangen sein koennen, wird nach einer WIEDER-Verbindung ein
+ * synthetisches "resync" geliefert (der Server sendet es nur bei einem
+ * eigenen DB-Abbruch). Rueckgabe: Funktion zum Beenden.
+ */
+export function abonniereChatEreignisse(onEreignis: (e: ChatEreignis) => void): () => void {
+  const abbruch = new AbortController();
+  let wartezeit = SSE_BACKOFF_START_MS;
+  let schonVerbunden = false;
+
+  async function lauf() {
+    while (!abbruch.signal.aborted) {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await fetch("/api/chat/ereignisse", {
+          headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+          signal: abbruch.signal,
+        });
+        if (res.status === 401) {
+          clearToken();
+          beiSitzungAbgelaufen?.();
+          return;
+        }
+        if (!res.ok || !res.body) throw new Error(`Stream abgelehnt (${res.status})`);
+        wartezeit = SSE_BACKOFF_START_MS;
+        if (schonVerbunden) onEreignis({ chatId: null, art: "resync" });
+        schonVerbunden = true;
+
+        const leser = res.body.getReader();
+        const dekoder = new TextDecoder();
+        let puffer = "";
+        for (;;) {
+          const { done, value } = await leser.read();
+          if (done) break;
+          puffer += dekoder.decode(value, { stream: true });
+          let ende: number;
+          while ((ende = puffer.indexOf("\n\n")) >= 0) {
+            const block = puffer.slice(0, ende);
+            puffer = puffer.slice(ende + 2);
+            let ereignisName = "message";
+            const daten: string[] = [];
+            for (const zeile of block.split("\n")) {
+              if (zeile.startsWith(":")) continue;
+              if (zeile.startsWith("event:")) ereignisName = zeile.slice(6).trim();
+              else if (zeile.startsWith("data:")) daten.push(zeile.slice(5).trimStart());
+            }
+            if (ereignisName !== "chat" || daten.length === 0) continue;
+            try {
+              onEreignis(JSON.parse(daten.join("\n")) as ChatEreignis);
+            } catch {
+              // Kaputtes Ereignis ueberspringen -- der naechste Stand kommt per REST.
+            }
+          }
+        }
+      } catch {
+        if (abbruch.signal.aborted) return;
+      }
+      await new Promise<void>((fertig) => {
+        const timer = window.setTimeout(fertig, wartezeit);
+        abbruch.signal.addEventListener("abort", () => (window.clearTimeout(timer), fertig()), { once: true });
+      });
+      wartezeit = Math.min(wartezeit * 2, SSE_BACKOFF_MAX_MS);
+    }
+  }
+  void lauf();
+  return () => abbruch.abort();
 }
 
 export const api = {
@@ -577,4 +695,79 @@ export const api = {
   }) => request<DelegationDto>("/delegationen", { method: "POST", body: JSON.stringify(payload) }),
   delegationGenehmigen: (id: string) => request<DelegationDto>(`/delegationen/${id}/genehmigen`, { method: "PATCH" }),
   delegationWiderrufen: (id: string) => request<DelegationDto>(`/delegationen/${id}/widerrufen`, { method: "PATCH" }),
+
+  // Chat (Mitarbeitende und Klient:innen teilen sich diese Endpunkte).
+  chatListe: () => request<ChatDto[]>("/chat"),
+  chatEinzeln: (id: string) => request<ChatDto>(`/chat/${id}`),
+  chatKontakte: () => request<ChatKontaktDto[]>("/chat/kontakte"),
+  chatUngelesen: () => request<ChatUngelesenDto>("/chat/ungelesen"),
+  chatDirektAnlegen: (ziel: ChatKontaktEingabe) =>
+    request<ChatDto>("/chat/direkt", { method: "POST", body: JSON.stringify(ziel) }),
+  chatGruppeAnlegen: (name: string, teilnehmer: ChatKontaktEingabe[]) =>
+    request<ChatDto>("/chat/gruppe", { method: "POST", body: JSON.stringify({ name, teilnehmer }) }),
+  chatUmbenennen: (id: string, name: string) =>
+    request<ChatDto>(`/chat/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  chatTeilnehmerHinzufuegen: (id: string, ziel: ChatKontaktEingabe) =>
+    request<ChatDto>(`/chat/${id}/teilnehmer`, { method: "POST", body: JSON.stringify(ziel) }),
+  chatTeilnahmeBeenden: (id: string, teilnehmerId: string) =>
+    request<{ entfernt: true }>(`/chat/${id}/teilnehmer/${teilnehmerId}`, { method: "DELETE" }),
+  chatNachrichten: (id: string, vor?: string, limit = 50) =>
+    request<ChatNachrichtenSeiteDto>(`/chat/${id}/nachrichten?limit=${limit}${vor ? `&vor=${vor}` : ""}`),
+  chatSenden: (id: string, eingabe: ChatNachrichtEingabe) =>
+    request<ChatNachrichtDto>(`/chat/${id}/nachrichten`, { method: "POST", body: JSON.stringify(eingabe) }),
+  // Roher Body wie beim Grundriss; Dateityp und -name stehen in Header/Query.
+  chatBildSenden: async (id: string, datei: File, text?: string): Promise<ChatNachrichtDto> => {
+    const token = getToken();
+    const query = new URLSearchParams({ dateiname: datei.name || "bild" });
+    if (text?.trim()) query.set("text", text.trim());
+    const res = await fetch(`/api/chat/${id}/bilder?${query}`, {
+      method: "POST",
+      headers: { "Content-Type": datei.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: datei,
+    });
+    if (res.status === 401 && token) {
+      clearToken();
+      beiSitzungAbgelaufen?.();
+    }
+    if (!res.ok) {
+      if (res.status === 413) throw new ApiFehler("Das Bild ist zu groß (maximal 8 MB).", 413);
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new ApiFehler(body.message ?? `Bild konnte nicht gesendet werden (${res.status})`, res.status);
+    }
+    return res.json() as Promise<ChatNachrichtDto>;
+  },
+  chatAnhangUrl: (anhangId: string) => blobUrl(`/chat/anhaenge/${anhangId}`),
+  chatNachrichtLoeschen: (nachrichtId: string) =>
+    request<ChatNachrichtDto>(`/chat/nachrichten/${nachrichtId}`, { method: "DELETE" }),
+  chatGelesen: (id: string) => request<{ gelesen: true }>(`/chat/${id}/gelesen`, { method: "POST" }),
+
+  // Kalender
+  termine: (von: string, bis: string) =>
+    request<TerminDto[]>(`/kalender/termine?von=${encodeURIComponent(von)}&bis=${encodeURIComponent(bis)}`),
+  terminEinzeln: (id: string) => request<TerminDto>(`/kalender/termine/${id}`),
+  terminAnlegen: (eingabe: TerminAnlegenEingabe) =>
+    request<TerminDto>("/kalender/termine", { method: "POST", body: JSON.stringify(eingabe) }),
+  terminAendern: (
+    id: string,
+    payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean }
+  ) => request<TerminDto>(`/kalender/termine/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  terminAbsagen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/absagen`, { method: "POST" }),
+  terminAntworten: (id: string, antwort: TerminAntwort) =>
+    request<TerminDto>(`/kalender/termine/${id}/antwort`, { method: "POST", body: JSON.stringify({ antwort }) }),
+  terminUebernehmen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/uebernehmen`, { method: "POST" }),
+  terminIcsHerunterladen: (id: string) => dateiHerunterladen(`/kalender/termine/${id}/ics`, "termin.ics"),
+
+  // Zugang der Klient:innen zur App (Verwaltung durch Mitarbeitende)
+  klientZugang: (klientId: string) => request<KlientZugangDto>(`/klienten/${klientId}/zugang`),
+  klientZugangEinladen: (klientId: string, email: string) =>
+    request<KlientEinladungDto>(`/klienten/${klientId}/zugang`, { method: "POST", body: JSON.stringify({ email }) }),
+  klientZugangNeuEinladen: (klientId: string, email?: string) =>
+    request<KlientEinladungDto>(`/klienten/${klientId}/zugang/neu-einladen`, {
+      method: "POST",
+      body: JSON.stringify(email ? { email } : {}),
+    }),
+  klientZugangEmailAendernLink: (klientId: string) =>
+    request<KlientEmailAenderungLinkDto>(`/klienten/${klientId}/zugang/email-aendern-link`, { method: "POST" }),
+  klientZugangAktivSetzen: (klientId: string, aktiv: boolean) =>
+    request<KlientZugangDto>(`/klienten/${klientId}/zugang`, { method: "PATCH", body: JSON.stringify({ aktiv }) }),
 };

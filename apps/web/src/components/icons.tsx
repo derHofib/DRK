@@ -30,6 +30,7 @@ import {
   Building2,
   CalendarCheck,
   CalendarClock,
+  CalendarDays,
   CalendarX2,
   Check,
   ChevronDown,
@@ -56,6 +57,7 @@ import {
   History,
   Hourglass,
   IdCard,
+  ImagePlus,
   Inbox,
   Info,
   KeyRound,
@@ -71,8 +73,11 @@ import {
   Map as KartenSymbol,
   MapPin,
   MapPinOff,
+  Mail,
   Maximize2,
   Menu,
+  MessageCircle,
+  MessageSquarePlus,
   Minimize2,
   Monitor,
   Moon,
@@ -80,6 +85,7 @@ import {
   Network,
   NotebookPen,
   Palette,
+  Paperclip,
   PanelLeftClose,
   PanelLeftOpen,
   PenLine,
@@ -91,6 +97,7 @@ import {
   ReceiptText,
   RotateCcw,
   Save,
+  Send,
   Settings,
   ShieldCheck,
   ShieldOff,
@@ -103,6 +110,7 @@ import {
   Sun,
   Table2,
   Tag,
+  Trash2,
   TriangleAlert,
   Upload,
   UserRound,
@@ -156,6 +164,17 @@ export const IOrganigramm = baue(Network);
 export const IVertretung = baue(UserRoundCheck);
 /** Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. */
 export const IMehr = baue(Menu);
+
+/* Nachrichten und Kalender */
+export const INachrichten = baue(MessageCircle);
+export const IKalender = baue(CalendarDays);
+export const INeuerChat = baue(MessageSquarePlus);
+export const ISenden = baue(Send);
+export const IBildAnhaengen = baue(ImagePlus);
+export const IAnhang = baue(Paperclip);
+export const IMail = baue(Mail);
+export const INachrichtLoeschen = baue(Trash2);
+export const IGruppe = baue(Users);
 
 /* Unterreiter */
 export const IUebersicht = baue(LayoutList);
@@ -276,6 +295,8 @@ export const ILeerKontakte = baueLeer(Contact);
 export const ILeerAnwaerter = baueLeer(Inbox);
 export const ILeerOrganigramm = baueLeer(Boxes);
 export const ILeerVertretung = baueLeer(Shuffle);
+export const ILeerNachrichten = baueLeer(MessageCircle);
+export const ILeerKalender = baueLeer(CalendarDays);
 
 /* Sonstiges */
 export const ITraeger = baue(Building2);
