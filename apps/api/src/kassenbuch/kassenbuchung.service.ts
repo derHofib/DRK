@@ -43,6 +43,7 @@ export interface KassenbuchungTeilnehmerDto {
 
 export interface KassenbuchungDto {
   id: string;
+  belegnummer: number;
   klientId: string | null;
   klientName: string | null;
   standortId: string | null;
@@ -83,7 +84,7 @@ export interface WochenuebersichtEintrag {
 // UND standort_id sind seit Migration 0030 beide nullable (siehe
 // kassenbuchung_klient_xor_standort), daher LEFT statt INNER JOIN.
 const BUCHUNG_SELECT = `
-  SELECT b.id, b.klient_id, k.vorname, k.nachname, b.standort_id, s.name AS standort_name,
+  SELECT b.id, b.belegnummer, b.klient_id, k.vorname, k.nachname, b.standort_id, s.name AS standort_name,
          b.datum, b.betrag_cent, b.verwendungszweck, b.typ_id, t.bezeichnung AS typ_bezeichnung,
          b.ist_hzl, b.iso_jahr, b.iso_woche,
          b.storniert, b.storno_grund,
@@ -605,6 +606,7 @@ async function holeTeilnehmer(client: PoolClient, buchungIds: string[]): Promise
 function zuDto(r: any, teilnehmer: KassenbuchungTeilnehmerDto[]): KassenbuchungDto {
   return {
     id: r.id,
+    belegnummer: r.belegnummer,
     klientId: r.klient_id,
     klientName: r.klient_id ? `${r.vorname} ${r.nachname}` : null,
     standortId: r.standort_id,

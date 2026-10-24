@@ -163,12 +163,12 @@ export function TagVorschlaegeDatalist({ tags }: { tags: TagDto[] }) {
   );
 }
 
-export function Tagesberichte() {
+export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}) {
   const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [tagVorschlaege, setTagVorschlaege] = useState<TagDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [formularOffen, setFormularOffen] = useState(false);
+  const [formularOffen, setFormularOffen] = useState(Boolean(startKlientId));
   const [formFehler, setFormFehler] = useState<string | null>(null);
 
   function laden() {
@@ -276,7 +276,7 @@ export function Tagesberichte() {
             <div className="zv-field-row">
               <div className="zv-field">
                 <label>Klient</label>
-                <select name="klientId" required autoFocus defaultValue="">
+                <select key={klienten.length} name="klientId" required autoFocus defaultValue={startKlientId ?? ""}>
                   <option value="" disabled>
                     Bitte wählen
                   </option>

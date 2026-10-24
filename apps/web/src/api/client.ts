@@ -53,6 +53,8 @@ import type {
   TagesberichtDto,
   TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
+  SucheErgebnisDto,
+  SucheGruppe,
   ZimmerListEintragDto,
 } from "@zimmerakte/shared";
 
@@ -563,6 +565,9 @@ export const api = {
       `/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}${standortId ? `&standortId=${standortId}` : ""}`
     ),
 
+  suche: (q: string) => request<SucheErgebnisDto>(`/suche?q=${encodeURIComponent(q)}`),
+  sucheZuletzt: (eintraege: { gruppe: SucheGruppe; id: string }[]) =>
+    request<SucheErgebnisDto>("/suche/zuletzt", { method: "POST", body: JSON.stringify({ eintraege }) }),
   kassenbuchDarfBuchen: () => request<{ darf: boolean }>("/kassenbuchungen/darf-buchen"),
   hzlUebergabeEntsperren: (passwort: string) =>
     request<{ ok: true }>("/kassenbuchungen/hzl-uebergabe/entsperren", { method: "POST", body: JSON.stringify({ passwort }) }),

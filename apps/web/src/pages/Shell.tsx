@@ -9,12 +9,15 @@ import {
   IAbmelden,
   IAnwaerter,
   IArchivieren,
+  IAuszahlen,
   IAufklappen,
   IAusklappen,
   IEinklappen,
   IKlienten,
   IMehr,
+  INeu,
   IStandort,
+  ITagesberichte,
   ITraeger,
   IZuklappen,
 } from "../components/icons";
@@ -22,6 +25,7 @@ import {
   ladeMenuReihenfolge,
   reiterNachReihenfolge,
   speichereMenuReihenfolge,
+  STANDARD_REITER,
   UNTERPUNKTE,
   hauptreiterVon,
   type HauptReiter,
@@ -36,6 +40,7 @@ import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import type { UebergabeStart } from "./HzlUebergabe";
+import { Befehl, Befehlspalette, zuletztLoeschen, zuletztMerken } from "../components/Befehlspalette";
 import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
@@ -317,8 +322,75 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       .catch(() => {});
   }, []);
 
+  // --- Befehlspalette --------------------------------------------------
+  // Ziel einer Palette-Auswahl fuer die Seite, die danach aufgeht. `nonce`
+  // im key, damit auch ein erneutes Waehlen auf derselben Seite sie neu
+  // aufbaut (die Seiten lesen das Ziel nur beim Einhaengen).
+  const [paletteOffen, setPaletteOffen] = useState(false);
+  // Zaehlt jedes Oeffnen mit: Esc und Strg+K binnen eines Renderdurchgangs
+  // ergaeben sonst "true -> false -> true" ohne sichtbare Aenderung, und die
+  // Palette bliebe mit dem alten Suchtext stehen. Strg+K oeffnet deshalb immer
+  // frisch statt umzuschalten. (Per Browserpruefung nicht reproduzierbar --
+  // Vorsorge, keine gemessene Korrektur.)
+  const [paletteNr, setPaletteNr] = useState(0);
+  const paletteOeffnen = useCallback(() => {
+    setPaletteOffen(true);
+    setPaletteNr((n) => n + 1);
+  }, []);
+  const [navZiel, setNavZiel] = useState<{
+    nonce: number;
+    klientId?: string;
+    kassenbuchKlientId?: string;
+    neueBuchung?: boolean;
+    tagesberichtKlientId?: string;
+  }>({ nonce: 0 });
+
+  const geheZu = useCallback((ziel: Tab, extra: Omit<typeof navZiel, "nonce"> = {}) => {
+    setNavZiel((alt) => ({ nonce: alt.nonce + 1, ...extra }));
+    setTab(ziel);
+    setOffenesPanel(null);
+  }, []);
+
+  useEffect(() => {
+    function taste(e: globalThis.KeyboardEvent) {
+      const ziel = e.target instanceof HTMLElement ? e.target : null;
+      const inEingabe =
+        ziel !== null &&
+        (ziel.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(ziel.tagName));
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        paletteOeffnen();
+      } else if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey && !inEingabe) {
+        e.preventDefault();
+        paletteOeffnen();
+      }
+    }
+    document.addEventListener("keydown", taste);
+    return () => document.removeEventListener("keydown", taste);
+  }, [paletteOeffnen]);
+
+  const paletteNavigation: Befehl[] = [
+    ...STANDARD_REITER.map((r) => ({ schluessel: `nav:${r.wert}`, titel: r.label, icon: r.icon, ausfuehren: () => geheZu(r.wert) })),
+    ...Object.values(UNTERPUNKTE)
+      .flat()
+      .map((u) => ({ schluessel: `nav:${u.wert}`, titel: u.label, icon: u.icon, ausfuehren: () => geheZu(u.wert) })),
+    ...standorte.map((st) => ({
+      schluessel: `nav:standort:${st.id}`,
+      titel: `Standort: ${st.name}`,
+      hinweis: "Standort wechseln",
+      icon: IStandort,
+      ausfuehren: () => geheZu(`standort:${st.id}`),
+    })),
+  ];
+  const paletteAktionen: Befehl[] = [
+    { schluessel: "aktion:buchung", titel: "Neue Buchung", icon: INeu, ausfuehren: () => geheZu("kassenbuch", { neueBuchung: true }) },
+    { schluessel: "aktion:tagesbericht", titel: "Tagesbericht schreiben", icon: ITagesberichte, ausfuehren: () => geheZu("tagesberichte") },
+    { schluessel: "aktion:hzl", titel: "HZL auszahlen", icon: IAuszahlen, ausfuehren: () => geheZu("hzl") },
+  ];
+
   const logout = useCallback(() => {
     clearToken();
+    zuletztLoeschen();
     onLoggedOut();
   }, [onLoggedOut]);
 
@@ -637,10 +709,10 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "dashboard" && <Dashboard />}
           {tab === "standorte" && <StandortUebersicht />}
           {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
-          {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
-          {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}
+          {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
+          {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}
-          {tab === "tagesberichte" && <Tagesberichte />}
+          {tab === "tagesberichte" && <Tagesberichte key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />}
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
@@ -659,6 +731,21 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           )}
         </div>
       </div>
+      <Befehlspalette
+        offen={paletteOffen}
+        oeffnungNr={paletteNr}
+        onSchliessen={() => setPaletteOffen(false)}
+        navigation={paletteNavigation}
+        aktionen={paletteAktionen}
+        tagesberichtFuer={(t) => geheZu("tagesberichte", { tagesberichtKlientId: t.id })}
+        onTreffer={(t) => {
+          zuletztMerken({ gruppe: t.gruppe, id: t.id });
+          if (t.gruppe === "klienten") geheZu("klienten", { klientId: t.id });
+          else if (t.gruppe === "zimmer") geheZu(t.standortId ? `standort:${t.standortId}` : "standorte");
+          else if (t.gruppe === "mitarbeitende") geheZu("mitarbeitende");
+          else geheZu("kassenbuch");
+        }}
+      />
     </div>
   );
 }

@@ -407,6 +407,8 @@ export interface OffenerStornoantragDto {
  */
 export interface KassenbuchungDto {
   id: string;
+  /** Laufende Belegnummer je Mandant (Anzeige: KB-00042). */
+  belegnummer: number;
   klientId: string | null;
   klientName: string | null;
   standortId: string | null;
@@ -1091,3 +1093,24 @@ export interface MitarbeiterProfilFuerKlientDto extends MitarbeiterProfilInhaltD
   zugeordnet: boolean;
 }
 
+
+
+/** Anzeige einer Belegnummer: KB-00042. */
+export function formatBelegnummer(nummer: number): string {
+  return `KB-${String(nummer).padStart(5, "0")}`;
+}
+
+export type SucheGruppe = "klienten" | "zimmer" | "mitarbeitende" | "belege";
+
+export interface SucheTrefferDto {
+  gruppe: SucheGruppe;
+  id: string;
+  titel: string;
+  untertitel: string | null;
+  /** Fuer Navigation: Standort des Zimmers bzw. der Buchung, falls bekannt. */
+  standortId: string | null;
+  /** Nur Belege: fuer die Anzeige in Mono. */
+  betragCent: number | null;
+}
+
+export type SucheErgebnisDto = Record<SucheGruppe, SucheTrefferDto[]>;

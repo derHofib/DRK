@@ -97,6 +97,7 @@ import {
   ReceiptText,
   RotateCcw,
   Save,
+  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -188,6 +189,7 @@ export const ISicherheit = baue(ShieldCheck);
 export const IAnmelden = baue(LogIn);
 export const IAbmelden = baue(LogOut);
 export const INeu = baue(Plus);
+export const ISuche = baue(Search);
 export const IAbbrechen = baue(X);
 export const ISpeichern = baue(Save);
 export const IBestaetigen = baue(Check);

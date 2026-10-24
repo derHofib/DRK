@@ -4,6 +4,7 @@ import { ChatEreignisProvider } from "./components/chat/ereignisse";
 import { Login } from "./pages/Login";
 import { PasswortZuruecksetzen } from "./pages/PasswortZuruecksetzen";
 import { HzlUebergabe, UebergabeStart, uebergabeLesen, uebergabeMerken } from "./pages/HzlUebergabe";
+import { zuletztLoeschen } from "./components/Befehlspalette";
 import { Shell } from "./pages/Shell";
 import { KlientEinladung } from "./pages/klient/KlientEinladung";
 import { KlientEmailAendern } from "./pages/klient/KlientEmailAendern";
@@ -38,6 +39,7 @@ export function App() {
       // Klient:innen sollen nach einer abgelaufenen Sitzung wieder in ihrer Anmeldung landen, nicht in der der Mitarbeitenden.
       setStartAlsKlient(warKlient);
       uebergabeMerken(null);
+      zuletztLoeschen();
       setUebergabe(null);
       setSitzungAbgelaufen(true);
       setAngemeldet(false);

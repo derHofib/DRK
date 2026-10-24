@@ -2789,6 +2789,45 @@ Geprüft: `hzl-uebergabe.e2e-spec.ts` (8 Tests, 5 Gegenproben rot);
 und quer, Gegenprobe: Abbrechen ohne Passwort → rot); Gesamtsuite
 604/604; `design-pruefung.mjs` mit 32 Paaren je Kombination.
 
+### Nachtrag: Befehlspalette und Belegnummer (Phase B)
+
+**Strg/⌘+K** oder **/** (wenn der Fokus nicht in einem Eingabefeld liegt) öffnet
+die Befehlspalette (`components/Befehlspalette.tsx`): Klient:innen, Zimmer,
+Mitarbeitende, Belege (per KB-Nummer, Betrag oder Zweck), dazu Navigation
+(inkl. Standortwechsel) und Aktionen („Neue Buchung“, „Tagesbericht für …
+schreiben“, „HZL auszahlen“). Pfeiltasten + Enter, Esc schließt und gibt den
+Fokus zurück; Fußzeile nennt die Kürzel.
+
+- **Serverseitig, nichts vorgeladen:** `GET /suche?q=` (mind. 2 Zeichen, max.
+  8 Treffer je Gruppe) läuft durch RLS, Standort-Beschränkung
+  (`klientStandortBedingung`/`standortIdBedingung`) und das jeweilige
+  Organigramm-Recht (`klienten.ansehen`, `zimmer.ansehen`,
+  `mitarbeitende.ansehen`, `kassenbuch.ansehen`) – geprüft im `SucheService`.
+  Der Client lädt keine Listen vor (im Browser gemessen). LIKE-Zeichen aus der
+  Eingabe sind Text. Namen laufen über `KlientNamen`; Treffer sind bereits auf
+  sichtbare Personen eingeschränkt, deshalb stehen volle Namen darin.
+  Mitarbeitende werden auch über die E-Mail gefunden, die Adresse selbst wird
+  nicht ausgeliefert.
+- **Zuletzt geöffnet:** nur IDs in `localStorage` (Anzeigekomfort dieses
+  Geräts, TTDSG §25 Abs. 2, beim Abmelden gelöscht). Die Namen holt
+  `POST /suche/zuletzt` bei jedem Öffnen frisch – Rechte und Standort gelten
+  dort erneut.
+- **Belegnummer (Migration 0059):** `kassenbuchung.belegnummer`, je Mandant
+  lückenlos (Zähler in `kassenbuch_nummernkreis`, per Trigger in derselben
+  Transaktion vergeben; Rollback nimmt die Nummer zurück – eine Sequence
+  könnte das nicht). Für die App-Rolle weder änderbar noch der Zähler lesbar.
+  Bestand wurde nach Erfassungszeitpunkt durchnummeriert. Anzeige `KB-00042`
+  im Kassenbuch und in der Palette.
+- Neu seit diesem Schritt: die Mitarbeitenden-Suche verlangt
+  `mitarbeitende.ansehen`; die bestehende Mitarbeitenden-Liste prüft dieses
+  Recht bisher nicht.
+
+Geprüft: `suche.e2e-spec.ts` (11 Tests; Gegenproben: RLS aus → 3 rot,
+Standortbedingung entfernt → 2 rot, Rechteprüfung entfernt → 1 rot,
+UPDATE(belegnummer) erlaubt → 1 rot); `befehlspalette-pruefung.mjs`
+(28 Messungen, nur Tastatur, 3 Läufe in Folge grün); Gesamtsuite 615/615;
+`design-pruefung.mjs` 40 Paare in 28 Kombinationen.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

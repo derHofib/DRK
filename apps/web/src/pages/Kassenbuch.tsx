@@ -1,4 +1,5 @@
-import { CSSProperties, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
+import { formatBelegnummer } from "@zimmerakte/shared";
 import type {
   BenutzerListEintragDto,
   KassenbuchungDto,
@@ -109,16 +110,22 @@ function summeCent(buchungen: KassenbuchungDto[]): number {
 export function Kassenbuch({
   ansicht = "buchungen",
   onUebergabeStarten,
+  startFilterKlientId,
+  startNeueBuchung,
 }: {
   ansicht?: "buchungen" | "hzl";
   onUebergabeStarten?: (start: UebergabeStart) => void;
+  /** Aus der Befehlspalette: Liste auf diese Person eingrenzen. */
+  startFilterKlientId?: string;
+  /** Aus der Befehlspalette: das Buchungsformular sofort oeffnen. */
+  startNeueBuchung?: boolean;
 }) {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [mitarbeitende, setMitarbeitende] = useState<BenutzerListEintragDto[]>([]);
   const [typen, setTypen] = useState<KassenbuchungTypDto[]>([]);
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
-  const [filterKlientId, setFilterKlientId] = useState("");
+  const [filterKlientId, setFilterKlientId] = useState(startFilterKlientId ?? "");
   const [filterStandortId, setFilterStandortId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -226,6 +233,28 @@ export function Kassenbuch({
       setUebergabePruefung(false);
     }
   }
+
+  function neueBuchungOeffnen() {
+    setVorbelegung(null);
+    setZiel("klient");
+    setFormStandortId("");
+    setTypId(standardTypId());
+    setRichtung("einzahlung");
+    setUnterschrift(null);
+    setFormFehler(null);
+    setFormularOffen(true);
+  }
+
+  // Aus der Befehlspalette: erst oeffnen, wenn die Buchungstypen da sind --
+  // sonst bliebe der vorbelegte Typ leer.
+  const startFormularErledigt = useRef(false);
+  useEffect(() => {
+    if (startNeueBuchung && !startFormularErledigt.current && typen.length > 0) {
+      startFormularErledigt.current = true;
+      neueBuchungOeffnen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startNeueBuchung, typen]);
 
   function formularOeffnenFuer(klientId: string) {
     setVorbelegung({ klientId, isoJahr: uebersichtJahr, isoWoche: uebersichtWoche });
@@ -402,16 +431,7 @@ export function Kassenbuch({
         {ansicht === "buchungen" && (
         <button
           className="zv-btn"
-          onClick={() => {
-            setVorbelegung(null);
-            setZiel("klient");
-            setFormStandortId("");
-            setTypId(standardTypId());
-            setRichtung("einzahlung");
-            setUnterschrift(null);
-            setFormFehler(null);
-            setFormularOffen(true);
-          }}
+          onClick={neueBuchungOeffnen}
         >
           <INeu />
           Neue Buchung
@@ -788,6 +808,7 @@ export function Kassenbuch({
               </span>
               <span className="zv-liste-zelle" data-label="Zweck">
                 <strong>{b.verwendungszweck}</strong>
+                <span className="zv-mono zv-beleg-nr">{formatBelegnummer(b.belegnummer)}</span>
               </span>
               <span className="zv-liste-zelle" data-label="Typ">
                 <strong>
@@ -910,6 +931,7 @@ export function Kassenbuch({
               </span>
               <span className="zv-liste-zelle" data-label="Zweck">
                 <strong>{b.verwendungszweck}</strong>
+                <span className="zv-mono zv-beleg-nr">{formatBelegnummer(b.belegnummer)}</span>
               </span>
               <span className="zv-liste-zelle" data-label="Typ">
                 <strong>{b.typBezeichnung}</strong>

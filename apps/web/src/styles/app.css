@@ -3743,3 +3743,150 @@ li:last-child > .zv-kontakt-zeile,
     width: min(100%, calc(32vh * 2.5));
   }
 }
+
+/* ==================================================================
+   Befehlspalette (components/Befehlspalette.tsx)
+   ==================================================================
+   Strg/Cmd+K oder "/". Nur Tokens, Trennlinien statt Schatten. */
+.zv-palette-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--zv-scrim);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--zv-space-4) var(--zv-space-4);
+}
+
+.zv-palette {
+  width: 100%;
+  max-width: 640px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  overflow: hidden;
+}
+
+.zv-palette-eingabe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: 0 var(--zv-space-4);
+  border-bottom: 1px solid var(--zv-border);
+  color: var(--zv-text-muted);
+}
+.zv-palette-eingabe input {
+  flex: 1;
+  min-height: 52px;
+  border: none;
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-xl);
+  outline: none;
+}
+.zv-palette-eingabe:focus-within {
+  border-bottom-color: var(--zv-accent);
+}
+
+.zv-palette-status {
+  margin: 0;
+  padding: var(--zv-space-1) var(--zv-space-4);
+  min-height: 1.6em;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-liste {
+  overflow-y: auto;
+  padding-bottom: var(--zv-space-2);
+}
+
+.zv-palette-gruppe {
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-1);
+  font-size: var(--zv-text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 44px;
+  padding: var(--zv-space-2) var(--zv-space-4);
+  cursor: pointer;
+}
+.zv-palette-zeile.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-text);
+  /* Auswahl auch ohne Farbwahrnehmung erkennbar (WCAG 1.4.1). */
+  outline: 2px solid var(--zv-accent);
+  outline-offset: -2px;
+}
+.zv-palette-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.zv-palette-titel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-palette-untertitel {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-palette-betrag {
+  font-variant-numeric: tabular-nums;
+  color: var(--zv-text-muted);
+}
+.zv-palette mark {
+  background: var(--zv-accent-soft-strong);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.zv-palette-meldung {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+.zv-palette-fuss kbd {
+  font-family: var(--zv-font-mono);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  padding: 0 4px;
+  margin: 0 2px;
+}
+
+/* Belegnummer unter dem Verwendungszweck (Kassenbuch): gleiche Nummer wie in der Befehlspalette. */
+.zv-beleg-nr {
+  display: block;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}

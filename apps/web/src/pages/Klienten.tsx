@@ -37,19 +37,26 @@ const ANSICHT_TITEL: Record<KlientenAnsicht, string> = {
 export function Klienten({
   ansicht,
   onAnsichtChange,
+  oeffneKlientId,
 }: {
   ansicht: KlientenAnsicht;
   onAnsichtChange: (ansicht: KlientenAnsicht) => void;
+  /** Aus der Befehlspalette: diese Akte beim Einhaengen oeffnen. */
+  oeffneKlientId?: string;
 }) {
   // Der Zustand liegt in Shell.tsx (fuer den Sidebar-Unterpunkt
   // "Anwärter", siehe dort) -- hier nur noch ein Alias, damit der Rest
   // dieser Datei unveraendert bleibt.
   const setAnsicht = onAnsichtChange;
+  useEffect(() => {
+    if (oeffneKlientId) setAnsicht("aktiv");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(false);
   const [formFehler, setFormFehler] = useState<string | null>(null);
-  const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(null);
+  const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(oeffneKlientId ?? null);
 
   const [anwaerterStatus, setAnwaerterStatus] = useState<AnwaerterStatus>("offen");
   const [anwaerter, setAnwaerter] = useState<AnwaerterDto[]>([]);

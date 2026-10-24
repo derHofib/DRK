@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 32;
+const ERWARTETE_PAARE = 40;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -261,6 +261,14 @@ async function messePaare(page) {
       pruefe("Uebergabe: Kicker (muted) auf Seitenhintergrund", q(".zv-pruef-ue-kicker"), 4.5);
       pruefe("Uebergabe: Warnhinweis auf Seitenhintergrund", q(".zv-pruef-ue-hinweis"), 4.5);
       pruefe("Uebergabe: Knopf Unterschreiben", q(".zv-pruef-ue-knopf"), 4.5);
+      pruefe("Palette: Text auf Surface", q(".zv-pruef-pal-titel"), 4.5);
+      pruefe("Palette: Untertitel (muted)", q(".zv-pruef-pal-unter"), 4.5);
+      pruefe("Palette: Gruppenkopf (muted)", q(".zv-pruef-pal-gruppe"), 4.5);
+      pruefe("Palette: aktive Zeile (Text auf accent-soft)", q(".zv-pruef-pal-aktiv"), 4.5);
+      pruefe("Palette: Hervorhebung <mark>", q(".zv-pruef-pal-mark"), 4.5);
+      pruefe("Palette: Fusszeile (muted)", q(".zv-pruef-pal-fuss"), 4.5);
+      pruefe("Palette: Statuszeile (muted)", q(".zv-pruef-pal-status"), 4.5);
+      pruefe("Belegnummer im Kassenbuch (muted)", q(".zv-pruef-beleg-nr"), 4.5);
       return ergebnisse;
     `
     )
@@ -319,7 +327,15 @@ const PRUEFSEITE = `
     <p class="zv-uebergabe-hinweis zv-pruef-ue-hinweis">Der Betrag &uuml;bersteigt den Barbetrag.</p>
     <button class="zv-btn zv-uebergabe-knopf zv-pruef-ue-knopf">Unterschreiben</button>
   </div>
-</div>`;
+</div>
+<div class="zv-palette" style="max-height:none">
+  <p class="zv-palette-status zv-pruef-pal-status">3 Treffer</p>
+  <div class="zv-palette-gruppe zv-pruef-pal-gruppe">Klient:innen</div>
+  <div class="zv-palette-zeile"><span class="zv-palette-text"><span class="zv-palette-titel zv-pruef-pal-titel">Anna <mark class="zv-pruef-pal-mark">Maria</mark></span><span class="zv-palette-untertitel zv-pruef-pal-unter">Haus Eins</span></span></div>
+  <div class="zv-palette-zeile aktiv"><span class="zv-palette-text"><span class="zv-palette-titel zv-pruef-pal-aktiv">Aktive Zeile</span></span></div>
+  <div class="zv-palette-fuss zv-pruef-pal-fuss">Esc schlie&szlig;en</div>
+</div>
+<span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>`;
 
 async function main() {
   const browser = await starteBrowser();
