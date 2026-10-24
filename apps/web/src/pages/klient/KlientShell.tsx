@@ -64,9 +64,9 @@ export function KlientShell({ onLoggedOut }: { onLoggedOut: () => void }) {
         <div className="zv-klient-aktionen">
           {ich && <span className="zv-klient-gruss">Hallo, {ich.anzeigename}</span>}
           <ThemeToggle />
-          <button type="button" className="zv-btn zv-btn-still zv-btn-klein" onClick={abmelden}>
+          <button type="button" className="zv-btn zv-btn-still zv-btn-klein zv-klient-abmelden" onClick={abmelden} aria-label="Abmelden">
             <IAbmelden />
-            Abmelden
+            <span>Abmelden</span>
           </button>
         </div>
       </header>

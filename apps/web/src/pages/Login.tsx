@@ -214,7 +214,7 @@ export function Login({
           aria-pressed={klient}
         >
           <IKlienten />
-          {klient ? "Zurück zur Anmeldung für Mitarbeitende" : "Anmeldung für Klient:innen"}
+          {klient ? "Zur Anmeldung für Mitarbeitende" : "Anmeldung für Klient:innen"}
         </button>
       </form>
     </div>

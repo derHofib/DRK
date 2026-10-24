@@ -64,7 +64,6 @@ export function AnfrageDialog({
       <li key={zielSchluessel(z)}>
         <button type="button" className={`zv-kontakt-zeile zv-ziel${aktiv ? " aktiv" : ""}`} onClick={() => setAuswahl(zielSchluessel(z))} aria-pressed={aktiv}>
           <span className="zv-kontakt-name">{z.name}</span>
-          {z.art === "benutzer" && z.istBezugsbetreuer && <span className="zv-pill">Deine Bezugsbetreuung</span>}
           {z.art === "team" && <span className="zv-pill zv-pill-vergeben">Ganzes Team</span>}
         </button>
       </li>

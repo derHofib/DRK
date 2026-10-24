@@ -3169,6 +3169,26 @@ li:last-child > .zv-kontakt-zeile,
   font-weight: var(--zv-weight-semibold);
 }
 
+.zv-anfragen-kopf:has(.zv-anfragen-toggle) {
+  padding: 0;
+}
+
+.zv-anfragen-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  width: 100%;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .zv-anfragen > .zv-hinweis {
   margin: 0 var(--zv-space-3) var(--zv-space-2);
 }
@@ -3370,11 +3390,13 @@ li:last-child > .zv-kontakt-zeile,
 .zv-klient button:not(.zv-chat-eintrag):not(.zv-kal-tag),
 .zv-klient input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .zv-klient select,
+.zv-klient textarea,
 .zv-klient a.zv-btn {
   min-height: 44px;
 }
 
-.zv-klient .zv-icon-btn {
+.zv-klient .zv-icon-btn,
+.zv-klient .zv-klient-abmelden {
   min-width: 44px;
 }
 
@@ -3385,6 +3407,12 @@ li:last-child > .zv-kontakt-zeile,
 }
 
 .zv-klient .zv-kal-tag {
+  min-height: 44px;
+}
+
+.zv-klient .zv-segmented button,
+.zv-klient .zv-blase-loeschen {
+  min-width: 44px;
   min-height: 44px;
 }
 
@@ -3453,8 +3481,34 @@ li:last-child > .zv-kontakt-zeile,
     border-bottom: none;
   }
 
-  .zv-klient .zv-blase-loeschen {
-    min-width: 44px;
-    min-height: 44px;
+}
+
+/* Sieben Tageszellen muessen auf 320 px je mindestens 44 px breit sein:
+   (320 - 2 x 4 px Rand) / 7 = 44,6 px, daher am Raster weder Luecke noch Seitenrand;
+   alles andere im Kalender behaelt seinen normalen Abstand. */
+@media (max-width: 400px) {
+  /* Kopf bleibt einzeilig: Abmelden nur als Symbol (aria-label bleibt), die Chatliste soll Platz bekommen. */
+  .zv-klient-abmelden span {
+    display: none;
+  }
+
+  .zv-klient-kopf {
+    flex-wrap: nowrap;
+  }
+
+  .zv-klient-marke {
+    flex: 1;
+  }
+
+  .zv-klient-inhalt[data-bereich="termine"] {
+    padding-inline: var(--zv-space-1);
+  }
+
+  .zv-klient-inhalt[data-bereich="termine"] .zv-kalender > :not(.zv-kal-raster) {
+    margin-inline: var(--zv-space-3);
+  }
+
+  .zv-klient .zv-kal-raster {
+    gap: 0;
   }
 }
