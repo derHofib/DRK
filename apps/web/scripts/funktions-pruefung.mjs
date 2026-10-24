@@ -9,6 +9,7 @@
  *   4 Akzentfarbe: live, gespeichert, ueber Neuladen, ueber Benutzer
  *     hinweg -- und 403 fuer Rollen ohne Branding-Recht
  *   5 Kein horizontaler Ueberlauf bei 390px, mobile Navigation intakt
+ *   7 Nachrichten/Kalender erreichbar, kein Ueberlauf bei 320/768/1280 px
  *   6 Sammelmenue ("Mehr", Phase 8): oeffnen, Zieleintrag anklicken,
  *     Route wechselt, Menue schliesst sich, Fokus liegt sinnvoll
  *
@@ -42,7 +43,7 @@ function chromiumOrdnerKandidaten(basisPfad) {
   try {
     return readdirSync(basisPfad)
       .filter((name) => name.startsWith("chromium-"))
-      .map((name) => `${basisPfad}/${name}/chrome-linux/chrome`);
+      .flatMap((name) => [`${basisPfad}/${name}/chrome-linux64/chrome`, `${basisPfad}/${name}/chrome-linux/chrome`]);
   } catch {
     return [];
   }
@@ -137,7 +138,7 @@ console.log("\n1) Anmeldung und Grundgeruest");
   // (Sammelmenue), siehe Shell.tsx/REITER_MOBIL_SICHTBAR.
   ok(await page.locator(".zv-tabbar-app button").count() === 5, "Mobile Reiterleiste hat 4 Reiter + 'Mehr'");
   const reiter = await page.locator(".zv-tabbar-app button").allInnerTexts();
-  ok(reiter.includes("Aufgaben"), `Reiter "Aufgaben" direkt sichtbar (${reiter.join(", ")})`);
+  ok(reiter.includes("Nachrichten") && reiter.includes("Kalender"), `Reiter "Nachrichten" und "Kalender" direkt sichtbar (${reiter.join(", ")})`);
   ok(reiter.includes("Mehr"), `Sammelmenue-Knopf "Mehr" vorhanden (${reiter.join(", ")})`);
   ok(!reiter.includes("Einstellungen"), "Reiter \"Einstellungen\" ist ins Sammelmenue gewandert, nicht mehr direkt sichtbar");
   ok(await page.locator(".zv-tabbar-app svg").count() >= 5, "Jeder Reiter traegt ein Icon");
@@ -352,6 +353,25 @@ console.log("\n6) Sammelmenue (\"Mehr\"): oeffnen, waehlen, schliessen, Fokus");
   const fokussiertesLabel = await page.evaluate(() => document.activeElement?.textContent?.trim());
   ok(fokussiertesLabel === "Mehr", `Fokus liegt nach Escape auf dem Mehr-Knopf (${fokussiertesLabel})`);
 
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------- 7
+console.log("\n7) Nachrichten und Kalender: erreichbar, kein horizontaler Ueberlauf (320/768/1280 px)");
+for (const breite of [320, 768, 1280]) {
+  const ctx = await browser.newContext({ viewport: { width: breite, height: 800 } });
+  const page = await ctx.newPage();
+  await anmelden(page, LEITUNG);
+  for (const [reiter, selektor] of [["Nachrichten", ".zv-chat"], ["Kalender", ".zv-kalender"]]) {
+    await reiterWaehlen(page, reiter);
+    await page.waitForSelector(selektor, { timeout: 8000 });
+    await page.waitForTimeout(300);
+    const u = await page.evaluate(() => ({
+      doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      body: document.body.scrollWidth - document.body.clientWidth,
+    }));
+    ok(u.doc <= 0 && u.body <= 0, `${reiter} bei ${breite}px ohne horizontales Scrollen (doc ${u.doc}, body ${u.body})`);
+  }
   await ctx.close();
 }
 

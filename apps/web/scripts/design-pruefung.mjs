@@ -55,7 +55,7 @@ function chromiumOrdnerKandidaten(basisPfad) {
   try {
     return readdirSync(basisPfad)
       .filter((name) => name.startsWith("chromium-"))
-      .map((name) => `${basisPfad}/${name}/chrome-linux/chrome`);
+      .flatMap((name) => [`${basisPfad}/${name}/chrome-linux64/chrome`, `${basisPfad}/${name}/chrome-linux/chrome`]);
   } catch {
     return [];
   }
@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 19;
+const ERWARTETE_PAARE = 24;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -248,6 +248,11 @@ async function messePaare(page) {
       pruefe("Hinweis Fehler", q(".zv-pruef-hinweis-fehler"), 4.5);
       pruefe("Hinweis Erfolg", q(".zv-pruef-hinweis-erfolg"), 4.5);
       pruefe("Eingabefeldrand", q(".zv-pruef-input"), 3, "border");
+      pruefe("Menue-Zaehler (Badge)", q(".zv-pruef-badge"), 4.5);
+      pruefe("Chat: eigener Text", q(".zv-pruef-blase-text"), 4.5);
+      pruefe("Chat: Uhrzeit in eigener Blase", q(".zv-pruef-blase-zeit"), 4.5);
+      pruefe("Chat: Absendername", q(".zv-pruef-blase-absender"), 4.5);
+      pruefe("Chat: Vorschau ungelesen", q(".zv-pruef-vorschau"), 4.5);
       return ergebnisse;
     `
     )
@@ -278,6 +283,15 @@ const PRUEFSEITE = `
   <div style="background:var(--zv-surface-2);padding:16px">
     <p class="zv-pruef-faint-s2" style="color:var(--zv-text-faint);margin:0">Leise auf Surface-2</p>
   </div>
+  <span class="zv-nav-badge zv-pruef-badge" style="margin:0">3</span>
+  <div class="zv-blase zv-blase-eigene" style="max-width:none">
+    <div class="zv-blase-text zv-pruef-blase-text">Eigene Nachricht</div>
+    <div class="zv-blase-fuss zv-pruef-blase-zeit"><span>12:00</span></div>
+  </div>
+  <div class="zv-blase" style="max-width:none">
+    <div class="zv-blase-absender zv-pruef-blase-absender">Anna Leitung</div>
+  </div>
+  <div class="zv-chat-eintrag"><span class="zv-chat-vorschau ungelesen zv-pruef-vorschau">Vorschau</span></div>
   <table class="zv-table"><thead><tr><th class="zv-pruef-th">Spalte</th></tr></thead>
     <tbody><tr><td>Wert</td></tr></tbody></table>
   <div class="zv-tabbar"><button class="active zv-pruef-tab">Aktiv</button></div>
