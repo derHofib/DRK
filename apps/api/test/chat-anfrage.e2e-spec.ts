@@ -822,6 +822,63 @@ describe("Chat-Anfragen", () => {
       expect(chatId).toBeTruthy();
       expect(await sqlCode(ausSicht(s1cId), "SELECT chat_anfrage_annehmen($1)", [anfrage])).toBe("ok"); // ROLLBACK am Ende: Anfrage bleibt offen
     });
+    it("Standort-Sichtbarkeit (0057): wer die Klient:in nicht sehen darf, kann die Anfrage weder lesen noch ablehnen noch annehmen -- auch mit der App-Rolle direkt", async () => {
+      const w = await neuerKlient({ vorname: "Umzug", standortId: s1Id });
+      const anPerson = (await stelle(w, { benutzerId: s1aId })).body.id;
+      const anTeam = (await stelle(w, { standortId: s1Id })).body.id;
+      const lesen = async (ctx: Parameters<typeof alsAppRolle>[0], id: string) => (await zeilen(ctx, "SELECT id FROM chat_anfrage WHERE id = $1", [id])).length;
+      const ablehnen = (ctx: Parameters<typeof alsAppRolle>[0], id: string) =>
+        alsAppRolle(ctx, async (c) => (await c.query("UPDATE chat_anfrage SET beantwortet_am = now(), beantwortet_von = $2, angenommen = false WHERE id = $1", [id, ctx.benutzerId])).rowCount);
+      const annehmen = (ctx: Parameters<typeof alsAppRolle>[0], id: string) => sqlCode(ctx, "SELECT chat_anfrage_annehmen($1)", [id]);
+
+      // Vorher: untergebracht in S1, das Team sieht und erreicht alles
+      expect([await lesen(ausSicht(s1aId), anPerson), await lesen(ausSicht(s1bId), anTeam)]).toEqual([1, 1]);
+      expect(await ablehnen(ausSicht(s1bId), anTeam)).toBe(1);
+      expect(await annehmen(ausSicht(s1bId), anTeam)).toBe("ok");
+
+      // Umzug nach S2 (alte Belegung beendet, neue an S2): die letzte UND aktuelle Belegung liegt ausserhalb von S1
+      await admin.query("UPDATE belegung SET auszug = CURRENT_DATE - 6 WHERE klient_id = $1", [w.id]);
+      const zimmerS2 = (await admin.query("INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, $3) RETURNING id", [mandantAId, s2Id, `U${suffix}`])).rows[0].id;
+      await admin.query("INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug) VALUES ($1, $2, $3, CURRENT_DATE - 5)", [mandantAId, zimmerS2, w.id]);
+
+      for (const [ctx, id] of [[ausSicht(s1aId), anPerson], [ausSicht(s1bId), anTeam], [ausSicht(s1bId), anPerson]] as const) {
+        expect([id, await lesen(ctx, id)]).toEqual([id, 0]);
+        expect([id, await ablehnen(ctx, id)]).toEqual([id, 0]);
+      }
+      expect(await annehmen(ausSicht(s1aId), anPerson)).toBe("P0002");
+      expect(await annehmen(ausSicht(s1bId), anTeam)).toBe("P0002");
+      // Unbeschraenkte sehen weiter alles; die Klient:in selbst ihre Anfragen
+      expect([await lesen(ausSicht(leitungId), anTeam), await lesen(ausSicht(vollzugriffId), anTeam), await lesen(ausSichtKlient(w.id), anPerson)]).toEqual([1, 1, 1]);
+      expect(await annehmen(ausSicht(leitungId), anTeam)).toBe("ok");
+      // Nichts davon hat die Anfragen veraendert
+      expect((await admin.query("SELECT count(*)::int AS n FROM chat_anfrage WHERE id = ANY($1) AND beantwortet_am IS NULL", [[anPerson, anTeam]])).rows[0].n).toBe(2);
+
+      // Bezugsbetreuung gilt unabhaengig vom Aufenthaltsort (wie klientIstErlaubt)
+      await admin.query("INSERT INTO klient_stammdaten (mandant_id, klient_id, bezugsbetreuer_id) VALUES ($1, $2, $3)", [mandantAId, w.id, s1aId]);
+      expect(await lesen(ausSicht(s1aId), anPerson)).toBe(1);
+      expect(await annehmen(ausSicht(s1aId), anPerson)).toBe("ok");
+      expect(await lesen(ausSicht(s1bId), anPerson)).toBe(0); // s1b ist weder Ziel noch Bezug
+
+      // Letzte Belegung zaehlt auch nach dem Auszug: s2a (nur S2) behaelt Sicht nach Auszug aus S2
+      const s2Anfrage = (await admin.query("INSERT INTO chat_anfrage (mandant_id, klient_id, ziel_benutzer_id) VALUES ($1, $2, $3) RETURNING id", [mandantAId, w.id, s2aId])).rows[0].id;
+      await admin.query("UPDATE belegung SET auszug = CURRENT_DATE - 1 WHERE klient_id = $1 AND auszug IS NULL", [w.id]);
+      expect(await lesen(ausSicht(s2aId), s2Anfrage)).toBe(1);
+      expect(await lesen(ausSicht(s1aId), s2Anfrage)).toBe(0);
+    });
+
+    it("Standort-Sichtbarkeit (0057): Klient:in ohne Belegung und ohne Bezugsbetreuung ist fuer Beschraenkte unsichtbar (fail closed), fuer Unbeschraenkte sichtbar", async () => {
+      const nirgends = await neuerKlient({ vorname: "Nirgendwo" });
+      const id = (await admin.query("INSERT INTO chat_anfrage (mandant_id, klient_id, ziel_benutzer_id) VALUES ($1, $2, $3) RETURNING id", [mandantAId, nirgends.id, s1bId])).rows[0].id;
+      expect(await zeilen(ausSicht(s1bId), "SELECT id FROM chat_anfrage WHERE id = $1", [id])).toHaveLength(0);
+      expect(await sqlCode(ausSicht(s1bId), "SELECT chat_anfrage_annehmen($1)", [id])).toBe("P0002");
+      // Anderer Mandant: weder Sicht noch Funktion
+      expect(await zeilen({ mandantId: mandantBId, benutzerId: leitungBId }, "SELECT id FROM chat_anfrage WHERE id = $1", [id])).toHaveLength(0);
+      expect(await zeilen(ausSicht(s1bId), "SELECT chat_anfrage_klient_sichtbar($1) AS ok", [nirgends.id])).toEqual([{ ok: false }]);
+      expect(await zeilen(ausSicht(leitungId), "SELECT chat_anfrage_klient_sichtbar($1) AS ok", [nirgends.id])).toEqual([{ ok: true }]);
+      // Klient-Sitzung und leerer Prinzipal: false
+      expect(await zeilen(ausSichtKlient(nirgends.id), "SELECT chat_anfrage_klient_sichtbar($1) AS ok", [nirgends.id])).toEqual([{ ok: false }]);
+      expect(await zeilen({ mandantId: mandantAId }, "SELECT chat_anfrage_klient_sichtbar($1) AS ok", [nirgends.id])).toEqual([{ ok: false }]);
+    });
   });
 
   // --- Echtzeit ----------------------------------------------------------------------
