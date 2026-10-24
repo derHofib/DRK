@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 24;
+const ERWARTETE_PAARE = 28;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -253,6 +253,10 @@ async function messePaare(page) {
       pruefe("Chat: Uhrzeit in eigener Blase", q(".zv-pruef-blase-zeit"), 4.5);
       pruefe("Chat: Absendername", q(".zv-pruef-blase-absender"), 4.5);
       pruefe("Chat: Vorschau ungelesen", q(".zv-pruef-vorschau"), 4.5);
+      pruefe("Anfragen: Titel auf Surface-2", q(".zv-pruef-anfragen-kopf"), 4.5);
+      pruefe("Anfrage: Ziel (muted) auf Karte", q(".zv-pruef-anfrage-ziel"), 4.5);
+      pruefe("Anfrage: Auswahl Ziel aktiv", q(".zv-pruef-ziel-aktiv"), 4.5);
+      pruefe("Klient: aktiver Bereich", q(".zv-pruef-klient-nav"), 4.5);
       return ergebnisse;
     `
     )
@@ -292,6 +296,14 @@ const PRUEFSEITE = `
     <div class="zv-blase-absender zv-pruef-blase-absender">Anna Leitung</div>
   </div>
   <div class="zv-chat-eintrag"><span class="zv-chat-vorschau ungelesen zv-pruef-vorschau">Vorschau</span></div>
+  <section class="zv-anfragen">
+    <h3 class="zv-anfragen-kopf zv-pruef-anfragen-kopf">Anfragen</h3>
+    <ul class="zv-anfragen-liste"><li class="zv-anfrage">
+      <span class="zv-anfrage-ziel zv-pruef-anfrage-ziel">An: Team Haus Eins</span>
+    </li></ul>
+  </section>
+  <ul class="zv-kontaktliste"><li><button class="zv-kontakt-zeile zv-ziel aktiv zv-pruef-ziel-aktiv">Team Haus Eins</button></li></ul>
+  <nav class="zv-klient-nav"><button class="active zv-pruef-klient-nav">Nachrichten</button></nav>
   <table class="zv-table"><thead><tr><th class="zv-pruef-th">Spalte</th></tr></thead>
     <tbody><tr><td>Wert</td></tr></tbody></table>
   <div class="zv-tabbar"><button class="active zv-pruef-tab">Aktiv</button></div>

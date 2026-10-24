@@ -12,6 +12,9 @@
  *   7 Nachrichten/Kalender erreichbar, kein Ueberlauf bei 320/768/1280 px
  *   6 Sammelmenue ("Mehr", Phase 8): oeffnen, Zieleintrag anklicken,
  *     Route wechselt, Menue schliesst sich, Fokus liegt sinnvoll
+ *   8 Klient-Anmeldung und KlientShell: genau zwei Bereiche, nie die
+ *     Mitarbeitenden-Shell, keine 401er, Zielgroessen, Ueberlauf, Abmelden
+ *     (nur mit PRUEF_KLIENT_EMAIL/PRUEF_KLIENT_PASSWORT -- sonst ausdruecklich uebersprungen)
  *
  * Voraussetzung: Dev-Anmeldedaten (siehe Aufrufparameter unten). Bewusst
  * kein Bestandteil der CI -- dort laeuft design-pruefung.mjs, die ohne
@@ -87,6 +90,13 @@ const MANDANT = process.env.PRUEF_MANDANT ?? "drk-musterverband";
 const PW = process.env.PRUEF_PASSWORT ?? "dev-passwort-nur-lokal";
 const LEITUNG = process.env.PRUEF_LEITUNG ?? "leitung@drk-musterverband.test";
 const ANDERE = process.env.PRUEF_ANDERE ?? "betreuung@drk-musterverband.test";
+// Klient-Zugang: kein Standardwert, weil es im Dev-Datenbestand keinen gibt (Einladen: Klientenakte > "Zugang zur App").
+const KLIENT_EMAIL = process.env.PRUEF_KLIENT_EMAIL;
+const KLIENT_PW = process.env.PRUEF_KLIENT_PASSWORT ?? PW;
+
+// NUR_ABSCHNITT=8 fuehrt nur einen Abschnitt aus (z. B. wenn der Testmandant kein Branding-Recht fuer Abschnitt 4 hat).
+const NUR = process.env.NUR_ABSCHNITT;
+const laufe = (n) => !NUR || NUR === String(n);
 
 const fehler = [];
 const ok = (b, m) => { console.log(`  ${b ? "OK  " : "FEHL"}  ${m}`); if (!b) fehler.push(m); };
@@ -129,8 +139,8 @@ async function reiterWaehlen(page, label) {
 }
 
 // ---------------------------------------------------------------- 1
-console.log("\n1) Anmeldung und Grundgeruest");
-{
+if (laufe(1)) console.log("\n1) Anmeldung und Grundgeruest");
+if (laufe(1)) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
@@ -146,8 +156,8 @@ console.log("\n1) Anmeldung und Grundgeruest");
 }
 
 // ---------------------------------------------------------------- 2
-console.log("\n2) Theme-Umschalter kippt wirklich etwas");
-{
+if (laufe(2)) console.log("\n2) Theme-Umschalter kippt wirklich etwas");
+if (laufe(2)) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: "light" });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
@@ -171,8 +181,8 @@ console.log("\n2) Theme-Umschalter kippt wirklich etwas");
 }
 
 // ---------------------------------------------------------------- 3
-console.log("\n3) Kein Aufblitzen des falschen Themes beim Laden");
-{
+if (laufe(3)) console.log("\n3) Kein Aufblitzen des falschen Themes beim Laden");
+if (laufe(3)) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: "light" });
   const page = await ctx.newPage();
   await page.goto(URL, { waitUntil: "networkidle" });
@@ -194,8 +204,8 @@ console.log("\n3) Kein Aufblitzen des falschen Themes beim Laden");
 }
 
 // ---------------------------------------------------------------- 4
-console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
-{
+if (laufe(4)) console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
+if (laufe(4)) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
@@ -274,8 +284,8 @@ console.log("\n4) Akzentfarbe: speichern, neu laden, anderer Benutzer");
 }
 
 // ---------------------------------------------------------------- 5
-console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
-{
+if (laufe(5)) console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
+if (laufe(5)) {
   for (const theme of ["hell", "dunkel"]) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await ctx.newPage();
@@ -317,8 +327,8 @@ console.log("\n5) Kein horizontaler Ueberlauf, mobile Navigation intakt");
 }
 
 // ---------------------------------------------------------------- 6
-console.log("\n6) Sammelmenue (\"Mehr\"): oeffnen, waehlen, schliessen, Fokus");
-{
+if (laufe(6)) console.log("\n6) Sammelmenue (\"Mehr\"): oeffnen, waehlen, schliessen, Fokus");
+if (laufe(6)) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
@@ -357,8 +367,8 @@ console.log("\n6) Sammelmenue (\"Mehr\"): oeffnen, waehlen, schliessen, Fokus");
 }
 
 // ---------------------------------------------------------------- 7
-console.log("\n7) Nachrichten und Kalender: erreichbar, kein horizontaler Ueberlauf (320/768/1280 px)");
-for (const breite of [320, 768, 1280]) {
+if (laufe(7)) console.log("\n7) Nachrichten und Kalender: erreichbar, kein horizontaler Ueberlauf (320/768/1280 px)");
+if (laufe(7)) for (const breite of [320, 768, 1280]) {
   const ctx = await browser.newContext({ viewport: { width: breite, height: 800 } });
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
@@ -373,6 +383,77 @@ for (const breite of [320, 768, 1280]) {
     ok(u.doc <= 0 && u.body <= 0, `${reiter} bei ${breite}px ohne horizontales Scrollen (doc ${u.doc}, body ${u.body})`);
   }
   await ctx.close();
+}
+
+// ---------------------------------------------------------------- 8
+if (laufe(8)) console.log("\n8) Klient-Anmeldung und KlientShell");
+if (!laufe(8)) {
+  // nicht gewaehlt
+} else if (!KLIENT_EMAIL) {
+  console.log("  uebersprungen: PRUEF_KLIENT_EMAIL (und ggf. PRUEF_KLIENT_PASSWORT) nicht gesetzt -- nichts gemessen");
+} else {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  const antworten = [];
+  page.on("response", (r) => { if (r.url().includes("/api/") && [401, 403].includes(r.status()) && !r.url().includes("/auth/")) antworten.push(`${r.status()} ${r.url()}`); });
+  await page.goto(URL, { waitUntil: "networkidle" });
+  const umschalter = page.locator('button:has-text("Anmeldung für Klient:innen")');
+  ok(await umschalter.count() === 1, "Login zeigt den Umschalter 'Anmeldung für Klient:innen'");
+  await umschalter.click();
+  ok(await page.locator('.zv-sub:has-text("Anmeldung für Klient:innen")').count() === 1, "Umschalter wechselt in den Klientenmodus");
+  await page.fill("#mandantSlug", MANDANT);
+  await page.fill("#email", KLIENT_EMAIL);
+  await page.fill("#passwort", KLIENT_PW);
+  await page.click('button[type="submit"]');
+  await page.waitForSelector(".zv-klient", { timeout: 10000 });
+  ok(await page.locator(".zv-sidebar, .zv-tabbar-app").count() === 0, "KlientShell statt Mitarbeitenden-Shell");
+  const bereiche = (await page.locator(".zv-klient-nav button").allInnerTexts()).map((t) => t.trim().replace(/\d+$/, "").trim());
+  ok(JSON.stringify(bereiche) === JSON.stringify(["Nachrichten", "Termine"]), `Genau zwei Bereiche (${bereiche.join(", ")})`);
+  await page.click('.zv-klient-nav button:has-text("Termine")');
+  await page.waitForSelector(".zv-kalender");
+  await page.click('.zv-klient-nav button:has-text("Nachrichten")');
+  await page.waitForSelector(".zv-chat");
+  await page.waitForTimeout(500);
+  ok(antworten.length === 0, `Keine 401/403 ausserhalb von /auth (${antworten.join("; ")})`);
+  ok(await page.evaluate(() => !!localStorage.getItem("zimmerakte_token")), "Sitzung besteht (kein erzwungenes Abmelden)");
+
+  const vorher = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.click('.zv-klient-aktionen button[aria-label^="Design"]');
+  await page.click('.zv-klient-aktionen button[aria-label^="Design"]');
+  const nachher = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  ok(vorher !== nachher, `Hell/Dunkel-Umschalter wirkt in der KlientShell (${vorher} -> ${nachher})`);
+
+  const klein = await page.evaluate(() => [...document.querySelectorAll(".zv-klient-kopf button, .zv-klient-nav button, .zv-chat-liste-kopf button")]
+    .map((e) => { const b = e.getBoundingClientRect(); return { n: (e.getAttribute("aria-label") || e.textContent || "").trim().slice(0, 24), w: b.width, h: b.height }; })
+    .filter((b) => b.w < 43.5 || b.h < 43.5));
+  ok(klein.length === 0, `Bedienelemente in Kopf, Navigation und Chatliste mindestens 44 px${klein.length ? ": " + JSON.stringify(klein) : ""}`);
+  await ctx.close();
+
+  for (const breite of [320, 768, 1280]) {
+    const c = await browser.newContext({ viewport: { width: breite, height: 800 } });
+    const p = await c.newPage();
+    await p.goto(URL, { waitUntil: "networkidle" });
+    await p.click('button:has-text("Anmeldung für Klient:innen")');
+    await p.fill("#mandantSlug", MANDANT);
+    await p.fill("#email", KLIENT_EMAIL);
+    await p.fill("#passwort", KLIENT_PW);
+    await p.click('button[type="submit"]');
+    await p.waitForSelector(".zv-klient", { timeout: 10000 });
+    for (const [bereich, selektor] of [["Nachrichten", ".zv-chat"], ["Termine", ".zv-kalender"]]) {
+      await p.click(`.zv-klient-nav button:has-text("${bereich}")`);
+      await p.waitForSelector(selektor);
+      await p.waitForTimeout(300);
+      const u = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, body: document.body.scrollWidth - document.body.clientWidth }));
+      ok(u.doc <= 0 && u.body <= 0, `KlientShell ${bereich} bei ${breite}px ohne horizontales Scrollen (doc ${u.doc}, body ${u.body})`);
+    }
+    if (breite === 1280) {
+      await p.click('button:has-text("Abmelden")');
+      await p.waitForSelector("#mandantSlug");
+      ok(await p.evaluate(() => !localStorage.getItem("zimmerakte_token")), "Abmelden raeumt den Token");
+      ok(await p.locator('.zv-sub:has-text("Anmeldung für Klient:innen")').count() === 1, "Nach dem Abmelden wieder die Klient-Anmeldung");
+    }
+    await c.close();
+  }
 }
 
 await browser.close();
