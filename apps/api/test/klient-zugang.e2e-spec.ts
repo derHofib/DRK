@@ -220,13 +220,19 @@ describe("Klienten-Zugang", () => {
     }
   });
 
-  it("GET /auth/klient/ich liefert Vorname und Mandant des Klient-Tokens", async () => {
+  it("GET /auth/klient/ich liefert Vorname, Mandant und die Traegerfarben des Klient-Tokens", async () => {
+    const standard = await als(tokenKlient1).get("/auth/klient/ich");
+    expect(standard.status).toBe(200);
+    const gespeichert = (await admin.query("SELECT akzentfarbe, dunkel_grundfarbe FROM mandant WHERE id = $1", [mandantAId])).rows[0];
+    expect(standard.body.mandant).toMatchObject({ akzentfarbe: gespeichert.akzentfarbe, dunkelGrundfarbe: gespeichert.dunkel_grundfarbe });
+
+    await admin.query("UPDATE mandant SET akzentfarbe = '#e11d48', dunkel_grundfarbe = '#1a2b3c' WHERE id = $1", [mandantAId]);
     const res = await als(tokenKlient1).get("/auth/klient/ich");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       klientId: klient1Id,
       anzeigename: "Vorname",
-      mandant: { id: mandantAId, name: `KZ A ${suffix}` },
+      mandant: { id: mandantAId, name: `KZ A ${suffix}`, akzentfarbe: "#e11d48", dunkelGrundfarbe: "#1a2b3c" },
     });
   });
 

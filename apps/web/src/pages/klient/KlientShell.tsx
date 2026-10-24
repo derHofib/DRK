@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChatKontaktDto } from "@zimmerakte/shared";
+import { akzentSetzen, dunkelGrundfarbeSetzen } from "../../theme/theme";
 import { api, clearToken, type KlientIchDto } from "../../api/client";
 import { useChatEreignisse } from "../../components/chat/ereignisse";
 import { IAbmelden, IKalender, INachrichten } from "../../components/icons";
@@ -24,7 +25,12 @@ export function KlientShell({ onLoggedOut }: { onLoggedOut: () => void }) {
   useEffect(() => {
     api
       .klientIch()
-      .then(setIch)
+      .then((d) => {
+        setIch(d);
+        // Wie in der Shell der Mitarbeitenden: die Traegerfarbe ist die Autoritaet, ein localStorage-Wert nur die Ueberbrueckung.
+        if (d.mandant.akzentfarbe) akzentSetzen(d.mandant.akzentfarbe);
+        if (d.mandant.dunkelGrundfarbe) dunkelGrundfarbeSetzen(d.mandant.dunkelGrundfarbe);
+      })
       .catch(() => {});
   }, []);
 

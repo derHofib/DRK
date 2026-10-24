@@ -416,22 +416,28 @@ export class AuthService {
    * Endpunkt zwar authentifiziert (TeilnehmerGuard), aber ohne Klient-Bezug
    * -- 403 statt 401, weil die Identitaet feststeht und nur die Art falsch ist.
    */
-  async klientIch(): Promise<{ klientId: string; anzeigename: string; mandant: { id: string; name: string } }> {
+  async klientIch(): Promise<{ klientId: string; anzeigename: string; mandant: { id: string; name: string; akzentfarbe: string; dunkelGrundfarbe: string } }> {
     const teilnehmer = aktuellerTeilnehmer();
     if (teilnehmer.art !== "klient") {
       throw new ForbiddenException("Dieser Endpunkt ist nur für Klient-Zugänge.");
     }
     const { mandantId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const { rows } = await client.query<{ vorname: string; mandant_name: string }>(
-        "SELECT k.vorname, m.name AS mandant_name FROM klient k, mandant m WHERE k.id = $1 AND m.id = $2",
+      const { rows } = await client.query<{ vorname: string; mandant_name: string; akzentfarbe: string; dunkel_grundfarbe: string }>(
+        "SELECT k.vorname, m.name AS mandant_name, m.akzentfarbe, m.dunkel_grundfarbe FROM klient k, mandant m WHERE k.id = $1 AND m.id = $2",
         [teilnehmer.id, mandantId]
       );
       if (rows.length === 0) throw new UnauthorizedException("Zugang ungültig.");
       return {
         klientId: teilnehmer.id,
         anzeigename: rows[0].vorname,
-        mandant: { id: mandantId, name: rows[0].mandant_name },
+        // Nur die Hex-Werte wie beim Mandant-Endpunkt der Mitarbeitenden; Ton und Helligkeit leitet das CSS ab.
+        mandant: {
+          id: mandantId,
+          name: rows[0].mandant_name,
+          akzentfarbe: rows[0].akzentfarbe,
+          dunkelGrundfarbe: rows[0].dunkel_grundfarbe,
+        },
       };
     });
   }

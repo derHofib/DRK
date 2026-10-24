@@ -233,7 +233,7 @@ export interface ChatUngelesenDto {
 export interface KlientIchDto {
   klientId: string;
   anzeigename: string;
-  mandant: { id: string; name: string };
+  mandant: { id: string; name: string; akzentfarbe: string; dunkelGrundfarbe: string };
 }
 
 export interface KlientEinladungDto {
