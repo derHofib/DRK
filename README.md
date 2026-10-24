@@ -8,7 +8,7 @@ Der vollständige Bauplan (Datenmodell-Philosophie, Mandantenmodell,
 Rechtliches, Phasenplan mit Abnahmekriterien) ist als Artifact dokumentiert;
 frag im laufenden Chat danach, falls der Link nicht mehr griffbereit ist.
 
-## Stand: Phase 8 (Aufgaben)
+## Stand: Phase 9 (Klienten-Zugang, Kalender, Chat)
 
 Umgesetzt und **gegen eine echte PostgreSQL-Instanz getestet**:
 
