@@ -8,6 +8,7 @@ import {
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
+import { MeinProfil } from "../components/MeinProfil";
 import { Sicherheit } from "./Sicherheit";
 import { Standorte } from "./Standorte";
 import { KassenbuchTypen } from "./KassenbuchTypen";
@@ -15,6 +16,7 @@ import {
   IAnpassen,
   IBestaetigen,
   IDarstellung,
+  IMitarbeitende,
   IEinklappen,
   IErfolg,
   IFehler,
@@ -29,7 +31,7 @@ import {
 } from "../components/icons";
 import { STANDARD_REITER, reiterNachReihenfolge, type HauptReiter } from "../navigation";
 
-type Bereich = "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
+type Bereich = "profil" | "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
 
 export function Einstellungen({
   mandant,
@@ -51,6 +53,13 @@ export function Einstellungen({
   return (
     <div>
       <div className="zv-tabbar" style={{ padding: 0, marginBottom: 24 }}>
+        <button
+          className={bereich === "profil" ? "active" : ""}
+          onClick={() => setBereich("profil")}
+        >
+          <IMitarbeitende />
+          Mein Profil
+        </button>
         <button
           className={bereich === "darstellung" ? "active" : ""}
           onClick={() => setBereich("darstellung")}
@@ -81,6 +90,7 @@ export function Einstellungen({
         </button>
       </div>
 
+      {bereich === "profil" && <MeinProfil />}
       {bereich === "darstellung" && (
         <Darstellung
           mandant={mandant}

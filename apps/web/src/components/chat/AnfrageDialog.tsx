@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { ChatAnfrageDto, ChatAnfrageZielDto } from "@zimmerakte/shared";
 import { ApiFehler, api } from "../../api/client";
 import { Leerzustand } from "../Leerzustand";
+import { MitarbeiterProfilKlient } from "../MitarbeiterProfilKlient";
 import { Modal } from "../Modal";
 import { IFehler, ILeerKontakte, INeuerChat } from "../icons";
 
@@ -97,6 +98,12 @@ export function AnfrageDialog({
                 <ul className="zv-kontaktliste">{g.liste.map(zeile)}</ul>
               </div>
             ))}
+
+          {gewaehlt?.art === "benutzer" && (
+            <div style={{ marginTop: "var(--zv-space-3)" }}>
+              <MitarbeiterProfilKlient benutzerId={gewaehlt.benutzerId} />
+            </div>
+          )}
 
           {gewaehlt?.art === "benutzer" && gewaehlt.direktChatId ? (
             <div style={{ marginTop: "var(--zv-space-3)" }}>

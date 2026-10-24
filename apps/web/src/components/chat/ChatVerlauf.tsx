@@ -3,8 +3,9 @@ import type { ChatDto, ChatNachrichtDto } from "@zimmerakte/shared";
 import { api } from "../../api/client";
 import { formatTagTrenner, lokalesDatum } from "../../format";
 import { Leerzustand } from "../Leerzustand";
+import { MitarbeiterProfilKlient } from "../MitarbeiterProfilKlient";
 import { Modal } from "../Modal";
-import { IFehler, IGruppe, ILeerNachrichten, INachrichtLoeschen, IZurueckPfeil } from "../icons";
+import { IFehler, IGruppe, IMitarbeitende, ILeerNachrichten, INachrichtLoeschen, IZurueckPfeil } from "../icons";
 import { ChatEingabe } from "./ChatEingabe";
 import { useChatEreignisse } from "./ereignisse";
 import { NachrichtBlase } from "./NachrichtBlase";
@@ -20,11 +21,14 @@ export function ChatVerlauf({
   onZurueck,
   onGruppeVerwalten,
   onListeAktualisieren,
+  klient = false,
 }: {
   chat: ChatDto;
   onZurueck: () => void;
   onGruppeVerwalten: () => void;
   onListeAktualisieren: () => void;
+  /** Klient-Sicht: im Direktchat mit einer Mitarbeiter:in gibt es ihr freigegebenes Profil. */
+  klient?: boolean;
 }) {
   const { abonnieren, badgeNeuLaden } = useChatEreignisse();
   const [nachrichten, setNachrichten] = useState<ChatNachrichtDto[]>([]);
@@ -35,6 +39,7 @@ export function ChatVerlauf({
   const [bildGross, setBildGross] = useState<{ url: string; name: string } | null>(null);
   const [loeschZiel, setLoeschZiel] = useState<ChatNachrichtDto | null>(null);
   const [loescht, setLoescht] = useState(false);
+  const [profilOffen, setProfilOffen] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
   const amEnde = useRef(true);
@@ -149,6 +154,8 @@ export function ChatVerlauf({
           ? "Direktchat"
           : "";
 
+  const profilPartner = klient && chat.art === "direkt" ? chat.teilnehmer.find((t) => t.art === "benutzer") : undefined;
+
   let letzterTag = "";
   return (
     <section className="zv-chat-verlauf" aria-label={`Chat ${chat.anzeigename}`}>
@@ -160,6 +167,12 @@ export function ChatVerlauf({
           <strong>{chat.anzeigename}</strong>
           {untertitel && <span>{untertitel}</span>}
         </div>
+        {profilPartner && (
+          <button type="button" className="zv-btn zv-btn-still zv-btn-klein" onClick={() => setProfilOffen(true)}>
+            <IMitarbeitende />
+            Profil
+          </button>
+        )}
         {chat.art === "gruppe" && (
           <button type="button" className="zv-btn zv-btn-still zv-btn-klein" onClick={onGruppeVerwalten}>
             <IGruppe />
@@ -230,6 +243,12 @@ export function ChatVerlauf({
               Abbrechen
             </button>
           </div>
+        </Modal>
+      )}
+
+      {profilOffen && profilPartner && (
+        <Modal titel="Profil" onClose={() => setProfilOffen(false)}>
+          <MitarbeiterProfilKlient benutzerId={profilPartner.id} />
         </Modal>
       )}
     </section>

@@ -136,6 +136,7 @@ export function Nachrichten({ klient = false }: { klient?: boolean }) {
           onZurueck={() => setAktivId(null)}
           onGruppeVerwalten={() => setGruppeOffen(true)}
           onListeAktualisieren={listeAktualisieren}
+          klient={klient}
         />
       ) : (
         <div className="zv-chat-leer">

@@ -3512,3 +3512,53 @@ li:last-child > .zv-kontakt-zeile,
     gap: 0;
   }
 }
+
+
+/* ==================================================================
+   Mitarbeiter-Profil (Karte, Klient-Ansicht, Bearbeiten in Einstellungen)
+   ================================================================== */
+.zv-profil-liste {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  margin: var(--zv-space-3) 0 0;
+}
+
+.zv-profil-liste dt {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+}
+
+.zv-profil-liste dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-profil-liste a {
+  color: var(--zv-accent-strong);
+}
+
+.zv-profil-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-profil-freigabe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1) var(--zv-space-4);
+  margin: var(--zv-space-2) 0 var(--zv-space-4);
+}
+
+@media (max-width: 480px) {
+  .zv-profil-liste {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .zv-profil-liste dd {
+    margin-bottom: var(--zv-space-2);
+  }
+}

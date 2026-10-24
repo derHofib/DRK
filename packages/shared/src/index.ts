@@ -1030,3 +1030,57 @@ export interface ChatAnfrageAnnahmeDto {
   chatId: string;
   anfrage: ChatAnfrageDto;
 }
+
+// ---------------------------------------------------------------------------
+// Mitarbeiter-Profil (migrations/0058_mitarbeiter_profil.sql)
+// ---------------------------------------------------------------------------
+
+export type KontaktArt = "telefon" | "chat" | "email";
+
+export const KONTAKTART_LABEL: Record<KontaktArt, string> = {
+  telefon: "Anruf",
+  chat: "Chat-Nachricht",
+  email: "E-Mail",
+};
+
+/** Die Angaben selbst -- bei Klient:innen sind nicht freigegebene Felder null. */
+export interface MitarbeiterProfilInhaltDto {
+  telefon: string | null;
+  bevorzugteKontaktart: KontaktArt | null;
+  erreichbarkeit: string | null;
+  emailDienstlich: string | null;
+  ueberMich: string | null;
+}
+
+/** Wer ein Feld sehen darf: Klient:innen der Bezugsbetreuung ("zugeordnet") bzw. alle anderen, die die Person sehen koennen. */
+export interface ProfilFreigabeDto {
+  zugeordnet: boolean;
+  andere: boolean;
+}
+
+/** Kontaktart und Erreichbarkeit gehoeren zusammen und teilen eine Freigabe ("kontakt"). */
+export interface ProfilSichtbarkeitDto {
+  telefon: ProfilFreigabeDto;
+  kontakt: ProfilFreigabeDto;
+  email: ProfilFreigabeDto;
+  ueberMich: ProfilFreigabeDto;
+}
+
+/** Das eigene Profil inklusive der Freigaben -- nur die Person selbst bekommt diese Sicht. */
+export interface MitarbeiterProfilEigenDto extends MitarbeiterProfilInhaltDto {
+  sichtbarkeit: ProfilSichtbarkeitDto;
+}
+
+/** Kolleg:innen sehen untereinander alle Angaben (ohne die Freigabe-Einstellungen). */
+export interface MitarbeiterProfilKollegeDto extends MitarbeiterProfilInhaltDto {
+  benutzerId: string;
+  name: string;
+}
+
+/** Was eine Klient-Sitzung sieht: nur freigegebene Felder, ausserdem ob es die eigene Bezugsbetreuung ist. */
+export interface MitarbeiterProfilFuerKlientDto extends MitarbeiterProfilInhaltDto {
+  benutzerId: string;
+  name: string;
+  zugeordnet: boolean;
+}
+

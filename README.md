@@ -2697,6 +2697,55 @@ Module `kalender/` und `chat/` im Backend sowie die Seiten „Nachrichten" und
   Seiten nicht gemessen, auch nicht das Verhalten von `fetch`-Streaming und
   `navigator.geolocation` dort.
 
+### Nachtrag: Mitarbeiter-Profil mit Freigaben für Klient:innen
+
+Jede Mitarbeiter:in pflegt unter **Einstellungen → Mein Profil** dienstliche
+Kontaktangaben: Telefon, bevorzugte Kontaktart (Anruf / Chat-Nachricht /
+E-Mail), Erreichbarkeit, dienstliche E-Mail und einen Freitext „Über mich".
+Je Gruppe (Telefon; Kontaktart + Erreichbarkeit; E-Mail; Über mich) legt sie
+fest, wer es sehen darf -- getrennt für ihre **zugeordneten** Klient:innen und
+für **alle anderen**. Kolleg:innen sehen immer alles (Mitarbeitende → „Profil").
+
+- **Zugeordnet** heißt: die Person ist Bezugsbetreuung der Klient:in
+  (`klient_stammdaten.bezugsbetreuer_id`).
+- **Privat als Vorgabe.** Jede Freigabe ist `DEFAULT false`; ein neues Profil
+  zeigt Klient:innen nichts außer dem Namen.
+- **Kein neuer Personenkreis.** Eine Klient:in sieht das Profil nur von
+  Personen, die sie ohnehin sehen kann: Ziele der Chat-Anfrage (Bezugsbetreuung,
+  Team des aktuellen Standorts) und Teilnehmende gemeinsamer Chats. Alles
+  andere ist ein 404, identisch zu „gibt es nicht". Angezeigt wird es im
+  Dialog „Gespräch anfragen" sowie über „Profil" im Kopf eines Direktchats.
+- **„Alle anderen" setzt „Bezugsbetreuung" voraus** (CHECK-Constraint, die
+  Oberfläche schaltet mit): ein Profil, das Fremden mehr zeigt als der eigenen
+  Bezugsbetreuung, ließe sich nicht sinnvoll erklären.
+- **Die Filterung liegt in der Datenbank**, nicht im Service
+  (Migration 0058): Klient-Sitzungen haben auf `mitarbeiter_profil` keinen
+  Lesezugriff (Policy), sie bekommen das Profil ausschließlich über die
+  `SECURITY DEFINER`-Funktion `mitarbeiter_profil_fuer_klient()`, die je Feld den
+  Wert oder `NULL` liefert -- „nicht freigegeben" und „nie ausgefüllt" sind für
+  die Klient:in nicht unterscheidbar. Schreiben darf nur die Person selbst
+  (Policy auf `benutzer_id`; auch Vollzugriff ändert fremde Profile nicht),
+  `UPDATE` spaltenscharf, kein `DELETE`. Deaktivierte Personen verschwinden aus
+  der Klient-Sicht.
+- Bewusst nicht Teil davon: keine Profilbilder, kein Änderungsprotokoll (es sind
+  Angaben der Person über sich selbst, keine Klientendaten), kein Profil in der
+  Chat-Sicht von Mitarbeitenden (dort gibt es die Mitarbeitenden-Liste).
+
+Geprüft: gesamte API-Suite 596/596 grün, 52 Suiten (584 + 12 neue); neue Spec
+`mitarbeiter-profil.e2e-spec.ts` (12 Tests) deckt die Matrix ab: Vorgabe leer,
+zugeordnet sieht genau die für sie freigegebenen Felder, nicht zugeordnet nur
+die für „andere", außerhalb des Kreises 404, gemeinsamer Chat öffnet den
+Kreis, deaktivierte Person unsichtbar, Kolleg:innen sehen alles, fremdes Profil
+per direktem SQL unter der App-Rolle nicht änderbar, Klient-Sitzung kommt nicht
+an die Tabelle, ungültige Eingaben 400, falsche Prinzipale 401/403.
+**Gegenproben** an der Datenbank-Logik (jeweils wiederhergestellt): Feldfreigaben
+ignoriert → 2 Tests rot; Sichtkreis-Prüfung aus → 2 rot; Update-Policy nur
+Mandant → 1 rot; Lese-Policy ohne Klient-Ausschluss → 1 rot. Live-Browser-Check
+(Playwright): Profil befüllt und gespeichert, Kollege sieht Telefon, E-Mail und
+Text, die zugeordnete Klient:in sieht Telefon, Kontaktart, Erreichbarkeit und
+„Über mich" (nicht die E-Mail), eine andere Klient:in nur Kontaktart und
+Erreichbarkeit.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

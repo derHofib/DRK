@@ -4,6 +4,9 @@ import type {
   ChatAnfrageDto,
   ChatAnfrageEingabe,
   ChatAnfrageZielDto,
+  MitarbeiterProfilEigenDto,
+  MitarbeiterProfilFuerKlientDto,
+  MitarbeiterProfilKollegeDto,
   ChatDto,
   ChatKontaktDto,
   ChatKontaktEingabe,
@@ -762,6 +765,13 @@ export const api = {
   klientIch: () => request<KlientIchDto>("/auth/klient/ich"),
 
   // Chat-Anfragen: Klient:innen stellen sie, Mitarbeitende beantworten sie.
+  // Mitarbeiter-Profil
+  profilEigenes: () => request<MitarbeiterProfilEigenDto>("/profil/ich"),
+  profilEigenesSpeichern: (profil: MitarbeiterProfilEigenDto) =>
+    request<MitarbeiterProfilEigenDto>("/profil/ich", { method: "PUT", body: JSON.stringify(profil) }),
+  profilKollege: (benutzerId: string) => request<MitarbeiterProfilKollegeDto>(`/profil/kollegen/${benutzerId}`),
+  mitarbeiterProfilFuerKlient: (benutzerId: string) =>
+    request<MitarbeiterProfilFuerKlientDto>(`/mitarbeiter-profil/${benutzerId}`),
   chatAnfrageZiele: () => request<ChatAnfrageZielDto[]>("/chat/anfragen/ziele"),
   chatAnfragen: () => request<ChatAnfrageDto[]>("/chat/anfragen"),
   chatAnfrageStellen: (eingabe: ChatAnfrageEingabe) =>

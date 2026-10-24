@@ -1,9 +1,10 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
+import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
 import { Modal } from "../components/Modal";
-import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
+import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
 
 export function Mitarbeitende() {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
@@ -16,6 +17,7 @@ export function Mitarbeitende() {
   const [standortZuweisung, setStandortZuweisung] = useState<BenutzerListEintragDto | null>(null);
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
   const [wirdZugewiesen, setWirdZugewiesen] = useState(false);
+  const [profilAnsicht, setProfilAnsicht] = useState<MitarbeiterProfilKollegeDto | null>(null);
   const [statusAenderung, setStatusAenderung] = useState<BenutzerListEintragDto | null>(null);
   const [statusFehler, setStatusFehler] = useState<string | null>(null);
   const [statusWirdGespeichert, setStatusWirdGespeichert] = useState(false);
@@ -95,6 +97,15 @@ export function Mitarbeitende() {
       setStatusFehler(err instanceof Error ? err.message : "Status konnte nicht geändert werden.");
     } finally {
       setStatusWirdGespeichert(false);
+    }
+  }
+
+  async function profilOeffnen(b: BenutzerListEintragDto) {
+    setFehler(null);
+    try {
+      setProfilAnsicht(await api.profilKollege(b.id));
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Profil konnte nicht geladen werden.");
     }
   }
 
@@ -241,6 +252,10 @@ export function Mitarbeitende() {
                 )}
               </span>
               <span className="zv-liste-zelle-aktionen">
+                <button className="zv-link-btn" onClick={() => profilOeffnen(b)}>
+                  <IMitarbeitende />
+                  Profil
+                </button>
                 <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
                   <IResetLink />
                   Passwort zurücksetzen
@@ -269,6 +284,12 @@ export function Mitarbeitende() {
             </div>
           ))}
         </div>
+      )}
+
+      {profilAnsicht && (
+        <Modal titel={`Profil — ${profilAnsicht.name}`} onClose={() => setProfilAnsicht(null)}>
+          <MitarbeiterProfilKarte inhalt={profilAnsicht} leerText={`${profilAnsicht.name} hat noch kein Profil ausgefüllt.`} />
+        </Modal>
       )}
 
       {statusAenderung && (
