@@ -2972,3 +2972,167 @@ li:last-child > .zv-kontakt-zeile,
     min-height: 36px;
   }
 }
+
+/* ==================================================================
+   Kalender
+   ================================================================== */
+.zv-kal-navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-kal-monat {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  text-transform: capitalize;
+  font-size: var(--zv-text-xl);
+}
+
+.zv-kal-raster {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-wochentag {
+  text-align: center;
+  padding: var(--zv-space-1) 0;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 48px;
+  padding: var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zv-kal-tag:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-tag.fremd {
+  background: var(--zv-bg);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-tag.heute .zv-kal-tag-zahl {
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-tag.gewaehlt {
+  background: var(--zv-accent-soft);
+  border-color: var(--zv-accent);
+}
+
+.zv-kal-punkte {
+  display: flex;
+  gap: 3px;
+}
+
+.zv-kal-punkt {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-accent);
+}
+
+.zv-kal-punkt.abgesagt {
+  background: var(--zv-text-faint);
+}
+
+.zv-kal-listenkopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-kal-listenkopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+  text-transform: capitalize;
+}
+
+.zv-kal-liste {
+  list-style: none;
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-kal-termin {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-kal-termin:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-zeit {
+  flex-shrink: 0;
+  min-width: 70px;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-termin-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.zv-kal-termin-text span {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+@media (min-width: 1001px) {
+  .zv-kal-tag {
+    min-height: 64px;
+  }
+}
+
+@media (max-width: 640px) {
+  .zv-kal-termin {
+    flex-wrap: wrap;
+  }
+
+  .zv-kal-zeit {
+    min-width: 0;
+  }
+}

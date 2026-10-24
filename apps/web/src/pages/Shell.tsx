@@ -41,6 +41,7 @@ import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
 import { Nachrichten } from "./Nachrichten";
+import { Kalender } from "./Kalender";
 
 /** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
 const MOBIL_SICHTBAR_ANZAHL = 4;
@@ -86,6 +87,7 @@ const BREITE_REITER = new Set<Tab>([
   "hzl",
   "klienten",
   "nachrichten",
+  "kalender",
   "mitarbeitende",
   "tagesberichte",
   "aufgaben",
@@ -622,6 +624,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "hzl" && <Kassenbuch ansicht="hzl" />}
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "nachrichten" && <Nachrichten />}
+          {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "vertretung" && <Vertretung />}
