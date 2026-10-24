@@ -2,26 +2,32 @@ import {
   BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
-import type { ChatNachrichtEingabe } from "@zimmerakte/shared";
+import type { ChatAnfrageEingabe, ChatNachrichtEingabe, ChatUngelesenDto } from "@zimmerakte/shared";
 import { TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { erkenneBildTyp } from "../common/datei";
 import { leseRohKoerper } from "../common/roh-koerper";
 import { requireTenantContext } from "../common/tenant-context";
+import { ChatAnfrageService } from "./chat-anfrage.service";
 import { ChatEreignisService } from "./chat-ereignis.service";
 import { ChatNachrichtService } from "./chat-nachricht.service";
 import { ChatService } from "./chat.service";
-import { bildQuerySchema, gruppeAnlegenSchema, kontaktSchema, nachrichtSchema, seiteQuerySchema, umbenennenSchema } from "./chat.schemas";
+import { ablehnenSchema, anfrageSchema, bildQuerySchema, gruppeAnlegenSchema, kontaktSchema, nachrichtSchema, seiteQuerySchema, umbenennenSchema } from "./chat.schemas";
 
 const MAX_BILD_BYTES = 8_000_000;
 const ANHANG_CACHE_SEKUNDEN = 7 * 24 * 60 * 60;
+// Zusaetzlich zur Obergrenze offener Anfragen (migrations/0056): bremst auch das
+// Absenden-und-Zurueckziehen im Kreis, das die Obergrenze nicht trifft.
+const ANFRAGE_RATEN_SCHRANKE = { default: { limit: 10, ttl: 60_000 } };
 
 // Ungueltige IDs sind "nicht gefunden" (wie im Kalender), nicht "Eingabefehler".
 const id = () => new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.NOT_FOUND });
 
 /**
- * Statische Pfade (kontakte, ungelesen, ereignisse, anhaenge/...) stehen VOR
- * den ":id"-Routen, sonst frisst ":id" sie.
+ * Statische Pfade (kontakte, ungelesen, ereignisse, anhaenge/..., anfragen/...)
+ * stehen VOR den ":id"-Routen, sonst frisst ":id" sie (GET /chat/anfragen
+ * wuerde als Chat-ID "anfragen" enden).
  */
 @Controller("chat")
 @TeilnehmerAuthenticated()
@@ -29,6 +35,7 @@ export class ChatController {
   constructor(
     private readonly chats: ChatService,
     private readonly nachrichten: ChatNachrichtService,
+    private readonly anfragen: ChatAnfrageService,
     private readonly ereignisse: ChatEreignisService,
     private readonly jwt: JwtService
   ) {}
@@ -44,8 +51,41 @@ export class ChatController {
   }
 
   @Get("ungelesen")
-  async ungelesen() {
-    return this.chats.ungelesenGesamt();
+  async ungelesen(): Promise<ChatUngelesenDto> {
+    return { ...(await this.chats.ungelesenGesamt()), offeneAnfragen: await this.anfragen.offeneAnzahl() };
+  }
+
+  @Get("anfragen/ziele")
+  async anfrageZiele() {
+    return this.anfragen.ziele();
+  }
+
+  @Get("anfragen")
+  async anfrageListe() {
+    return this.anfragen.liste();
+  }
+
+  @Throttle(ANFRAGE_RATEN_SCHRANKE)
+  @Post("anfragen")
+  async anfrageStellen(@Body() body: unknown) {
+    return this.anfragen.stellen(anfrageSchema.parse(body) as ChatAnfrageEingabe);
+  }
+
+  @Post("anfragen/:id/annehmen")
+  @HttpCode(200)
+  async anfrageAnnehmen(@Param("id", id()) anfrageId: string) {
+    return this.anfragen.annehmen(anfrageId);
+  }
+
+  @Post("anfragen/:id/ablehnen")
+  @HttpCode(200)
+  async anfrageAblehnen(@Param("id", id()) anfrageId: string, @Body() body: unknown) {
+    return this.anfragen.ablehnen(anfrageId, ablehnenSchema.parse(body ?? {}).begruendung?.trim() || null);
+  }
+
+  @Delete("anfragen/:id")
+  async anfrageZurueckziehen(@Param("id", id()) anfrageId: string) {
+    return this.anfragen.zurueckziehen(anfrageId);
   }
 
   // @Res() ohne passthrough: der Handler beendet die Antwort nicht selbst, der Dienst haelt sie offen.

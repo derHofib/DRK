@@ -975,5 +975,58 @@ export interface ChatEreignisDto {
    * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; resync: Verbindung zur Datenbank
    * war unterbrochen -- alles neu laden.
    */
-  art: "nachricht" | "teilnehmer" | "chat" | "resync";
+  art: "nachricht" | "teilnehmer" | "chat" | "anfrage" | "resync";
+  /**
+   * Nur bei art "anfrage": welche Chat-Anfrage sich geaendert hat (neu, beantwortet, zurueckgezogen).
+   * Ohne Inhalt -- die Anfragen laedt der Client per GET /chat/anfragen.
+   */
+  anfrageId?: string;
+}
+
+// --- Chat-Anfragen durch Klient:innen (migrations/0056) ---
+
+/** Abgeleitet (offen = unbeantwortet), nicht gespeichert. "zurueckgezogen": von der Klient:in selbst beendet. */
+export type ChatAnfrageZustand = "offen" | "angenommen" | "abgelehnt" | "zurueckgezogen";
+
+/** GET /chat/anfragen/ziele (nur Klient:innen): wen man anfragen darf. */
+export type ChatAnfrageZielDto =
+  | {
+      art: "benutzer";
+      benutzerId: string;
+      name: string;
+      istBezugsbetreuer: boolean;
+      /** Schon bestehender Direktchat mit dieser Person -- dann braucht es keine Anfrage. */
+      direktChatId: string | null;
+    }
+  | { art: "team"; standortId: string; /** "Team <Standortname>" */ name: string };
+
+/** POST /chat/anfragen (nur Klient:innen). */
+export type ChatAnfrageEingabe = ({ benutzerId: string } | { standortId: string }) & { nachricht?: string | null };
+
+export interface ChatAnfrageDto {
+  id: string;
+  zustand: ChatAnfrageZustand;
+  erstelltAm: string;
+  /** Anfragende:r; fuer Mitarbeitende nach den Anonymisierungsregeln (volle Namen nur bei Sichtrecht), fuer die Klient:in selbst nur der Vorname. */
+  klient: ChatPersonDto;
+  ziel: { art: "benutzer"; id: string; name: string } | { art: "team"; id: string; name: string };
+  nachricht: string | null;
+  beantwortetAm: string | null;
+  /** Wer angenommen/abgelehnt hat (nicht bei "offen" und "zurueckgezogen"). */
+  beantwortetVon: { id: string; name: string } | null;
+  ablehnungsgrund: string | null;
+  /** Nur bei "angenommen": der Direktchat. */
+  chatId: string | null;
+}
+
+/** GET /chat/ungelesen: Menue-Badge = ungelesen + offeneAnfragen. */
+export interface ChatUngelesenDto {
+  ungelesen: number;
+  /** Mitarbeitende: offene Anfragen an mich oder mein Team (nur solche, deren Klient:in ich sehen darf). Klient:innen: immer 0. */
+  offeneAnfragen: number;
+}
+
+export interface ChatAnfrageAnnahmeDto {
+  chatId: string;
+  anfrage: ChatAnfrageDto;
 }

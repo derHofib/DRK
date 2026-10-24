@@ -43,3 +43,14 @@ export const seiteQuerySchema = z.object({
   vor: z.string().uuid("„vor“ muss die ID einer Nachricht sein.").optional(),
   limit: z.coerce.number().int("„limit“ muss eine ganze Zahl sein.").min(1).max(100, "„limit“ darf höchstens 100 sein.").optional(),
 });
+
+const anfrageNachricht = z.string().trim().max(1000, "Der Text ist zu lang (höchstens 1000 Zeichen).").nullable().optional();
+
+export const anfrageSchema = z.union([
+  z.object({ benutzerId: z.string().uuid(), nachricht: anfrageNachricht }).strict(),
+  z.object({ standortId: z.string().uuid(), nachricht: anfrageNachricht }).strict(),
+]);
+
+export const ablehnenSchema = z
+  .object({ begruendung: z.string().trim().max(500, "Die Begründung ist zu lang (höchstens 500 Zeichen).").nullable().optional() })
+  .strict();

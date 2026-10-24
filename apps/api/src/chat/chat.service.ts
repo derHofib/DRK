@@ -24,6 +24,7 @@ interface ChatRow {
   art: "direkt" | "gruppe";
   name: string | null;
   erstellt_am: Date;
+  beigetreten_am: Date;
   ist_admin: boolean;
   ungelesen: number;
   l_id: string | null;
@@ -58,8 +59,12 @@ export function prinzipalParameter(ich: Teilnehmer): [string | null, string | nu
 }
 
 /**
- * Sichtbarkeit steckt in der RLS (chat_ist_teilnehmer, migrations/0055): ein
- * fremder Chat ist "nicht gefunden" (404), nicht "verboten" -- seine Existenz
+ * Sichtbarkeit steckt in der RLS (chat_ist_teilnehmer, migrations/0055; die
+ * Historien-Grenze fuer Gruppen chat_nachricht_lesbar, 0056): letzte Nachricht,
+ * Ungelesen-Zaehler und Verlauf lesen alle durch dieselbe Policy und zeigen
+ * deshalb nie etwas aus der Zeit vor dem Beitritt.
+ *
+ * Ein fremder Chat ist "nicht gefunden" (404), nicht "verboten" -- seine Existenz
  * soll nicht verraten werden. 403 gibt es nur fuer Chats, die man sieht, aber
  * nicht verwalten darf. Das gilt auch fuer ist_vollzugriff-Konten.
  */
@@ -301,7 +306,7 @@ export class ChatService {
   /** Zwei Abfragen fuer beliebig viele Chats (Chats + letzte Nachricht + Lesestand, dann Teilnehmende) -- kein N+1. */
   private async ladeChats(client: PoolClient, ich: Teilnehmer, chatId: string | null): Promise<ChatDto[]> {
     const { rows } = await client.query<ChatRow>(
-      `SELECT c.id, c.art, c.name, c.erstellt_am, me.ist_admin,
+      `SELECT c.id, c.art, c.name, c.erstellt_am, me.beigetreten_am, me.ist_admin,
               (SELECT count(*)::int FROM chat_nachricht u
                WHERE u.chat_id = c.id AND u.geloescht_am IS NULL AND u.art <> 'system'
                  AND u.erstellt_am > me.zuletzt_gelesen_am
@@ -320,7 +325,7 @@ export class ChatService {
        LEFT JOIN benutzer lb ON lb.id = l.absender_benutzer_id
        LEFT JOIN klient lk ON lk.id = l.absender_klient_id
        WHERE ($3::uuid IS NULL OR c.id = $3::uuid)
-       ORDER BY COALESCE(l.erstellt_am, c.erstellt_am) DESC, c.id`,
+       ORDER BY COALESCE(l.erstellt_am, me.beigetreten_am) DESC, c.id`,
       [...prinzipalParameter(ich), chatId]
     );
     if (rows.length === 0) return [];
@@ -381,7 +386,7 @@ export class ChatService {
         ungelesen: r.ungelesen,
         teilnehmer,
         letzteNachricht: letzte,
-        letzteAktivitaetAm: (letzte?.erstelltAm ?? r.erstellt_am.toISOString()),
+        letzteAktivitaetAm: (letzte?.erstelltAm ?? r.beigetreten_am.toISOString()),
       });
     }
     return dtos;

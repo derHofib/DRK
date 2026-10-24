@@ -12,7 +12,7 @@ const WIEDERVERBINDEN_MIN_MS = 1_000;
 const WIEDERVERBINDEN_MAX_MS = 30_000;
 // setTimeout vertraegt sich bei Werten ueber 2^31-1 ms zu einem Sofort-Ablauf.
 const MAX_TIMEOUT_MS = 2_147_483_647;
-const ARTEN = new Set(["nachricht", "teilnehmer", "chat"]);
+const CHAT_ARTEN = new Set(["nachricht", "teilnehmer", "chat"]);
 
 interface Abonnent {
   mandantId: string;
@@ -28,7 +28,8 @@ interface Abonnent {
 
 /**
  * Echtzeit per Server-Sent Events. Die Datenbank meldet per NOTIFY nur
- * "in Chat X ist etwas passiert" (migrations/0055, ohne Inhalt); der Dienst
+ * "in Chat X ist etwas passiert" bzw. "Anfrage Y hat sich geaendert"
+ * (migrations/0055/0056, ohne Inhalt); der Dienst
  * haelt dafuer EINE dedizierte Verbindung (LISTEN braucht eine dauerhafte,
  * keine Pool-Verbindung) und verteilt an die Abonnent:innen, die in diesem
  * Chat aktiv sind. Inhalte holt sich der Client danach per REST -- so laufen
@@ -187,24 +188,41 @@ export class ChatEreignisService implements OnModuleDestroy {
   }
 
   private eingang(n: Notification): void {
-    let nutzlast: { mandant_id?: unknown; chat_id?: unknown; art?: unknown };
+    let nutzlast: { mandant_id?: unknown; chat_id?: unknown; anfrage_id?: unknown; art?: unknown };
     try {
       nutzlast = JSON.parse(n.payload ?? "");
     } catch {
       return;
     }
-    if (typeof nutzlast.mandant_id !== "string" || typeof nutzlast.chat_id !== "string" || typeof nutzlast.art !== "string" || !ARTEN.has(nutzlast.art)) {
+    if (typeof nutzlast.mandant_id !== "string" || typeof nutzlast.art !== "string") return;
+    const mandantId = nutzlast.mandant_id;
+    let zustellen: (a: Abonnent) => Promise<void>;
+    if (nutzlast.art === "anfrage" && typeof nutzlast.anfrage_id === "string") {
+      const anfrageId = nutzlast.anfrage_id;
+      zustellen = (a) => this.zustellenAnfrage(a, anfrageId);
+    } else if (typeof nutzlast.chat_id === "string" && CHAT_ARTEN.has(nutzlast.art)) {
+      const ereignis = { chatId: nutzlast.chat_id, art: nutzlast.art as ChatEreignisDto["art"] };
+      zustellen = (a) => this.zustellen(a, ereignis);
+    } else {
       return;
     }
-    const mandantId = nutzlast.mandant_id;
-    const ereignis = { chatId: nutzlast.chat_id, art: nutzlast.art as ChatEreignisDto["art"] };
     for (const a of this.abonnenten) {
-      // Vorab-Filter nach Mandant; die eigentliche Zugangsentscheidung trifft die Datenbank (istMitglied).
+      // Vorab-Filter nach Mandant; die eigentliche Zugangsentscheidung trifft die Datenbank (istMitglied / sieheAnfrage).
       if (a.mandantId !== mandantId) continue;
-      a.warteschlange = a.warteschlange.then(() => this.zustellen(a, ereignis)).catch((err) => {
+      a.warteschlange = a.warteschlange.then(() => zustellen(a)).catch((err) => {
         this.log.warn(`Ereignis konnte nicht zugestellt werden: ${(err as Error).message}`);
       });
     }
+  }
+
+  /** Anfragen werden nicht zwischengespeichert: ob jemand sie sieht, haengt vom Zustand ab (Team, Beantworter:in) und aendert sich mit jedem Ereignis. */
+  private async zustellenAnfrage(a: Abonnent, anfrageId: string): Promise<void> {
+    if (a.beendet) return;
+    // Plain SELECT unter der Identitaet des Abonnenten: chat_anfrage_lesen (RLS) ist die Zugangsentscheidung.
+    const { rows } = await tenantContextStorage.run(a.ctx, () =>
+      this.db.withTenant((client) => client.query("SELECT 1 FROM chat_anfrage WHERE id = $1::uuid", [anfrageId]))
+    );
+    if (rows.length > 0) this.schreibe(a, eventText({ chatId: null, art: "anfrage", anfrageId }));
   }
 
   private async zustellen(a: Abonnent, e: { chatId: string; art: ChatEreignisDto["art"] }): Promise<void> {

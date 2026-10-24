@@ -770,6 +770,150 @@ describe("Chat", () => {
 
   // --- App-Rolle direkt (RLS, Trigger, Spaltenrechte) -------------------------------
 
+  // --- Historien-Grenze (migrations/0056) --------------------------------------------
+
+  describe("Historien-Grenze in Gruppen", () => {
+    let grenzeId: string; // leitung (Admin), betreuer; Vorgeschichte vor dem Beitritt der anderen
+    let altNachrichtId: string;
+    let altBildNachrichtId: string;
+    let altAnhangId: string;
+    let altTerminId: string;
+
+    const texte = async (token: string, chatId: string) =>
+      (await als(token).get(`/chat/${chatId}/nachrichten?limit=100`)).body.nachrichten.map((n: any) => n.text).filter((t: string | null) => t !== null);
+
+    beforeAll(async () => {
+      const l = als(tokenLeitung);
+      grenzeId = (await l.post("/chat/gruppe", { name: "Mit Vorgeschichte", teilnehmer: [{ benutzerId: betreuerId }] })).body.id;
+      altNachrichtId = (await l.post(`/chat/${grenzeId}/nachrichten`, { art: "text", text: "alt-eins" })).body.id;
+      const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: "#456" } }).png().toBuffer();
+      altBildNachrichtId = (await l.roh(`/chat/${grenzeId}/bilder`, "image/png", png)).body.id;
+      altAnhangId = (await admin.query("SELECT id FROM chat_anhang WHERE nachricht_id = $1", [altBildNachrichtId])).rows[0].id;
+      const termin = await l.post(`/chat/${grenzeId}/nachrichten`, {
+        art: "termin",
+        termin: { titel: "Alter Termin", beginn: zeit("12-10", "09:00"), ende: zeit("12-10", "10:00") },
+      });
+      altTerminId = termin.body.termin.id;
+      await l.post(`/chat/${grenzeId}/nachrichten`, { art: "text", text: "alt-zwei" });
+    });
+
+    it("Neu Aufgenommene sehen nichts aus der Zeit davor: Verlauf, Vorschau, Ungelesen, Anhang und geteilter Termin", async () => {
+      const l = als(tokenLeitung);
+      // Vorher: Betreuer ist von Anfang an dabei und sieht alles.
+      expect(await texte(tokenBetreuer, grenzeId)).toEqual(expect.arrayContaining(["alt-eins", "alt-zwei"]));
+
+      expect((await l.post(`/chat/${grenzeId}/teilnehmer`, { benutzerId: vollzugriffId })).status).toBe(200);
+      expect((await l.post(`/chat/${grenzeId}/teilnehmer`, { klientId: klient1Id })).status).toBe(200);
+
+      for (const token of [tokenVollzugriff, tokenKlient1]) {
+        const c = als(token);
+        const leer = await c.get(`/chat/${grenzeId}/nachrichten`);
+        expect(leer.status).toBe(200);
+        expect(leer.body).toEqual({ nachrichten: [], weitere: false });
+        const ansicht = (await c.get("/chat")).body.find((x: any) => x.id === grenzeId);
+        expect(ansicht).toMatchObject({ ungelesen: 0, letzteNachricht: null });
+        // Ohne sichtbare Nachricht zaehlt der Beitritt als letzte Aktivitaet, nicht die Gruendung des Chats.
+        expect(ansicht.letzteAktivitaetAm).toBe(ansicht.teilnehmer.find((t: any) => t.art === (token === tokenKlient1 ? "klient" : "benutzer") && t.id === (token === tokenKlient1 ? klient1Id : vollzugriffId)).beigetretenAm);
+        expect((await c.get(`/chat/anhaenge/${altAnhangId}`)).status).toBe(404);
+      }
+      // Der geteilte Termin aus der Vorgeschichte ist verschlossen, auch wenn die ID bekannt ist.
+      expect((await als(tokenVollzugriff).get(`/kalender/termine/${altTerminId}`)).status).toBe(404);
+      expect((await als(tokenKlient1).get(`/kalender/termine/${altTerminId}`)).status).toBe(404);
+      expect((await als(tokenBetreuer).get(`/kalender/termine/${altTerminId}`)).status).toBe(200);
+      // Eine Nachricht aus der Vorgeschichte als Cursor oder zum Loeschen zu adressieren verraet nichts.
+      expect((await als(tokenVollzugriff).get(`/chat/${grenzeId}/nachrichten?vor=${altNachrichtId}`)).status).toBe(400);
+      expect((await als(tokenVollzugriff).del(`/chat/nachrichten/${altNachrichtId}`)).status).toBe(404);
+
+      // Ab dem Beitritt: alles sichtbar, Ungelesen zaehlt nur das Neue.
+      await l.post(`/chat/${grenzeId}/nachrichten`, { art: "text", text: "neu-eins" });
+      const neuerTermin = (await l.post(`/chat/${grenzeId}/nachrichten`, {
+        art: "termin",
+        termin: { titel: "Neuer Termin", beginn: zeit("12-11", "09:00"), ende: zeit("12-11", "10:00") },
+      })).body.termin.id;
+      for (const token of [tokenVollzugriff, tokenKlient1]) {
+        const c = als(token);
+        expect(await texte(token, grenzeId)).toEqual(["neu-eins"]);
+        const ansicht = (await c.get("/chat")).body.find((x: any) => x.id === grenzeId);
+        expect(ansicht.ungelesen).toBe(2);
+        expect(ansicht.letzteNachricht).toMatchObject({ vorschau: "Termin: Neuer Termin" });
+        expect((await c.get(`/kalender/termine/${neuerTermin}`)).status).toBe(200);
+      }
+      // Vorgeschichte bleibt fuer die, die dabei waren
+      expect(await texte(tokenBetreuer, grenzeId)).toEqual(expect.arrayContaining(["alt-eins", "alt-zwei", "neu-eins"]));
+      expect((await als(tokenBetreuer).get(`/chat/anhaenge/${altAnhangId}`)).status).toBe(200);
+
+      // Eigene Nachrichten der neu Aufgenommenen sind sofort sichtbar.
+      const eigene = await als(tokenVollzugriff).post(`/chat/${grenzeId}/nachrichten`, { art: "text", text: "Hallo zusammen" });
+      expect(eigene.status).toBe(201);
+      expect(await texte(tokenVollzugriff, grenzeId)).toEqual(["Hallo zusammen", "neu-eins"]);
+
+      // Ungelesen-Gesamtzahl rechnet mit denselben sichtbaren Nachrichten
+      const gesamt = (await als(tokenKlient1).get("/chat/ungelesen")).body.ungelesen;
+      const summe = (await als(tokenKlient1).get("/chat")).body.reduce((n: number, c: any) => n + c.ungelesen, 0);
+      expect(gesamt).toBe(summe);
+    });
+
+    it("Direkt mit der App-Rolle: Nachrichten, Anhaenge und Termine vor dem Beitritt sind auf Datenbankebene unsichtbar", async () => {
+      const zaehleNachrichten = (ctx: Parameters<typeof alsAppRolle>[0]) =>
+        alsAppRolle(ctx, async (c) => (await c.query("SELECT count(*)::int AS n FROM chat_nachricht WHERE chat_id = $1 AND erstellt_am < (SELECT beigetreten_am FROM chat_teilnehmer WHERE chat_id = $1 AND benutzer_id = $2 AND verlassen_am IS NULL)", [grenzeId, vollzugriffId])).rows[0].n);
+      expect(await zaehleNachrichten({ mandantId: mandantAId, benutzerId: vollzugriffId })).toBe(0);
+      expect(await zaehleNachrichten(ausSichtLeitung())).toBeGreaterThan(0); // Gegenprobe: dieselbe Abfrage zeigt der Leitung die Vorgeschichte
+
+      const lesen = (ctx: Parameters<typeof alsAppRolle>[0], sql: string, params: unknown[]) =>
+        alsAppRolle(ctx, async (c) => (await c.query(sql, params)).rows[0].n as number);
+      const alsVollzugriff = { mandantId: mandantAId, benutzerId: vollzugriffId };
+      const alsKlient = { mandantId: mandantAId, klientId: klient1Id };
+      for (const ctx of [alsVollzugriff, alsKlient]) {
+        expect(await lesen(ctx, "SELECT count(*)::int AS n FROM chat_nachricht WHERE id = ANY($1)", [[altNachrichtId, altBildNachrichtId]])).toBe(0);
+        expect(await lesen(ctx, "SELECT count(*)::int AS n FROM chat_anhang WHERE id = $1", [altAnhangId])).toBe(0);
+        expect(await lesen(ctx, "SELECT count(*)::int AS n FROM termin WHERE id = $1", [altTerminId])).toBe(0);
+        expect(await lesen(ctx, "SELECT termin_sichtbar($1)::int AS n", [altTerminId])).toBe(0);
+        expect(await lesen(ctx, "SELECT count(*)::int AS n FROM chat_nachricht WHERE chat_id = $1", [grenzeId])).toBeGreaterThan(0); // aber das Neue
+      }
+      expect(await lesen(ausSichtBetreuer(), "SELECT count(*)::int AS n FROM chat_nachricht WHERE id = ANY($1)", [[altNachrichtId, altBildNachrichtId]])).toBe(2);
+      // Die Nachricht aus der Vorgeschichte laesst sich auch nicht per UPDATE erreichen.
+      expect(await alsAppRolle(alsVollzugriff, async (c) => (await c.query("UPDATE chat_nachricht SET text = NULL, geloescht_am = now() WHERE id = $1", [altNachrichtId])).rowCount)).toBe(0);
+      // Und nicht als Anhang-Ziel: ein Bild an eine unsichtbare Nachricht zu haengen scheitert.
+      expect(
+        await sqlCode(alsVollzugriff, "INSERT INTO chat_anhang (mandant_id, nachricht_id, dateiname, mime_type, inhalt, inhalt_hash, groesse) VALUES ($1, $2, 'a', 'image/png', '\\x00', 'h', 1)", [mandantAId, altBildNachrichtId])
+      ).toBe("42501");
+    });
+
+    it("Wiedereintritt: die Zeit dazwischen UND die frueheren Nachrichten bleiben verschlossen (auch die eigenen)", async () => {
+      const l = als(tokenLeitung);
+      const chat = (await l.post("/chat/gruppe", { name: "Rein und raus", teilnehmer: [{ benutzerId: betreuerId }] })).body.id;
+      await l.post(`/chat/${chat}/nachrichten`, { art: "text", text: "erste-phase" });
+      await als(tokenBetreuer).post(`/chat/${chat}/nachrichten`, { art: "text", text: "von-betreuer-erste-phase" });
+      expect(await texte(tokenBetreuer, chat)).toEqual(["von-betreuer-erste-phase", "erste-phase"]);
+
+      const zeile = (await l.get(`/chat/${chat}`)).body.teilnehmer.find((t: any) => t.id === betreuerId).teilnehmerId;
+      expect((await l.del(`/chat/${chat}/teilnehmer/${zeile}`)).status).toBe(200);
+      await l.post(`/chat/${chat}/nachrichten`, { art: "text", text: "waehrend-abwesenheit" });
+      expect((await l.post(`/chat/${chat}/teilnehmer`, { benutzerId: betreuerId })).status).toBe(200);
+      await l.post(`/chat/${chat}/nachrichten`, { art: "text", text: "zweite-phase" });
+
+      expect(await texte(tokenBetreuer, chat)).toEqual(["zweite-phase"]);
+      const ansicht = (await als(tokenBetreuer).get("/chat")).body.find((x: any) => x.id === chat);
+      expect(ansicht).toMatchObject({ ungelesen: 1, letzteNachricht: { vorschau: "zweite-phase" } });
+      // Die Leitung war immer dabei.
+      expect(await texte(tokenLeitung, chat)).toEqual(["zweite-phase", "waehrend-abwesenheit", "von-betreuer-erste-phase", "erste-phase"]);
+    });
+
+    it("Direktchats sind ausgenommen: auch ein spaeterer beigetreten_am versteckt dort nichts", async () => {
+      const chat = (await als(tokenLeitung).post("/chat/direkt", { benutzerId: vollzugriffId })).body.id;
+      await als(tokenLeitung).post(`/chat/${chat}/nachrichten`, { art: "text", text: "direkt-alt" });
+      await admin.query("UPDATE chat_teilnehmer SET beigetreten_am = now() + interval '1 day' WHERE chat_id = $1 AND benutzer_id = $2", [chat, vollzugriffId]);
+      // Der Direktchat existiert schon aus frueheren Tests: seine aelteren Nachrichten bleiben ebenfalls sichtbar.
+      expect(await texte(tokenVollzugriff, chat)).toEqual(expect.arrayContaining(["direkt-alt", "eins"]));
+      // Gegenprobe: dieselbe Verschiebung in einer Gruppe versteckt die Nachricht.
+      const gruppe = (await als(tokenLeitung).post("/chat/gruppe", { name: "Zukunft", teilnehmer: [{ benutzerId: vollzugriffId }] })).body.id;
+      await als(tokenLeitung).post(`/chat/${gruppe}/nachrichten`, { art: "text", text: "gruppe-neu" });
+      expect(await texte(tokenVollzugriff, gruppe)).toEqual(["gruppe-neu"]);
+      await admin.query("UPDATE chat_teilnehmer SET beigetreten_am = now() + interval '1 day' WHERE chat_id = $1 AND benutzer_id = $2", [gruppe, vollzugriffId]);
+      expect(await texte(tokenVollzugriff, gruppe)).toEqual([]);
+    });
+  });
+
   describe("direkt mit der App-Rolle", () => {
     it("Sichtbarkeit: Teilnehmende ja, ist_vollzugriff-Konto und Fremde nein", async () => {
       const zaehle = (ctx: Parameters<typeof alsAppRolle>[0], tabelle: string) =>
