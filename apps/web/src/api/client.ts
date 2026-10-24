@@ -92,9 +92,16 @@ export function clearToken(): void {
  * unten ist eine einfache Funktion ausserhalb jeder Komponente, hat also
  * keinen anderen Weg, React-State zu erreichen.
  */
-let beiSitzungAbgelaufen: (() => void) | null = null;
-export function aufSitzungAbgelaufen(fn: () => void): void {
+let beiSitzungAbgelaufen: ((warKlient: boolean) => void) | null = null;
+export function aufSitzungAbgelaufen(fn: (warKlient: boolean) => void): void {
   beiSitzungAbgelaufen = fn;
+}
+
+/** Token verwerfen und App.tsx melden; ob es ein Klient-Token war, muss VOR dem Verwerfen gelesen werden. */
+function sitzungBeenden(): void {
+  const warKlient = istKlientToken();
+  clearToken();
+  beiSitzungAbgelaufen?.(warKlient);
 }
 
 /**
@@ -174,8 +181,7 @@ async function request<T>(path: string, init?: RequestInit, ohneToken = false): 
     // Code) laeuft ohne Token und soll normal als Formularfehler erscheinen,
     // nicht ploetzlich zur Login-Seite "zurueckspringen".
     if (res.status === 401 && token) {
-      clearToken();
-      beiSitzungAbgelaufen?.();
+      sitzungBeenden();
     }
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new ApiFehler(body.message ?? `Anfrage fehlgeschlagen (${res.status})`, res.status);
@@ -269,8 +275,7 @@ export function abonniereChatEreignisse(onEreignis: (e: ChatEreignis) => void): 
           signal: abbruch.signal,
         });
         if (res.status === 401) {
-          clearToken();
-          beiSitzungAbgelaufen?.();
+          sitzungBeenden();
           return;
         }
         if (!res.ok || !res.body) throw new Error(`Stream abgelehnt (${res.status})`);
@@ -394,8 +399,7 @@ export const api = {
       body: datei,
     });
     if (res.status === 401 && token) {
-      clearToken();
-      beiSitzungAbgelaufen?.();
+      sitzungBeenden();
     }
     if (!res.ok) {
       if (res.status === 413) throw new Error("Die Datei ist zu groß (maximal 8 MB).");
@@ -800,8 +804,7 @@ export const api = {
       body: datei,
     });
     if (res.status === 401 && token) {
-      clearToken();
-      beiSitzungAbgelaufen?.();
+      sitzungBeenden();
     }
     if (!res.ok) {
       if (res.status === 413) throw new ApiFehler("Das Bild ist zu groß (maximal 8 MB).", 413);

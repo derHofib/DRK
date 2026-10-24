@@ -29,7 +29,9 @@ export function App() {
   const [startAlsKlient, setStartAlsKlient] = useState(false);
 
   useEffect(() => {
-    aufSitzungAbgelaufen(() => {
+    aufSitzungAbgelaufen((warKlient) => {
+      // Klient:innen sollen nach einer abgelaufenen Sitzung wieder in ihrer Anmeldung landen, nicht in der der Mitarbeitenden.
+      setStartAlsKlient(warKlient);
       setSitzungAbgelaufen(true);
       setAngemeldet(false);
     });
