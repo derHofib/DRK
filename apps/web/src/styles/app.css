@@ -1591,6 +1591,22 @@
   margin-bottom: var(--zv-space-1);
 }
 
+/* Zielgroesse: der Textlink ist sonst nur ~22px hoch (gemessen). */
+.zv-signature-leeren {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.zv-signature-canvas-gross {
+  /* Breite statt max-height begrenzen, damit das Seitenverhaeltnis stimmt
+     (eine geklemmte Hoehe wuerde die Leinwand verzerrt darstellen). */
+  width: min(100%, calc(42vh * 2.5));
+  max-width: none;
+  height: auto;
+  aspect-ratio: 5 / 2;
+  margin-bottom: var(--zv-space-2);
+}
+
 /* ==================================================================
    Mobil
    ==================================================================
@@ -3560,5 +3576,170 @@ li:last-child > .zv-kontakt-zeile,
   }
   .zv-profil-liste dd {
     margin-bottom: var(--zv-space-2);
+  }
+}
+
+/* ==================================================================
+   HZL-Uebergabemodus (pages/HzlUebergabe.tsx)
+   ==================================================================
+   Vollbild ohne Navigation. Farben ausschliesslich aus den Tokens -- der
+   Mandant bestimmt den Akzent, es gibt hier keine eigene Markenfarbe.
+   Alle Knoepfe >= 44px (WCAG 2.2 Zielgroesse), auf dem Tablet bewusst mehr. */
+.zv-aktionen-reihe {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+}
+
+.zv-uebergabe {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--zv-space-5) var(--zv-space-4);
+}
+
+.zv-uebergabe-block {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-uebergabe-block h1 {
+  font-size: var(--zv-text-2xl);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+.zv-uebergabe-block h1:focus {
+  outline: none;
+}
+
+.zv-uebergabe-block p {
+  margin: 0;
+}
+
+.zv-uebergabe-kicker {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  letter-spacing: 0.04em;
+}
+
+.zv-uebergabe-klient h1 {
+  font-size: 40px;
+}
+
+.zv-uebergabe-betrag {
+  font-size: clamp(56px, 14vw, 120px);
+  line-height: 1.05;
+  font-weight: var(--zv-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.zv-uebergabe-kw {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-xl);
+}
+
+.zv-uebergabe-erklaerung {
+  font-size: var(--zv-text-xl);
+  padding-top: var(--zv-space-3);
+}
+
+.zv-uebergabe-feld {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-m);
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-feld input {
+  min-height: 52px;
+  font-size: 28px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+}
+
+.zv-uebergabe-hinweis {
+  color: var(--zv-status-warn);
+}
+
+.zv-uebergabe-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  padding-top: var(--zv-space-3);
+}
+.zv-uebergabe-knopf {
+  min-height: 56px;
+  min-width: 44px;
+  flex: 1 1 200px;
+  font-size: var(--zv-text-xl);
+}
+
+.zv-uebergabe-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.zv-uebergabe-liste li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-uebergabe-kontrolle {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--zv-space-2) var(--zv-space-5);
+  margin: 0;
+}
+.zv-uebergabe-kontrolle dt {
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-kontrolle dd {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+}
+.zv-uebergabe-vorschau {
+  display: block;
+  max-width: 240px;
+  background: var(--zv-signature-paper);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-uebergabe-status,
+.zv-uebergabe-offline {
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-offline {
+  position: absolute;
+  top: var(--zv-space-3);
+  right: var(--zv-space-4);
+  margin: 0;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .zv-uebergabe {
+    justify-content: flex-start;
+  }
+  .zv-uebergabe-betrag {
+    font-size: clamp(48px, 10vh, 80px);
+  }
+  .zv-signature-canvas-gross {
+    width: min(100%, calc(32vh * 2.5));
   }
 }

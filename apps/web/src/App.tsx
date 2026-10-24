@@ -3,6 +3,7 @@ import { aufSitzungAbgelaufen, clearToken, getToken, istKlientToken } from "./ap
 import { ChatEreignisProvider } from "./components/chat/ereignisse";
 import { Login } from "./pages/Login";
 import { PasswortZuruecksetzen } from "./pages/PasswortZuruecksetzen";
+import { HzlUebergabe, UebergabeStart, uebergabeLesen, uebergabeMerken } from "./pages/HzlUebergabe";
 import { Shell } from "./pages/Shell";
 import { KlientEinladung } from "./pages/klient/KlientEinladung";
 import { KlientEmailAendern } from "./pages/klient/KlientEmailAendern";
@@ -27,11 +28,17 @@ export function App() {
   const [klientEinladung, setKlientEinladung] = useState(() => new URLSearchParams(window.location.search).get("klient-einladung"));
   const [klientEmail, setKlientEmail] = useState(() => new URLSearchParams(window.location.search).get("klient-email"));
   const [startAlsKlient, setStartAlsKlient] = useState(false);
+  // Uebergabemodus ERSETZT die Shell (statt sie zu verdecken): die Navigation
+  // ist dann nicht im DOM. Der Zustand steht in sessionStorage, damit Neuladen
+  // nicht aus dem Modus herausfuehrt.
+  const [uebergabe, setUebergabe] = useState<UebergabeStart | null>(() => uebergabeLesen());
 
   useEffect(() => {
     aufSitzungAbgelaufen((warKlient) => {
       // Klient:innen sollen nach einer abgelaufenen Sitzung wieder in ihrer Anmeldung landen, nicht in der der Mitarbeitenden.
       setStartAlsKlient(warKlient);
+      uebergabeMerken(null);
+      setUebergabe(null);
       setSitzungAbgelaufen(true);
       setAngemeldet(false);
     });
@@ -77,7 +84,9 @@ export function App() {
   // und die Sitzung selbst beenden -- die Wahl hier faellt deshalb am Token.
   return (
     <ChatEreignisProvider>
-      {istKlientToken() ? (
+      {!istKlientToken() && uebergabe ? (
+        <HzlUebergabe start={uebergabe} onBeendet={() => setUebergabe(null)} />
+      ) : istKlientToken() ? (
         <KlientShell
           onLoggedOut={() => {
             // Wer sich als Klient:in abmeldet, will sich meist wieder so anmelden.
@@ -87,7 +96,13 @@ export function App() {
         />
       ) : (
         <Shell
+          onUebergabeStarten={(start) => {
+            uebergabeMerken(start);
+            setUebergabe(start);
+          }}
           onLoggedOut={() => {
+            uebergabeMerken(null);
+            setUebergabe(null);
             setStartAlsKlient(false);
             setAngemeldet(false);
           }}

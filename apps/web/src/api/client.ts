@@ -563,6 +563,10 @@ export const api = {
       `/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}${standortId ? `&standortId=${standortId}` : ""}`
     ),
 
+  kassenbuchDarfBuchen: () => request<{ darf: boolean }>("/kassenbuchungen/darf-buchen"),
+  hzlUebergabeEntsperren: (passwort: string) =>
+    request<{ ok: true }>("/kassenbuchungen/hzl-uebergabe/entsperren", { method: "POST", body: JSON.stringify({ passwort }) }),
+
   unterschriftBildUrl: (kassenbuchungId: string) => blobUrl(`/kassenbuchungen/${kassenbuchungId}/unterschrift`),
 
   kostenuebernahmenListe: (klientId: string) =>

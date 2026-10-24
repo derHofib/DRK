@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
+import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { KassenbuchungService } from "./kassenbuchung.service";
@@ -59,6 +60,11 @@ const wochenuebersichtSchema = z.object({
   standortId: z.string().uuid().optional(),
 });
 
+// Wie beim Login: 10/min laesst Vertippen zu, macht Durchprobieren unwirtschaftlich.
+const RATEN_SCHRANKE = { default: { limit: 10, ttl: 60_000 } };
+
+const entsperrenSchema = z.object({ passwort: z.string().min(1) });
+
 @Controller("kassenbuchungen")
 @Authenticated()
 export class KassenbuchungController {
@@ -77,6 +83,20 @@ export class KassenbuchungController {
   async wochenuebersicht(@Query() query: unknown) {
     const { jahr, kw, standortId } = wochenuebersichtSchema.parse(query);
     return this.kassenbuch.wochenuebersicht(jahr, kw, standortId);
+  }
+
+  @Get("darf-buchen")
+  async darfBuchen() {
+    return this.kassenbuch.darfBuchen();
+  }
+
+  @Throttle(RATEN_SCHRANKE)
+  @Post("hzl-uebergabe/entsperren")
+  async hzlUebergabeEntsperren(@Body() body: unknown) {
+    const eingabe = entsperrenSchema.safeParse(body);
+    if (!eingabe.success) throw new BadRequestException("Bitte das Passwort eingeben.");
+    await this.kassenbuch.hzlUebergabeEntsperren(eingabe.data.passwort);
+    return { ok: true };
   }
 
   @Post()

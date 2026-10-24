@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
@@ -14,6 +15,7 @@ import {
 } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";
 import { RechteService } from "../rechte/rechte.service";
+import { AuditService } from "../audit/audit.service";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -67,10 +69,14 @@ export interface KassenbuchungDto {
 export interface WochenuebersichtEintrag {
   klientId: string;
   klientName: string;
+  vorname: string;
+  nachname: string;
   bezahlt: boolean;
   buchungId: string | null;
   betragCent: number | null;
   datum: string | null;
+  letzterHzlBetragCent: number | null;
+  saldoCent: number;
 }
 
 // Wiederkehrender Teil der SELECT-Liste/JOINs fuer eine Buchung -- klient_id
@@ -98,7 +104,8 @@ const BUCHUNG_SELECT = `
 export class KassenbuchungService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly rechte: RechteService
+    private readonly rechte: RechteService,
+    private readonly audit: AuditService
   ) {}
 
   /**
@@ -130,6 +137,12 @@ export class KassenbuchungService {
     teilnehmerBenutzerIds?: string[];
   }): Promise<KassenbuchungDto> {
     const { mandantId, benutzerId } = requireTenantContext();
+    // Das Recht stand in der Registry, wurde aber nirgends erzwungen: wer
+    // eingeloggt war, konnte buchen. Die Vorab-Pruefung des Uebergabemodus
+    // (darfBuchen) ist nur ehrlich, wenn dieselbe Frage hier verbindlich ist.
+    if (!(await this.rechte.hatRecht("kassenbuch", "buchen"))) {
+      throw new ForbiddenException("Für Kassenbuchungen fehlt die Berechtigung.");
+    }
     const istAuszahlung = input.betragCent < 0;
     const verwendungszweck = input.verwendungszweck?.trim() ?? "";
 
@@ -476,7 +489,12 @@ export class KassenbuchungService {
       const { rows } = await client.query(
         `
         SELECT k.id AS klient_id, k.vorname, k.nachname,
-               b.id AS buchung_id, b.betrag_cent, b.datum
+               b.id AS buchung_id, b.betrag_cent, b.datum,
+               (SELECT abs(h.betrag_cent) FROM kassenbuchung h
+                 WHERE h.klient_id = k.id AND h.ist_hzl AND NOT h.storniert
+                 ORDER BY h.datum DESC, h.erstellt_am DESC LIMIT 1) AS letzter_hzl_betrag_cent,
+               (SELECT COALESCE(SUM(s.betrag_cent), 0) FROM kassenbuchung s
+                 WHERE s.klient_id = k.id AND NOT s.storniert) AS saldo_cent
         FROM klient k
         LEFT JOIN kassenbuchung b
           ON b.klient_id = k.id AND b.ist_hzl AND b.iso_jahr = $1 AND b.iso_woche = $2 AND NOT b.storniert
@@ -488,12 +506,52 @@ export class KassenbuchungService {
       return rows.map((r) => ({
         klientId: r.klient_id,
         klientName: `${r.vorname} ${r.nachname}`,
+        vorname: r.vorname,
+        nachname: r.nachname,
         bezahlt: r.buchung_id !== null,
         buchungId: r.buchung_id,
         betragCent: r.betrag_cent,
         datum: r.datum,
+        // SUM liefert bigint, pg gibt das als String zurueck.
+        letzterHzlBetragCent: r.letzter_hzl_betrag_cent === null ? null : Number(r.letzter_hzl_betrag_cent),
+        saldoCent: Number(r.saldo_cent),
       }));
     });
+  }
+
+  /**
+   * Vorab-Pruefung fuer den Uebergabemodus: ob die Person ueberhaupt buchen
+   * darf, soll sich zeigen, BEVOR das Geraet an die Klient:in geht -- sonst
+   * faellt ein 403 erst nach der Unterschrift auf. Die eigentliche Pruefung
+   * beim Buchen (anlegen) bleibt unveraendert die Autoritaet.
+   */
+  async darfBuchen(): Promise<{ darf: boolean }> {
+    return { darf: await this.rechte.hatRecht("kassenbuch", "buchen") };
+  }
+
+  /**
+   * Entsperren des HZL-Uebergabemodus: die Mitarbeiter:in bestaetigt mit dem
+   * Passwort IHRES eigenen Kontos. Das Passwort wird vor der Klient:in
+   * getippt -- der Preis dafuer, dass kein zweites Geheimnis verwaltet werden
+   * muss. Jeder Versuch geht ins Audit-Log, auch ein fehlgeschlagener: wird
+   * das Geraet in der Uebergabe durchprobiert, soll das nachvollziehbar sein.
+   * Falsches Passwort ist bewusst 403 und nicht 401: der Web-Client beendet
+   * bei einem 401 mit Token die Sitzung (api/client.ts).
+   */
+  async hzlUebergabeEntsperren(passwort: string): Promise<void> {
+    const { benutzerId } = requireTenantContext();
+    const ok = await this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{ passwort_hash: string }>("SELECT passwort_hash FROM benutzer WHERE id = $1", [benutzerId]);
+      const richtig = rows.length > 0 && (await bcrypt.compare(passwort, rows[0].passwort_hash));
+      await this.audit.protokollieren(client, {
+        modul: "kassenbuch",
+        aktion: richtig ? "hzl-uebergabe.entsperrt" : "hzl-uebergabe.entsperren-fehlgeschlagen",
+        objektTyp: "benutzer",
+        objektId: benutzerId,
+      });
+      return richtig;
+    });
+    if (!ok) throw new ForbiddenException("Das Passwort ist falsch.");
   }
 
   async unterschriftBild(kassenbuchungId: string): Promise<{ bild: Buffer; hash: string } | null> {

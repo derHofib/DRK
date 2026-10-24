@@ -430,10 +430,17 @@ export interface KassenbuchungDto {
 export interface WochenuebersichtEintragDto {
   klientId: string;
   klientName: string;
+  /** Einzeln, damit die Uebergabeansicht "Vorname + Initial" zeigen kann, ohne den Namen zu raten. */
+  vorname: string;
+  nachname: string;
   bezahlt: boolean;
   buchungId: string | null;
   betragCent: number | null;
   datum: string | null;
+  /** Zuletzt ausgezahlter HZL-Betrag (positiv, ohne stornierte) -- Vorschlag fuer die naechste Auszahlung. */
+  letzterHzlBetragCent: number | null;
+  /** Saldo aller nicht stornierten Buchungen dieser Klient:in (Barbetrag). */
+  saldoCent: number;
 }
 
 export interface KostenuebernahmeDto {

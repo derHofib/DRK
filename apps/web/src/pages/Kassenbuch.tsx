@@ -33,6 +33,7 @@ import {
   IZurueckPfeil,
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
+import type { UebergabeStart } from "./HzlUebergabe";
 import { formatBetrag, formatDatum } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
@@ -105,7 +106,13 @@ function summeCent(buchungen: KassenbuchungDto[]): number {
  * Kassenbuch selbst nur Buchungen zeigt. Beide teilen sich Formular, Daten
  * und den Standort-Filter, deshalb eine Komponente statt zwei.
  */
-export function Kassenbuch({ ansicht = "buchungen" }: { ansicht?: "buchungen" | "hzl" }) {
+export function Kassenbuch({
+  ansicht = "buchungen",
+  onUebergabeStarten,
+}: {
+  ansicht?: "buchungen" | "hzl";
+  onUebergabeStarten?: (start: UebergabeStart) => void;
+}) {
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [mitarbeitende, setMitarbeitende] = useState<BenutzerListEintragDto[]>([]);
@@ -198,6 +205,27 @@ export function Kassenbuch({ ansicht = "buchungen" }: { ansicht?: "buchungen" | 
   // eine Jahresgrenze hinweg immer eine gueltige Option in der Liste.
   const jahrOptionen = [-2, -1, 0, 1, 2].map((delta) => uebersichtJahr + delta);
   const wochenOptionen = Array.from({ length: isoWochenImJahr(uebersichtJahr) }, (_, i) => i + 1);
+
+  // Vorab-Pruefung, damit niemand erst nach der Unterschrift erfaehrt, dass
+  // die Buchung am fehlenden Recht scheitert (der Server prueft trotzdem).
+  const [uebergabePruefung, setUebergabePruefung] = useState(false);
+  async function uebergabeStarten(klientIds: string[]) {
+    if (!onUebergabeStarten || klientIds.length === 0) return;
+    setUebergabePruefung(true);
+    setFehler(null);
+    try {
+      const { darf } = await api.kassenbuchDarfBuchen();
+      if (!darf) {
+        setFehler("Mit diesem Konto dürfen keine Kassenbuchungen erfasst werden – die Übergabe wurde nicht gestartet.");
+        return;
+      }
+      onUebergabeStarten({ jahr: uebersichtJahr, woche: uebersichtWoche, standortId: filterStandortId || null, klientIds });
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Die Berechtigung konnte nicht geprüft werden.");
+    } finally {
+      setUebergabePruefung(false);
+    }
+  }
 
   function formularOeffnenFuer(klientId: string) {
     setVorbelegung({ klientId, isoJahr: uebersichtJahr, isoWoche: uebersichtWoche });
@@ -594,7 +622,18 @@ export function Kassenbuch({ ansicht = "buchungen" }: { ansicht?: "buchungen" | 
               </p>
             )}
           </div>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+            {uebersicht.some((e) => !e.bezahlt) && (
+              <button
+                type="button"
+                className="zv-btn zv-btn-sekundaer"
+                disabled={uebergabePruefung}
+                onClick={() => void uebergabeStarten(uebersicht.filter((e) => !e.bezahlt).map((e) => e.klientId))}
+              >
+                <IUnterschrift />
+                Alle offenen nacheinander
+              </button>
+            )}
             <button
               type="button"
               className="zv-icon-btn"
@@ -667,10 +706,20 @@ export function Kassenbuch({ ansicht = "buchungen" }: { ansicht?: "buchungen" | 
                       </span>
                     )
                   ) : (
-                    <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
-                      <IAuszahlen />
-                      Jetzt auszahlen
-                    </button>
+                    <span className="zv-aktionen-reihe">
+                      <button
+                        className="zv-link-btn"
+                        disabled={uebergabePruefung}
+                        onClick={() => void uebergabeStarten([e.klientId])}
+                      >
+                        <IUnterschrift />
+                        Auszahlen + unterschreiben
+                      </button>
+                      <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
+                        <IAuszahlen />
+                        Manuell buchen
+                      </button>
+                    </span>
                   )}
                 </span>
               </div>

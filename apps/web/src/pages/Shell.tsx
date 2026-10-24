@@ -35,6 +35,7 @@ import { StandortRaeume } from "./StandortRaeume";
 import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
+import type { UebergabeStart } from "./HzlUebergabe";
 import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
@@ -129,11 +130,28 @@ function speichereBoolean(schluessel: string, wert: boolean) {
   }
 }
 
-export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
+export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => void; onUebergabeStarten: (start: UebergabeStart) => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
   const { badge: chatBadge } = useChatEreignisse();
   const badgeFuer = (w: HauptReiter) => (w === "nachrichten" ? chatBadge : 0);
-  const [tab, setTab] = useState<Tab>("dashboard");
+  // Nach dem Uebergabemodus (ersetzt die Shell, siehe App.tsx) zurueck dorthin, wo man war.
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      // Nur lesen: der React-StrictMode ruft Initialisierer doppelt auf, ein
+      // Entfernen hier ginge im zweiten Aufruf ins Leere (siehe Effekt unten).
+      if (sessionStorage.getItem("zv-nach-uebergabe-tab") === "hzl") return "hzl";
+    } catch {
+      // egal
+    }
+    return "dashboard";
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem("zv-nach-uebergabe-tab");
+    } catch {
+      // egal
+    }
+  }, []);
   const [eingeklappt, setEingeklappt] = useState(() => ladeBoolean(SIDEBAR_SPEICHER));
   // "Beim Ueberfahren ausklappen" wirkt nur, solange das Menueband
   // eingeklappt ist -- greift also erst zusammen mit eingeklappt=true (siehe
@@ -621,7 +639,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
           {tab === "klienten" && <Klienten ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} />}
           {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}
-          {tab === "hzl" && <Kassenbuch ansicht="hzl" />}
+          {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}
           {tab === "tagesberichte" && <Tagesberichte />}
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}

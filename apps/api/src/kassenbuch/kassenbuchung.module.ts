@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuditModule } from "../audit/audit.module";
 import { AuthModule } from "../auth/auth.module";
 import { RechteModule } from "../rechte/rechte.module";
 import { KassenbuchungController } from "./kassenbuchung.controller";
@@ -7,7 +8,7 @@ import { KassenbuchungTypController } from "./kassenbuchung-typ.controller";
 import { KassenbuchungTypService } from "./kassenbuchung-typ.service";
 
 @Module({
-  imports: [AuthModule, RechteModule],
+  imports: [AuthModule, RechteModule, AuditModule],
   controllers: [KassenbuchungController, KassenbuchungTypController],
   providers: [KassenbuchungService, KassenbuchungTypService],
 })

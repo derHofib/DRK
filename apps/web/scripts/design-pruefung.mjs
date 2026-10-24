@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 28;
+const ERWARTETE_PAARE = 32;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -257,6 +257,10 @@ async function messePaare(page) {
       pruefe("Anfrage: Ziel (muted) auf Karte", q(".zv-pruef-anfrage-ziel"), 4.5);
       pruefe("Anfrage: Auswahl Ziel aktiv", q(".zv-pruef-ziel-aktiv"), 4.5);
       pruefe("Klient: aktiver Bereich", q(".zv-pruef-klient-nav"), 4.5);
+      pruefe("Uebergabe: Betrag auf Seitenhintergrund", q(".zv-pruef-ue-betrag"), 4.5);
+      pruefe("Uebergabe: Kicker (muted) auf Seitenhintergrund", q(".zv-pruef-ue-kicker"), 4.5);
+      pruefe("Uebergabe: Warnhinweis auf Seitenhintergrund", q(".zv-pruef-ue-hinweis"), 4.5);
+      pruefe("Uebergabe: Knopf Unterschreiben", q(".zv-pruef-ue-knopf"), 4.5);
       return ergebnisse;
     `
     )
@@ -307,6 +311,14 @@ const PRUEFSEITE = `
   <table class="zv-table"><thead><tr><th class="zv-pruef-th">Spalte</th></tr></thead>
     <tbody><tr><td>Wert</td></tr></tbody></table>
   <div class="zv-tabbar"><button class="active zv-pruef-tab">Aktiv</button></div>
+</div>
+<div class="zv-uebergabe" style="min-height:0">
+  <div class="zv-uebergabe-block">
+    <p class="zv-uebergabe-kicker zv-pruef-ue-kicker">Vorbereitung durch Mitarbeitende</p>
+    <p class="zv-uebergabe-betrag zv-mono zv-pruef-ue-betrag">20,00 &euro;</p>
+    <p class="zv-uebergabe-hinweis zv-pruef-ue-hinweis">Der Betrag &uuml;bersteigt den Barbetrag.</p>
+    <button class="zv-btn zv-uebergabe-knopf zv-pruef-ue-knopf">Unterschreiben</button>
+  </div>
 </div>`;
 
 async function main() {

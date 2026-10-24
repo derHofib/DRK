@@ -2746,6 +2746,49 @@ Text, die zugeordnete Klient:in sieht Telefon, Kontaktart, Erreichbarkeit und
 „Über mich" (nicht die E-Mail), eine andere Klient:in nur Kontaktart und
 Erreichbarkeit.
 
+### Nachtrag: HZL-Übergabemodus (Phase A)
+
+Die HZL-Auszahlung wird mit dem Gerät in der Hand der Klient:in unterschrieben.
+Der **Übergabemodus** (`pages/HzlUebergabe.tsx`) zeigt dafür Vollbild nur
+Vorname und Initial, Betrag, KW, „Ich habe den Betrag erhalten“ und das
+Unterschriftsfeld. Gestartet wird er in der HZL-Wochenübersicht („Auszahlen +
+unterschreiben“ je Person, „Alle offenen nacheinander“ als Sammelmodus).
+
+Ablauf je Person: Vorbereitung (Mitarbeitende: Betrag, vorbelegt mit dem
+letzten HZL-Betrag, Überspringen möglich) → Unterschrift (Klient:in) →
+**Passwort der Mitarbeiter:in** → Kontrollschritt (Betrag, Klient:in, neuer
+Barbetrag, Unterschrift) → Buchen. Abbrechen führt ebenfalls über die
+Passwortabfrage. Übersprungene bleiben offen und stehen in der Abschluss-
+übersicht.
+
+Entscheidungen und ihre Gründe:
+
+- **Die Shell wird ersetzt, nicht verdeckt** (`App.tsx`): die Navigation ist
+  im Modus gar nicht im DOM. Der Zustand (nur IDs und Woche, keine Namen,
+  keine Unterschrift) liegt in `sessionStorage`, damit Neuladen nicht aus dem
+  Modus herausführt; die Zurück-Taste wird abgefangen.
+- **Ehrlich eingegrenzt:** das ist eine Bedienhilfe, keine Sicherheitsgrenze.
+  Wer das Gerät hält, kann den Browser beenden. Verbindlich sind nur die
+  Serverregeln (Auszahlung nur mit Unterschrift, `kassenbuch.buchen`,
+  Audit-Eintrag). Für eine echte Sperre empfiehlt sich **Geführter Zugriff
+  (iOS) bzw. App-Pinning/Kiosk (Android)** auf dem Tablet.
+- **Passwort-Bestätigung:** `POST /kassenbuchungen/hzl-uebergabe/entsperren`
+  prüft das Passwort des eigenen Kontos, antwortet bei Fehlern mit **403**
+  (ein 401 beendet im Web-Client die Sitzung), ist auf 10/min gedrosselt und
+  schreibt Erfolg wie Fehlversuch ins Audit-Log. Der Endpunkt liegt im
+  Kassenbuch-Modul, weil `AuditModule` bereits `AuthModule` importiert.
+- **`kassenbuch.buchen` wurde bisher nirgends erzwungen** (stand nur in der
+  Registry): jede angemeldete Person konnte buchen. Jetzt prüft
+  `KassenbuchungService.anlegen()` das Recht; `GET /kassenbuchungen/darf-buchen`
+  beantwortet dieselbe Frage vorab, damit niemand erst nach der Unterschrift
+  erfährt, dass die Buchung scheitert.
+- Mandantenfarbe statt Markenfarbe: Aktionen nutzen `--zv-accent`.
+
+Geprüft: `hzl-uebergabe.e2e-spec.ts` (8 Tests, 5 Gegenproben rot);
+`scripts/uebergabemodus-pruefung.mjs` (32 Messungen im Browser, Tablet hoch
+und quer, Gegenprobe: Abbrechen ohne Passwort → rot); Gesamtsuite
+604/604; `design-pruefung.mjs` mit 32 Paaren je Kombination.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

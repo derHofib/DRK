@@ -31,6 +31,7 @@ import { Test } from "@nestjs/testing";
 import { Client } from "pg";
 import { DatabaseModule } from "../src/database/database.module";
 import { RechteModule } from "../src/rechte/rechte.module";
+import { AuditModule } from "../src/audit/audit.module";
 import { KassenbuchungService } from "../src/kassenbuch/kassenbuchung.service";
 import { RechteService } from "../src/rechte/rechte.service";
 import { tenantContextStorage } from "../src/common/tenant-context";
@@ -106,7 +107,8 @@ describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", ()
     leitungTypId = await neuerAccountTyp("Leitung");
     await admin.query(
       `INSERT INTO account_typ_recht (mandant_id, account_typ_id, modul, aktion, scope, erlaubt)
-       VALUES ($1, $2, 'kassenbuch', 'storno-entscheiden', 'tenant', true)`,
+       VALUES ($1, $2, 'kassenbuch', 'storno-entscheiden', 'tenant', true),
+              ($1, $2, 'kassenbuch', 'buchen', 'tenant', true)`,
       [mandantId, leitungTypId]
     );
 
@@ -164,7 +166,7 @@ describe("Kassenbuch: Vier-Augen-Verschaerfung beim Storno (Migration 0045)", ()
     );
 
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, RechteModule],
+      imports: [DatabaseModule, RechteModule, AuditModule],
       providers: [KassenbuchungService],
     }).compile();
     app = moduleRef.createNestApplication();
