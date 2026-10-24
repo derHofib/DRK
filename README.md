@@ -2828,6 +2828,45 @@ UPDATE(belegnummer) erlaubt → 1 rot); `befehlspalette-pruefung.mjs`
 (28 Messungen, nur Tastatur, 3 Läufe in Folge grün); Gesamtsuite 615/615;
 `design-pruefung.mjs` 40 Paare in 28 Kombinationen.
 
+### Nachtrag: Schichtübergabe als eigenes Objekt (Phase C)
+
+Unter **Dashboard → Schichtübergabe** schreibt die gehende Schicht Punkte
+(Enter = nächster Punkt, optional mit Klient:in oder Zimmer), wählt Standort und
+Dienst (Früh/Spät/Nacht, Vorschlag nach Uhrzeit) und sendet. Die anderen sehen
+auf dem Dashboard eine Karte mit den Punkten, bis sie **Gelesen** bestätigen; je
+Punkt gibt es **Als Aufgabe anlegen**, der Verweis bleibt am Punkt sichtbar.
+
+- **Migration 0060:** `schichtuebergabe`, `schichtuebergabe_punkt`,
+  `schichtuebergabe_gelesen` (RLS + FORCE). Kopf, Punkte und Quittungen sind per
+  `REVOKE UPDATE, DELETE` unveränderlich; ein Nachtrag ist ein **neuer** Punkt
+  (`nachtrag = true`) mit eigenem Zeitstempel. Quittieren darf jede Person nur
+  für sich selbst (Policy `WITH CHECK benutzer_id = app.benutzer_id`).
+- **Kein Entwurf in der Datenbank:** er liegt bis zum Senden nur im
+  `localStorage` (Eingabekomfort dieses Geräts, TTDSG §25 Abs. 2 Nr. 2), wird
+  beim Senden und beim Abmelden gelöscht, weil der Freitext Gesundheitsdaten
+  enthalten kann.
+- **Standort:** Beschränkung im Service (`benutzer_standort`), wie bei Zimmer und
+  Kassenbuch. Rechte `schichtuebergabe.ansehen` / `.schreiben` (Registry); Vollzugriff
+  hat sie automatisch, andere Accounttypen bekommen sie über die Rechte-Matrix.
+- **Aufgabe aus Punkt:** `aufgabe` bekommt `klient_id` und
+  `schichtuebergabe_punkt_id`. Hat der Punkt nur eine Klient:in, wird deren
+  aktuelles Zimmer genommen – eine Aufgabe ohne Zimmer sieht RLS (0033) nur
+  Ersteller:in und Zugewiesene:r, sie wäre für das Team unsichtbar. Gibt es
+  weder Zimmer noch Klient:in, wird sie der anlegenden Person zugewiesen
+  (Abweichung vom „offen lassen“, aus demselben Grund). Pro Punkt höchstens eine
+  Aufgabe (409).
+- Ungelesen zählt nur, was jünger als 3 Tage ist und nicht von einem selbst
+  stammt.
+
+Geprüft: `schichtuebergabe.e2e-spec.ts` (10 Tests; Gegenproben: RLS aus – bei
+Übergaben allein bleibt die Mandantentrennung grün, weil die Joins auf
+`standort`/`benutzer` ebenfalls RLS tragen, erst mit deren RLS aus wird sie rot –,
+Standortfilter weg, UPDATE/DELETE erlaubt, Insert-Policy offen,
+Rechteprüfung weg, `ON CONFLICT` weg: jeweils rot, danach grün);
+`schichtuebergabe-pruefung.mjs` (22 Messungen mit zwei Personen, Gegenproben:
+Entwurf beim Abmelden nicht gelöscht → rot, Ungelesen-Filter weg → rot);
+Gesamtsuite 625/625; `design-pruefung.mjs` 45 Paare.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

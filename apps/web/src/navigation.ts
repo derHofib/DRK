@@ -15,6 +15,7 @@ import {
   IMitarbeitende,
   INachrichten,
   IOrganigramm,
+  IUebergabe,
   IStandort,
   ITagesberichte,
   IVertretung,
@@ -40,6 +41,7 @@ export type HauptReiter =
  */
 export type UnterReiter =
   | "aufgaben"
+  | "schichtuebergabe"
   | "vertretung"
   | "organigramm"
   | "hzl"
@@ -57,7 +59,10 @@ export interface UnterpunktEintrag {
 }
 
 export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
-  dashboard: [{ wert: "aufgaben", label: "Aufgaben", icon: IAufgaben }],
+  dashboard: [
+    { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
+    { wert: "schichtuebergabe", label: "Schichtübergabe", icon: IUebergabe },
+  ],
   kassenbuch: [{ wert: "hzl", label: "HZL", icon: IAuszahlen }],
   mitarbeitende: [
     { wert: "vertretung", label: "Vertretung", icon: IVertretung },

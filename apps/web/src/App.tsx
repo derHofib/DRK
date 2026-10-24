@@ -5,6 +5,7 @@ import { Login } from "./pages/Login";
 import { PasswortZuruecksetzen } from "./pages/PasswortZuruecksetzen";
 import { HzlUebergabe, UebergabeStart, uebergabeLesen, uebergabeMerken } from "./pages/HzlUebergabe";
 import { zuletztLoeschen } from "./components/Befehlspalette";
+import { entwurfLoeschen } from "./pages/Schichtuebergabe";
 import { Shell } from "./pages/Shell";
 import { KlientEinladung } from "./pages/klient/KlientEinladung";
 import { KlientEmailAendern } from "./pages/klient/KlientEmailAendern";
@@ -40,6 +41,7 @@ export function App() {
       setStartAlsKlient(warKlient);
       uebergabeMerken(null);
       zuletztLoeschen();
+      entwurfLoeschen();
       setUebergabe(null);
       setSitzungAbgelaufen(true);
       setAngemeldet(false);

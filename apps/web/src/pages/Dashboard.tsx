@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useState } from "react";
 import type { DashboardDto, StandortDto } from "@zimmerakte/shared";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
+import { UebergabeKarten } from "../components/UebergabeKarten";
 import { api } from "../api/client";
 import { faelligkeitsHinweis, PRIORITAET_ICON, PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { Leerzustand } from "../components/Leerzustand";
@@ -167,6 +168,8 @@ export function Dashboard() {
           ))}
         </div>
       )}
+
+      <UebergabeKarten />
 
       {daten && (
         <div style={{ opacity: wirdGeladen ? 0.6 : 1, transition: "opacity var(--zv-transition-base)" }}>

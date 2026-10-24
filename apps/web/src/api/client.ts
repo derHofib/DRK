@@ -53,6 +53,8 @@ import type {
   TagesberichtDto,
   TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
+  SchichtuebergabeDto,
+  Dienst,
   SucheErgebnisDto,
   SucheGruppe,
   ZimmerListEintragDto,
@@ -565,6 +567,19 @@ export const api = {
       `/kassenbuchungen/wochenuebersicht?jahr=${isoJahr}&kw=${isoWoche}${standortId ? `&standortId=${standortId}` : ""}`
     ),
 
+  schichtuebergabeAnlegen: (payload: {
+    standortId: string;
+    dienst: Dienst;
+    punkte: { text: string; klientId?: string; zimmerId?: string }[];
+  }) => request<SchichtuebergabeDto>("/schichtuebergaben", { method: "POST", body: JSON.stringify(payload) }),
+  schichtuebergabenListe: (standortId?: string) =>
+    request<SchichtuebergabeDto[]>(`/schichtuebergaben${standortId ? `?standortId=${standortId}` : ""}`),
+  schichtuebergabenUngelesen: () => request<SchichtuebergabeDto[]>("/schichtuebergaben/ungelesen"),
+  schichtuebergabeGelesen: (id: string) => request<{ ok: true }>(`/schichtuebergaben/${id}/gelesen`, { method: "POST" }),
+  schichtuebergabeNachtrag: (id: string, payload: { text: string; klientId?: string; zimmerId?: string }) =>
+    request<SchichtuebergabeDto>(`/schichtuebergaben/${id}/nachtraege`, { method: "POST", body: JSON.stringify(payload) }),
+  schichtuebergabePunktAufgabe: (punktId: string) =>
+    request<AufgabeDto>(`/schichtuebergaben/punkte/${punktId}/aufgabe`, { method: "POST", body: "{}" }),
   suche: (q: string) => request<SucheErgebnisDto>(`/suche?q=${encodeURIComponent(q)}`),
   sucheZuletzt: (eintraege: { gruppe: SucheGruppe; id: string }[]) =>
     request<SucheErgebnisDto>("/suche/zuletzt", { method: "POST", body: JSON.stringify({ eintraege }) }),

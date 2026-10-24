@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 40;
+const ERWARTETE_PAARE = 45;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -269,6 +269,11 @@ async function messePaare(page) {
       pruefe("Palette: Fusszeile (muted)", q(".zv-pruef-pal-fuss"), 4.5);
       pruefe("Palette: Statuszeile (muted)", q(".zv-pruef-pal-status"), 4.5);
       pruefe("Belegnummer im Kassenbuch (muted)", q(".zv-pruef-beleg-nr"), 4.5);
+      pruefe("Uebergabe-Karte: Titel auf Surface", q(".zv-pruef-uk-titel"), 4.5);
+      pruefe("Uebergabe-Karte: Meta (muted)", q(".zv-pruef-uk-meta"), 4.5);
+      pruefe("Uebergabe-Karte: Punkttext", q(".zv-pruef-uk-text"), 4.5);
+      pruefe("Uebergabe-Karte: Pill Nachtrag (info)", q(".zv-pruef-uk-pill"), 4.5);
+      pruefe("Uebergabe-Karte: Aufgabe-Verweis (Link)", q(".zv-pruef-uk-link"), 4.5);
       return ergebnisse;
     `
     )
@@ -335,7 +340,15 @@ const PRUEFSEITE = `
   <div class="zv-palette-zeile aktiv"><span class="zv-palette-text"><span class="zv-palette-titel zv-pruef-pal-aktiv">Aktive Zeile</span></span></div>
   <div class="zv-palette-fuss zv-pruef-pal-fuss">Esc schlie&szlig;en</div>
 </div>
-<span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>`;
+<span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>
+<article class="zv-uebergabe-karte">
+  <h3 class="zv-pruef-uk-titel">Sp&auml;tdienst &middot; Haus Eins</h3>
+  <p class="zv-sub-inline zv-pruef-uk-meta">24.10. 21:12 &middot; von Leitung</p>
+  <ol class="zv-uebergabe-punkte"><li>
+    <div class="zv-uebergabe-punkt-text zv-pruef-uk-text"><span class="zv-pill zv-pill-info zv-pruef-uk-pill">Nachtrag</span> Heizung tropft</div>
+    <div class="zv-uebergabe-punkt-aktion"><button class="zv-link-btn zv-pruef-uk-link">Als Aufgabe anlegen</button></div>
+  </li></ol>
+</article>`;
 
 async function main() {
   const browser = await starteBrowser();

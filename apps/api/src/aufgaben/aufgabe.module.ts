@@ -8,5 +8,6 @@ import { AufgabeService } from "./aufgabe.service";
   imports: [AuthModule, RechteModule],
   controllers: [AufgabeController],
   providers: [AufgabeService],
+  exports: [AufgabeService],
 })
 export class AufgabeModule {}

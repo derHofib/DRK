@@ -574,6 +574,10 @@ export interface AufgabeDto {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
+  /** Aus einer Schichtuebergabe uebernommen: betroffene Klient:in und Herkunft. */
+  klientId: string | null;
+  klientName: string | null;
+  uebergabePunktId: string | null;
 }
 
 export interface AufgabenAnzahlDto {
@@ -1114,3 +1118,41 @@ export interface SucheTrefferDto {
 }
 
 export type SucheErgebnisDto = Record<SucheGruppe, SucheTrefferDto[]>;
+
+
+export type Dienst = "frueh" | "spaet" | "nacht";
+
+export const DIENST_LABEL: Record<Dienst, string> = {
+  frueh: "Frühdienst",
+  spaet: "Spätdienst",
+  nacht: "Nachtdienst",
+};
+
+export interface SchichtuebergabePunktDto {
+  id: string;
+  position: number;
+  text: string;
+  klientId: string | null;
+  klientName: string | null;
+  zimmerId: string | null;
+  zimmerNummer: string | null;
+  /** Nach dem Senden ergaenzt -- die urspruenglichen Punkte bleiben unveraendert. */
+  nachtrag: boolean;
+  erstelltVonName: string;
+  erstelltAm: string;
+  aufgaben: { id: string; titel: string; erledigt: boolean }[];
+}
+
+export interface SchichtuebergabeDto {
+  id: string;
+  standortId: string;
+  standortName: string;
+  dienst: Dienst;
+  verfasstVonName: string;
+  gesendetAm: string;
+  gelesen: boolean;
+  gelesenAnzahl: number;
+  /** Selbst verfasst -- die eigene Uebergabe muss nicht bestaetigt werden. */
+  eigene: boolean;
+  punkte: SchichtuebergabePunktDto[];
+}
