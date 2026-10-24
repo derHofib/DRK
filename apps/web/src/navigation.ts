@@ -12,6 +12,7 @@ import {
   IKassenbuch,
   IKlienten,
   IMitarbeitende,
+  INachrichten,
   IOrganigramm,
   IStandort,
   ITagesberichte,
@@ -24,6 +25,7 @@ export type HauptReiter =
   | "mitarbeitende"
   | "standorte"
   | "klienten"
+  | "nachrichten"
   | "kassenbuch"
   | "tagesberichte"
   | "einstellungen";
@@ -89,6 +91,7 @@ export interface ReiterEintrag {
 export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "dashboard", label: "Dashboard", icon: IDashboard },
   { wert: "klienten", label: "Klienten", icon: IKlienten },
+  { wert: "nachrichten", label: "Nachrichten", icon: INachrichten },
   { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
   { wert: "standorte", label: "Standorte", icon: IStandort },

@@ -4,6 +4,7 @@ import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { MarkenIcon } from "../components/MarkenZeichen";
+import { useChatEreignisse } from "../components/chat/ereignisse";
 import {
   IAbmelden,
   IAnwaerter,
@@ -39,9 +40,20 @@ import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
+import { Nachrichten } from "./Nachrichten";
 
 /** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
 const MOBIL_SICHTBAR_ANZAHL = 4;
+
+/** Zaehler am Menuepunkt; 0 = unsichtbar. */
+function NavBadge({ anzahl }: { anzahl: number }) {
+  if (anzahl <= 0) return null;
+  return (
+    <span className="zv-nav-badge" aria-label={`${anzahl} ungelesen`}>
+      {anzahl > 99 ? "99+" : anzahl}
+    </span>
+  );
+}
 
 /**
  * Die Unterpunkte von "Klienten" in der Sidebar -- der Hauptknopf
@@ -73,6 +85,7 @@ const BREITE_REITER = new Set<Tab>([
   "kassenbuch",
   "hzl",
   "klienten",
+  "nachrichten",
   "mitarbeitende",
   "tagesberichte",
   "aufgaben",
@@ -116,6 +129,8 @@ function speichereBoolean(schluessel: string, wert: boolean) {
 
 export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
+  const { badge: chatBadge } = useChatEreignisse();
+  const badgeFuer = (w: HauptReiter) => (w === "nachrichten" ? chatBadge : 0);
   const [tab, setTab] = useState<Tab>("dashboard");
   const [eingeklappt, setEingeklappt] = useState(() => ladeBoolean(SIDEBAR_SPEICHER));
   // "Beim Ueberfahren ausklappen" wirkt nur, solange das Menueband
@@ -378,6 +393,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
                   >
                     <Icon />
                     <span className="zv-sidebar-label">{label}</span>
+                    <NavBadge anzahl={badgeFuer(wert)} />
                   </button>
                 );
               }
@@ -509,6 +525,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
               >
                 <Icon />
                 {label}
+                <NavBadge anzahl={badgeFuer(wert)} />
               </button>
             ))}
           </div>
@@ -577,6 +594,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
             >
               <Icon />
               {label}
+              <NavBadge anzahl={badgeFuer(wert)} />
             </button>
           ))}
           <button
@@ -589,10 +607,13 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           >
             <IMehr />
             Mehr
+            {REITER_MOBIL_MEHR.some((r) => badgeFuer(r.wert) > 0) && <span className="zv-nav-badge zv-nav-badge-punkt" aria-hidden="true" />}
           </button>
         </div>
 
-        <div className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}`}>
+        <div
+          className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
+        >
           {tab === "dashboard" && <Dashboard />}
           {tab === "standorte" && <StandortUebersicht />}
           {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
@@ -600,6 +621,7 @@ export function Shell({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === "kassenbuch" && <Kassenbuch ansicht="buchungen" />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" />}
           {tab === "tagesberichte" && <Tagesberichte />}
+          {tab === "nachrichten" && <Nachrichten />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "vertretung" && <Vertretung />}

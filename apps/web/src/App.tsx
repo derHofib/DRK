@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { aufSitzungAbgelaufen, getToken } from "./api/client";
+import { ChatEreignisProvider } from "./components/chat/ereignisse";
 import { Login } from "./pages/Login";
 import { PasswortZuruecksetzen } from "./pages/PasswortZuruecksetzen";
 import { Shell } from "./pages/Shell";
@@ -28,7 +29,9 @@ export function App() {
   }
 
   return angemeldet ? (
-    <Shell onLoggedOut={() => setAngemeldet(false)} />
+    <ChatEreignisProvider>
+      <Shell onLoggedOut={() => setAngemeldet(false)} />
+    </ChatEreignisProvider>
   ) : (
     <Login
       onLoggedIn={() => {

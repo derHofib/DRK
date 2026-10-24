@@ -2339,3 +2339,636 @@ button.zv-raumknoten:focus-visible {
   outline: none;
   box-shadow: var(--zv-shadow-2);
 }
+
+/* ==================================================================
+   Nachrichten (Chat) und gemeinsame Bausteine fuer Chat/Kalender
+   ================================================================== */
+
+/* Zaehler am Menuepunkt: in der Sidebar rechts neben dem Namen, bei
+   eingeklapptem Menueband und in der mobilen Leiste als Plakette an der
+   Ecke des Icons -- dort ist neben dem Icon kein Platz fuer eine Zeile. */
+.zv-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-accent);
+  color: var(--zv-accent-contrast);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1;
+}
+
+.zv-nav-badge-inline {
+  margin-left: var(--zv-space-2);
+}
+
+.zv-nav-badge-punkt {
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+}
+
+.zv-sidebar-nav button,
+.zv-tabbar-app button {
+  position: relative;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav .zv-nav-badge,
+.zv-tabbar-app .zv-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  margin: 0;
+}
+
+.zv-tabbar-app .zv-nav-badge {
+  left: calc(50% + 6px);
+  right: auto;
+}
+
+.zv-tabbar-app .zv-nav-badge-punkt {
+  top: 6px;
+  left: calc(50% + 10px);
+}
+
+.zv-aktionszeile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-inline-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-feldtitel {
+  display: block;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+  margin-bottom: var(--zv-space-1);
+}
+
+.zv-fehlertext {
+  color: var(--zv-status-danger);
+}
+
+.zv-durchgestrichen {
+  text-decoration: line-through;
+}
+
+/* Kontaktauswahl (Neuer Chat, Gruppe, Terminteilnehmende) */
+.zv-kontaktliste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-kontakt-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: none;
+  border-bottom: 1px solid var(--zv-border);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.zv-kontakt-zeile,
+label.zv-kontakt-zeile {
+  cursor: pointer;
+}
+
+button.zv-kontakt-zeile:hover,
+label.zv-kontakt-zeile:hover {
+  background: var(--zv-surface-2);
+}
+
+li:last-child > .zv-kontakt-zeile,
+.zv-kontaktliste > .zv-kontakt-zeile:last-child {
+  border-bottom: none;
+}
+
+.zv-kontakt-zeile input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--zv-accent);
+}
+
+.zv-kontakt-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Zweispaltig: Liste | Verlauf. Feste Hoehe statt Seitenscroll, damit nur
+   der Verlauf scrollt und die Eingabezeile sichtbar bleibt -- bewusst per
+   Flex/Grid in der Seite und NICHT mit position:fixed (siehe Kommentar bei
+   .zv-tabbar-app: Layout- vs. visueller Viewport auf Mobilbrowsern). */
+.zv-chat {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--zv-space-4);
+  height: calc(100dvh - 2 * var(--zv-space-5));
+  min-height: 360px;
+}
+
+.zv-chat-liste,
+.zv-chat-verlauf,
+.zv-chat-leer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+}
+
+.zv-chat-leer {
+  align-items: center;
+  justify-content: center;
+}
+
+.zv-chat-liste-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  flex-shrink: 0;
+}
+
+.zv-chat-liste-kopf h2 {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-chat-liste-inhalt {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.zv-chat-liste-inhalt ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zv-chat-eintrag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--zv-space-3);
+  border: none;
+  border-bottom: 1px solid var(--zv-border);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-chat-eintrag:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-chat-eintrag.aktiv {
+  background: var(--zv-accent-soft);
+}
+
+.zv-chat-eintrag-kopf,
+.zv-chat-eintrag-fuss {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-chat-eintrag-fuss {
+  align-items: center;
+}
+
+.zv-chat-eintrag-name {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-chat-eintrag-name span,
+.zv-chat-vorschau {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.zv-chat-eintrag-zeit {
+  flex-shrink: 0;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-chat-vorschau {
+  flex: 1;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-chat-vorschau.ungelesen {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-chat-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  flex-shrink: 0;
+}
+
+.zv-chat-kopf-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-chat-kopf-text strong,
+.zv-chat-kopf-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-chat-kopf-text span {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-chat-zurueck {
+  display: none;
+}
+
+.zv-chat-nachrichten {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--zv-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  background: var(--zv-bg);
+}
+
+.zv-chat-aelter,
+.zv-chat-tag,
+.zv-chat-system {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.zv-chat-tag {
+  margin: var(--zv-space-2) 0;
+  padding: 2px var(--zv-space-3);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-xs);
+}
+
+.zv-chat-system {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  text-align: center;
+  padding: var(--zv-space-1) 0;
+}
+
+.zv-blase {
+  align-self: flex-start;
+  flex-shrink: 0;
+  max-width: min(80%, 520px);
+  min-width: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-l);
+  border-top-left-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  color: var(--zv-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-blase-eigene {
+  align-self: flex-end;
+  border-top-left-radius: var(--zv-radius-l);
+  border-top-right-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  border-color: var(--zv-accent-soft-strong);
+}
+
+.zv-blase-geloescht .zv-blase-text {
+  font-style: italic;
+  color: var(--zv-text-muted);
+}
+
+.zv-blase-absender {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+}
+
+.zv-blase-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--zv-text-m);
+  line-height: var(--zv-leading-normal);
+}
+
+.zv-blase-fuss {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-blase-loeschen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: pointer;
+}
+
+.zv-blase-loeschen:hover {
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+}
+
+.zv-blase-bild-knopf {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+
+.zv-blase-bild {
+  display: block;
+  max-width: min(100%, 320px);
+  max-height: 260px;
+  width: auto;
+  height: auto;
+  border-radius: var(--zv-radius-m);
+}
+
+.zv-blase-bild-laedt {
+  width: 200px;
+  max-width: 100%;
+  height: 140px;
+  background: var(--zv-surface-3);
+}
+
+.zv-blase-bildfehler {
+  display: flex;
+  gap: var(--zv-space-1);
+  align-items: center;
+  font-size: var(--zv-text-s);
+  color: var(--zv-status-danger);
+}
+
+.zv-blase-karte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+}
+
+.zv-blase-karte-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  overflow-wrap: anywhere;
+}
+
+.zv-blase-karte-zeile {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.zv-blase-karte .zv-btn {
+  margin-top: var(--zv-space-1);
+  text-decoration: none;
+}
+
+.zv-chat-eingabe {
+  position: relative;
+  flex-shrink: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+}
+
+.zv-chat-eingabezeile {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--zv-space-2);
+}
+
+.zv-chat-textfeld {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 120px;
+  resize: none;
+  padding: 9px 11px;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  line-height: var(--zv-leading-normal);
+}
+
+.zv-chat-textfeld:focus {
+  border-color: var(--zv-accent);
+}
+
+.zv-chat-senden {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+}
+
+.zv-chat-anhang {
+  position: relative;
+}
+
+.zv-chat-anhangmenue {
+  position: absolute;
+  bottom: calc(100% + var(--zv-space-2));
+  left: 0;
+  z-index: 5;
+  min-width: 170px;
+  padding: var(--zv-space-1);
+  display: flex;
+  flex-direction: column;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-chat-anhangmenue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zv-chat-anhangmenue button:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-chat-bildvorschau {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-chat-bildvorschau img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-chat-bildname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-bild-gross {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  border-radius: var(--zv-radius-m);
+}
+
+/* Schmaler als zwei Spalten sinnvoll tragen (die Sidebar nimmt am Desktop
+   schon 240px): Liste ODER Verlauf, mit Zurueck-Knopf im Verlauf. */
+@media (max-width: 1000px) {
+  .zv-chat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zv-chat[data-ansicht="liste"] .zv-chat-verlauf,
+  .zv-chat[data-ansicht="liste"] .zv-chat-leer,
+  .zv-chat[data-ansicht="verlauf"] .zv-chat-liste,
+  .zv-chat-leer {
+    display: none;
+  }
+
+  .zv-chat-zurueck {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .zv-content-voll {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .zv-content-voll > .zv-chat {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    gap: 0;
+  }
+
+  .zv-content-voll .zv-chat-liste,
+  .zv-content-voll .zv-chat-verlauf {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .zv-chat-textfeld {
+    font-size: 16px;
+  }
+
+  .zv-blase {
+    max-width: 90%;
+  }
+
+  .zv-blase-loeschen {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
