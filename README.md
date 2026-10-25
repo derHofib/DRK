@@ -2867,6 +2867,50 @@ Rechteprüfung weg, `ON CONFLICT` weg: jeweils rot, danach grün);
 Entwurf beim Abmelden nicht gelöscht → rot, Ungelesen-Filter weg → rot);
 Gesamtsuite 625/625; `design-pruefung.mjs` 45 Paare.
 
+### Nachtrag: Löschfrist für Chatnachrichten und Chat bei Anonymisierung
+
+Umsetzung der Entscheidungsvorlage „Datenschutz im Hecaso-Chat“ (Optionen A, B,
+C; Ende-zu-Ende-Verschlüsselung bewusst nicht). Bis hierher lag jede
+Chatnachricht unbegrenzt im Klartext in der Datenbank, und die Anonymisierung
+einer Klient:in erreichte den Chat nicht.
+
+- **Migration 0061, Löschfrist je Träger:** `mandant.chat_loeschfrist_tage`
+  (Standard 90, `CHECK` 7 bis 3650 -- die Untergrenze fängt den Tippfehler „1“
+  statt „100“ ab). Nach Ablauf werden Nachricht und Bild endgültig gelöscht,
+  ebenso beantwortete Gesprächsanfragen; offene Anfragen bleiben. Die App-Rolle
+  bekommt dafür **kein** `DELETE`, sondern genau eine parameterlose
+  `SECURITY DEFINER`-Funktion `chat_loeschfrist_anwenden()`, die nur nach der
+  eigenen Frist jedes Mandanten löscht (Advisory-Lock gegen parallele Läufe).
+- **Stündlicher Lauf in der API** (`chat/chat-loeschfrist.service.ts`), erster
+  Lauf eine Minute nach dem Start, nur Anzahlen im Log. Bewusst kein Cronjob:
+  ein vergessener Cronjob fällt niemandem auf. In Tests aus (`NODE_ENV=test`),
+  abschaltbar mit `CHAT_LOESCHFRIST_AUTOMATISCH=aus`. Zweite dokumentierte
+  Ausnahme von `withTenant()` (CLAUDE.md, Regel 1).
+- **Einstellung** unter Einstellungen → Sicherheit mit eigenem Recht
+  `mandanten.datenschutz-bearbeiten` (nicht `branding-bearbeiten`: es geht
+  darum, wann Sozialdaten verschwinden). Beim Verkürzen warnt die Seite, dass
+  Älteres innerhalb einer Stunde endgültig gelöscht wird. Der Chatverlauf nennt
+  die Frist oben im Verlauf, für Mitarbeitende und Klient:innen.
+- **Anonymisierung** (Trigger `chat_bei_anonymisierung` an `klient`, wie
+  `klient_zugang_bei_sperre`): Direktchats der Person werden vollständig
+  geleert (beide Seiten -- ein Direktchat mit ihr ist eine Unterhaltung über
+  sie), in Gruppen verschwinden ihre eigenen Nachrichten und ihre Teilnahme
+  endet, alle ihre Anfragen werden gelöscht. Was andere in Gruppen *über* sie
+  geschrieben haben, ist maschinell nicht erkennbar; dafür greift die Frist.
+- **Betrieb** (`docs/DEPLOYMENT.md`): verschlüsselte Datenträger als Pflicht,
+  Backups asymmetrisch mit `age` verschlüsselt (privater Schlüssel nie auf dem
+  Server) und nach 30 Tagen rotiert. Die tatsächliche Höchstdauer einer
+  Nachricht ist Löschfrist + Backup-Aufbewahrung.
+
+Geprüft: `chat-loeschfrist.e2e-spec.ts` (9 Tests; Gegenproben: Trigger
+deaktiviert → 1 rot, Frist in der Funktion wirkungslos → 2 rot, Rechteprüfung
+entfernt → 1 rot, jeweils danach grün); Gesamtsuite 634/634 (in
+`chat.e2e-spec.ts` erwartet ein Test jetzt das neue Feld `loeschfristTage`);
+`chat-loeschfrist-pruefung.mjs` 14 Messungen (Hinweis im Verlauf, 403 für
+Betreuer:in mit Fehlermeldung, Warnung beim Verkürzen, Speichern und Neuladen,
+kein Überlauf bei 320/768/1280 px in Hell und Dunkel); `design-pruefung.mjs`
+46 Paare (neu: Hinweis Löschfrist), alle über der Schwelle.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

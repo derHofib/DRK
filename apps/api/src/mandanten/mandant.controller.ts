@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch } from "@nestjs/common";
 import { z } from "zod";
+import { CHAT_LOESCHFRIST_MAX_TAGE, CHAT_LOESCHFRIST_MIN_TAGE } from "@zimmerakte/shared";
 import { Authenticated } from "../common/authenticated.decorator";
 import { MandantService } from "./mandant.service";
 
@@ -26,6 +27,14 @@ const erscheinungsbildSchema = z
     message: "Mindestens akzentfarbe oder dunkelGrundfarbe angeben.",
   });
 
+const chatLoeschfristSchema = z.object({
+  tage: z
+    .number()
+    .int("Bitte ganze Tage angeben.")
+    .min(CHAT_LOESCHFRIST_MIN_TAGE, `Mindestens ${CHAT_LOESCHFRIST_MIN_TAGE} Tage.`)
+    .max(CHAT_LOESCHFRIST_MAX_TAGE, `Höchstens ${CHAT_LOESCHFRIST_MAX_TAGE} Tage.`),
+});
+
 @Controller("mandant")
 @Authenticated()
 export class MandantController {
@@ -51,5 +60,10 @@ export class MandantController {
     // gebraucht wird.
     const patch = erscheinungsbildSchema.parse(body);
     return this.mandant.aktualisiereErscheinungsbild(patch);
+  }
+
+  @Patch("me/chat-loeschfrist")
+  async chatLoeschfristSetzen(@Body() body: unknown) {
+    return this.mandant.setzeChatLoeschfrist(chatLoeschfristSchema.parse(body).tage);
   }
 }

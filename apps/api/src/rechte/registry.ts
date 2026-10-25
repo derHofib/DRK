@@ -102,6 +102,9 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   // Modul statt "organigramm.bearbeiten": Trägerfarbe/Branding ist fachlich
   // unabhaengig von der Organisationsstruktur.
   { modul: "mandanten", aktion: "branding-bearbeiten" },
+  // Loeschfrist fuer Chatinhalte (migrations/0061) -- eigenes Recht, weil
+  // sie bestimmt, wann Sozialdaten unwiderruflich verschwinden.
+  { modul: "mandanten", aktion: "datenschutz-bearbeiten" },
 
   { modul: "organigramm", aktion: "ansehen" },
   { modul: "organigramm", aktion: "bearbeiten" },

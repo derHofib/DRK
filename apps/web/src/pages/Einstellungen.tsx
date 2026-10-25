@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AKZENTFARBE_MUSTER,
+  CHAT_LOESCHFRIST_MAX_TAGE,
+  CHAT_LOESCHFRIST_MIN_TAGE,
   DUNKEL_GRUNDFARBEN,
   PASTELL_PALETTEN,
   type MandantDto,
@@ -103,7 +105,12 @@ export function Einstellungen({
       )}
       {bereich === "standorte" && <Standorte />}
       {bereich === "kassenbuch" && <KassenbuchTypen />}
-      {bereich === "sicherheit" && <Sicherheit />}
+      {bereich === "sicherheit" && (
+        <>
+          <Sicherheit />
+          {mandant && <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
+        </>
+      )}
     </div>
   );
 }
@@ -613,5 +620,111 @@ function Vorschau() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Trägerweite Datenschutzentscheidung (migrations/0061), deshalb neben den
+ * eigenen Sicherheitseinstellungen und nicht unter "Darstellung". Ob die
+ * Person sie ändern darf, entscheidet allein der Server (Recht
+ * mandanten.datenschutz-bearbeiten) -- hier wird nichts vorab ausgeblendet,
+ * eine Ablehnung erscheint als Fehlermeldung.
+ */
+function ChatLoeschfrist({
+  mandant,
+  onMandantAktualisiert,
+}: {
+  mandant: MandantDto;
+  onMandantAktualisiert: (m: MandantDto) => void;
+}) {
+  const [feld, setFeld] = useState(String(mandant.chatLoeschfristTage));
+  const [speichert, setSpeichert] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [erfolg, setErfolg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFeld(String(mandant.chatLoeschfristTage));
+  }, [mandant.chatLoeschfristTage]);
+
+  const tage = Number(feld);
+  const gueltig = Number.isInteger(tage) && tage >= CHAT_LOESCHFRIST_MIN_TAGE && tage <= CHAT_LOESCHFRIST_MAX_TAGE;
+  const geaendert = gueltig && tage !== mandant.chatLoeschfristTage;
+  const kuerzer = geaendert && tage < mandant.chatLoeschfristTage;
+
+  async function speichern() {
+    if (speichert || !geaendert) return;
+    setSpeichert(true);
+    setFehler(null);
+    setErfolg(null);
+    try {
+      const aktualisiert = await api.mandantChatLoeschfristSetzen(tage);
+      onMandantAktualisiert(aktualisiert);
+      setErfolg(`Löschfrist gespeichert: ${aktualisiert.chatLoeschfristTage} Tage.`);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setSpeichert(false);
+    }
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>Löschfrist für Chatnachrichten</h3>
+      <p className="zv-sub">
+        Nachrichten, Bilder und beantwortete Gesprächsanfragen werden nach dieser Frist endgültig gelöscht, für alle
+        Mitarbeitenden und Klient:innen von {mandant.name}. Was dokumentiert werden muss, gehört in die Akte oder die
+        Schichtübergabe, nicht in den Chat.
+      </p>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      {erfolg && (
+        <div className="zv-hinweis zv-hinweis-erfolg">
+          <IErfolg />
+          {erfolg}
+        </div>
+      )}
+
+      <div className="zv-field">
+        <label htmlFor="chat-loeschfrist">Frist in Tagen</label>
+        <input
+          id="chat-loeschfrist"
+          type="number"
+          inputMode="numeric"
+          min={CHAT_LOESCHFRIST_MIN_TAGE}
+          max={CHAT_LOESCHFRIST_MAX_TAGE}
+          step={1}
+          value={feld}
+          onChange={(e) => {
+            setFeld(e.target.value);
+            setErfolg(null);
+          }}
+        />
+        {!gueltig && (
+          <span className="zv-sub-inline">
+            Bitte zwischen {CHAT_LOESCHFRIST_MIN_TAGE} und {CHAT_LOESCHFRIST_MAX_TAGE} Tagen.
+          </span>
+        )}
+      </div>
+
+      {kuerzer && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          Nachrichten, die älter als {tage} Tage sind, werden innerhalb der nächsten Stunde gelöscht. Das lässt sich
+          nicht rückgängig machen.
+        </div>
+      )}
+
+      <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
+        <button className="zv-btn" onClick={speichern} disabled={!geaendert || speichert}>
+          <ISpeichern />
+          {speichert ? "Speichert…" : "Speichern"}
+        </button>
+      </div>
+    </section>
   );
 }

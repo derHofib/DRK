@@ -8,7 +8,11 @@ interface MandantZeile {
   slug: string;
   akzentfarbe: string;
   dunkelGrundfarbe: string;
+  chatLoeschfristTage: number;
 }
+
+const MANDANT_SPALTEN =
+  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage"';
 
 /** Partielles Update -- mindestens ein Feld ist gesetzt, siehe Controller. */
 interface ErscheinungsbildPatch {
@@ -49,7 +53,7 @@ export class MandantService {
   async findEigenenMandanten() {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<MandantZeile>(
-        'SELECT id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe" FROM mandant'
+        `SELECT ${MANDANT_SPALTEN} FROM mandant`
       );
       return rows[0] ?? null;
     });
@@ -90,8 +94,27 @@ export class MandantService {
       // steht.
       const { rows } = await client.query<MandantZeile>(
         `UPDATE mandant SET ${setzt.join(", ")}
-         RETURNING id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe"`,
+         RETURNING ${MANDANT_SPALTEN}`,
         werte
+      );
+      return rows[0] ?? null;
+    });
+  }
+
+  /**
+   * Eigenes Recht statt branding-bearbeiten: die Frist entscheidet darüber,
+   * wann Sozialdaten unwiderruflich verschwinden -- das ist eine
+   * Datenschutzentscheidung des Trägers, keine Frage des Erscheinungsbilds.
+   * Grenzen prüft der CHECK in Migration 0061 (und vorher zod).
+   */
+  async setzeChatLoeschfrist(tage: number) {
+    if (!(await this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"))) {
+      throw new ForbiddenException("Nur die Leitung darf die Löschfrist für Chatnachrichten ändern.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<MandantZeile>(
+        `UPDATE mandant SET chat_loeschfrist_tage = $1 RETURNING ${MANDANT_SPALTEN}`,
+        [tage]
       );
       return rows[0] ?? null;
     });

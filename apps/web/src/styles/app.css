@@ -2670,9 +2670,17 @@ li:last-child > .zv-kontakt-zeile,
 
 .zv-chat-aelter,
 .zv-chat-tag,
+.zv-chat-frist,
 .zv-chat-system {
   align-self: center;
   flex-shrink: 0;
+}
+
+.zv-chat-frist {
+  margin: var(--zv-space-2) 0 0;
+  text-align: center;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-xs);
 }
 
 .zv-chat-tag {
