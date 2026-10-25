@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MandantDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
+import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { MarkenIcon } from "../components/MarkenZeichen";
 import { useChatEreignisse } from "../components/chat/ereignisse";
@@ -708,6 +709,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         <div
           className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
+          <WarteschlangeLeiste />
           {tab === "dashboard" && <Dashboard />}
           {tab === "standorte" && <StandortUebersicht />}
           {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}

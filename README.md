@@ -562,9 +562,9 @@ sauber.
   Netzwerk überhaupt startet — er cacht nie Zimmer-, Klienten- oder
   Kassenbuch-Daten. Ohne Verbindung sieht man also die Login-Seite (oder
   die zuletzt geladene Ansicht als leere Hülle), nicht die zuletzt
-  bekannten Daten. Ein echtes Offline-Arbeiten (z. B. eine Auszahlung ohne
-  Empfang erfassen und später synchronisieren) ist nicht Teil dieser
-  Phase und bräuchte eine eigene Warteschlangen-Logik.
+  bekannten Daten. Einzige Ausnahme seit dem Nachtrag „Offlinebetrieb für
+  Kassenbuchungen“: eine im Funkloch erfasste Buchung wartet auf dem Gerät,
+  bis sie übertragen ist (siehe dort).
 
 **Nachtrag — erweiterte Klienten-Stammdaten (Aufnahme-Datenblatt) und
 Kontakte.** Auf Wunsch wurden alle Felder aus dem Papier-Aufnahme-Datenblatt
@@ -2866,6 +2866,65 @@ Rechteprüfung weg, `ON CONFLICT` weg: jeweils rot, danach grün);
 `schichtuebergabe-pruefung.mjs` (22 Messungen mit zwei Personen, Gegenproben:
 Entwurf beim Abmelden nicht gelöscht → rot, Ungelesen-Filter weg → rot);
 Gesamtsuite 625/625; `design-pruefung.mjs` 45 Paare.
+
+### Nachtrag: Offlinebetrieb für Kassenbuchungen (Bauplan Phase 4)
+
+Im Treppenhaus gibt es keinen Empfang, das Bargeld wird trotzdem ausgegeben
+und quittiert. Eine Buchung aus dem Formular „Neue Buchung“ (auch eine
+Auszahlung mit Unterschrift) wird deshalb **zuerst auf dem Gerät eingereiht
+und dann gesendet** (`offline/warteschlange.ts`). Ohne Verbindung schließt das
+Formular, eine Leiste über jedem Bereich der Shell zeigt „1 Buchung noch nicht
+übertragen“ samt Betrag und Zweck. Gesendet wird beim Wiederverbinden, beim
+Start der App (also auch nach Neuladen und neuer Anmeldung), alle 30 s solange
+etwas wartet, und per „Jetzt übertragen“.
+
+- **Idempotenz (Migration 0061):** der Client erzeugt beim Erfassen einen
+  Schlüssel (UUID) und schickt ihn bei jedem Versuch unverändert als
+  `Idempotency-Key`-Header. `kassenbuchung.idempotenz_schluessel` ist je
+  Mandant eindeutig; kommt derselbe Schlüssel noch einmal, gibt der Server die
+  vorhandene Buchung zurück (gleicher Status, gleicher Körper, Header
+  `Idempotency-Replayed: true`) und zieht keine neue Belegnummer. Zwei
+  gleichzeitige Versuche fängt der Index ab, der Service liest danach die
+  Gewinner-Zeile. Für HZL bleibt `hzl_einmal_je_woche` die zweite Sicherung.
+- **Kein stilles Verschlucken:** derselbe Schlüssel mit anderem Inhalt
+  (sha256-Fingerabdruck über die normalisierte Anfrage) oder von einer anderen
+  Person ergibt **409** statt der alten Buchung.
+- **Abgelehnt ist endgültig, offline nicht:** Netzfehler, 5xx, 429 und 401
+  (Sitzung abgelaufen) bleiben in der Warteschlange. Jeder andere 4xx (z. B.
+  HZL der Woche inzwischen auf einem anderen Gerät gebucht) markiert den
+  Eintrag als abgelehnt: er bleibt mit der Meldung des Servers sichtbar, bis
+  ihn jemand mit zweitem Tippen verwirft, weil das Geld trotzdem ausgegeben
+  wurde. Kommt die Ablehnung schon beim ersten Versuch, steht sie im noch
+  offenen Formular.
+- **Gerätespeicher:** `localStorage`, nur IDs, Betrag, Datum, Zweck und die
+  Unterschrift, keine Namen, und nur bis zur Bestätigung durch den Server
+  (TTDSG §25 Abs. 2 Nr. 2). Beim Abmelden bleibt ein wartender Eintrag
+  **absichtlich** liegen; jeder Eintrag gehört der Person, die ihn erfasst hat,
+  und nur deren Sitzung sendet ihn (sonst stünde der falsche Name in
+  `gebucht_von`).
+- **Grenzen:** Klient:innen und Buchungstypen kommen weiterhin nur vom Server.
+  Wer die Seite mit Netz geöffnet hat und dann ins Funkloch geht, kann buchen;
+  wer die App ohne Netz kalt startet, hat keine Auswahlliste. Der
+  HZL-Übergabemodus bleibt offline gesperrt (Passwortbestätigung braucht den
+  Server). Zwischen Tabs gibt es keine Sperre, dort fängt der Schlüssel
+  Doppelsendungen ab.
+
+Geprüft: `kassenbuch-idempotenz.e2e-spec.ts` (14 Tests: dreimal nacheinander,
+dreimal parallel, erzwungenes Wettrennen gegen eine offene Transaktion, HZL,
+anderer Inhalt, andere Person, anderer Mandant, archivierter Klient, ohne
+Schlüssel, kaputter Schlüssel, ohne Unterschrift, Spaltenrecht). Gegenproben,
+jeweils rot und danach wieder grün: eindeutiger Index weg, Wiederholung im
+Konfliktzweig weg, Vorab-Suche weg, Fingerabdruck-Vergleich weg,
+Personen-Vergleich weg, `UPDATE (idempotenz_schluessel)` erlaubt. Die beiden
+parallelen HTTP-Tests allein blieben ohne Index grün, deshalb das erzwungene
+Rennen. `scripts/offline-pruefung.mjs` (26 Messungen im Browser): Flugmodus,
+erfassen, dann drei Versuche über online-Ereignis, Neuladen und Knopf, von
+denen die ersten zwei den Server erreichen, deren Antwort aber verloren geht.
+Ergebnis: genau eine Buchung. Gegenprobe `--gegenprobe` (Schlüssel entfernt):
+drei Buchungen, rot. Das Skript hat dabei einen echten Fehler gefunden: die
+Sendesperre blieb nach dem ersten Offline-Speichern stehen, bis neu geladen
+wurde (siehe Kommentar an `uebertragen()`). Gesamtsuite 639/639;
+`design-pruefung.mjs` alle Paare über der Schwelle.
 
 ## Lokale Entwicklung
 

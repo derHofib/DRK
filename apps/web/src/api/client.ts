@@ -62,6 +62,20 @@ import type {
 
 const TOKEN_KEY = "zimmerakte_token";
 
+export interface KassenbuchungAnlegenPayload {
+  klientId?: string;
+  standortId?: string;
+  datum: string;
+  betragCent: number;
+  verwendungszweck?: string;
+  typId: string;
+  isoJahr?: number;
+  isoWoche?: number;
+  unterschriftBase64?: string;
+  teilnehmerKlientIds?: string[];
+  teilnehmerBenutzerIds?: string[];
+}
+
 /**
  * Fehler mit HTTP-Status: manche Aufrufer muessen 403 ("dieses Recht fehlt,
  * den Bereich gar nicht erst zeigen") von echten Fehlern unterscheiden --
@@ -527,19 +541,15 @@ export const api = {
     const text = query.toString();
     return request<KassenbuchungDto[]>(`/kassenbuchungen${text ? `?${text}` : ""}`);
   },
-  kassenbuchungAnlegen: (payload: {
-    klientId?: string;
-    standortId?: string;
-    datum: string;
-    betragCent: number;
-    verwendungszweck?: string;
-    typId: string;
-    isoJahr?: number;
-    isoWoche?: number;
-    unterschriftBase64?: string;
-    teilnehmerKlientIds?: string[];
-    teilnehmerBenutzerIds?: string[];
-  }) => request<KassenbuchungDto>("/kassenbuchungen", { method: "POST", body: JSON.stringify(payload) }),
+  // idempotenzSchluessel: von der Offline-Warteschlange (offline/warteschlange.ts)
+  // beim Erfassen erzeugt und bei jedem Versuch gleich -- der Server legt dafuer
+  // hoechstens eine Buchung an (Migration 0061).
+  kassenbuchungAnlegen: (payload: KassenbuchungAnlegenPayload, idempotenzSchluessel?: string) =>
+    request<KassenbuchungDto>("/kassenbuchungen", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: idempotenzSchluessel ? { "Idempotency-Key": idempotenzSchluessel } : undefined,
+    }),
 
   kassenbuchungTypenListe: () => request<KassenbuchungTypDto[]>("/kassenbuchungstypen"),
   kassenbuchungTypAnlegen: (payload: { bezeichnung: string; kommentarPflicht: boolean }) =>
