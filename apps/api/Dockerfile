@@ -16,6 +16,16 @@ WORKDIR /repo
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @zimmerakte/api build
+# @zimmerakte/shared liefert fuer Vite, tsx und Jest rohes TypeScript aus
+# (src/index.ts). Node selbst laedt .ts unter node_modules nicht
+# (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING) -- solange die API nur Typen
+# daraus importierte, fiel das nie auf, weil tsc solche Importe entfernt.
+# Seit suche.service (formatBelegnummer) und schichtuebergabe.service
+# (DIENST_LABEL) Werte daraus laden, startete der Container nicht mehr. Deshalb
+# hier einmal nach CommonJS kompilieren; die Bedingung "zimmerakte-laufzeit"
+# im CMD unten waehlt dist/ statt src/ (siehe exports in
+# packages/shared/package.json). Alle anderen Werkzeuge sehen weiter src/.
+RUN pnpm --filter @zimmerakte/shared build:laufzeit
 RUN pnpm --filter @zimmerakte/api deploy --prod --legacy /deploy/api
 
 FROM node:20-alpine AS runtime
@@ -27,4 +37,4 @@ RUN chown -R zimmerakte:zimmerakte /app
 USER zimmerakte
 
 EXPOSE 3000
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "--conditions=zimmerakte-laufzeit", "dist/src/main.js"]
