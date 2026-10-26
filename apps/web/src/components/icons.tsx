@@ -28,6 +28,7 @@ import {
   Boxes,
   Briefcase,
   Building2,
+  CloudOff,
   CalendarCheck,
   CalendarClock,
   CalendarDays,
@@ -96,6 +97,7 @@ import {
   PowerOff,
   Receipt,
   ReceiptText,
+  RefreshCw,
   RotateCcw,
   Save,
   Search,
@@ -231,6 +233,10 @@ export const IDeaktivieren = baue(PowerOff);
 // nicht eingetreten ist (vorausschauende Planung).
 export const IGeplant = baue(CalendarClock);
 export const IWarteliste = baue(Hourglass);
+
+/* Offline-Warteschlange (offline/warteschlange.ts) */
+export const IOffline = baue(CloudOff);
+export const IUebertragen = baue(RefreshCw);
 // Eigene Icons fuer "verschieben" in der Menue-Reihenfolge -- bewusst nicht
 // IAufklappen/IZuklappen wiederverwendet, die stehen schon fuer "ein-/
 // ausklappen" und wuerden hier eine andere Bedeutung ueberladen.

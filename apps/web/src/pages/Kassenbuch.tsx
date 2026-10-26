@@ -9,6 +9,7 @@ import type {
   WochenuebersichtEintragDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { einreihen, entfernen, senden, useWarteschlange } from "../offline/warteschlange";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
@@ -143,6 +144,21 @@ export function Kassenbuch({
   const [typId, setTypId] = useState("");
   const [unterschrift, setUnterschrift] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
+
+  // Kommt eine wartende Buchung an (Warteschlange wird kuerzer), Liste und
+  // Wochenuebersicht nachladen -- sonst fehlte sie hier bis zum naechsten
+  // Seitenwechsel.
+  const warteschlange = useWarteschlange();
+  const wartendAnzahl = warteschlange.filter((e) => e.status === "wartet").length;
+  const vorherWartend = useRef(wartendAnzahl);
+  useEffect(() => {
+    if (wartendAnzahl < vorherWartend.current) {
+      ladeBuchungen();
+      ladeUebersicht(uebersichtJahr, uebersichtWoche);
+    }
+    vorherWartend.current = wartendAnzahl;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wartendAnzahl]);
 
   const [offeneUnterschrift, setOffeneUnterschrift] = useState<{ buchungId: string; url: string } | null>(null);
   const [stornoBeantragenBuchung, setStornoBeantragenBuchung] = useState<KassenbuchungDto | null>(null);
@@ -296,7 +312,10 @@ export function Kassenbuch({
 
     setWirdGespeichert(true);
     try {
-      await api.kassenbuchungAnlegen({
+      // Erst einreihen, dann senden -- auch mit Verbindung. Reisst sie
+      // mitten in der Anfrage ab, bleibt der Eintrag liegen und wird mit
+      // demselben Schluessel erneut gesendet (offline/warteschlange.ts).
+      const eintrag = einreihen({
         klientId: ziel === "klient" ? String(form.get("klientId")) : undefined,
         standortId: ziel === "standort" ? String(form.get("standortId")) : undefined,
         datum: String(form.get("datum")),
@@ -309,11 +328,24 @@ export function Kassenbuch({
         teilnehmerKlientIds: ziel === "standort" ? form.getAll("teilnehmerKlientIds").map(String) : undefined,
         teilnehmerBenutzerIds: ziel === "standort" ? form.getAll("teilnehmerBenutzerIds").map(String) : undefined,
       });
+      const { ergebnis, fehler: sendeFehler } = await senden(eintrag);
+      if (ergebnis === "abgelehnt") {
+        // Das Formular ist noch offen: die Person korrigiert hier, statt den
+        // Eintrag spaeter in der Warteschlange zu finden.
+        entfernen(eintrag.schluessel);
+        setFormFehler(sendeFehler instanceof Error ? sendeFehler.message : "Buchung konnte nicht gespeichert werden.");
+        return;
+      }
       setFormularOffen(false);
       setVorbelegung(null);
       setUnterschrift(null);
-      ladeBuchungen();
-      ladeUebersicht(uebersichtJahr, uebersichtWoche);
+      // "wartet": kein Nachladen -- ohne Netz schluege es nur mit einer
+      // Fehlermeldung fehl. Die Warteschlangen-Leiste der Shell zeigt den
+      // Eintrag, der Effekt oben laedt nach, sobald er angekommen ist.
+      if (ergebnis === "gebucht") {
+        ladeBuchungen();
+        ladeUebersicht(uebersichtJahr, uebersichtWoche);
+      }
     } catch (err) {
       setFormFehler(err instanceof Error ? err.message : "Buchung konnte nicht gespeichert werden.");
     } finally {

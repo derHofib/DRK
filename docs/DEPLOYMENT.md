@@ -400,7 +400,11 @@ für den Server-Betrieb:
   (Schritt 5 bleibt manuell).
 - Offline-Unterstützung der PWA ist bewusst nur App-Shell (HTML/CSS/JS),
   keine gecachten Geschäftsdaten -- offline sieht man also keine
-  veralteten Klientendaten, sondern nur die leere App-Shell.
+  veralteten Klientendaten, sondern nur die leere App-Shell. Ausnahme:
+  eine im Funkloch erfasste Kassenbuchung wartet bis zur Übertragung im
+  `localStorage` des Geräts (README, Nachtrag „Offlinebetrieb“). Auf
+  gemeinsam genutzten Geräten deshalb vor dem Weitergeben prüfen, dass die
+  Leiste „noch nicht übertragen“ verschwunden ist.
 - App-Icons sind Platzhalter-Grafiken, kein echter Design-Durchgang.
 - Keine Ende-zu-Ende-Verschlüsselung im Chat. Wer Zugriff auf den laufenden
   Server oder die Datenbank hat, kann Chatinhalte technisch lesen. Bewusst so
