@@ -26,6 +26,16 @@ Anleitung überträgt genau das auf einen Server.
   (Mitglied der Gruppe `docker`, oder `sudo`).
 - Optional, aber für einen echten Betrieb empfohlen: eine Domain, die auf
   die Server-IP zeigt, für HTTPS über einen Reverse Proxy (Abschnitt 6).
+- **Verschlüsselte Datenträger (Pflicht im echten Betrieb).** Die Datenbank
+  liegt im Klartext im Docker-Volume, auch Chatnachrichten und Bilder. Gelöschte
+  Zeilen bleiben außerdem physisch in den Datenbankdateien, bis PostgreSQL sie
+  per `VACUUM` überschreibt. Deshalb muss die Platte unter `/var/lib/docker`
+  verschlüsselt sein: entweder die Volume-Verschlüsselung des Hosters (beim
+  Hoster schriftlich bestätigen lassen, gehört in den
+  Auftragsverarbeitungsvertrag) oder LUKS bei eigener Hardware. Prüfen:
+  ```bash
+  lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINT   # eine Zeile mit TYPE "crypt" über dem Docker-Pfad
+  ```
 
 ## 2. Repository auf den Server holen
 
@@ -295,24 +305,70 @@ service_completed_successfully`).
 
 ## 9. Backups
 
-Alle Daten liegen im Docker-Volume `zimmerakte_prod_db_data`. Ein einfacher
-`pg_dump`-Snapshot:
+Alle Daten liegen im Docker-Volume `zimmerakte_prod_db_data`. Ein Backup
+enthält **alle** Klienten-, Kassenbuch-, Rechnungs- und Chatdaten im
+Klartext -- auch Chatnachrichten, die in der App längst gelöscht sind, falls
+das Backup vor dem Löschen entstand. Backups werden deshalb nie unverschlüsselt
+abgelegt und nicht länger aufbewahrt als nötig.
+
+**Verschlüsselt mit [age](https://age-encryption.org), asymmetrisch.** Auf dem
+Server liegt nur der öffentliche Schlüssel: wer den Server übernimmt, kann
+neue Backups erzeugen, aber kein altes lesen. Den privaten Schlüssel einmalig
+auf einem Rechner der Leitung erzeugen und offline verwahren (z. B. ausgedruckt
+im Tresor und auf einem verschlüsselten USB-Stick) -- ohne ihn ist jedes
+Backup wertlos.
 
 ```bash
-docker compose -f docker-compose.prod.yml exec db \
-  pg_dump -U zimmerakte_admin -d zimmerakte > backup-$(date +%F).sql
+# einmalig, NICHT auf dem Server:
+age-keygen -o zimmerakte-backup.key      # gibt "Public key: age1..." aus
+
+# auf dem Server (apt install age):
+echo "age1...der-oeffentliche-schluessel..." > /etc/zimmerakte-backup.pub
 ```
 
-Diese Datei enthält alle Klienten-, Kassenbuch- und Rechnungsdaten -- wie
-jedes andere Backup mit personenbezogenen Daten entsprechend geschützt
-lagern (verschlüsselt, Zugriff eingeschränkt).
-
-Rücksichern in eine neue, leere Instanz:
+Tägliches Backup mit Rotation, z. B. als `/usr/local/bin/zimmerakte-backup`:
 
 ```bash
-cat backup-2026-08-24.sql | docker compose -f docker-compose.prod.yml exec -T db \
-  psql -U zimmerakte_admin -d zimmerakte
+#!/bin/sh
+set -eu
+ZIEL=/var/backups/zimmerakte
+AUFBEWAHRUNG_TAGE=30
+mkdir -p "$ZIEL" && chmod 700 "$ZIEL"
+cd /opt/zimmerakte   # Verzeichnis mit docker-compose.prod.yml
+docker compose -f docker-compose.prod.yml exec -T db \
+  pg_dump -U zimmerakte_admin -d zimmerakte \
+  | age -R /etc/zimmerakte-backup.pub > "$ZIEL/backup-$(date +%F).sql.age"
+find "$ZIEL" -name 'backup-*.sql.age' -mtime +"$AUFBEWAHRUNG_TAGE" -delete
 ```
+
+```bash
+chmod 700 /usr/local/bin/zimmerakte-backup
+echo '30 2 * * * root /usr/local/bin/zimmerakte-backup' > /etc/cron.d/zimmerakte-backup
+```
+
+**Aufbewahrung und Chat-Löschfrist gehören zusammen.** Die App löscht
+Chatinhalte nach der Frist des Trägers (Einstellungen → Sicherheit, Standard
+90 Tage, siehe migrations/0061). In einem Backup lebt eine Nachricht aber so
+lange weiter wie das Backup selbst. Die tatsächliche Höchstdauer ist also
+*Löschfrist + Aufbewahrung der Backups*, mit den Werten oben 120 Tage. Wer
+Backups länger aufhebt (Wochen-/Monatsstände, Kopien außer Haus), verlängert
+diese Dauer entsprechend und sollte das im Verzeichnis der
+Verarbeitungstätigkeiten so festhalten. Das gilt für jede Kopie, auch für
+Snapshots des Hosters.
+
+Rücksichern in eine neue, leere Instanz (auf einem Rechner mit dem privaten
+Schlüssel entschlüsseln, nicht auf dem Server ablegen):
+
+```bash
+age -d -i zimmerakte-backup.key backup-2026-08-24.sql.age \
+  | docker compose -f docker-compose.prod.yml exec -T db \
+    psql -U zimmerakte_admin -d zimmerakte
+```
+
+Nach einem Rücksichern enthält die Datenbank wieder Chatnachrichten, die seit
+dem Backup abgelaufen wären. Der nächste stündliche Löschlauf der API entfernt
+sie; wer nicht warten will, startet die API einmal neu (der erste Lauf kommt
+eine Minute nach dem Start).
 
 ## 10. Bekannte Fallstricke (Troubleshooting)
 
@@ -350,3 +406,8 @@ für den Server-Betrieb:
   gemeinsam genutzten Geräten deshalb vor dem Weitergeben prüfen, dass die
   Leiste „noch nicht übertragen“ verschwunden ist.
 - App-Icons sind Platzhalter-Grafiken, kein echter Design-Durchgang.
+- Keine Ende-zu-Ende-Verschlüsselung im Chat. Wer Zugriff auf den laufenden
+  Server oder die Datenbank hat, kann Chatinhalte technisch lesen. Bewusst so
+  entschieden (Entscheidungsvorlage „Datenschutz im Hecaso-Chat"): die
+  Absicherung läuft über verschlüsselte Datenträger und Backups (Abschnitte 1
+  und 9), die Löschfrist und den Auftragsverarbeitungsvertrag mit dem Hoster.

@@ -26,6 +26,23 @@ const erscheinungsbildSchema = z
     message: "Mindestens akzentfarbe oder dunkelGrundfarbe angeben.",
   });
 
+// Dieselben Grenzen wie CHAT_LOESCHFRIST_MIN/MAX_TAGE in @zimmerakte/shared und
+// der CHECK in Migration 0061 -- hier bewusst als Zahl statt als Import: die
+// API darf aus shared nur Typen beziehen. Das Paket liefert rohes TypeScript
+// (main: src/index.ts), und im Docker-Image (node:20, pnpm deploy) gibt es
+// niemanden, der es zur Laufzeit uebersetzt -- ein Wert-Import laesst den
+// Container beim Start mit "Unexpected token 'export'" abbrechen.
+const CHAT_LOESCHFRIST_MIN_TAGE = 7;
+const CHAT_LOESCHFRIST_MAX_TAGE = 3650;
+
+const chatLoeschfristSchema = z.object({
+  tage: z
+    .number()
+    .int("Bitte ganze Tage angeben.")
+    .min(CHAT_LOESCHFRIST_MIN_TAGE, `Mindestens ${CHAT_LOESCHFRIST_MIN_TAGE} Tage.`)
+    .max(CHAT_LOESCHFRIST_MAX_TAGE, `Höchstens ${CHAT_LOESCHFRIST_MAX_TAGE} Tage.`),
+});
+
 @Controller("mandant")
 @Authenticated()
 export class MandantController {
@@ -51,5 +68,10 @@ export class MandantController {
     // gebraucht wird.
     const patch = erscheinungsbildSchema.parse(body);
     return this.mandant.aktualisiereErscheinungsbild(patch);
+  }
+
+  @Patch("me/chat-loeschfrist")
+  async chatLoeschfristSetzen(@Body() body: unknown) {
+    return this.mandant.setzeChatLoeschfrist(chatLoeschfristSchema.parse(body).tage);
   }
 }

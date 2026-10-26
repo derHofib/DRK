@@ -44,7 +44,7 @@ export interface KassenbuchungAnlegenEingabe {
 
 /**
  * Inhalt der Anfrage als Hash, damit ein wiederverwendeter Idempotenzschluessel
- * mit ANDEREM Inhalt auffaellt (Migration 0061). Normalisiert wie anlegen()
+ * mit ANDEREM Inhalt auffaellt (Migration 0062). Normalisiert wie anlegen()
  * selbst normalisiert -- getrimmter Zweck, Teilnehmer ohne Duplikate und
  * sortiert --, sonst wuerde ein Client, der beim zweiten Versuch die Liste
  * anders ordnet, faelschlich als Fehler abgewiesen. Die Unterschrift geht als
@@ -169,7 +169,7 @@ export class KassenbuchungService {
   }
 
   /**
-   * anlegen() mit optionalem Idempotenzschluessel (Migration 0061): kommt
+   * anlegen() mit optionalem Idempotenzschluessel (Migration 0062): kommt
    * derselbe Schluessel von derselben Person mit demselben Inhalt noch einmal,
    * entsteht keine zweite Buchung -- die vorhandene wird zurueckgegeben,
    * wiederholt = true.

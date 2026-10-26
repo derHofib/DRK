@@ -33,6 +33,7 @@ export function ChatVerlauf({
   const { abonnieren, badgeNeuLaden } = useChatEreignisse();
   const [nachrichten, setNachrichten] = useState<ChatNachrichtDto[]>([]);
   const [weitere, setWeitere] = useState(false);
+  const [loeschfristTage, setLoeschfristTage] = useState<number | null>(null);
   const [geladen, setGeladen] = useState(false);
   const [aelterLaedt, setAelterLaedt] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -78,6 +79,7 @@ export function ChatVerlauf({
         erstesLaden.current = false;
         setWeitere(seite.weitere);
       }
+      setLoeschfristTage(seite.loeschfristTage);
       setFehler(null);
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Nachrichten konnten nicht geladen werden.");
@@ -197,6 +199,11 @@ export function ChatVerlauf({
             <IFehler />
             {fehler}
           </div>
+        )}
+        {/* Steht oben im Verlauf, weil genau dort die Nachrichten verschwinden --
+            wer nach oben scrollt und den Anfang vermisst, soll den Grund sehen. */}
+        {loeschfristTage !== null && (
+          <p className="zv-chat-frist">Nachrichten und Bilder werden nach {loeschfristTage} Tagen automatisch gelöscht.</p>
         )}
         {weitere && (
           <button type="button" className="zv-btn zv-btn-still zv-btn-klein zv-chat-aelter" onClick={() => void aelterLaden()} disabled={aelterLaedt}>

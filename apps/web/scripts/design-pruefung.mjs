@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 45;
+const ERWARTETE_PAARE = 46;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -253,6 +253,7 @@ async function messePaare(page) {
       pruefe("Chat: Uhrzeit in eigener Blase", q(".zv-pruef-blase-zeit"), 4.5);
       pruefe("Chat: Absendername", q(".zv-pruef-blase-absender"), 4.5);
       pruefe("Chat: Vorschau ungelesen", q(".zv-pruef-vorschau"), 4.5);
+      pruefe("Chat: Hinweis Löschfrist im Verlauf", q(".zv-pruef-chat-frist"), 4.5);
       pruefe("Anfragen: Titel auf Surface-2", q(".zv-pruef-anfragen-kopf"), 4.5);
       pruefe("Anfrage: Ziel (muted) auf Karte", q(".zv-pruef-anfrage-ziel"), 4.5);
       pruefe("Anfrage: Auswahl Ziel aktiv", q(".zv-pruef-ziel-aktiv"), 4.5);
@@ -313,6 +314,7 @@ const PRUEFSEITE = `
     <div class="zv-blase-absender zv-pruef-blase-absender">Anna Leitung</div>
   </div>
   <div class="zv-chat-eintrag"><span class="zv-chat-vorschau ungelesen zv-pruef-vorschau">Vorschau</span></div>
+  <div class="zv-chat-nachrichten" style="overflow:visible"><p class="zv-chat-frist zv-pruef-chat-frist">Nachrichten werden nach 90 Tagen gelöscht.</p></div>
   <section class="zv-anfragen">
     <h3 class="zv-anfragen-kopf zv-pruef-anfragen-kopf">Anfragen</h3>
     <ul class="zv-anfragen-liste"><li class="zv-anfrage">

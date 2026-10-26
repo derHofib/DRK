@@ -55,7 +55,10 @@ Rechteinhaber, der Policies umgehen kann, macht die Policy zur Dekoration.
 
 Die einzige Ausnahme ist die Mandantenauflösung beim Login (vor dem Login
 gibt es noch keinen `app.mandant_id`-Kontext) — sie steht bewusst an genau
-einer Stelle in `auth/auth.service.ts` und ist dort kommentiert.
+einer Stelle in `auth/auth.service.ts` und ist dort kommentiert. Dazu kommt
+der stündliche Lauf der Chat-Löschfrist (`chat/chat-loeschfrist.service.ts`):
+er hat keine anfragende Person, ruft aber nur die parameterlose
+`SECURITY DEFINER`-Funktion `chat_loeschfrist_anwenden()` auf (Migration 0061).
 
 **Jede neue fachliche Tabelle** braucht:
 ```sql

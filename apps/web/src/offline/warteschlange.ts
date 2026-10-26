@@ -11,7 +11,7 @@ import { ApiFehler, api, tokenBenutzerId, type KassenbuchungAnlegenPayload } fro
  * der Server committet hat. Mit dem Eintrag hier und seinem festen
  * Idempotenzschluessel ist das egal: er wird so lange erneut gesendet, bis
  * eine Antwort kommt, und der Server legt fuer denselben Schluessel
- * hoechstens eine Buchung an (Migration 0061).
+ * hoechstens eine Buchung an (Migration 0062).
  *
  * localStorage statt IndexedDB: Eintraege sind wenige und klein (eine
  * Unterschrift als PNG ist ein paar KB), und dieselbe synchrone API nutzen

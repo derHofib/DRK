@@ -378,6 +378,8 @@ export const api = {
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ akzentfarbe }) }),
   mandantDunkelGrundfarbeSetzen: (dunkelGrundfarbe: string) =>
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ dunkelGrundfarbe }) }),
+  mandantChatLoeschfristSetzen: (tage: number) =>
+    request<MandantDto>("/mandant/me/chat-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   benutzerAnlegen: (payload: { name: string; email: string; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
@@ -543,7 +545,7 @@ export const api = {
   },
   // idempotenzSchluessel: von der Offline-Warteschlange (offline/warteschlange.ts)
   // beim Erfassen erzeugt und bei jedem Versuch gleich -- der Server legt dafuer
-  // hoechstens eine Buchung an (Migration 0061).
+  // hoechstens eine Buchung an (Migration 0062).
   kassenbuchungAnlegen: (payload: KassenbuchungAnlegenPayload, idempotenzSchluessel?: string) =>
     request<KassenbuchungDto>("/kassenbuchungen", {
       method: "POST",

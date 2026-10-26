@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module";
 import { KalenderModule } from "../kalender/kalender.module";
 import { ChatAnfrageService } from "./chat-anfrage.service";
 import { ChatEreignisService } from "./chat-ereignis.service";
+import { ChatLoeschfristService } from "./chat-loeschfrist.service";
 import { ChatNachrichtService } from "./chat-nachricht.service";
 import { ChatController } from "./chat.controller";
 import { ChatService } from "./chat.service";
@@ -10,6 +11,6 @@ import { ChatService } from "./chat.service";
 @Module({
   imports: [AuthModule, KalenderModule],
   controllers: [ChatController],
-  providers: [ChatService, ChatAnfrageService, ChatNachrichtService, ChatEreignisService],
+  providers: [ChatService, ChatAnfrageService, ChatNachrichtService, ChatEreignisService, ChatLoeschfristService],
 })
 export class ChatModule {}

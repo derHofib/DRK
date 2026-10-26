@@ -103,7 +103,7 @@ export class KassenbuchungController {
   // draft-ietf-httpapi-idempotency-key-header), nicht im Koerper: er
   // beschreibt den Versuch, nicht die Buchung. Optional, damit jeder
   // bisherige Aufrufer unveraendert weiterbucht; die Offline-Warteschlange im
-  // Web-Client schickt ihn immer mit (Migration 0061).
+  // Web-Client schickt ihn immer mit (Migration 0062).
   @Post()
   async anlegen(
     @Body() body: unknown,

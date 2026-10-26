@@ -31,7 +31,17 @@ export interface MandantDto {
    * "#10131a". Unabhängig von akzentfarbe -- siehe migrations/0029.
    */
   dunkelGrundfarbe: string;
+  /** Nach so vielen Tagen werden Chatinhalte endgültig gelöscht (migrations/0061). */
+  chatLoeschfristTage: number;
 }
+
+/**
+ * Grenzen der Chat-Löschfrist -- dieselben wie der CHECK in Migration 0061.
+ * Untergrenze 7 statt 1, weil ein Tippfehler sonst fast den ganzen Verlauf
+ * unwiderruflich löschen würde.
+ */
+export const CHAT_LOESCHFRIST_MIN_TAGE = 7;
+export const CHAT_LOESCHFRIST_MAX_TAGE = 3650;
 
 /**
  * Eine Regel, drei Prüforte: der CHECK in Migration 0019, das zod-Schema im
@@ -964,6 +974,8 @@ export interface ChatNachrichtenSeiteDto {
   /** Neueste zuerst. Naechste Seite: GET ...?vor=<id der letzten Nachricht dieser Seite>. */
   nachrichten: ChatNachrichtDto[];
   weitere: boolean;
+  /** Nach so vielen Tagen werden Nachrichten endgültig gelöscht (migrations/0061). */
+  loeschfristTage: number | null;
 }
 
 export type ChatKontaktEingabe = { benutzerId: string } | { klientId: string };
