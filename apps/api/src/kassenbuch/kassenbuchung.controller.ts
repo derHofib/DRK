@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
@@ -99,9 +99,26 @@ export class KassenbuchungController {
     return { ok: true };
   }
 
+  // Idempotency-Key als Header (wie im IETF-Entwurf
+  // draft-ietf-httpapi-idempotency-key-header), nicht im Koerper: er
+  // beschreibt den Versuch, nicht die Buchung. Optional, damit jeder
+  // bisherige Aufrufer unveraendert weiterbucht; die Offline-Warteschlange im
+  // Web-Client schickt ihn immer mit (Migration 0062).
   @Post()
-  async anlegen(@Body() body: unknown) {
-    return this.kassenbuch.anlegen(anlegenSchema.parse(body));
+  async anlegen(
+    @Body() body: unknown,
+    @Headers("idempotency-key") idempotenzSchluessel: string | undefined,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    if (idempotenzSchluessel !== undefined && !z.string().uuid().safeParse(idempotenzSchluessel).success) {
+      throw new BadRequestException("Idempotency-Key muss eine UUID sein.");
+    }
+    const { buchung, wiederholt } = await this.kassenbuch.anlegenIdempotent(anlegenSchema.parse(body), idempotenzSchluessel);
+    // Gleicher Status und gleicher Koerper wie beim ersten Mal -- fuer den
+    // Client ist eine Wiederholung ein Erfolg. Der Header ist nur fuer
+    // Tests und Fehlersuche.
+    if (wiederholt) res.setHeader("Idempotency-Replayed", "true");
+    return buchung;
   }
 
   @Post(":id/storno-antrag")

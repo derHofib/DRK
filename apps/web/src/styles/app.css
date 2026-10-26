@@ -4042,3 +4042,20 @@ li:last-child > .zv-kontakt-zeile,
 .zv-uebergabe-senden .zv-btn {
   min-height: 44px;
 }
+
+/* ==================================================================
+   Offline-Warteschlange (components/WarteschlangeLeiste.tsx)
+   ================================================================== */
+.zv-warteschlange-kopf {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zv-warteschlange-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.zv-warteschlange-liste {
+  margin: var(--zv-space-1) 0 0;
+  padding-left: var(--zv-space-4);
+}

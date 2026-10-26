@@ -28,6 +28,46 @@ const UNIQUE_VIOLATION = "23505";
 // damit es dort eine verstaendliche Meldung statt einen rohen DB-Fehler gibt.
 const STORNO_VIER_AUGEN_VERLETZT = "ZA002";
 
+export interface KassenbuchungAnlegenEingabe {
+  klientId?: string;
+  standortId?: string;
+  datum: string;
+  betragCent: number;
+  verwendungszweck?: string;
+  typId: string;
+  isoJahr?: number;
+  isoWoche?: number;
+  unterschriftBase64?: string;
+  teilnehmerKlientIds?: string[];
+  teilnehmerBenutzerIds?: string[];
+}
+
+/**
+ * Inhalt der Anfrage als Hash, damit ein wiederverwendeter Idempotenzschluessel
+ * mit ANDEREM Inhalt auffaellt (Migration 0062). Normalisiert wie anlegen()
+ * selbst normalisiert -- getrimmter Zweck, Teilnehmer ohne Duplikate und
+ * sortiert --, sonst wuerde ein Client, der beim zweiten Versuch die Liste
+ * anders ordnet, faelschlich als Fehler abgewiesen. Die Unterschrift geht als
+ * eigener Hash ein statt als Bild, damit der Fingerabdruck klein bleibt.
+ */
+export function fingerabdruck(input: KassenbuchungAnlegenEingabe): string {
+  const sortiert = (ids?: string[]) => [...new Set(ids ?? [])].sort();
+  const normalisiert = [
+    input.klientId ?? null,
+    input.standortId ?? null,
+    input.datum,
+    input.betragCent,
+    input.verwendungszweck?.trim() ?? "",
+    input.typId,
+    input.isoJahr ?? null,
+    input.isoWoche ?? null,
+    input.unterschriftBase64 ? createHash("sha256").update(input.unterschriftBase64).digest("hex") : null,
+    sortiert(input.teilnehmerKlientIds),
+    sortiert(input.teilnehmerBenutzerIds),
+  ];
+  return createHash("sha256").update(JSON.stringify(normalisiert)).digest("hex");
+}
+
 export interface OffenerStornoantragDto {
   id: string;
   grund: string;
@@ -124,19 +164,20 @@ export class KassenbuchungService {
    * optionalen Teilnehmer (Klienten UND Mitarbeitende) sind rein
    * dokumentarisch -- wer teilgenommen hat, aendert nichts am Betrag.
    */
-  async anlegen(input: {
-    klientId?: string;
-    standortId?: string;
-    datum: string;
-    betragCent: number;
-    verwendungszweck?: string;
-    typId: string;
-    isoJahr?: number;
-    isoWoche?: number;
-    unterschriftBase64?: string;
-    teilnehmerKlientIds?: string[];
-    teilnehmerBenutzerIds?: string[];
-  }): Promise<KassenbuchungDto> {
+  async anlegen(input: KassenbuchungAnlegenEingabe): Promise<KassenbuchungDto> {
+    return (await this.anlegenIdempotent(input)).buchung;
+  }
+
+  /**
+   * anlegen() mit optionalem Idempotenzschluessel (Migration 0062): kommt
+   * derselbe Schluessel von derselben Person mit demselben Inhalt noch einmal,
+   * entsteht keine zweite Buchung -- die vorhandene wird zurueckgegeben,
+   * wiederholt = true.
+   */
+  async anlegenIdempotent(
+    input: KassenbuchungAnlegenEingabe,
+    idempotenzSchluessel?: string
+  ): Promise<{ buchung: KassenbuchungDto; wiederholt: boolean }> {
     const { mandantId, benutzerId } = requireTenantContext();
     // Das Recht stand in der Registry, wurde aber nirgends erzwungen: wer
     // eingeloggt war, konnte buchen. Die Vorab-Pruefung des Uebergabemodus
@@ -156,9 +197,19 @@ export class KassenbuchungService {
 
     const teilnehmerKlientIds = [...new Set(input.teilnehmerKlientIds ?? [])];
     const teilnehmerBenutzerIds = [...new Set(input.teilnehmerBenutzerIds ?? [])];
+    const abdruck = idempotenzSchluessel ? fingerabdruck(input) : null;
 
     try {
       return await this.db.withTenant(async (client) => {
+        // Vor allen fachlichen Pruefungen: ist die Buchung schon angekommen,
+        // gilt sie -- auch wenn der Klient inzwischen archiviert oder der Typ
+        // deaktiviert wurde. Die Warteschlange auf dem Geraet soll eine
+        // laengst gebuchte Auszahlung nicht als "abgelehnt" anzeigen.
+        if (idempotenzSchluessel) {
+          const vorhanden = await this.wiederholung(client, idempotenzSchluessel, abdruck!, benutzerId);
+          if (vorhanden) return { buchung: vorhanden, wiederholt: true };
+        }
+
         // Ob "Verwendungszweck" Pflicht ist (und wie das Feld heisst) haengt
         // seit Migration 0035 am gewaehlten Typ, nicht mehr an einer festen
         // Zod-Regel -- deshalb hier statt im Controller geprueft. RLS
@@ -210,8 +261,9 @@ export class KassenbuchungService {
         }
 
         const { rows } = await client.query(
-          `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id, ist_hzl, iso_jahr, iso_woche, gebucht_von)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `INSERT INTO kassenbuchung (mandant_id, klient_id, standort_id, datum, betrag_cent, verwendungszweck, typ_id, ist_hzl, iso_jahr, iso_woche, gebucht_von,
+                                      idempotenz_schluessel, idempotenz_fingerabdruck)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            RETURNING id`,
           [
             mandantId,
@@ -225,6 +277,8 @@ export class KassenbuchungService {
             input.isoJahr ?? null,
             input.isoWoche ?? null,
             benutzerId,
+            idempotenzSchluessel ?? null,
+            abdruck,
           ]
         );
         const buchungId = rows[0].id;
@@ -251,14 +305,51 @@ export class KassenbuchungService {
           );
         }
 
-        return this.findeEineIntern(client, buchungId);
+        return { buchung: await this.findeEineIntern(client, buchungId), wiederholt: false };
       });
     } catch (err) {
       if (isPgError(err) && err.code === UNIQUE_VIOLATION) {
+        // Zwei Versuche mit demselben Schluessel gleichzeitig: beide haben
+        // oben nichts gefunden, der zweite wartet am Index, bis der erste
+        // committet, und scheitert dann. Welcher Index dabei zuerst anschlaegt
+        // (Idempotenz oder HZL-Woche), legt Postgres fest, nicht wir --
+        // deshalb hier nicht am Constraint-Namen unterscheiden, sondern
+        // nachsehen, ob unter dem Schluessel inzwischen eine Buchung steht.
+        if (idempotenzSchluessel) {
+          const vorhanden = await this.db.withTenant((client) =>
+            this.wiederholung(client, idempotenzSchluessel, abdruck!, benutzerId)
+          );
+          if (vorhanden) return { buchung: vorhanden, wiederholt: true };
+        }
         throw new ConflictException("Für diese Kalenderwoche wurde für diesen Klienten bereits eine HZL-Zahlung erfasst.");
       }
       throw err;
     }
+  }
+
+  /**
+   * Die Buchung, die unter diesem Schluessel schon angelegt wurde -- oder null.
+   * Nur fuer dieselbe Person und denselben Inhalt: sonst ist es kein
+   * Wiederholungsversuch, und die Antwort wuerde einer anderen Person eine
+   * Buchung zeigen, die sie vielleicht gar nicht sehen darf (Standort).
+   */
+  private async wiederholung(
+    client: PoolClient,
+    schluessel: string,
+    abdruck: string,
+    benutzerId: string
+  ): Promise<KassenbuchungDto | null> {
+    const { rows } = await client.query<{ id: string; idempotenz_fingerabdruck: string; gebucht_von: string | null }>(
+      "SELECT id, idempotenz_fingerabdruck, gebucht_von FROM kassenbuchung WHERE idempotenz_schluessel = $1",
+      [schluessel]
+    );
+    if (rows.length === 0) return null;
+    if (rows[0].gebucht_von !== benutzerId || rows[0].idempotenz_fingerabdruck !== abdruck) {
+      throw new ConflictException(
+        "Dieser Idempotenzschlüssel wurde bereits für eine andere Buchung verwendet."
+      );
+    }
+    return this.findeEineIntern(client, rows[0].id);
   }
 
   /**
