@@ -1,0 +1,17 @@
+-- Redesign "ruhige Fachanwendung": die Vorgabefarbe fuer neu angelegte
+-- Mandanten wechselt von "DRK Rot" (#e3000f, Migration 0021) auf
+-- "Tannengruen" (#2d6a4f).
+--
+-- Warum: im neuen Designsystem ist der Akzent AUSSCHLIESSLICH
+-- Handlungsfarbe (Primaerknopf, aktiver Menuepunkt, Links), und Koralle
+-- ist fest fuer Aufmerksamkeit reserviert (heute, ueberfaellig, offen). Ein
+-- roter Standardakzent laege farblich direkt neben dieser Koralle und neben
+-- --zv-status-danger (Storno, Ablehnung) -- "hier handeln" und "hier
+-- stimmt etwas nicht" waeren auf einen Blick nicht mehr zu trennen.
+-- Tannengruen ist die hecaso-Markenfarbe und hat diese Kollision nicht.
+-- DRK Rot bleibt in PASTELL_PALETTEN waehlbar.
+--
+-- Bewusst NUR der Spaltendefault, keine Aktualisierung bestehender Zeilen
+-- (gleiche Begruendung wie 0021): ein Traeger, der seine Farbe gewaehlt
+-- oder den alten Standard behalten hat, wird nicht unbemerkt umgefaerbt.
+ALTER TABLE mandant ALTER COLUMN akzentfarbe SET DEFAULT '#2d6a4f';

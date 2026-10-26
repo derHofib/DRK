@@ -96,10 +96,11 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46;
+const ERWARTETE_PAARE = 46 + 3 * 7 + 8;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
+  ["Tannengruen", "#2d6a4f"],
   ["DRK Rot", "#e3000f"],
   ["Salbei", "#79c7a8"],
   ["Petrol", "#5ec4c0"],
@@ -275,6 +276,31 @@ async function messePaare(page) {
       pruefe("Uebergabe-Karte: Punkttext", q(".zv-pruef-uk-text"), 4.5);
       pruefe("Uebergabe-Karte: Pill Nachtrag (info)", q(".zv-pruef-uk-pill"), 4.5);
       pruefe("Uebergabe-Karte: Aufgabe-Verweis (Link)", q(".zv-pruef-uk-link"), 4.5);
+
+      // Redesign "ruhige Fachanwendung": neue Neutraltoene, Tags, Koralle.
+      // Jeder Text-Token wird auf JEDER Flaeche gemessen, auf der er
+      // vorkommt -- gedaempfter Text steht als Kontextzeile direkt auf dem
+      // Seitenhintergrund, als Gruppenlabel auf Flaeche gedaempft.
+      for (const flaeche of ["bg", "surface", "s2"]) {
+        pruefe("Text auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .t"), 4.5);
+        pruefe("Text sekundaer auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ts"), 4.5);
+        pruefe("Text gedaempft auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .tg"), 4.5);
+        pruefe("Achtung-Text auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ta"), 4.5);
+        pruefe("Link auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .zv-link-btn"), 4.5);
+        // Koralle als Marker (Heute-Linie, Auszugskante): Grafik mit
+        // Bedeutung, WCAG 1.4.11 -> 3:1.
+        pruefe("Achtung-Marker auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ma"), 3, "border");
+        // Akzent als Grafik (Fortschritts-/Laufzeitbalken).
+        pruefe("Akzent-Balken auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .mb"), 3, "border");
+      }
+      pruefe("Tag neutral", q(".zv-pruef-tag-neutral"), 4.5);
+      pruefe("Tag erledigt", q(".zv-pruef-tag-erledigt"), 4.5);
+      pruefe("Tag Frist", q(".zv-pruef-tag-frist"), 4.5);
+      pruefe("Tag achtung", q(".zv-pruef-tag-achtung"), 4.5);
+      pruefe("Eingabefeldrand auf Hintergrund", q(".zv-pruef-input-bg"), 3, "border");
+      pruefe("Aktiver Menuepunkt (accent-strong auf accent-soft)", q(".zv-pruef-nav-aktiv"), 4.5);
+      pruefe("Gedaempft auf ausgewaehlter Zeile", q(".zv-pruef-auswahl-tg"), 4.5);
+      pruefe("Text auf Hover-Zeile", q(".zv-pruef-hover-tg"), 4.5);
       return ergebnisse;
     `
     )
@@ -343,6 +369,32 @@ const PRUEFSEITE = `
   <div class="zv-palette-fuss zv-pruef-pal-fuss">Esc schlie&szlig;en</div>
 </div>
 <span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>
+<div style="background:var(--zv-bg)">
+${["bg", "surface", "s2"].map((f) => `
+  <div class="zv-pruef-n-${f}" style="padding:8px;background:${{ bg: "var(--zv-bg)", surface: "var(--zv-surface)", s2: "var(--zv-surface-2)" }[f]}">
+    <span class="t" style="color:var(--zv-text)">Text</span>
+    <span class="ts" style="color:var(--zv-text-sekundaer)">Sekundaer</span>
+    <span class="tg" style="color:var(--zv-text-gedaempft)">Gedaempft</span>
+    <span class="ta" style="color:var(--zv-achtung-text)">ueberfaellig</span>
+    <button class="zv-link-btn">Verweis</button>
+    <div class="ma" style="border-top:2px solid var(--zv-achtung)"></div>
+    <div class="mb" style="border-top:2px solid var(--zv-accent)"></div>
+  </div>`).join("")}
+  <span class="zv-pill zv-pruef-tag-neutral">neutral</span>
+  <span class="zv-pill zv-pill-erledigt zv-pruef-tag-erledigt">erledigt</span>
+  <span class="zv-pill zv-pill-frist zv-pruef-tag-frist">endet in 37 T.</span>
+  <span class="zv-pill zv-pill-achtung zv-pruef-tag-achtung">frei</span>
+  <!-- Eigene Flaeche bewusst transparent: gemessen wird der Rand gegen den
+       Seitenhintergrund AUSSERHALB des Felds, die haertere Seite. -->
+  <div class="zv-pruef-input-bg" style="border:1px solid var(--zv-border-strong);height:8px"></div>
+  <div style="background:var(--zv-accent-soft)">
+    <span class="zv-pruef-nav-aktiv" style="color:var(--zv-accent-strong)">Heute</span>
+    <span class="zv-pruef-auswahl-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
+  </div>
+  <div style="background:var(--zv-surface-3)">
+    <span class="zv-pruef-hover-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
+  </div>
+</div>
 <article class="zv-uebergabe-karte">
   <h3 class="zv-pruef-uk-titel">Sp&auml;tdienst &middot; Haus Eins</h3>
   <p class="zv-sub-inline zv-pruef-uk-meta">24.10. 21:12 &middot; von Leitung</p>

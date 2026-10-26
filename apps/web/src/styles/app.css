@@ -391,7 +391,7 @@
   font-size: var(--zv-text-xs);
   font-weight: var(--zv-weight-semibold);
   white-space: nowrap;
-  box-shadow: var(--zv-shadow-1);
+  box-shadow: var(--zv-shadow-2);
   z-index: 5;
   pointer-events: none;
 }
@@ -455,7 +455,6 @@
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-l);
-  box-shadow: var(--zv-shadow-2);
   padding: var(--zv-space-6);
   width: 100%;
   max-width: 380px;
@@ -692,21 +691,22 @@
   width: 100%;
 }
 
-/* Tonal: traegt die Markenfarbe als Flaeche, ohne mit dem primaeren
-   Knopf um Aufmerksamkeit zu konkurrieren. */
+/* Weiss mit Rahmen statt tonaler Akzentflaeche: der Akzent als Flaeche
+   gehoert nur dem Primaerknopf. Zwei Knoepfe in Akzentfarbe nebeneinander
+   wuerden die Frage "was ist die naechste Handlung?" wieder offen lassen. */
 .zv-btn-sekundaer {
-  background: var(--zv-accent-soft);
-  color: var(--zv-accent-strong);
-  border-color: transparent;
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border-color: var(--zv-border-knopf);
 }
 .zv-btn-sekundaer:hover:not(:disabled) {
-  background: var(--zv-accent-soft-strong);
+  background: var(--zv-surface-3);
 }
 
 .zv-btn-still {
   background: transparent;
   color: var(--zv-text-muted);
-  border-color: var(--zv-border-strong);
+  border-color: var(--zv-border-knopf);
 }
 .zv-btn-still:hover:not(:disabled) {
   background: var(--zv-surface-2);
@@ -972,37 +972,56 @@
 /* ==================================================================
    Pills
    ================================================================== */
+/*
+ * Status-Tag. Eckig (4 px) statt Pille und neutral als Grundzustand: ein
+ * Tag ist eine Auskunft, kein Knopf -- die runde, akzentfarbene Pille sah
+ * anklickbar aus. Feste Hoehe, damit Tags in Tabellenzeilen auf einer
+ * Linie stehen. Vier Varianten: neutral / erledigt / frist / achtung.
+ */
 .zv-pill {
   display: inline-flex;
   align-items: center;
   gap: var(--zv-space-1);
-  font-size: var(--zv-text-xs);
+  height: var(--zv-tag-hoehe);
+  font-size: var(--zv-tag-schrift);
   font-weight: var(--zv-weight-semibold);
-  padding: 3px 10px;
-  border-radius: var(--zv-radius-pill);
-  border: 1px solid transparent;
-  background: var(--zv-accent-soft);
-  color: var(--zv-accent-strong);
+  line-height: 1;
+  padding: 0 var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  border: 0;
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
   white-space: nowrap;
 }
 
 .zv-pill-vergeben {
-  background: var(--zv-surface-2);
-  color: var(--zv-text-muted);
-  border-color: var(--zv-border);
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
 }
 
 .zv-pill-zugeordnet,
+.zv-pill-erledigt,
 .zv-pill-ok {
-  background: var(--zv-status-ok-bg);
-  color: var(--zv-status-ok);
+  background: var(--zv-tag-erledigt-bg);
+  color: var(--zv-tag-erledigt-text);
+}
+
+.zv-pill-frist {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+/* Koralle: heute, ueberfaellig, offen, ungelesen, frei -- nie dekorativ. */
+.zv-pill-achtung {
+  background: var(--zv-tag-achtung-bg);
+  color: var(--zv-tag-achtung-text);
 }
 
 /* Mehrbettzimmer mit noch mindestens einem freien Platz -- zwischen
    "zugeordnet" (ganz leer) und "vergeben" (voll). */
 .zv-pill-teilweise {
-  background: var(--zv-status-warn-bg);
-  color: var(--zv-status-warn);
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
 }
 
 .zv-pill-danger {
@@ -1011,8 +1030,8 @@
 }
 
 .zv-pill-offen {
-  background: var(--zv-status-warn-bg);
-  color: var(--zv-status-warn);
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
 }
 
 .zv-pill-info {
@@ -1033,17 +1052,14 @@
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-m);
-  box-shadow: var(--zv-shadow-1);
   padding: var(--zv-space-4);
-  /* Schmale Akzentkante links -- traegt die Markenfarbe in die Flaeche,
-     ohne Text zu ueberlagern. */
-  border-left: 3px solid var(--zv-accent-soft-strong);
-  transition: box-shadow var(--zv-transition-base), transform var(--zv-transition-base);
+  /* Keine Akzentkante und kein Anheben beim Hover mehr: der Akzent ist
+     Handlungsfarbe, eine Karte ist keine Handlung. */
+  transition: border-color var(--zv-transition-fast);
 }
 
 .zv-room-card:hover {
-  box-shadow: var(--zv-shadow-2);
-  transform: translateY(-1px);
+  border-color: var(--zv-border-strong);
 }
 
 .zv-room-head {
@@ -1786,9 +1802,7 @@
     background: var(--zv-surface);
     border: 1px solid var(--zv-border);
     border-radius: var(--zv-radius-m);
-    box-shadow: var(--zv-shadow-1);
     padding: var(--zv-space-4);
-    border-left: 3px solid var(--zv-accent-soft-strong);
   }
 
   .zv-info-karte-aktiv {
@@ -2086,8 +2100,8 @@
   width: 150px;
   padding: var(--zv-space-3);
   border-radius: var(--zv-radius-m);
-  border: 2px solid var(--zv-accent);
-  background: var(--zv-accent-soft);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface-2);
 }
 
 .zv-raumbaum-etage strong {

@@ -54,7 +54,9 @@ export const CHAT_LOESCHFRIST_MAX_TAGE = 3650;
  */
 export const AKZENTFARBE_MUSTER = /^#[0-9a-fA-F]{6}$/;
 
-export const AKZENTFARBE_STANDARD = "#e3000f";
+/** Tannengrün, die hecaso-Markenfarbe -- seit Migration 0062 (vorher DRK
+ * Rot, 0021). Begründung dort. */
+export const AKZENTFARBE_STANDARD = "#2d6a4f";
 
 /**
  * Standardwert der neuen Spalte dunkel_grundfarbe (Migration 0029). Siehe
@@ -96,16 +98,18 @@ export interface PastellPalette {
  * nur Farbton und Buntheit, die Helligkeit gehört dem CSS (siehe
  * apps/web/src/theme/farbe.ts).
  *
- * "DRK Rot" steht bewusst an erster Stelle und ist der Standardwert neuer
- * Mandanten (siehe migrations/0021 und AKZENTFARBE_STANDARD oben) -- das ist
- * die tatsächliche Hausfarbe des Trägers, keine beliebige Wahl. Die übrigen
- * acht Paletten bleiben bewusst nicht-rot: für Träger, die sich für eine
+ * "Tannengrün" steht an erster Stelle und ist der Standardwert neuer
+ * Mandanten (siehe migrations/0062 und AKZENTFARBE_STANDARD oben): der
+ * Akzent ist nur noch Handlungsfarbe und soll nicht neben der festen
+ * Aufmerksamkeitsfarbe Koralle liegen. "DRK Rot" bleibt als Hausfarbe des
+ * Trägers wählbar. Die übrigen Paletten bleiben bewusst nicht-rot: für Träger, die sich für eine
  * andere Farbe entscheiden, kollidierte ein zufälliges Rot visuell mit
  * --zv-status-danger (Storno, Ablehnung, negative Beträge). Über den freien
  * Farbwähler bleibt jede Farbe möglich; die Statusfarben sind davon
  * unberührt, weil sie feste Farbtöne haben und dem Akzent nicht folgen.
  */
 export const PASTELL_PALETTEN: readonly PastellPalette[] = [
+  { id: "tannengruen", name: "Tannengrün", hex: "#2d6a4f" },
   { id: "drk-rot", name: "DRK Rot", hex: "#e3000f" },
   { id: "salbei", name: "Salbei", hex: "#79c7a8" },
   { id: "petrol", name: "Petrol", hex: "#5ec4c0" },

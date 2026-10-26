@@ -412,7 +412,7 @@ function Traegerfarbe({
             maxLength={7}
           />
           {!AKZENTFARBE_MUSTER.test(hexFeld) && (
-            <span className="zv-sub-inline">Bitte im Format #e3000f.</span>
+            <span className="zv-sub-inline">Bitte im Format #2d6a4f.</span>
           )}
         </div>
       </div>
