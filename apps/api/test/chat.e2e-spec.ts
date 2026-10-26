@@ -809,7 +809,7 @@ describe("Chat", () => {
         const c = als(token);
         const leer = await c.get(`/chat/${grenzeId}/nachrichten`);
         expect(leer.status).toBe(200);
-        expect(leer.body).toEqual({ nachrichten: [], weitere: false });
+        expect(leer.body).toEqual({ nachrichten: [], weitere: false, loeschfristTage: 90 });
         const ansicht = (await c.get("/chat")).body.find((x: any) => x.id === grenzeId);
         expect(ansicht).toMatchObject({ ungelesen: 0, letzteNachricht: null });
         // Ohne sichtbare Nachricht zaehlt der Beitritt als letzte Aktivitaet, nicht die Gruendung des Chats.

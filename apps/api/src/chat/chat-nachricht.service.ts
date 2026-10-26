@@ -84,7 +84,10 @@ export class ChatNachrichtService {
       }
       const nachrichten = await this.ladeNachrichten(client, ich, bedingung, parameter, anzahl + 1);
       const weitere = nachrichten.length > anzahl;
-      return { nachrichten: nachrichten.slice(0, anzahl), weitere };
+      // RLS auf mandant laesst genau die eigene Zeile durch -- auch fuer
+      // Klient-Sitzungen, die so erfahren, wann ihre Nachrichten verschwinden.
+      const { rows: frist } = await client.query<{ tage: number }>("SELECT chat_loeschfrist_tage AS tage FROM mandant");
+      return { nachrichten: nachrichten.slice(0, anzahl), weitere, loeschfristTage: frist[0]?.tage ?? null };
     });
   }
 
