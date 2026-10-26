@@ -54,7 +54,7 @@ export const CHAT_LOESCHFRIST_MAX_TAGE = 3650;
  */
 export const AKZENTFARBE_MUSTER = /^#[0-9a-fA-F]{6}$/;
 
-/** Tannengrün, die hecaso-Markenfarbe -- seit Migration 0062 (vorher DRK
+/** Tannengrün, die hecaso-Markenfarbe -- seit Migration 0063 (vorher DRK
  * Rot, 0021). Begründung dort. */
 export const AKZENTFARBE_STANDARD = "#2d6a4f";
 
@@ -99,7 +99,7 @@ export interface PastellPalette {
  * apps/web/src/theme/farbe.ts).
  *
  * "Tannengrün" steht an erster Stelle und ist der Standardwert neuer
- * Mandanten (siehe migrations/0062 und AKZENTFARBE_STANDARD oben): der
+ * Mandanten (siehe migrations/0063 und AKZENTFARBE_STANDARD oben): der
  * Akzent ist nur noch Handlungsfarbe und soll nicht neben der festen
  * Aufmerksamkeitsfarbe Koralle liegen. "DRK Rot" bleibt als Hausfarbe des
  * Trägers wählbar. Die übrigen Paletten bleiben bewusst nicht-rot: für Träger, die sich für eine

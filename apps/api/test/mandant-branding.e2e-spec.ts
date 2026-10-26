@@ -26,7 +26,7 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
-// Seit Migration 0062: Tannengrün statt DRK Rot (0021).
+// Seit Migration 0063: Tannengrün statt DRK Rot (0021).
 const STANDARDFARBE = "#2d6a4f";
 // Migration 0029.
 const STANDARD_DUNKEL_GRUNDFARBE = "#10131a";
