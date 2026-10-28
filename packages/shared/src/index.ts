@@ -537,6 +537,13 @@ export interface DashboardDto {
     prioritaet: AufgabePrioritaet;
     faelligAm: string | null;
   }[];
+  freieZimmer: {
+    zimmerId: string;
+    nummer: string;
+    etage: string | null;
+    standortName: string;
+    freiePlaetze: number;
+  }[];
   meineOffenenAufgaben: {
     id: string;
     titel: string;

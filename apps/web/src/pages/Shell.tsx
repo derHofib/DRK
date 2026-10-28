@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BenutzerListEintragDto, MandantDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
@@ -386,6 +386,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     setOffenesPanel(null);
   }, []);
 
+  const dashboardNavigation = useMemo(() => ({ zu: geheZu, suche: paletteOeffnen }), [geheZu, paletteOeffnen]);
+
   useEffect(() => {
     function taste(e: globalThis.KeyboardEvent) {
       const ziel = e.target instanceof HTMLElement ? e.target : null;
@@ -768,7 +770,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
           <WarteschlangeLeiste />
-          {tab === "dashboard" && <Dashboard />}
+          {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} />}
           {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={(id) => geheZu(`standort:${id}`)} />}
           {tab.startsWith("standort:") && (
             <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} onStandortWaehlen={(id) => geheZu(id ? `standort:${id}` : "standorte")} />

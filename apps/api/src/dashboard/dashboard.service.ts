@@ -59,6 +59,13 @@ export interface DashboardDto {
     prioritaet: AufgabePrioritaet;
     faelligAm: string | null;
   }[];
+  freieZimmer: {
+    zimmerId: string;
+    nummer: string;
+    etage: string | null;
+    standortName: string;
+    freiePlaetze: number;
+  }[];
   meineOffenenAufgaben: {
     id: string;
     titel: string;
@@ -103,6 +110,7 @@ export class DashboardService {
       const kostenuebernahmenBaldEndend = await this.kostenuebernahmenBaldEndend(client, erlaubteStandorte);
       const klientenOhneTagesbericht = await this.klientenOhneTagesbericht(client, erlaubteStandorte);
       const unzugewieseneZimmeraufgaben = await this.unzugewieseneZimmeraufgaben(client, erlaubteStandorte);
+      const freieZimmer = await this.freieZimmer(client, erlaubteStandorte);
       const meineOffenenAufgaben = await this.meineOffenenAufgaben(client, benutzerId);
       return {
         zimmer,
@@ -113,6 +121,7 @@ export class DashboardService {
         kostenuebernahmenBaldEndend,
         klientenOhneTagesbericht,
         unzugewieseneZimmeraufgaben,
+        freieZimmer,
         meineOffenenAufgaben,
       };
     });
@@ -150,6 +159,44 @@ export class DashboardService {
     );
     const r = rows[0];
     return { frei: Number(r.frei), gesamt: Number(r.gesamt), standorte: Number(r.standorte) };
+  }
+
+  /**
+   * Konkrete Zimmer mit freien Plaetzen fuer die rechte Spalte der
+   * Startseite -- die Zahl in der Lage-Leiste sagt nur "wie viele", wer
+   * jemanden aufnehmen soll, braucht "welches". Zaehlung wie in zimmerFrei()
+   * (nur bereits eingezogene Belegungen), Sortierung nach Standort und
+   * Nummer, damit die Liste von Aufruf zu Aufruf stabil bleibt.
+   */
+  private async freieZimmer(client: PoolClient, erlaubteStandorte: string[] | null) {
+    const bedingungen = ["z.aktiv"];
+    const params: unknown[] = [];
+    if (erlaubteStandorte) {
+      params.push(erlaubteStandorte);
+      bedingungen.push(`z.standort_id = ANY($${params.length})`);
+    }
+    const { rows } = await client.query(
+      `
+      SELECT z.id, z.nummer, z.etage, s.name AS standort_name, (z.kapazitaet - belegte.anzahl) AS frei
+      FROM zimmer z
+      JOIN standort s ON s.id = z.standort_id
+      JOIN LATERAL (
+        SELECT count(*) AS anzahl FROM belegung b
+        WHERE b.zimmer_id = z.id AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+      ) belegte ON true
+      WHERE ${bedingungen.join(" AND ")} AND z.kapazitaet > belegte.anzahl
+      ORDER BY s.name, z.nummer
+      LIMIT ${LISTEN_LIMIT}
+      `,
+      params
+    );
+    return rows.map((r) => ({
+      zimmerId: r.id,
+      nummer: r.nummer,
+      etage: r.etage ?? null,
+      standortName: r.standort_name,
+      freiePlaetze: Number(r.frei),
+    }));
   }
 
   private async hzlWoche(client: PoolClient, erlaubteStandorte: string[] | null) {

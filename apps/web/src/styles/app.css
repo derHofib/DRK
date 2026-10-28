@@ -4297,3 +4297,343 @@ button[class],
 .zv-link-btn {
   font-family: var(--zv-font-ui);
 }
+
+/* ==================================================================
+   Heute (Dashboard.tsx)
+   ==================================================================
+   Eine Flaeche fuer die Lage, eine Liste fuer alles, was zu tun ist.
+   Struktur nur ueber Haarlinien und Gruppenlabels -- keine Karten, keine
+   Schatten. Koralle erscheint nur dort, wo etwas ueberfaellig oder offen
+   ist (Frist, Lage-Folgezeile, naechster Termin). */
+.zv-kopf-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-wrap: wrap;
+}
+
+/* Suchfeld ist ein Knopf: es oeffnet die Befehlspalette, tippen passiert
+   dort. Ein echtes Eingabefeld hier waere ein zweiter Suchweg mit eigener
+   Ergebnisliste. */
+.zv-suchfeld {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 44px;
+  min-width: 220px;
+  padding: 0 var(--zv-space-3);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-meta);
+  cursor: pointer;
+}
+.zv-suchfeld:hover {
+  border-color: var(--zv-border-strong);
+}
+.zv-suchfeld span {
+  flex: 1;
+  text-align: left;
+}
+.zv-suchfeld kbd {
+  font-size: var(--zv-text-label);
+  color: var(--zv-text-muted);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  padding: 1px var(--zv-space-1);
+}
+@media (max-width: 640px) {
+  .zv-suchfeld {
+    min-width: 0;
+    flex: 1;
+  }
+  .zv-suchfeld kbd {
+    display: none;
+  }
+}
+
+.zv-neu-menue {
+  position: relative;
+}
+.zv-neu-liste {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--zv-space-1));
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+}
+.zv-neu-liste button {
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.zv-neu-liste button:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-heute {
+  transition: opacity var(--zv-transition-base);
+  min-width: 0;
+}
+
+/* Lage: vier Spalten auf einer Flaeche, durch Haarlinien getrennt. */
+.zv-lage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  margin-bottom: var(--zv-space-5);
+}
+.zv-lage-spalte {
+  padding: var(--zv-space-4);
+  min-width: 0;
+  border-left: 1px solid var(--zv-border);
+}
+.zv-lage-spalte:first-child {
+  border-left: 0;
+}
+@media (max-width: 640px) {
+  .zv-lage {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* Nach dem Umbruch trennt eine obere Linie die zweite Reihe; die linke
+     Linie gilt nur noch fuer die rechte Spalte. */
+  .zv-lage-spalte:nth-child(odd) {
+    border-left: 0;
+  }
+  .zv-lage-spalte:nth-child(n + 3) {
+    border-top: 1px solid var(--zv-border);
+  }
+}
+.zv-lage-label {
+  margin: 0;
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-lage-wert {
+  margin: var(--zv-space-1) 0;
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--zv-text);
+}
+.zv-lage-folge {
+  margin: 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-lage-folge-achtung {
+  color: var(--zv-achtung-text);
+}
+
+.zv-heute-spalten {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .zv-heute-spalten {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.zv-abschnittskopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--zv-space-3);
+}
+.zv-abschnittskopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-abschnitt);
+  font-weight: var(--zv-weight-bold);
+}
+/* Die Filter scrollen selbst, wenn sie auf dem Handy nicht nebeneinander
+   passen -- nie die Seite. */
+.zv-abschnittskopf .zv-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.zv-abschnittskopf .zv-segmented button {
+  white-space: nowrap;
+}
+
+.zv-todo-gruppe {
+  margin-bottom: var(--zv-space-5);
+}
+.zv-gruppenlabel-inline {
+  margin: 0 0 var(--zv-space-1);
+  padding-bottom: var(--zv-space-2);
+  border-bottom: 1px solid var(--zv-border-strong);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-gruppenlabel-inline .zv-mono {
+  margin-left: var(--zv-space-1);
+}
+
+.zv-todo-liste,
+.zv-rand-liste,
+.zv-zeitleiste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-todo-zeile {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 56px;
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-todo-zeile .zv-pill {
+  justify-self: start;
+}
+.zv-todo-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zv-todo-titel {
+  font-size: var(--zv-text-basis);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+  overflow-wrap: anywhere;
+}
+.zv-todo-meta {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+.zv-todo-frist {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.zv-todo-frist-achtung {
+  color: var(--zv-achtung-text);
+  font-weight: 500;
+}
+/* Handy: Tag und Frist ziehen in die Zeile ueber den Titel, die Aktion
+   steht darunter -- vier Spalten passen bei 390 px nicht. */
+@media (max-width: 640px) {
+  .zv-todo-zeile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tag frist"
+      "text text"
+      "aktion aktion";
+    row-gap: var(--zv-space-2);
+  }
+  .zv-todo-zeile .zv-pill {
+    grid-area: tag;
+  }
+  .zv-todo-zeile .zv-todo-frist {
+    grid-area: frist;
+  }
+  .zv-todo-zeile .zv-todo-text {
+    grid-area: text;
+  }
+  .zv-todo-zeile .zv-btn {
+    grid-area: aktion;
+    justify-self: start;
+  }
+}
+
+.zv-heute-rand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+  min-width: 0;
+}
+.zv-rand-leer {
+  margin: 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+/* Zeitleiste: Punkt auf einer senkrechten Haarlinie. Der naechste Termin
+   ist koralle (Aufmerksamkeit), Vergangenes durchgestrichen und leiser. */
+.zv-zeitleiste li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 var(--zv-space-3) var(--zv-space-5);
+  border-left: 1px solid var(--zv-border-strong);
+  margin-left: 5px;
+}
+.zv-zeitleiste li:last-child {
+  border-left-color: transparent;
+}
+.zv-zeit-punkt {
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  border: 2px solid var(--zv-border-strong);
+}
+.zv-zeit-naechster .zv-zeit-punkt {
+  background: var(--zv-achtung);
+  border-color: var(--zv-achtung);
+}
+.zv-zeit-uhr {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-zeit-naechster .zv-zeit-uhr {
+  color: var(--zv-achtung-text);
+  font-weight: 500;
+}
+.zv-zeit-titel {
+  font-size: var(--zv-text-basis);
+  font-weight: var(--zv-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.zv-zeit-vorbei .zv-zeit-titel,
+.zv-zeit-vorbei .zv-zeit-uhr {
+  text-decoration: line-through;
+  color: var(--zv-text-muted);
+  font-weight: 400;
+}
+
+.zv-rand-liste li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-rand-nummer {
+  font-size: var(--zv-text-basis);
+  font-weight: 500;
+}

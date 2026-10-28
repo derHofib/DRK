@@ -317,6 +317,12 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       expect(res.body.zimmer).toEqual({ frei: 1, gesamt: 4, standorte: 2 });
     });
 
+    it("nennt das konkrete freie Zimmer (103 an Standort 1), nicht die belegten", async () => {
+      const res = await get(tokenBereichsleitung);
+      expect(res.body.freieZimmer).toHaveLength(1);
+      expect(res.body.freieZimmer[0]).toMatchObject({ nummer: "103", standortName: "Standort 1", freiePlaetze: 1 });
+    });
+
     it("zaehlt die HZL-Wochenuebersicht nur fuer woechentliche Klient:innen", async () => {
       const res = await get(tokenBereichsleitung);
       expect(res.body.hzlWoche).toEqual({ bezahlt: 1, gesamt: 2, isoJahr: jahr, isoWoche: woche });
@@ -376,6 +382,23 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
     it("sieht nur die Zimmer von Standort 1", async () => {
       const res = await get(tokenEinrichtungsleitungS1);
       expect(res.body.zimmer).toEqual({ frei: 1, gesamt: 3, standorte: 1 });
+    });
+
+    it("nennt als freies Zimmer nur Zimmer des eigenen Standorts", async () => {
+      // Zimmer 202 an Standort 2 wird nur hier frei angelegt: ohne ein freies
+      // Zimmer ausserhalb der Zuordnung koennte der Test nie rot werden.
+      const { rows } = await admin.query<{ id: string }>(
+        "INSERT INTO zimmer (mandant_id, standort_id, nummer) VALUES ($1, $2, '202') RETURNING id",
+        [mandantId, standort2Id]
+      );
+      try {
+        const res = await get(tokenEinrichtungsleitungS1);
+        expect(res.body.freieZimmer.map((z: { standortName: string }) => z.standortName)).toEqual(["Standort 1"]);
+        const alle = await get(tokenBereichsleitung);
+        expect(alle.body.freieZimmer.map((z: { nummer: string }) => z.nummer)).toEqual(["103", "202"]);
+      } finally {
+        await admin.query("DELETE FROM zimmer WHERE id = $1", [rows[0].id]);
+      }
     });
 
     it("sieht nur den woechentlichen Klienten von Standort 1 in der HZL-Uebersicht", async () => {

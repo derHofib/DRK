@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1;
+const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1 + 4;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -298,6 +298,12 @@ async function messePaare(page) {
       pruefe("Tag erledigt", q(".zv-pruef-tag-erledigt"), 4.5);
       pruefe("Tag Frist", q(".zv-pruef-tag-frist"), 4.5);
       pruefe("Tag achtung", q(".zv-pruef-tag-achtung"), 4.5);
+      // Heute: die echten Klassen, nicht Nachbauten -- eine umbenannte
+      // Klasse in app.css faellt hier sofort auf (Messung bricht ab).
+      pruefe("Heute: ueberfaellige Frist auf Flaeche", q(".zv-pruef-heute-frist"), 4.5);
+      pruefe("Heute: Lage-Folgezeile achtung auf Flaeche", q(".zv-pruef-heute-folge"), 4.5);
+      pruefe("Heute: naechster Termin (Uhrzeit)", q(".zv-pruef-heute-uhr"), 4.5);
+      pruefe("Heute: vergangener Termin (durchgestrichen)", q(".zv-pruef-heute-vorbei"), 4.5);
       pruefe("Eingabefeldrand auf Hintergrund", q(".zv-pruef-input-bg"), 3, "border");
       pruefe("Aktiver Menuepunkt (accent-strong auf accent-soft)", q(".zv-pruef-nav-aktiv"), 4.5);
       pruefe("Gedaempft auf ausgewaehlter Zeile", q(".zv-pruef-auswahl-tg"), 4.5);
@@ -386,6 +392,14 @@ ${["bg", "surface", "s2"].map((f) => `
   <span class="zv-pill zv-pill-erledigt zv-pruef-tag-erledigt">erledigt</span>
   <span class="zv-pill zv-pill-frist zv-pruef-tag-frist">endet in 37 T.</span>
   <span class="zv-pill zv-pill-achtung zv-pruef-tag-achtung">frei</span>
+  <div style="background:var(--zv-surface);padding:8px">
+    <span class="zv-todo-frist zv-todo-frist-achtung zv-mono zv-pruef-heute-frist">seit 3 Tagen</span>
+    <span class="zv-lage-folge zv-lage-folge-achtung zv-pruef-heute-folge">4 offen</span>
+  </div>
+  <ol class="zv-zeitleiste" style="background:var(--zv-bg);padding:8px">
+    <li class="zv-zeit-naechster"><span class="zv-zeit-uhr zv-mono zv-pruef-heute-uhr">14:00&ndash;15:00</span></li>
+    <li class="zv-zeit-vorbei"><span class="zv-zeit-titel zv-pruef-heute-vorbei">Vorbei</span></li>
+  </ol>
   <!-- Eigene Flaeche bewusst transparent: gemessen wird der Rand gegen den
        Seitenhintergrund AUSSERHALB des Felds, die haertere Seite. -->
   <div class="zv-pruef-input-bg" style="border:1px solid var(--zv-border-strong);height:8px"></div>
