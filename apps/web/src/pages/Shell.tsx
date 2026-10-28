@@ -45,7 +45,6 @@ import type { UebergabeStart } from "./HzlUebergabe";
 import { Befehl, Befehlspalette, zuletztLoeschen, zuletztMerken } from "../components/Befehlspalette";
 import { Tagesberichte } from "./Tagesberichte";
 import { Aufgaben } from "./Aufgaben";
-import { Schichtuebergabe, entwurfLoeschen } from "./Schichtuebergabe";
 import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
@@ -440,7 +439,6 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   const logout = useCallback(() => {
     clearToken();
     zuletztLoeschen();
-    entwurfLoeschen();
     onLoggedOut();
   }, [onLoggedOut]);
 
@@ -794,7 +792,6 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
-          {tab === "schichtuebergabe" && <Schichtuebergabe />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}

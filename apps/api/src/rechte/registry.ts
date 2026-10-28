@@ -86,8 +86,6 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "tagesberichte", aktion: "ansehen" },
   { modul: "tagesberichte", aktion: "anlegen" },
 
-  { modul: "schichtuebergabe", aktion: "ansehen" },
-  { modul: "schichtuebergabe", aktion: "schreiben" },
 
   // Heutiges ROLLEN_MIT_STANDORT_ANLEGEN/-BEARBEITEN (standort.service.ts).
   { modul: "standorte", aktion: "ansehen" },

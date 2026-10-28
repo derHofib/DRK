@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardDto, StandortDto, TerminDto } from "@zimmerakte/shared";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
-import { UebergabeKarten } from "../components/UebergabeKarten";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
@@ -510,8 +509,6 @@ export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
                 </div>
               </div>
 
-              <UebergabeKarten />
-
               {gruppen.length === 0 ? (
                 <Leerzustand
                   icon={ILeerAufgaben}
@@ -589,18 +586,6 @@ export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
                     })}
                   </ol>
                 )}
-              </section>
-
-              <section aria-label="Übergabe">
-                <div className="zv-abschnittskopf">
-                  <h3>Übergabe</h3>
-                  <button type="button" className="zv-link-btn" onClick={() => navigation.zu("schichtuebergabe")}>
-                    Öffnen
-                  </button>
-                </div>
-                <p className="zv-rand-leer">
-                  Ungelesene Übergaben stehen oben in „Zu erledigen“. Die Zusammenfassung der letzten Schicht folgt.
-                </p>
               </section>
 
               <section aria-label="Freie Zimmer">

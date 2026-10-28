@@ -701,8 +701,8 @@ function ChatLoeschfrist({
       <h3>Löschfrist für Chatnachrichten</h3>
       <p className="zv-sub">
         Nachrichten, Bilder und beantwortete Gesprächsanfragen werden nach dieser Frist endgültig gelöscht, für alle
-        Mitarbeitenden und Klient:innen von {mandant.name}. Was dokumentiert werden muss, gehört in die Akte oder die
-        Schichtübergabe, nicht in den Chat.
+        Mitarbeitenden und Klient:innen von {mandant.name}. Was dokumentiert werden muss, gehört in die Akte, nicht in
+        den Chat.
       </p>
 
       {fehler && (
