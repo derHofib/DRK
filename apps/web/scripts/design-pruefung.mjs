@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1 + 4 + 3;
+const ERWARTETE_PAARE = 41 + 3 * 7 + 8 + 1 + 4 + 3;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -271,11 +271,6 @@ async function messePaare(page) {
       pruefe("Palette: Fusszeile (muted)", q(".zv-pruef-pal-fuss"), 4.5);
       pruefe("Palette: Statuszeile (muted)", q(".zv-pruef-pal-status"), 4.5);
       pruefe("Belegnummer im Kassenbuch (muted)", q(".zv-pruef-beleg-nr"), 4.5);
-      pruefe("Uebergabe-Karte: Titel auf Surface", q(".zv-pruef-uk-titel"), 4.5);
-      pruefe("Uebergabe-Karte: Meta (muted)", q(".zv-pruef-uk-meta"), 4.5);
-      pruefe("Uebergabe-Karte: Punkttext", q(".zv-pruef-uk-text"), 4.5);
-      pruefe("Uebergabe-Karte: Pill Nachtrag (info)", q(".zv-pruef-uk-pill"), 4.5);
-      pruefe("Uebergabe-Karte: Aufgabe-Verweis (Link)", q(".zv-pruef-uk-link"), 4.5);
 
       // Redesign "ruhige Fachanwendung": neue Neutraltoene, Tags, Koralle.
       // Jeder Text-Token wird auf JEDER Flaeche gemessen, auf der er
@@ -415,15 +410,7 @@ ${["bg", "surface", "s2"].map((f) => `
   <div style="background:var(--zv-surface-3)">
     <span class="zv-pruef-hover-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
   </div>
-</div>
-<article class="zv-uebergabe-karte">
-  <h3 class="zv-pruef-uk-titel">Sp&auml;tdienst &middot; Haus Eins</h3>
-  <p class="zv-sub-inline zv-pruef-uk-meta">24.10. 21:12 &middot; von Leitung</p>
-  <ol class="zv-uebergabe-punkte"><li>
-    <div class="zv-uebergabe-punkt-text zv-pruef-uk-text"><span class="zv-pill zv-pill-info zv-pruef-uk-pill">Nachtrag</span> Heizung tropft</div>
-    <div class="zv-uebergabe-punkt-aktion"><button class="zv-link-btn zv-pruef-uk-link">Als Aufgabe anlegen</button></div>
-  </li></ol>
-</article>`;
+</div>`;
 
 async function main() {
   const browser = await starteBrowser();

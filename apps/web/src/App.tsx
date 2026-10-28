@@ -5,7 +5,6 @@ import { Login } from "./pages/Login";
 import { PasswortZuruecksetzen } from "./pages/PasswortZuruecksetzen";
 import { HzlUebergabe, UebergabeStart, uebergabeLesen, uebergabeMerken } from "./pages/HzlUebergabe";
 import { zuletztLoeschen } from "./components/Befehlspalette";
-import { entwurfLoeschen } from "./pages/Schichtuebergabe";
 import { Shell } from "./pages/Shell";
 import { KlientEinladung } from "./pages/klient/KlientEinladung";
 import { KlientEmailAendern } from "./pages/klient/KlientEmailAendern";
@@ -13,6 +12,18 @@ import { KlientShell } from "./pages/klient/KlientShell";
 
 /** Query-Parameter, die einen Link-Einstieg kennzeichnen; nach dem Einloesen werden sie aus der URL entfernt. */
 const LINK_PARAMETER = ["reset", "klient-einladung", "klient-email"];
+
+/**
+ * Die Schichtübergabe ist entfernt, ihr Entwurf kann aber noch im
+ * localStorage alter Geräte liegen -- Freitext, der Gesundheitsdaten
+ * enthalten kann. Früher wurde er beim Abmelden gelöscht; ohne diese Zeile
+ * bliebe er auf Geräten liegen, auf denen sich niemand mehr abmeldet.
+ */
+try {
+  localStorage.removeItem("zv-schichtuebergabe-entwurf");
+} catch {
+  // egal
+}
 
 function parameterEntfernen() {
   const url = new URL(window.location.href);
@@ -41,7 +52,6 @@ export function App() {
       setStartAlsKlient(warKlient);
       uebergabeMerken(null);
       zuletztLoeschen();
-      entwurfLoeschen();
       setUebergabe(null);
       setSitzungAbgelaufen(true);
       setAngemeldet(false);
