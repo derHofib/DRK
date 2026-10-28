@@ -350,7 +350,8 @@ export class BenutzerService {
    */
   async positionWechseln(
     zielBenutzerId: string,
-    positionId: string | null
+    positionIdEingabe: string | null,
+    accountTypId?: string
   ): Promise<{ id: string; positionen: BenutzerListEintrag["positionen"] }> {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("organigramm", "manage-permissions"))) {
@@ -364,6 +365,13 @@ export class BenutzerService {
       return await this.db.withTenant(async (client) => {
         const { rows: zielRows } = await client.query("SELECT id FROM benutzer WHERE id = $1", [zielBenutzerId]);
         if (zielRows.length === 0) throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
+
+        // Ein Rang ist der Account-Typ, nicht eine schon vorhandene Position:
+        // sonst waeren selbst angelegte Typen ohne Position nicht waehlbar.
+        let positionId = positionIdEingabe;
+        if (accountTypId !== undefined) {
+          positionId = await this.positionFuerAccountTyp(client, accountTypId, ctx.mandantId, ctx.benutzerId);
+        }
 
         if (positionId !== null) {
           const { rows: posRows } = await client.query<{ aktiv: boolean }>(
@@ -395,14 +403,38 @@ export class BenutzerService {
         const zielRang = positionId === null ? null : await this.rangVon(client, positionId);
         const behalten = offen.find((b) => b.laeuft && (b.position_id === positionId || b.rang === zielRang));
 
+        const beenden = offen.filter((b) => b !== behalten && !(zielRang !== null && b.rang === zielRang && b.laeuft)).map((b) => b.id);
         if (positionId !== null && !behalten) {
-          await client.query(
+          const { rows: neu } = await client.query<{ id: string }>(
             `INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id, erstellt_von)
-             VALUES ($1, $2, $3, $4)`,
+             VALUES ($1, $2, $3, $4) RETURNING id`,
             [ctx.mandantId, positionId, zielBenutzerId, ctx.benutzerId]
           );
+          // Die Standorte der Person ziehen mit um: ihre bisherigen Positionen
+          // waren ihr Standortzugang (je Einheit eine Position). Ohne
+          // Uebernahme haette sie nach dem Rangwechsel nur noch den Anker der
+          // neuen Position und still fuenf Standorte verloren.
+          if (beenden.length > 0) {
+            await client.query(
+              `INSERT INTO org_position_besetzung_einheit (mandant_id, besetzung_id, org_unit_id)
+               SELECT $1, $2, u.id
+               FROM (
+                 SELECT p.org_unit_id AS id
+                   FROM org_position_besetzung b JOIN org_position p ON p.id = b.position_id
+                  WHERE b.id = ANY($3) AND p.typ = 'linie'
+                 UNION
+                 SELECT w.org_unit_id
+                   FROM org_position_besetzung b JOIN org_position_weitere_einheit w ON w.position_id = b.position_id
+                  WHERE b.id = ANY($3)
+                 UNION
+                 SELECT e.org_unit_id FROM org_position_besetzung_einheit e WHERE e.besetzung_id = ANY($3)
+               ) u
+               WHERE u.id <> (SELECT org_unit_id FROM org_position WHERE id = $4)
+                 AND (SELECT typ FROM org_position WHERE id = $4) = 'linie'`,
+              [ctx.mandantId, neu[0].id, beenden, positionId]
+            );
+          }
         }
-        const beenden = offen.filter((b) => b !== behalten && !(zielRang !== null && b.rang === zielRang && b.laeuft)).map((b) => b.id);
         if (beenden.length > 0) {
           await client.query(
             `UPDATE org_position_besetzung SET gueltig_bis = GREATEST(gueltig_ab, CURRENT_DATE) - 1
@@ -432,6 +464,50 @@ export class BenutzerService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Eine vorhandene aktive Linienposition dieses Account-Typs, sonst wird sie
+   * an der Traeger-Wurzel angelegt (Titel = Typname). Die Wurzel ist als
+   * Anker bewusst neutral: Einrichtungs-Scopes ergeben dort nichts, die
+   * Standorte kommen allein aus den Einheiten der Besetzung (fail closed).
+   */
+  private async positionFuerAccountTyp(
+    client: PoolClient,
+    accountTypId: string,
+    mandantId: string,
+    benutzerId: string
+  ): Promise<string> {
+    const { rows: typRows } = await client.query<{ name: string }>("SELECT name FROM account_typ WHERE id = $1", [
+      accountTypId,
+    ]);
+    if (typRows.length === 0) throw new NotFoundException("Account-Typ nicht gefunden.");
+
+    const { rows: vorhanden } = await client.query<{ id: string }>(
+      `SELECT id FROM org_position
+       WHERE account_typ_id = $1 AND aktiv AND typ = 'linie' AND NOT ist_geplant
+       ORDER BY (titel = $2) DESC, erstellt_am
+       LIMIT 1`,
+      [accountTypId, typRows[0].name]
+    );
+    if (vorhanden.length > 0) return vorhanden[0].id;
+
+    const { rows: neu } = await client.query<{ id: string }>(
+      `INSERT INTO org_position (mandant_id, org_unit_id, titel, account_typ_id, soll_besetzung, erstellt_von)
+       SELECT $1, ou.id, $2, $3, 1, $4 FROM org_unit ou WHERE ou.typ = 'traeger'
+       RETURNING id`,
+      [mandantId, typRows[0].name, accountTypId, benutzerId]
+    );
+    if (neu.length === 0) throw new ConflictException("Keine Trägerwurzel im Organigramm gefunden.");
+    await this.audit.protokollieren(client, {
+      modul: "organigramm",
+      aktion: "position.anlegen",
+      objektTyp: "org_position",
+      objektId: neu[0].id,
+      vorher: null,
+      nachher: { titel: typRows[0].name, accountTypId },
+    });
+    return neu[0].id;
   }
 
   private async rangVon(client: PoolClient, positionId: string): Promise<string | null> {

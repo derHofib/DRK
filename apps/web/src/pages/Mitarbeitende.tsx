@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, PositionDto, StandortDto } from "@zimmerakte/shared";
+import type { AccountTypDto, BenutzerListEintragDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
@@ -23,24 +23,19 @@ export function Mitarbeitende() {
   const [statusWirdGespeichert, setStatusWirdGespeichert] = useState(false);
 
   const [rangZiel, setRangZiel] = useState<BenutzerListEintragDto | null>(null);
-  const [rangPositionen, setRangPositionen] = useState<PositionDto[]>([]);
+  const [rangTypen, setRangTypen] = useState<AccountTypDto[]>([]);
   const [rangFehler, setRangFehler] = useState<string | null>(null);
   const [rangWirdGespeichert, setRangWirdGespeichert] = useState(false);
 
-  // Dieselbe Position gibt es je Organisationseinheit; zur Auswahl zaehlt der
-  // Rang, nicht die Einheit -- jeder Rang erscheint einmal, die ID ist nur sein
-  // Vertreter (der Server erkennt "derselbe Rang" und laesst vorhandene
-  // Besetzungen dann unberuehrt).
-  const rangOptionen = rangPositionen.filter(
-    (p, i) => rangPositionen.findIndex((q) => q.titel === p.titel && q.accountTypId === p.accountTypId) === i
-  );
-
+  // Zur Auswahl steht jeder Account-Typ, nicht nur einer mit schon vorhandener
+  // Position: ein selbst angelegter Typ (z. B. "Bereichsleiter") hat noch keine,
+  // und der Server legt sie beim ersten Zuweisen an.
   // Ob die Person das darf, entscheidet allein der Server (403 landet im
   // Dialog) -- das Frontend kennt die Rechte der angemeldeten Person nicht.
   async function rangOeffnen(b: BenutzerListEintragDto) {
     setFehler(null);
     try {
-      setRangPositionen((await api.organigrammPositionen()).filter((p) => p.aktiv));
+      setRangTypen(await api.organigrammAccountTypen());
       setRangFehler(null);
       setRangZiel(b);
     } catch (err) {
@@ -51,7 +46,7 @@ export function Mitarbeitende() {
   async function rangSpeichern(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!rangZiel) return;
-    const wert = String(new FormData(e.currentTarget).get("positionId"));
+    const wert = String(new FormData(e.currentTarget).get("accountTypId"));
     setRangFehler(null);
     setRangWirdGespeichert(true);
     try {
@@ -356,13 +351,13 @@ export function Mitarbeitende() {
               <label htmlFor="rang-position">Position</label>
               <select
                 id="rang-position"
-                name="positionId"
-                defaultValue={rangOptionen.find((p) => p.titel === rangZiel.positionen[0]?.titel)?.id ?? ""}
+                name="accountTypId"
+                defaultValue={rangTypen.find((t) => t.name === rangZiel.positionen[0]?.accountTypName)?.id ?? ""}
               >
                 <option value="">Keine Position</option>
-                {rangOptionen.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.titel}
+                {rangTypen.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
                   </option>
                 ))}
               </select>

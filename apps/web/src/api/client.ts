@@ -390,10 +390,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ aktiv }),
     }),
-  benutzerPositionWechseln: (benutzerId: string, positionId: string | null) =>
+  // Ein Rang ist ein Account-Typ (accountTypId); null entzieht jede Position.
+  benutzerPositionWechseln: (benutzerId: string, accountTypId: string | null) =>
     request<{ id: string }>(`/benutzer/${benutzerId}/position`, {
       method: "PUT",
-      body: JSON.stringify({ positionId }),
+      body: JSON.stringify(accountTypId === null ? { positionId: null } : { accountTypId }),
     }),
   benutzerStandorteSetzen: (benutzerId: string, standortIds: string[]) =>
     request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),

@@ -10,8 +10,12 @@ interface AktivePosition {
   /**
    * Zusaetzliche Organisationseinheiten einer Linienposition (Migration
    * 0047, org_position_weitere_einheit -- z.B. eine Einrichtungsleitung mit
-   * zwei Einrichtungen). Fuer Stabsstellen immer leer: deren Scope kommt
-   * ausschliesslich aus org_position_stabsstelle_scope, s. orgUnitIdsFuerScope().
+   * zwei Einrichtungen) UND die Einheiten der einzelnen Besetzung (Migration
+   * 0066, org_position_besetzung_einheit -- die Standorte einer Person auf
+   * einer geteilten Rang-Position). Die zweite Quelle gilt nur fuer die
+   * Besetzung dieser Person, nie fuer andere auf derselben Position.
+   * Fuer Stabsstellen immer leer: deren Scope kommt ausschliesslich aus
+   * org_position_stabsstelle_scope, s. orgUnitIdsFuerScope().
    */
   weitereOrgUnitIds: string[];
   typ: "linie" | "stabsstelle";
@@ -132,6 +136,9 @@ export class RechteService {
       `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff,
               COALESCE(
                 (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
+                '{}'
+              ) || COALESCE(
+                (SELECT array_agg(e.org_unit_id) FROM org_position_besetzung_einheit e WHERE e.besetzung_id = b.id),
                 '{}'
               ) AS weitere_org_unit_ids
        FROM org_position_besetzung b
