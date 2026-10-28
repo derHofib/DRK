@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, PositionDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, OrgUnitDto, PositionDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
@@ -24,6 +24,7 @@ export function Mitarbeitende() {
 
   const [rangZiel, setRangZiel] = useState<BenutzerListEintragDto | null>(null);
   const [rangPositionen, setRangPositionen] = useState<PositionDto[]>([]);
+  const [rangEinheiten, setRangEinheiten] = useState<OrgUnitDto[]>([]);
   const [rangFehler, setRangFehler] = useState<string | null>(null);
   const [rangWirdGespeichert, setRangWirdGespeichert] = useState(false);
 
@@ -32,7 +33,9 @@ export function Mitarbeitende() {
   async function rangOeffnen(b: BenutzerListEintragDto) {
     setFehler(null);
     try {
-      setRangPositionen((await api.organigrammPositionen()).filter((p) => p.aktiv));
+      const [positionen, einheiten] = await Promise.all([api.organigrammPositionen(), api.organigrammOrgUnits()]);
+      setRangPositionen(positionen.filter((p) => p.aktiv));
+      setRangEinheiten(einheiten);
       setRangFehler(null);
       setRangZiel(b);
     } catch (err) {
@@ -264,8 +267,8 @@ export function Mitarbeitende() {
                   </span>
                 ) : (
                   b.positionen.map((p, i) => (
-                    <span key={i} className="zv-pill" style={{ marginRight: 4 }} title={`${p.titel} (${p.accountTypName})`}>
-                      <span className="zv-pill-text">{p.titel}</span>
+                    <span key={i} className="zv-pill" style={{ marginRight: 4 }} title={`${p.titel} · ${p.einheitName} (${p.accountTypName})`}>
+                      <span className="zv-pill-text">{p.titel} · {p.einheitName}</span>
                     </span>
                   ))
                 )}
@@ -352,11 +355,20 @@ export function Mitarbeitende() {
                 defaultValue={rangZiel.positionen[0]?.positionId ?? ""}
               >
                 <option value="">Keine Position</option>
-                {rangPositionen.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.titel}
-                  </option>
-                ))}
+                {/* Dieselbe Position gibt es je Einheit; die Einheit als Gruppe macht jede Option eindeutig. */}
+                {rangEinheiten
+                  .filter((e) => rangPositionen.some((p) => p.orgUnitId === e.id))
+                  .map((e) => (
+                    <optgroup key={e.id} label={e.name}>
+                      {rangPositionen
+                        .filter((p) => p.orgUnitId === e.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.titel}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
               </select>
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={rangWirdGespeichert} style={{ marginTop: 20 }}>

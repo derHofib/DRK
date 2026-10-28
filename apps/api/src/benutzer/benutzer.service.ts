@@ -21,7 +21,7 @@ export interface BenutzerListEintrag {
   // Ersetzt die frueher feste "rolle" -- Rechte haengen seit der
   // Entwickler-Accounttyp-Umstellung ausschliesslich an Organigramm-
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
-  positionen: { positionId: string; titel: string; accountTypName: string }[];
+  positionen: { positionId: string; titel: string; accountTypName: string; einheitName: string }[];
   aktiv: boolean;
   standortIds: string[];
 }
@@ -55,12 +55,12 @@ export class BenutzerService {
         name: string;
         aktiv: boolean;
         standort_ids: string[];
-        positionen: { positionId: string; titel: string; accountTypName: string }[];
+        positionen: { positionId: string; titel: string; accountTypName: string; einheitName: string }[];
       }>(
         `SELECT b.id, b.email, b.name, b.aktiv,
                 COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
                 COALESCE(
-                  json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'accountTypName', a.name))
+                  json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'einheitName', ou.name, 'accountTypName', a.name))
                     FILTER (WHERE p.id IS NOT NULL),
                   '[]'
                 ) AS positionen
@@ -70,6 +70,7 @@ export class BenutzerService {
                 AND pb.gueltig_ab <= CURRENT_DATE
                 AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
          LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
+         LEFT JOIN org_unit ou ON ou.id = p.org_unit_id
          LEFT JOIN account_typ a ON a.id = p.account_typ_id
          GROUP BY b.id, b.email, b.name, b.aktiv
          ORDER BY b.name`
@@ -414,18 +415,19 @@ export class BenutzerService {
   }
 
   private async ladePositionen(client: PoolClient, benutzerId: string): Promise<BenutzerListEintrag["positionen"]> {
-    const { rows } = await client.query<{ position_id: string; titel: string; account_typ_name: string }>(
-      `SELECT p.id AS position_id, p.titel, a.name AS account_typ_name
+    const { rows } = await client.query<{ position_id: string; titel: string; account_typ_name: string; einheit_name: string }>(
+      `SELECT p.id AS position_id, p.titel, a.name AS account_typ_name, ou.name AS einheit_name
        FROM org_position_besetzung pb
        JOIN org_position p ON p.id = pb.position_id AND p.aktiv
        JOIN account_typ a ON a.id = p.account_typ_id
+       JOIN org_unit ou ON ou.id = p.org_unit_id
        WHERE pb.benutzer_id = $1
          AND pb.gueltig_ab <= CURRENT_DATE
          AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
        ORDER BY p.titel`,
       [benutzerId]
     );
-    return rows.map((r) => ({ positionId: r.position_id, titel: r.titel, accountTypName: r.account_typ_name }));
+    return rows.map((r) => ({ positionId: r.position_id, titel: r.titel, accountTypName: r.account_typ_name, einheitName: r.einheit_name }));
   }
 
 }

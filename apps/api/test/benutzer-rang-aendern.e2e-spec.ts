@@ -174,6 +174,9 @@ describe("Benutzer: Rang aendern", () => {
     const res = await put(tokenGfA, mitarbeiterId, { positionId: posLeitung });
     expect(res.status).toBe(200);
     expect(res.body.positionen.map((p: { positionId: string }) => p.positionId)).toEqual([posLeitung]);
+    // Dieselbe Position gibt es je Einheit -- die Einheit muss mitkommen,
+    // sonst sind zwei "Einrichtungsleitung" in der Oberflaeche nicht zu unterscheiden.
+    expect(res.body.positionen[0].einheitName).toEqual(expect.any(String));
     expect(await laufendePositionen(mitarbeiterId)).toEqual([posLeitung]);
 
     // Dasselbe Token wie vorher: Rechte werden je Anfrage aus den
