@@ -27,6 +27,14 @@ export function Mitarbeitende() {
   const [rangFehler, setRangFehler] = useState<string | null>(null);
   const [rangWirdGespeichert, setRangWirdGespeichert] = useState(false);
 
+  // Dieselbe Position gibt es je Organisationseinheit; zur Auswahl zaehlt der
+  // Rang, nicht die Einheit -- jeder Rang erscheint einmal, die ID ist nur sein
+  // Vertreter (der Server erkennt "derselbe Rang" und laesst vorhandene
+  // Besetzungen dann unberuehrt).
+  const rangOptionen = rangPositionen.filter(
+    (p, i) => rangPositionen.findIndex((q) => q.titel === p.titel && q.accountTypId === p.accountTypId) === i
+  );
+
   // Ob die Person das darf, entscheidet allein der Server (403 landet im
   // Dialog) -- das Frontend kennt die Rechte der angemeldeten Person nicht.
   async function rangOeffnen(b: BenutzerListEintragDto) {
@@ -349,10 +357,10 @@ export function Mitarbeitende() {
               <select
                 id="rang-position"
                 name="positionId"
-                defaultValue={rangZiel.positionen[0]?.positionId ?? ""}
+                defaultValue={rangOptionen.find((p) => p.titel === rangZiel.positionen[0]?.titel)?.id ?? ""}
               >
                 <option value="">Keine Position</option>
-                {rangPositionen.map((p) => (
+                {rangOptionen.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.titel}
                   </option>
