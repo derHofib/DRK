@@ -1051,8 +1051,13 @@
   display: flex;
   gap: var(--zv-space-1);
   margin-bottom: var(--zv-space-5);
-  border-bottom: 1px solid var(--zv-border);
+  /* Haarlinie als inset-Schatten statt border-bottom, und die Knoepfe ohne
+     negativen Rand: der alte -1px-Ueberstand ueber die Border hinaus machte
+     den Container (overflow-x:auto erzwingt overflow-y:auto) vertikal
+     scrollbar -- genau der zweite Balken, der dort nicht existieren darf. */
+  box-shadow: inset 0 -1px 0 var(--zv-border);
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1061,8 +1066,6 @@
   align-items: center;
   gap: var(--zv-space-2);
   flex-shrink: 0;
-  /* Der Strich ueberdeckt die Linie des Containers (margin-bottom: -1px). */
-  margin-bottom: -1px;
   padding: var(--zv-space-3);
   min-height: 44px;
   background: none;
@@ -1090,6 +1093,25 @@
   font-size: var(--zv-text-meta);
   font-weight: 400;
   color: var(--zv-text-gedaempft);
+}
+
+/* Schmale, zurueckhaltende Scrollbalken app-weit statt der groben
+   System-Balken (Tab-Leisten, Tabellen, Zeitleiste). Farbe nur ueber Tokens;
+   der Daumen wird erst beim Ueberfahren kraeftiger. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--zv-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
 }
 
 /* ==================================================================
