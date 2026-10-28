@@ -156,7 +156,9 @@ export function Vertretung() {
       </div>
 
       {delegationen.length === 0 && !fehler && (
-        <Leerzustand icon={ILeerVertretung}>Noch keine Vertretung beantragt oder erhalten.</Leerzustand>
+        <Leerzustand icon={ILeerVertretung} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={neuOeffnen}>Vertretung beantragen</button>}>
+          Noch keine Vertretung beantragt oder erhalten.
+        </Leerzustand>
       )}
 
       {delegationen.length > 0 && (

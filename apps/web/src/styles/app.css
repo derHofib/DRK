@@ -17,23 +17,18 @@
 }
 
 /*
- * Pastellschimmer hinter der Anmeldekarte -- die einzige Stelle, an der die
- * Markenfarbe grossflaechig auftritt. Bewusst nur auf .zv-shell (Login) und
- * nicht auf .zv-shell-app: hinter Tabellen und Formularen waere das Unruhe
- * ohne Nutzen.
+ * Frueher lag hier ein Farbverlauf in der Markenfarbe hinter der Anmeldekarte.
+ * Entfernt: ruhige, sachliche Oberflaeche auch auf der Anmeldeseite -- die
+ * Marke traegt das Zeichen in der Karte, nicht eine Flaeche dahinter.
  */
-.zv-shell::before {
-  content: "";
-  position: absolute;
-  inset: -30% -10% auto -10%;
-  height: 70%;
-  background: radial-gradient(
-    ellipse 60% 60% at 50% 40%,
-    var(--zv-accent-vivid) 0%,
-    transparent 70%
-  );
-  opacity: 0.16;
-  pointer-events: none;
+.zv-shell > .zv-card {
+  width: min(100% - var(--zv-space-5), 400px);
+  box-shadow: none;
+}
+.zv-login-slogan {
+  margin: 0 0 var(--zv-space-4);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
 }
 
 .zv-content {
@@ -1614,7 +1609,7 @@
   gap: var(--zv-space-2);
   padding: 7px var(--zv-space-3);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--zv-radius-s);
   background: transparent;
   color: var(--zv-text-muted);
   font-size: var(--zv-text-s);
@@ -1666,7 +1661,10 @@
   border-color: var(--zv-text);
 }
 
-/* Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
+/* Bewusst Literalwerte (einzige Ausnahme von Regel 7 in dieser Datei): Die
+   Farbfelder zeigen beliebige, vom Nutzer gewaehlte Toene -- der Haken darf
+   deshalb von keinem Theme-Token abhaengen, sonst wuerde er auf manchem Feld
+   unsichtbar. Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
    Deshalb ein dunkler Haken mit heller Aura statt reinem Weiss. */
 .zv-swatch svg {
   color: oklch(0.25 0 0);
@@ -4092,7 +4090,7 @@ li:last-child > .zv-kontakt-zeile,
 .zv-palette mark {
   background: var(--zv-accent-soft-strong);
   color: inherit;
-  border-radius: 2px;
+  border-radius: var(--zv-radius-s);
   padding: 0 1px;
 }
 

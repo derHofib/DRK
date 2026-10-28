@@ -275,7 +275,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
             )}
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Klient</label>
+                <label>Klient:in</label>
                 <select key={klienten.length} name="klientId" required autoFocus defaultValue={startKlientId ?? ""}>
                   <option value="" disabled>
                     Bitte wählen
@@ -315,11 +315,27 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
 
       {berichte.length === 0 ? (
-        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte erfasst.</Leerzustand>
+        <Leerzustand
+          icon={ILeerTagesberichte}
+          aktion={
+            <button
+              type="button"
+              className="zv-btn zv-btn-sekundaer"
+              onClick={() => {
+                setFormFehler(null);
+                setFormularOffen(true);
+              }}
+            >
+              Tagesbericht schreiben
+            </button>
+          }
+        >
+          Noch keine Tagesberichte erfasst.
+        </Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.1fr 1fr 2.6fr 1.5fr 1.5fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
-            <span>Klient</span>
+            <span>Klient:in</span>
             <span>Datum</span>
             <span>Bericht</span>
             <span>Tags</span>

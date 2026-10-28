@@ -194,7 +194,9 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
       </div>
 
       {listeMitTerminen.length === 0 ? (
-        <Leerzustand icon={ILeerKalender}>Keine Termine in diesem Zeitraum.</Leerzustand>
+        <Leerzustand icon={ILeerKalender} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setNeuOffen(true)}>Termin anlegen</button>}>
+          Keine Termine in diesem Zeitraum.
+        </Leerzustand>
       ) : (
         listeMitTerminen.map((tag) => (
           <div key={tag} className="zv-kal-gruppe">

@@ -105,7 +105,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setAnonymisierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht anonymisiert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht anonymisiert werden.");
     } finally {
       setWirdAnonymisiert(false);
     }
@@ -119,7 +119,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setArchivierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht archiviert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht archiviert werden.");
     } finally {
       setWirdArchiviert(false);
     }
@@ -133,7 +133,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setEntarchivierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht entarchiviert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht entarchiviert werden.");
     } finally {
       setWirdArchiviert(false);
     }
@@ -266,7 +266,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       )}
 
       {anonymisierenOffen && (
-        <Modal titel="Klient anonymisieren" onClose={() => setAnonymisierenOffen(false)}>
+        <Modal titel="Klient:in anonymisieren" onClose={() => setAnonymisierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Name und Geburtsdatum dieses Klienten werden dauerhaft überschrieben (Recht auf Löschung, Art. 17
             DSGVO). Aktenzeichen, Amt sowie Kassenbuch- und Rechnungshistorie bleiben als Belege erhalten. Diese
@@ -274,13 +274,13 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           </p>
           <button className="zv-btn zv-btn-gefahr zv-btn-block" onClick={anonymisieren} disabled={wirdAnonymisiert}>
             <ILoeschen />
-            {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient jetzt anonymisieren"}
+            {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient:in jetzt anonymisieren"}
           </button>
         </Modal>
       )}
 
       {archivierenOffen && (
-        <Modal titel="Klient archivieren" onClose={() => setArchivierenOffen(false)}>
+        <Modal titel="Klient:in archivieren" onClose={() => setArchivierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Es wird ein vollständiger PDF-Aktenauszug erzeugt (Stammdaten, Kontakte, Unterbringungshistorie,
             Kassenbuch, Kostenübernahmen, Rechnungen, Tagesberichte samt Anhängen) und dauerhaft gespeichert. Der
@@ -290,20 +290,20 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           </p>
           <button className="zv-btn zv-btn-block" onClick={archivieren} disabled={wirdArchiviert}>
             <IArchivieren />
-            {wirdArchiviert ? "Wird archiviert…" : "Klient jetzt archivieren"}
+            {wirdArchiviert ? "Wird archiviert…" : "Klient:in jetzt archivieren"}
           </button>
         </Modal>
       )}
 
       {entarchivierenOffen && (
-        <Modal titel="Klient entarchivieren" onClose={() => setEntarchivierenOffen(false)}>
+        <Modal titel="Klient:in entarchivieren" onClose={() => setEntarchivierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Der Klient ist danach wieder normal bearbeitbar und erscheint wieder in der aktiven Klientenliste. Die
             bereits erzeugten Aktenauszüge bleiben unverändert erhalten.
           </p>
           <button className="zv-btn zv-btn-block" onClick={entarchivieren} disabled={wirdArchiviert}>
             <IEntarchivieren />
-            {wirdArchiviert ? "Wird entarchiviert…" : "Klient jetzt entarchivieren"}
+            {wirdArchiviert ? "Wird entarchiviert…" : "Klient:in jetzt entarchivieren"}
           </button>
         </Modal>
       )}
@@ -480,7 +480,7 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
       setWartelisteOffen(false);
       onGeaendert();
     } catch (err) {
-      setFormFehler(err instanceof Error ? err.message : "Klient konnte nicht auf die Warteliste gesetzt werden.");
+      setFormFehler(err instanceof Error ? err.message : "Klient:in konnte nicht auf die Warteliste gesetzt werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -1743,7 +1743,7 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
         </div>
       )}
       {buchungen.length === 0 ? (
-        <Leerzustand icon={ILeerKassenbuch}>Keine Kassenbuch-Einträge für diesen Klienten.</Leerzustand>
+        <Leerzustand icon={ILeerKassenbuch}>Keine Kassenbuch-Einträge für diese Klient:in.</Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.2fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
@@ -1937,7 +1937,7 @@ function TagesberichteTab({
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
 
       {berichte.length === 0 ? (
-        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diesen Klienten erfasst.</Leerzustand>
+        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diese Klient:in erfasst.</Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "0.9fr 2.6fr 1.5fr 1.5fr" } as CSSProperties}>
           <div className="zv-liste-kopf">

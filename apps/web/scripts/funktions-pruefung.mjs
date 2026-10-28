@@ -278,6 +278,17 @@ if (laufe(4)) {
   const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page2 = await ctx2.newPage();
   await anmelden(page2, ANDERE);
+  // Die Markenfarbe kommt per eigener Anfrage NACH dem ersten Rendern der
+  // Shell; sofortiges Lesen misst den Standardwert. Warten, bis der erwartete
+  // Farbton ankommt -- bleibt er aus, laeuft das Warten ab und die Aussage
+  // unten wird trotzdem falsch (kein Freibrief).
+  await page2
+    .waitForFunction(
+      (soll) => Math.abs(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--zv-accent-h")) - parseFloat(soll)) < 1,
+      erwarteterFarbton,
+      { timeout: 8000 },
+    )
+    .catch(() => {});
   const andererNutzer = await page2.evaluate(() => {
     const b = document.querySelector(".zv-topbar .zv-btn");
     const c = document.createElement("canvas"); c.width = c.height = 1;

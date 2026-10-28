@@ -2970,6 +2970,78 @@ Sendesperre blieb nach dem ersten Offline-Speichern stehen, bis neu geladen
 wurde (siehe Kommentar an `uebertragen()`). Gesamtsuite 639/639;
 `design-pruefung.mjs` alle Paare über der Schwelle.
 
+### Nachtrag: Redesign „ruhig und dicht" (Schritte 0.1–0.6)
+
+Sichtbare und strukturelle Überarbeitung der Oberfläche, ohne neue
+Fachfunktion. Die Leitlinien, an denen sich jede Entscheidung messen lässt:
+
+- **Neutrale Fläche.** Struktur durch Haarlinien, Gruppenlabels und Typografie,
+  nicht durch Schatten, Verläufe oder farbige Karten.
+- **Akzent nur für Handlung** (primärer Knopf, aktiver Menüpunkt, Links);
+  **Koralle nur für Aufmerksamkeit** (heute, überfällig, offen, frei) —
+  nie dekorativ, und unabhängig von der gewählten Akzentfarbe.
+- **Zahlen in IBM Plex Mono** mit tabellarischen Ziffern (Beträge, Daten,
+  Zimmer- und Belegnummern); UI in Figtree, Fließtext in Source Sans 3.
+- **Jede Seite beantwortet zuerst „Was habe ich jetzt zu tun?"** (Heute:
+  eine Liste statt neun Kacheln).
+
+**Navigation.** Die Seitenleiste hat drei Gruppen — *Arbeit* (Heute,
+Nachrichten, Kalender, Aufgaben), *Menschen* (Klienten, Mitarbeitende) und
+*Haus* (Belegung, Tagesberichte, Kassenbuch) — plus Einstellungen am Fuß.
+Die Reihenfolge ist **eine flache Liste pro Gerät** (`localStorage`,
+`zimmerakte_menu_reihenfolge`) und wird beim Umordnen nur **innerhalb der
+Gruppe** verändert. Die Tab-IDs (`dashboard`, `standorte`, `standort:<id>`)
+blieben absichtlich gleich: Deep-Links und die Prüfskripte hängen daran,
+auch wenn „Dashboard" jetzt „Heute" heißt. Standorte sind keine Unterpunkte
+der Seitenleiste mehr, sondern **Reiter unter dem Seitenkopf**
+(`StandortReiter`), weil der Standort ein Filter der Seite ist, kein Ziel.
+Die mobile Leiste ist fest: Heute, Klienten, Nachrichten, Bericht, Mehr.
+
+**Weitere Entscheidungen, die nicht offensichtlich sind:**
+
+- *Heute* zeigt Einträge ohne feste Frist (Storno, Rechnungen, HZL) unter
+  „Diese Woche", nicht unter „Heute fällig" — sonst wäre die erste Gruppe
+  täglich voll mit Dingen, die nicht heute dran sind.
+- Die *Belegungszeitleiste* hat eine **feste Breite je Tag**, kein Prozent
+  des Containers: so bleiben Balken auf dem Handy lesbar, und der Inhalt
+  scrollt im eigenen Container statt die Seite aufzureißen.
+- Das *Kassenbuch-Journal* ist eine echte Tabelle, deren **Wrapper** scrollt
+  (nicht die Tabelle, siehe „Fallstricke" in CLAUDE.md zu `.zv-table`), damit
+  der Tabellenkopf klebt. Der Laufsaldo wird über die **ungefilterte** Menge
+  gerechnet — ein Saldo, der sich mit dem Filter ändert, wäre nicht der
+  Kassenstand. Storno ist im Datenmodell ein Flag an der Originalbuchung
+  (keine Gegenbuchung); die Zeile bleibt sichtbar, durchgestrichen.
+- Die *Klientenakte* hat Reiter Überblick / Tagesberichte / Kassenbuch /
+  Kostenübernahmen / Rechnungen / Stammdaten / Zugang & Freigaben. Termine
+  und Dokumente gibt es als Reiter nicht, weil es pro Klient:in keine
+  Datenquelle dafür gibt.
+
+**Prüfskripte dazu** (`apps/web/scripts/`): `design-pruefung.mjs` (Kontrast,
+jetzt auch mit den Klassen von Heute, Zeitleiste und Journal),
+`ueberlauf-pruefung.mjs` (kein horizontaler Seiten-Scroll in allen
+Hauptansichten bei 390 und 1440 px, hell und dunkel, bricht bei zu wenigen
+Messungen ab) und `screenshots.mjs` (erzeugt `design-sources/screenshots`
+neu). Achtung beim Wiederholen: `funktions-pruefung.mjs` ändert die
+Akzentfarbe des Mandanten und stellt sie bei einem Abbruch nicht zurück; die
+Login-Drosselung greift nach vielen Anmeldungen kurz hintereinander.
+
+**Bekannte Abweichungen vom Redesign** (bewusst nicht in diesem Schritt):
+
+- „Klienten" bleibt im Menü, in Dateinamen und in älteren Texten; umgestellt
+  auf „Klient:in/Klient:innen" sind die neuen und geänderten Texte.
+- Einzelne Abstände in `app.css` sind Literalwerte (2–3 px Haarlinien-
+  Versätze, 9/11 px Eingabefeld-Innenabstand) statt Tokens; die Farbfelder
+  der Akzentwahl (`.zv-swatch`) haben begründete Farbliterale.
+- Organigramm, Mitarbeitende, Vertretung, Nachrichten und Klientenportal
+  wurden nur auf Tokenverwendung geprüft (keine Farb- oder Radiusliterale
+  außerhalb der Ausnahmen) und haben noch ihre alten Listen-/Kartenformen;
+  neu gestaltet sind sie nicht.
+- `kassenbuch-pruefung.mjs` erwartet die HZL-Box noch auf der Kassenbuch-Seite
+  (veraltet seit dem HZL-Unterpunkt); `befehlspalette-`, `seitenpanel-` und
+  `aufgaben-pruefung.mjs` brauchen Seed-Daten, die es lokal nicht gibt.
+- In `funktions-pruefung.mjs` ist die Aussage „Bezugsbetreuung bekommt den
+  Farbabschnitt gar nicht erst angeboten" seit dem Rechte-Umbau veraltet.
+
 ## Lokale Entwicklung
 
 Voraussetzungen: Node ≥ 20, pnpm, eine PostgreSQL-16-Instanz (per Docker

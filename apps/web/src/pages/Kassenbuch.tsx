@@ -523,7 +523,7 @@ export function Kassenbuch({
                   ? `Wöchentliche Auszahlungen am Standort ${standortName}`
                   : "Wöchentliche Auszahlungen (Hilfe zum Lebensunterhalt)";
               }
-              return standortName ? `Buchungen am Standort ${standortName}` : "Alle Buchungen aller Klienten";
+              return standortName ? `Buchungen am Standort ${standortName}` : "Alle Buchungen aller Klient:innen";
             })()}
           </p>
         </div>
@@ -584,7 +584,7 @@ export function Kassenbuch({
             <div className="zv-field-row">
               {ziel === "klient" ? (
                 <div className="zv-field">
-                  <label>Klient</label>
+                  <label>Klient:in</label>
                   <select name="klientId" required defaultValue={vorbelegung?.klientId ?? ""} autoFocus>
                     <option value="" disabled>
                       Bitte wählen
@@ -627,7 +627,7 @@ export function Kassenbuch({
             {ziel === "standort" && (
               <div className="zv-field-row">
                 <div className="zv-field">
-                  <label htmlFor="teilnehmerKlientIds">Teilnehmende Klienten (optional)</label>
+                  <label htmlFor="teilnehmerKlientIds">Teilnehmende Klient:innen (optional)</label>
                   <select id="teilnehmerKlientIds" name="teilnehmerKlientIds" multiple size={5}>
                     {teilnehmerKlientenOptionen.map((k) => (
                       <option key={k.id} value={k.id}>
@@ -799,7 +799,7 @@ export function Kassenbuch({
         </div>
 
         {uebersicht.length === 0 ? (
-          <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
+          <Leerzustand icon={ILeerWoche}>Keine Klient:innen mit wöchentlichem HZL-Rhythmus.</Leerzustand>
         ) : (
           <div className="zv-journal-wrapper" role="region" aria-label="HZL-Auszahlungen der Woche" tabIndex={0}>
             <table className="zv-journal">
