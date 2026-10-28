@@ -142,7 +142,9 @@ describe("Benutzer: Rang aendern", () => {
       await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM audit_log WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM benutzer_reset_token WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM benutzer_standort WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM benutzer WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM standort WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kassenbuchung_typ WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM org_unit WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM mandant WHERE id = $1", [mandantId]);
@@ -174,9 +176,6 @@ describe("Benutzer: Rang aendern", () => {
     const res = await put(tokenGfA, mitarbeiterId, { positionId: posLeitung });
     expect(res.status).toBe(200);
     expect(res.body.positionen.map((p: { positionId: string }) => p.positionId)).toEqual([posLeitung]);
-    // Dieselbe Position gibt es je Einheit -- die Einheit muss mitkommen,
-    // sonst sind zwei "Einrichtungsleitung" in der Oberflaeche nicht zu unterscheiden.
-    expect(res.body.positionen[0].einheitName).toEqual(expect.any(String));
     expect(await laufendePositionen(mitarbeiterId)).toEqual([posLeitung]);
 
     // Dasselbe Token wie vorher: Rechte werden je Anfrage aus den
@@ -215,6 +214,51 @@ describe("Benutzer: Rang aendern", () => {
       [mitarbeiterId]
     );
     expect(rows[0].n).toBe(2);
+  });
+
+  it("derselbe Rang in zwei Einheiten: Liste zeigt ihn und die Standorte nur einmal, ein Wechsel auf denselben Rang aendert nichts", async () => {
+    // Zweite Position "Mitarbeiter (Testkonto)" unter einer eigenen Einheit
+    // -- so sieht es aus, wenn jemand in mehreren Einrichtungen arbeitet.
+    const { rows: typ } = await admin.query<{ account_typ_id: string; titel: string }>(
+      "SELECT account_typ_id, titel FROM org_position WHERE id = $1",
+      [posMitarbeiter]
+    );
+    const { rows: wurzel } = await admin.query<{ id: string }>(
+      "SELECT id FROM org_unit WHERE mandant_id = $1 AND typ = 'traeger'",
+      [mandantId]
+    );
+    const { rows: einheit } = await admin.query<{ id: string }>(
+      "INSERT INTO org_unit (mandant_id, typ, name, parent_id) VALUES ($1, 'bereich', 'Zweite Einheit', $2) RETURNING id",
+      [mandantId, wurzel[0].id]
+    );
+    const { rows: pos2 } = await admin.query<{ id: string }>(
+      "INSERT INTO org_position (mandant_id, org_unit_id, account_typ_id, titel) VALUES ($1, $2, $3, $4) RETURNING id",
+      [mandantId, einheit[0].id, typ[0].account_typ_id, typ[0].titel]
+    );
+    await admin.query("INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id) VALUES ($1, $2, $3)", [
+      mandantId,
+      pos2[0].id,
+      mitarbeiterId,
+    ]);
+    const { rows: standorte } = await admin.query<{ id: string }>(
+      "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort Z', 'Str. 1') RETURNING id",
+      [mandantId]
+    );
+    await admin.query("INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)", [
+      mandantId,
+      mitarbeiterId,
+      standorte[0].id,
+    ]);
+
+    const liste = await request(app.getHttpServer()).get("/benutzer").set("Authorization", `Bearer ${tokenGfA}`);
+    const eintrag = liste.body.find((b: { id: string }) => b.id === mitarbeiterId);
+    expect(eintrag.positionen).toHaveLength(1);
+    expect(eintrag.standortIds).toEqual([standorte[0].id]);
+
+    // Der Vertreter im Dropdown ist irgendeine der beiden Positionen.
+    const res = await put(tokenGfA, mitarbeiterId, { positionId: pos2[0].id });
+    expect(res.status).toBe(200);
+    expect(await laufendePositionen(mitarbeiterId)).toEqual([posMitarbeiter, pos2[0].id].sort());
   });
 
   it("den eigenen Rang aendern -> 403", async () => {

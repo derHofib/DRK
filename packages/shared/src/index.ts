@@ -132,9 +132,7 @@ export interface BenutzerListEintragDto {
   // Ersetzt die frühere feste "rolle" -- Rechte hängen seit der
   // Entwickler-Accounttyp-Umstellung ausschließlich an Organigramm-
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
-  // einheitName: dieselbe Position (z. B. "Mitarbeiter") gibt es je
-  // Organisationseinheit -- ohne Einheit sind die Eintraege nicht unterscheidbar.
-  positionen: { positionId: string; titel: string; accountTypName: string; einheitName: string }[];
+  positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
   // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
   standortIds: string[];

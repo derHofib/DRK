@@ -21,7 +21,7 @@ export interface BenutzerListEintrag {
   // Ersetzt die frueher feste "rolle" -- Rechte haengen seit der
   // Entwickler-Accounttyp-Umstellung ausschliesslich an Organigramm-
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
-  positionen: { positionId: string; titel: string; accountTypName: string; einheitName: string }[];
+  positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
   standortIds: string[];
 }
@@ -32,6 +32,20 @@ export interface BenutzerListEintrag {
 const UNIQUE_VIOLATION = "23505";
 // RAISE EXCEPTION ohne eigenen SQLSTATE (benutzer_vollzugriff_schutz, 0050).
 const RAISE_EXCEPTION = "P0001";
+
+// Dieselbe Position (z. B. "Mitarbeiter") gibt es je Organisationseinheit,
+// und wer in mehreren Einheiten sitzt, hat mehrere Besetzungen davon. Fuer
+// die Anzeige zaehlt der Rang, nicht die Einheit -- die Rechte haengen am
+// Accounttyp, die Einheiten-/Standortzuordnung steht in der Standortspalte.
+function eindeutigePositionen<T extends { titel: string; accountTypName: string }>(liste: T[]): T[] {
+  const gesehen = new Set<string>();
+  return liste.filter((p) => {
+    const schluessel = `${p.accountTypName}\u0000${p.titel}`;
+    if (gesehen.has(schluessel)) return false;
+    gesehen.add(schluessel);
+    return true;
+  });
+}
 
 @Injectable()
 export class BenutzerService {
@@ -55,12 +69,12 @@ export class BenutzerService {
         name: string;
         aktiv: boolean;
         standort_ids: string[];
-        positionen: { positionId: string; titel: string; accountTypName: string; einheitName: string }[];
+        positionen: { positionId: string; titel: string; accountTypName: string }[];
       }>(
         `SELECT b.id, b.email, b.name, b.aktiv,
-                COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
+                COALESCE(array_agg(DISTINCT bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
                 COALESCE(
-                  json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'einheitName', ou.name, 'accountTypName', a.name))
+                  json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'accountTypName', a.name))
                     FILTER (WHERE p.id IS NOT NULL),
                   '[]'
                 ) AS positionen
@@ -70,7 +84,6 @@ export class BenutzerService {
                 AND pb.gueltig_ab <= CURRENT_DATE
                 AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
          LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
-         LEFT JOIN org_unit ou ON ou.id = p.org_unit_id
          LEFT JOIN account_typ a ON a.id = p.account_typ_id
          GROUP BY b.id, b.email, b.name, b.aktiv
          ORDER BY b.name`
@@ -81,7 +94,7 @@ export class BenutzerService {
         name: r.name,
         aktiv: r.aktiv,
         standortIds: r.standort_ids,
-        positionen: r.positionen,
+        positionen: eindeutigePositionen(r.positionen),
       }));
     });
   }
@@ -368,12 +381,19 @@ export class BenutzerService {
         // an ihrem Startdatum still zurueck.
         // "laeuft" kommt aus SQL statt aus einem JS-Datum: CURRENT_DATE der
         // Datenbank ist dieselbe Uhr, die auch die Rechte-Engine benutzt.
-        const { rows: offen } = await client.query<{ id: string; position_id: string; laeuft: boolean }>(
-          `SELECT id, position_id, gueltig_ab <= CURRENT_DATE AS laeuft FROM org_position_besetzung
-           WHERE benutzer_id = $1 AND (gueltig_bis IS NULL OR gueltig_bis >= CURRENT_DATE)`,
+        const { rows: offen } = await client.query<{ id: string; position_id: string; laeuft: boolean; rang: string }>(
+          `SELECT pb.id, pb.position_id, pb.gueltig_ab <= CURRENT_DATE AS laeuft,
+                  p.account_typ_id::text || ':' || p.titel AS rang
+           FROM org_position_besetzung pb JOIN org_position p ON p.id = pb.position_id
+           WHERE pb.benutzer_id = $1 AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)`,
           [zielBenutzerId]
         );
-        const behalten = offen.find((b) => b.position_id === positionId && b.laeuft);
+        // Derselbe Rang in einer anderen Einheit ist kein Wechsel: das
+        // Dropdown zeigt jeden Rang nur einmal, die gewaehlte ID ist nur der
+        // Vertreter -- sonst wuerde eine Person mit "Mitarbeiter" in sechs
+        // Einheiten beim Speichern auf eine einzige zusammenschrumpfen.
+        const zielRang = positionId === null ? null : await this.rangVon(client, positionId);
+        const behalten = offen.find((b) => b.laeuft && (b.position_id === positionId || b.rang === zielRang));
 
         if (positionId !== null && !behalten) {
           await client.query(
@@ -382,7 +402,7 @@ export class BenutzerService {
             [ctx.mandantId, positionId, zielBenutzerId, ctx.benutzerId]
           );
         }
-        const beenden = offen.filter((b) => b !== behalten).map((b) => b.id);
+        const beenden = offen.filter((b) => b !== behalten && !(zielRang !== null && b.rang === zielRang && b.laeuft)).map((b) => b.id);
         if (beenden.length > 0) {
           await client.query(
             `UPDATE org_position_besetzung SET gueltig_bis = GREATEST(gueltig_ab, CURRENT_DATE) - 1
@@ -414,20 +434,29 @@ export class BenutzerService {
     }
   }
 
+  private async rangVon(client: PoolClient, positionId: string): Promise<string | null> {
+    const { rows } = await client.query<{ rang: string }>(
+      "SELECT account_typ_id::text || ':' || titel AS rang FROM org_position WHERE id = $1",
+      [positionId]
+    );
+    return rows[0]?.rang ?? null;
+  }
+
   private async ladePositionen(client: PoolClient, benutzerId: string): Promise<BenutzerListEintrag["positionen"]> {
     const { rows } = await client.query<{ position_id: string; titel: string; account_typ_name: string; einheit_name: string }>(
-      `SELECT p.id AS position_id, p.titel, a.name AS account_typ_name, ou.name AS einheit_name
+      `SELECT p.id AS position_id, p.titel, a.name AS account_typ_name
        FROM org_position_besetzung pb
        JOIN org_position p ON p.id = pb.position_id AND p.aktiv
        JOIN account_typ a ON a.id = p.account_typ_id
-       JOIN org_unit ou ON ou.id = p.org_unit_id
        WHERE pb.benutzer_id = $1
          AND pb.gueltig_ab <= CURRENT_DATE
          AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
        ORDER BY p.titel`,
       [benutzerId]
     );
-    return rows.map((r) => ({ positionId: r.position_id, titel: r.titel, accountTypName: r.account_typ_name, einheitName: r.einheit_name }));
+    return eindeutigePositionen(
+      rows.map((r) => ({ positionId: r.position_id, titel: r.titel, accountTypName: r.account_typ_name }))
+    );
   }
 
 }
