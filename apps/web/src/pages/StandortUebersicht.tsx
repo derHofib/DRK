@@ -84,7 +84,7 @@ export function StandortUebersicht({ onBelegungOeffnen }: { onBelegungOeffnen: (
           <p className="zv-kontextzeile">
             {daten ? `${daten.standort.name} · ${daten.zimmer.anzahl} Zimmer` : "Alle Standorte"}
           </p>
-          <h2>Belegung</h2>
+          <h2>Standorte</h2>
           {daten && (
             <p className="zv-sub" style={{ margin: "2px 0 0" }}>
               {daten.standort.adresse}

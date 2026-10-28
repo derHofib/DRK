@@ -207,6 +207,10 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // "Standorte". Serverseitig schon auf die erlaubten gefiltert
   // (StandortService.findeAlle), hier kommt nichts dazu.
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  // Welcher Standort unter "Standorte > Belegung" offen ist; null = noch keiner
+  // gewaehlt, dann der erste. Hier statt im Tab-Wert, damit "Belegung" in der
+  // Seitenleiste ein einziger Eintrag bleibt.
+  const [belegungStandortId, setBelegungStandortId] = useState<string | null>(null);
   const unterpunkteVon = (haupt: HauptReiter): UnterpunktEintrag[] | undefined => UNTERPUNKTE[haupt];
   // Alle Hauptpunkte in Menuereihenfolge (Gruppen nacheinander, Einstellungen
   // zuletzt) -- Grundlage fuer "Mehr" auf dem Handy und fuer Panel-Titel.
@@ -386,6 +390,14 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     setOffenesPanel(null);
   }, []);
 
+  const belegungOeffnen = useCallback(
+    (standortId: string | null) => {
+      if (standortId) setBelegungStandortId(standortId);
+      geheZu(standortId ? "belegung" : "standorte");
+    },
+    [geheZu],
+  );
+
   const dashboardNavigation = useMemo(() => ({ zu: geheZu, suche: paletteOeffnen }), [geheZu, paletteOeffnen]);
 
   useEffect(() => {
@@ -416,7 +428,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       titel: `Belegung: ${st.name}`,
       hinweis: "Standort wechseln",
       icon: IStandort,
-      ausfuehren: () => geheZu(`standort:${st.id}`),
+      ausfuehren: () => belegungOeffnen(st.id),
     })),
   ];
   const paletteAktionen: Befehl[] = [
@@ -767,13 +779,13 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         </div>
 
         <div
-          className={`zv-content${BREITE_REITER.has(tab) || tab.startsWith("standort:") ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
+          className={`zv-content${BREITE_REITER.has(tab) || tab === "belegung" ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
           <WarteschlangeLeiste />
           {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} />}
-          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={(id) => geheZu(`standort:${id}`)} />}
-          {tab.startsWith("standort:") && (
-            <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} onStandortWaehlen={(id) => geheZu(id ? `standort:${id}` : "standorte")} />
+          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={belegungOeffnen} />}
+          {tab === "belegung" && (belegungStandortId ?? standorte[0]?.id) && (
+            <StandortRaeume key={belegungStandortId ?? standorte[0].id} standortId={(belegungStandortId ?? standorte[0].id)} onStandortWaehlen={belegungOeffnen} />
           )}
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
@@ -808,7 +820,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         onTreffer={(t) => {
           zuletztMerken({ gruppe: t.gruppe, id: t.id });
           if (t.gruppe === "klienten") geheZu("klienten", { klientId: t.id });
-          else if (t.gruppe === "zimmer") geheZu(t.standortId ? `standort:${t.standortId}` : "standorte");
+          else if (t.gruppe === "zimmer") belegungOeffnen(t.standortId ?? null);
           else if (t.gruppe === "mitarbeitende") geheZu("mitarbeitende");
           else geheZu("kassenbuch");
         }}

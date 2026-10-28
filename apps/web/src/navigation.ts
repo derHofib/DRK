@@ -6,6 +6,7 @@
  */
 import {
   IAuszahlen,
+  IKapazitaet,
   IAufgaben,
   IDashboard,
   IEinstellungen,
@@ -45,11 +46,11 @@ export type UnterReiter =
   | "vertretung"
   | "organigramm"
   | "hzl"
-  // Ein einzelner Standort unter "Belegung". Gewaehlt wird er ueber die
-  // Standort-Reiter unter dem Seitenkopf (StandortReiter.tsx), nicht mehr
-  // ueber die Seitenleiste -- deshalb die ID im Tab-Wert selbst. Der
-  // Tab-Wert blieb bewusst gleich, damit Deep-Links und Pruefskripte tragen.
-  | `standort:${string}`;
+  // Raumplan/Zeitleiste EINES Standorts unter "Standorte". Welcher Standort,
+  // wird ueber die Standort-Reiter unter dem Seitenkopf gewaehlt
+  // (StandortReiter.tsx) und steht als Zustand in Shell.tsx, nicht im
+  // Tab-Wert -- so bleibt der Unterpunkt in der Seitenleiste EIN Eintrag.
+  | "belegung";
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -60,6 +61,7 @@ export interface UnterpunktEintrag {
 }
 
 export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
+  standorte: [{ wert: "belegung", label: "Belegung", icon: IKapazitaet }],
   dashboard: [{ wert: "schichtuebergabe", label: "Schichtübergabe", icon: IUebergabe }],
   kassenbuch: [{ wert: "hzl", label: "HZL", icon: IAuszahlen }],
   mitarbeitende: [
@@ -70,7 +72,6 @@ export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
 
 /** Zu welchem Hauptpunkt eine Seite in der Navigation gehoert (Unterpunkt -> Elternpunkt). */
 export function hauptreiterVon(tab: Tab): HauptReiter {
-  if (tab.startsWith("standort:")) return "standorte";
   for (const [haupt, unter] of Object.entries(UNTERPUNKTE)) {
     if (unter?.some((u) => u.wert === tab)) return haupt as HauptReiter;
   }
@@ -121,7 +122,7 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "aufgaben", label: "Aufgaben", icon: IAufgaben },
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
-  { wert: "standorte", label: "Belegung", icon: IStandort },
+  { wert: "standorte", label: "Standorte", icon: IStandort },
   { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
