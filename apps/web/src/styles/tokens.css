@@ -305,15 +305,16 @@
      Form
      ------------------------------------------------------------------ */
   /*
-   * Drei Radien, keine groesseren: 4 fuer Tags, 8 fuer Knoepfe, Felder und
-   * Menuepunkte, 10 fuer Flaechen. Grosse Radien lassen Flaechen weich und
+   * Drei Radien, keine groesseren: 6 fuer Tags, 10 fuer Knoepfe, Felder und
+   * Menuepunkte, 12 fuer Flaechen (leicht angehoben auf Wunsch: Kaesten
+   * sollen weicher wirken, aber weiterhin eindeutig eckig-sachlich). Grosse Radien lassen Flaechen weich und
    * "verspielt" wirken -- bei einer Akte mit Geld und Fristen soll die Form
    * nicht mehr behaupten als der Inhalt. --zv-radius-pill bleibt NUR fuer
    * echte Kreise (Punkte, Farbfelder, Schalter), nicht fuer Tags.
    */
-  --zv-radius-s: 4px;
-  --zv-radius-m: 8px;
-  --zv-radius-l: 10px;
+  --zv-radius-s: 6px;
+  --zv-radius-m: 10px;
+  --zv-radius-l: 12px;
   --zv-radius-pill: 999px;
 
   /* Masse der Status-Tags (.zv-pill): fest, damit Tags in Tabellenzeilen
