@@ -332,7 +332,7 @@ export class BenutzerService {
    *    Vollzugriff-Position auf eine andere als "letzter weg" ablehnen.
    *
    * Beendet wird mit gueltig_bis = gestern (bzw. dem Tag vor einem spaeteren
-   * Beginn), damit der Wechsel sofort gilt -- siehe Migration 0064.
+   * Beginn), damit der Wechsel sofort gilt -- siehe Migration 0065.
    */
   async positionWechseln(
     zielBenutzerId: string,

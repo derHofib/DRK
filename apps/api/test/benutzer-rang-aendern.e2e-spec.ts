@@ -3,7 +3,7 @@
  * Die Geschaeftsfuehrung gibt einer anderen Person einen anderen Rang. Rechte
  * haengen nur an Besetzungen, also wird vor allem geprueft, dass der Wechsel
  * SOFORT wirkt (neue Rechte da, alte weg -- auch bei einer erst heute
- * begonnenen Besetzung, Migration 0064) und dass die Schutzregeln greifen:
+ * begonnenen Besetzung, Migration 0065) und dass die Schutzregeln greifen:
  * nur mit organigramm.manage-permissions, nicht der eigene Rang, die letzte
  * aktive Geschaeftsfuehrung bleibt (DB-Trigger, 0042/0050).
  */
@@ -190,7 +190,7 @@ describe("Benutzer: Rang aendern", () => {
     expect(audit[0].nachher.positionen.map((p: { positionId: string }) => p.positionId)).toEqual([posLeitung]);
   });
 
-  it("Zuruecknehmen am selben Tag wirkt ebenfalls sofort (Besetzung von heute, Migration 0064)", async () => {
+  it("Zuruecknehmen am selben Tag wirkt ebenfalls sofort (Besetzung von heute, Migration 0065)", async () => {
     const res = await put(tokenGfA, mitarbeiterId, { positionId: posMitarbeiter });
     expect(res.status).toBe(200);
     expect(await laufendePositionen(mitarbeiterId)).toEqual([posMitarbeiter]);
