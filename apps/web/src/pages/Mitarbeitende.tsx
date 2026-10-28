@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MitarbeiterProfilKollegeDto, PositionDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
@@ -21,6 +21,41 @@ export function Mitarbeitende() {
   const [statusAenderung, setStatusAenderung] = useState<BenutzerListEintragDto | null>(null);
   const [statusFehler, setStatusFehler] = useState<string | null>(null);
   const [statusWirdGespeichert, setStatusWirdGespeichert] = useState(false);
+
+  const [rangZiel, setRangZiel] = useState<BenutzerListEintragDto | null>(null);
+  const [rangPositionen, setRangPositionen] = useState<PositionDto[]>([]);
+  const [rangFehler, setRangFehler] = useState<string | null>(null);
+  const [rangWirdGespeichert, setRangWirdGespeichert] = useState(false);
+
+  // Ob die Person das darf, entscheidet allein der Server (403 landet im
+  // Dialog) -- das Frontend kennt die Rechte der angemeldeten Person nicht.
+  async function rangOeffnen(b: BenutzerListEintragDto) {
+    setFehler(null);
+    try {
+      setRangPositionen((await api.organigrammPositionen()).filter((p) => p.aktiv));
+      setRangFehler(null);
+      setRangZiel(b);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Positionen konnten nicht geladen werden.");
+    }
+  }
+
+  async function rangSpeichern(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!rangZiel) return;
+    const wert = String(new FormData(e.currentTarget).get("positionId"));
+    setRangFehler(null);
+    setRangWirdGespeichert(true);
+    try {
+      await api.benutzerPositionWechseln(rangZiel.id, wert === "" ? null : wert);
+      setRangZiel(null);
+      laden();
+    } catch (err) {
+      setRangFehler(err instanceof Error ? err.message : "Rang konnte nicht geändert werden.");
+    } finally {
+      setRangWirdGespeichert(false);
+    }
+  }
 
   function laden() {
     api.benutzerListe().then(setBenutzer).catch((err) => setFehler(err.message));
@@ -256,6 +291,10 @@ export function Mitarbeitende() {
                   <IMitarbeitende />
                   Profil
                 </button>
+                <button className="zv-link-btn" onClick={() => rangOeffnen(b)}>
+                  <IMitarbeitende />
+                  Rang ändern
+                </button>
                 <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
                   <IResetLink />
                   Passwort zurücksetzen
@@ -289,6 +328,42 @@ export function Mitarbeitende() {
       {profilAnsicht && (
         <Modal titel={`Profil — ${profilAnsicht.name}`} onClose={() => setProfilAnsicht(null)}>
           <MitarbeiterProfilKarte inhalt={profilAnsicht} leerText={`${profilAnsicht.name} hat noch kein Profil ausgefüllt.`} />
+        </Modal>
+      )}
+
+      {rangZiel && (
+        <Modal titel={`Rang ändern — ${rangZiel.name}`} onClose={() => setRangZiel(null)}>
+          <form onSubmit={rangSpeichern}>
+            {rangFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {rangFehler}
+              </div>
+            )}
+            <p className="zv-sub" style={{ marginTop: 0 }}>
+              Die gewählte Position ersetzt alle bisherigen Positionen von {rangZiel.name}. Die neuen Rechte gelten
+              sofort; die Änderung wird im Protokoll festgehalten. Ohne Position hat die Person keine Rechte.
+            </p>
+            <div className="zv-field">
+              <label htmlFor="rang-position">Position</label>
+              <select
+                id="rang-position"
+                name="positionId"
+                defaultValue={rangZiel.positionen[0]?.positionId ?? ""}
+              >
+                <option value="">Keine Position</option>
+                {rangPositionen.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.titel}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="zv-btn zv-btn-block" type="submit" disabled={rangWirdGespeichert} style={{ marginTop: 20 }}>
+              <ISpeichern />
+              {rangWirdGespeichert ? "Speichert…" : "Speichern"}
+            </button>
+          </form>
         </Modal>
       )}
 

@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
@@ -20,7 +21,7 @@ export interface BenutzerListEintrag {
   // Ersetzt die frueher feste "rolle" -- Rechte haengen seit der
   // Entwickler-Accounttyp-Umstellung ausschliesslich an Organigramm-
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
-  positionen: { titel: string; accountTypName: string }[];
+  positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
   standortIds: string[];
 }
@@ -54,12 +55,12 @@ export class BenutzerService {
         name: string;
         aktiv: boolean;
         standort_ids: string[];
-        positionen: { titel: string; accountTypName: string }[];
+        positionen: { positionId: string; titel: string; accountTypName: string }[];
       }>(
         `SELECT b.id, b.email, b.name, b.aktiv,
                 COALESCE(array_agg(bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
                 COALESCE(
-                  json_agg(DISTINCT jsonb_build_object('titel', p.titel, 'accountTypName', a.name))
+                  json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'accountTypName', a.name))
                     FILTER (WHERE p.id IS NOT NULL),
                   '[]'
                 ) AS positionen
@@ -310,4 +311,121 @@ export class BenutzerService {
       throw err;
     }
   }
+
+  /**
+   * "Rang aendern": ersetzt alle laufenden und geplanten Besetzungen einer
+   * Person durch genau eine Position (oder durch keine, positionId = null).
+   * Rechte haengen ausschliesslich an Besetzungen, ein Rangwechsel ist also
+   * Rechteverwaltung und braucht deshalb dasselbe enge
+   * organigramm.manage-permissions wie das Setzen auf eine Vollzugriff-
+   * Position in organigramm.service.ts::besetzen() -- das breite
+   * organigramm.bearbeiten waere ein Weg, sich selbst Vollzugriff zu geben.
+   * Praktisch hat es nur die Geschaeftsfuehrung (Vollzugriff-Wildcard).
+   *
+   * Schutzregeln:
+   *  - nicht der eigene Rang: sonst stuft sich die Geschaeftsfuehrung
+   *    versehentlich selbst herab und kommt nicht mehr zurueck,
+   *  - die letzte aktive Geschaeftsfuehrung bleibt -- erzwingt der Trigger
+   *    org_position_besetzung_vollzugriff_schutz (0042/0050), nicht dieser
+   *    Code. Deshalb wird ERST die neue Besetzung angelegt und DANN die alte
+   *    beendet: andersherum wuerde der Trigger schon einen Wechsel von einer
+   *    Vollzugriff-Position auf eine andere als "letzter weg" ablehnen.
+   *
+   * Beendet wird mit gueltig_bis = gestern (bzw. dem Tag vor einem spaeteren
+   * Beginn), damit der Wechsel sofort gilt -- siehe Migration 0064.
+   */
+  async positionWechseln(
+    zielBenutzerId: string,
+    positionId: string | null
+  ): Promise<{ id: string; positionen: BenutzerListEintrag["positionen"] }> {
+    const ctx = requireTenantContext();
+    if (!(await this.rechte.hatRecht("organigramm", "manage-permissions"))) {
+      throw new ForbiddenException("Den Rang anderer Mitarbeitender darf nur die Geschäftsführung ändern.");
+    }
+    if (zielBenutzerId === ctx.benutzerId) {
+      throw new ForbiddenException("Der eigene Rang kann nicht selbst geändert werden.");
+    }
+
+    try {
+      return await this.db.withTenant(async (client) => {
+        const { rows: zielRows } = await client.query("SELECT id FROM benutzer WHERE id = $1", [zielBenutzerId]);
+        if (zielRows.length === 0) throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
+
+        if (positionId !== null) {
+          const { rows: posRows } = await client.query<{ aktiv: boolean }>(
+            "SELECT aktiv FROM org_position WHERE id = $1",
+            [positionId]
+          );
+          if (posRows.length === 0) throw new NotFoundException("Position nicht gefunden.");
+          if (!posRows[0].aktiv) throw new ConflictException("Diese Position ist deaktiviert.");
+        }
+
+        const vorher = await this.ladePositionen(client, zielBenutzerId);
+
+        // Offen = laeuft heute oder beginnt spaeter. Eine schon in der
+        // Zukunft geplante Besetzung zaehlt mit -- sonst kaeme der alte Rang
+        // an ihrem Startdatum still zurueck.
+        // "laeuft" kommt aus SQL statt aus einem JS-Datum: CURRENT_DATE der
+        // Datenbank ist dieselbe Uhr, die auch die Rechte-Engine benutzt.
+        const { rows: offen } = await client.query<{ id: string; position_id: string; laeuft: boolean }>(
+          `SELECT id, position_id, gueltig_ab <= CURRENT_DATE AS laeuft FROM org_position_besetzung
+           WHERE benutzer_id = $1 AND (gueltig_bis IS NULL OR gueltig_bis >= CURRENT_DATE)`,
+          [zielBenutzerId]
+        );
+        const behalten = offen.find((b) => b.position_id === positionId && b.laeuft);
+
+        if (positionId !== null && !behalten) {
+          await client.query(
+            `INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id, erstellt_von)
+             VALUES ($1, $2, $3, $4)`,
+            [ctx.mandantId, positionId, zielBenutzerId, ctx.benutzerId]
+          );
+        }
+        const beenden = offen.filter((b) => b !== behalten).map((b) => b.id);
+        if (beenden.length > 0) {
+          await client.query(
+            `UPDATE org_position_besetzung SET gueltig_bis = GREATEST(gueltig_ab, CURRENT_DATE) - 1
+             WHERE id = ANY($1)`,
+            [beenden]
+          );
+        }
+
+        const nachher = await this.ladePositionen(client, zielBenutzerId);
+        if ((positionId !== null && !behalten) || beenden.length > 0) {
+          await this.audit.protokollieren(client, {
+            modul: "mitarbeitende",
+            aktion: "rang-aendern",
+            objektTyp: "benutzer",
+            objektId: zielBenutzerId,
+            vorher: { positionen: vorher },
+            nachher: { positionen: nachher },
+          });
+        }
+        return { id: zielBenutzerId, positionen: nachher };
+      });
+    } catch (err) {
+      if (isPgError(err) && err.code === RAISE_EXCEPTION) {
+        throw new ConflictException(
+          "Mindestens eine aktive Geschäftsführung (Vollzugriff) muss bestehen bleiben — das ist die letzte."
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async ladePositionen(client: PoolClient, benutzerId: string): Promise<BenutzerListEintrag["positionen"]> {
+    const { rows } = await client.query<{ position_id: string; titel: string; account_typ_name: string }>(
+      `SELECT p.id AS position_id, p.titel, a.name AS account_typ_name
+       FROM org_position_besetzung pb
+       JOIN org_position p ON p.id = pb.position_id AND p.aktiv
+       JOIN account_typ a ON a.id = p.account_typ_id
+       WHERE pb.benutzer_id = $1
+         AND pb.gueltig_ab <= CURRENT_DATE
+         AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+       ORDER BY p.titel`,
+      [benutzerId]
+    );
+    return rows.map((r) => ({ positionId: r.position_id, titel: r.titel, accountTypName: r.account_typ_name }));
+  }
+
 }
