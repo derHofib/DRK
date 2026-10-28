@@ -11,6 +11,7 @@ import type {
 import { api } from "../api/client";
 import { einreihen, entfernen, senden, useWarteschlange } from "../offline/warteschlange";
 import { GrundAbfrage } from "../components/GrundAbfrage";
+import { KassenbuchJournal, laufsalden, neuesterZuerst } from "../components/KassenbuchJournal";
 import { Leerzustand } from "../components/Leerzustand";
 import { StandortReiter } from "../components/StandortReiter";
 import { Modal } from "../components/Modal";
@@ -29,6 +30,7 @@ import {
   ISOffen,
   ISStorniert,
   ISpeichern,
+  ISperre,
   IStandort,
   IStornieren,
   IUnterschrift,
@@ -38,6 +40,14 @@ import {
 import { SignaturePad } from "../components/SignaturePad";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { formatBetrag, formatDatum, kontextzeile } from "../format";
+
+type JournalFilter = "alle" | "einnahmen" | "ausgaben" | "stornos";
+const JOURNAL_FILTER_LABEL: Record<JournalFilter, string> = {
+  alle: "Alle",
+  einnahmen: "Einnahmen",
+  ausgaben: "Ausgaben",
+  stornos: "Stornos",
+};
 
 type Richtung = "einzahlung" | "auszahlung";
 type Ziel = "klient" | "standort";
@@ -128,6 +138,7 @@ export function Kassenbuch({
   const [typen, setTypen] = useState<KassenbuchungTypDto[]>([]);
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
   const [filterKlientId, setFilterKlientId] = useState(startFilterKlientId ?? "");
+  const [journalFilter, setJournalFilter] = useState<JournalFilter>("alle");
   const [filterStandortId, setFilterStandortId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -423,6 +434,60 @@ export function Kassenbuch({
   const aktiveStandortGesamt = aktive(standortBuchungen);
   const standortGesamtsaldo = summeCent(aktiveStandortGesamt);
 
+  // Journal: laufender Saldo ueber die ungefilterte Menge, Filter wirken nur
+  // auf die Anzeige (siehe laufsalden()). "Stornos" zeigt auch Buchungen mit
+  // offenem Antrag -- die sind auf dem Weg dorthin und sonst nirgends gebuendelt.
+  const klientSalden = laufsalden(klientBuchungen);
+  const standortSalden = laufsalden(standortBuchungen);
+  const zeigeKlientJournal = neuesterZuerst(
+    gefilterteBuchungen.filter((b) =>
+      journalFilter === "alle"
+        ? true
+        : journalFilter === "einnahmen"
+          ? b.betragCent > 0 && !b.storniert
+          : journalFilter === "ausgaben"
+            ? b.betragCent < 0 && !b.storniert
+            : b.storniert || b.offenerStornoantrag !== null,
+    ),
+  );
+
+  function unterschriftBild(b: KassenbuchungDto) {
+    return offeneUnterschrift?.buchungId === b.id ? (
+      <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100, display: "block" }} />
+    ) : null;
+  }
+
+  function zeilenAktionen(b: KassenbuchungDto) {
+    return (
+      <>
+        {b.hatUnterschrift && (
+          <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
+            <IUnterschrift />
+            Unterschrift
+          </button>
+        )}
+        {!b.storniert && !b.offenerStornoantrag && (
+          <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
+            <IStornieren />
+            Storno beantragen
+          </button>
+        )}
+        {b.offenerStornoantrag && (
+          <>
+            <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "genehmigt")}>
+              <IGenehmigen />
+              Genehmigen
+            </button>
+            <button className="zv-link-btn" onClick={() => setStornoAblehnenBuchung(b)}>
+              <IAblehnen />
+              Ablehnen
+            </button>
+          </>
+        )}
+      </>
+    );
+  }
+
   // Vorschlag fuer die Teilnehmer-Klienten-Auswahl: nur Klienten, die
   // aktuell am gewählten Standort wohnen -- fällt (z. B. bei fehlender
   // Zimmerzuordnung) niemand in diesen Filter, lieber die volle Liste
@@ -655,14 +720,24 @@ export function Kassenbuch({
       )}
 
       {ansicht === "hzl" && (
-      <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
+      <section className="zv-hzl-flaeche" aria-label="HZL-Woche">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <div>
-            <h3 style={{ fontSize: 15, margin: 0 }}>HZL-Wochenübersicht</h3>
+            <h3 className="zv-abschnittstitel">KW {uebersichtWoche}</h3>
             {uebersicht.length > 0 && (
-              <p className="zv-sub-inline" style={{ marginLeft: 0 }}>
-                {bezahltAnzahl} von {uebersicht.length} wöchentlichen Klient*innen für diese Woche ausgezahlt.
-              </p>
+              <>
+                <p className="zv-hzl-fortschritt-text">
+                  <span className="zv-mono">{bezahltAnzahl}</span> von <span className="zv-mono">{uebersicht.length}</span>{" "}
+                  ausgezahlt
+                </p>
+                <div
+                  className="zv-laufzeit zv-hzl-balken"
+                  role="img"
+                  aria-label={`${bezahltAnzahl} von ${uebersicht.length} ausgezahlt`}
+                >
+                  <div style={{ width: `${(bezahltAnzahl / uebersicht.length) * 100}%` }} />
+                </div>
+              </>
             )}
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
@@ -726,321 +801,167 @@ export function Kassenbuch({
         {uebersicht.length === 0 ? (
           <Leerzustand icon={ILeerWoche}>Keine Klienten mit wöchentlichem HZL-Rhythmus.</Leerzustand>
         ) : (
-          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1.6fr" } as CSSProperties}>
-            <div className="zv-liste-kopf">
-              <span>Klient</span>
-              <span>Status</span>
-              <span>Auszahlung</span>
-            </div>
-            {uebersicht.map((e) => (
-              <div key={e.klientId} className="zv-info-karte">
-                <span className="zv-liste-zelle-titel">{e.klientName}</span>
-                <span className="zv-liste-zelle" data-label="Status">
-                  <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-offen"}`}>
-                    {e.bezahlt ? <ISErledigt /> : <ISOffen />}
-                    {e.bezahlt ? "Bezahlt" : "Offen"}
-                  </span>
-                </span>
-                <span className="zv-liste-zelle" data-label="Auszahlung">
-                  {e.bezahlt ? (
-                    e.betragCent !== null && e.datum && (
-                      <span className="zv-mono">
-                        {formatBetrag(e.betragCent)} am {formatDatum(e.datum)}
+          <div className="zv-journal-wrapper" role="region" aria-label="HZL-Auszahlungen der Woche" tabIndex={0}>
+            <table className="zv-journal">
+              <thead>
+                <tr>
+                  <th>Klient:in</th>
+                  <th>Status</th>
+                  <th className="zv-journal-zahl">Betrag</th>
+                  <th>
+                    <span className="zv-sr-only">Aktion</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {uebersicht.map((e) => (
+                  <tr key={e.klientId}>
+                    <td>{e.klientName}</td>
+                    <td>
+                      <span className={`zv-pill ${e.bezahlt ? "zv-pill-ok" : "zv-pill-achtung"}`}>
+                        {e.bezahlt ? <ISErledigt /> : <ISOffen />}
+                        {e.bezahlt ? "Ausgezahlt" : "Offen"}
                       </span>
-                    )
-                  ) : (
-                    <span className="zv-aktionen-reihe">
-                      <button
-                        className="zv-link-btn"
-                        disabled={uebergabePruefung}
-                        onClick={() => void uebergabeStarten([e.klientId])}
-                      >
-                        <IUnterschrift />
-                        Auszahlen + unterschreiben
-                      </button>
-                      <button className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
-                        <IAuszahlen />
-                        Manuell buchen
-                      </button>
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
+                      {e.bezahlt && e.datum && <span className="zv-todo-meta"> am {formatDatum(e.datum)}</span>}
+                    </td>
+                    <td className="zv-journal-zahl zv-mono">
+                      {e.bezahlt && e.betragCent !== null ? formatBetrag(e.betragCent) : ""}
+                    </td>
+                    <td className="zv-journal-aktionen">
+                      {!e.bezahlt && (
+                        <>
+                          <button
+                            type="button"
+                            className="zv-btn zv-btn-klein"
+                            disabled={uebergabePruefung}
+                            onClick={() => void uebergabeStarten([e.klientId])}
+                          >
+                            <IUnterschrift />
+                            Auszahlen + unterschreiben
+                          </button>
+                          <button type="button" className="zv-link-btn" onClick={() => formularOeffnenFuer(e.klientId)}>
+                            <IAuszahlen />
+                            Manuell buchen
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
       )}
 
       {ansicht === "buchungen" && (
       <>
-      <div className="zv-stat-grid">
-        <div className="zv-stat-karte">
-          <p className="zv-stat-label">Gesamtsaldo alle Klienten</p>
-          <p className="zv-stat-wert">{formatBetrag(gesamtsaldo)}</p>
-          <p className="zv-stat-sub">{aktiveGesamt.length} Buchungen gesamt</p>
+      <section className="zv-kassenstand" aria-label="Kassenstand">
+        <div>
+          <p className="zv-lage-label">Kassenstand</p>
+          <p className="zv-kassenstand-wert zv-mono">{formatBetrag(gesamtsaldo)}</p>
+          <p className="zv-lage-folge">{aktiveGesamt.length} Buchungen, ohne stornierte</p>
         </div>
-        <div className="zv-stat-karte">
-          <p className="zv-stat-label">Summe (Filter)</p>
-          <p className="zv-stat-wert">{formatBetrag(summeFilter)}</p>
-          <p className="zv-stat-sub">{aktiveGefiltert.length} Buchungen</p>
+        <div>
+          <p className="zv-lage-label">Standort-Kasse</p>
+          <p className="zv-kassenstand-wert zv-kassenstand-klein zv-mono">{formatBetrag(standortGesamtsaldo)}</p>
+          <p className="zv-lage-folge">{aktiveStandortGesamt.length} Buchungen</p>
         </div>
-      </div>
+      </section>
 
-      <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
-        <select aria-label="Nach Klient filtern" value={filterKlientId} onChange={(e) => setFilterKlientId(e.target.value)}>
-          <option value="">Alle Klienten</option>
-          {klienten.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.vorname} {k.nachname}
-            </option>
+      <div className="zv-journal-werkzeug">
+        <div className="zv-segmented" role="group" aria-label="Art der Buchung">
+          {(Object.keys(JOURNAL_FILTER_LABEL) as JournalFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={journalFilter === f ? "active" : ""}
+              aria-pressed={journalFilter === f}
+              onClick={() => setJournalFilter(f)}
+            >
+              {JOURNAL_FILTER_LABEL[f]}
+            </button>
           ))}
-        </select>
+        </div>
+        <div className="zv-field" style={{ maxWidth: 260, margin: 0 }}>
+          <select aria-label="Nach Klient:in filtern" value={filterKlientId} onChange={(e) => setFilterKlientId(e.target.value)}>
+            <option value="">Alle Klient:innen</option>
+            {klienten.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.vorname} {k.nachname}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {gefilterteBuchungen.length === 0 ? (
-        <Leerzustand icon={ILeerKassenbuch}>Noch keine Buchungen erfasst.</Leerzustand>
-      ) : (
-        <div
-          className="zv-karten-liste"
-          style={{ "--zv-liste-spalten": "1.3fr 1fr 1fr 1.6fr 1.3fr 1.3fr 1fr 1.6fr" } as CSSProperties}
+      {zeigeKlientJournal.length === 0 ? (
+        <Leerzustand
+          icon={ILeerKassenbuch}
+          aktion={
+            klientBuchungen.length === 0 ? (
+              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={neueBuchungOeffnen}>
+                Erste Buchung anlegen
+              </button>
+            ) : undefined
+          }
         >
-          <div className="zv-liste-kopf">
-            <span>Klient</span>
-            <span>Datum</span>
-            <span>Betrag</span>
-            <span>Zweck</span>
-            <span>Typ</span>
-            <span>Mitarbeiter</span>
-            <span>Status</span>
-            <span></span>
-          </div>
-          {gefilterteBuchungen.map((b) => (
-            <div key={b.id} className="zv-info-karte">
-              <span className="zv-liste-zelle-titel">{b.klientName}</span>
-              <span className="zv-liste-zelle" data-label="Datum">
-                <strong>{formatDatum(b.datum)}</strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Betrag">
-                <strong
-                  className="zv-mono"
-                  style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}
-                >
-                  {formatBetrag(b.betragCent)}
-                </strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Zweck">
-                <strong>{b.verwendungszweck}</strong>
-                <span className="zv-mono zv-beleg-nr">{formatBelegnummer(b.belegnummer)}</span>
-              </span>
-              <span className="zv-liste-zelle" data-label="Typ">
-                <strong>
-                  {b.typBezeichnung}
-                  {b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""}
-                </strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Mitarbeiter">
-                {b.gebuchtVonName ?? "–"}
-              </span>
-              <span className="zv-liste-zelle" data-label="Status">
-                {b.storniert ? (
-                  <span className="zv-pill zv-pill-vergeben">
-                    <ISStorniert />
-                    Storniert
-                  </span>
-                ) : b.offenerStornoantrag ? (
-                  <>
-                    <span className="zv-pill zv-pill-offen">
-                      <ISOffen />
-                      Storno beantragt
-                    </span>
-                    <span className="zv-sub-inline zv-sub-inline-zeile">
-                      von {b.offenerStornoantrag.beantragtVonName}: {b.offenerStornoantrag.grund}
-                    </span>
-                  </>
-                ) : (
-                  <span className="zv-pill zv-pill-ok">
-                    <ISErledigt />
-                    Aktiv
-                  </span>
-                )}
-              </span>
-              <span
-                className={`zv-liste-zelle-aktionen${!b.hatUnterschrift && b.storniert ? " zv-liste-zelle-aktionen-leer" : ""}`}
-              >
-                {b.hatUnterschrift && (
-                  <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
-                    <IUnterschrift />
-                    Unterschrift
-                  </button>
-                )}
-                {!b.storniert && !b.offenerStornoantrag && (
-                  <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
-                    <IStornieren />
-                    Storno beantragen
-                  </button>
-                )}
-                {b.offenerStornoantrag && (
-                  <>
-                    <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "genehmigt")}>
-                      <IGenehmigen />
-                      Genehmigen
-                    </button>
-                    <button className="zv-link-btn" onClick={() => setStornoAblehnenBuchung(b)}>
-                      <IAblehnen />
-                      Ablehnen
-                    </button>
-                  </>
-                )}
-              </span>
-              {offeneUnterschrift?.buchungId === b.id && (
-                <div style={{ gridColumn: "1 / -1", marginTop: "var(--zv-space-2)" }}>
-                  <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+          {klientBuchungen.length === 0 ? "Noch keine Buchungen erfasst." : "Keine Buchung passt zu diesem Filter."}
+        </Leerzustand>
+      ) : (
+        <KassenbuchJournal
+          buchungen={zeigeKlientJournal}
+          salden={klientSalden}
+          bezugLabel="Klient:in"
+          bezug={(b) => b.klientName}
+          zusatz={(b) =>
+            [b.typBezeichnung + (b.isoJahr && b.isoWoche ? ` · KW ${b.isoWoche}` : ""), b.gebuchtVonName]
+              .filter(Boolean)
+              .join(" · ")
+          }
+          aktionen={zeilenAktionen}
+          unterschrift={unterschriftBild}
+        />
       )}
+      <p className="zv-journal-hinweis">
+        <ISperre />
+        Buchungen sind unveränderlich. Korrekturen nur per Storno.
+      </p>
 
       <div className="zv-seiten-kopf" style={{ marginTop: "var(--zv-space-6)" }}>
         <div>
-          <h2 style={{ fontSize: "var(--zv-text-xl)" }}>Standort-Buchungen</h2>
+          <h3 className="zv-abschnittstitel">Standort-Buchungen</h3>
           <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            Spaßgeld für Freizeitveranstaltungen und Ähnliches — dem Haus zugeordnet, nicht einem einzelnen Klienten.
+            Spaßgeld für Freizeitveranstaltungen und Ähnliches — dem Haus zugeordnet, nicht einzelnen Klient:innen.
           </p>
-        </div>
-      </div>
-
-      <div className="zv-stat-grid">
-        <div className="zv-stat-karte">
-          <p className="zv-stat-label">Gesamtsaldo Standort-Buchungen</p>
-          <p className="zv-stat-wert">{formatBetrag(standortGesamtsaldo)}</p>
-          <p className="zv-stat-sub">{aktiveStandortGesamt.length} Buchungen gesamt</p>
         </div>
       </div>
 
       {standortBuchungen.length === 0 ? (
         <Leerzustand icon={ILeerStandorte}>Noch keine Standort-Buchungen erfasst.</Leerzustand>
       ) : (
-        <div
-          className="zv-karten-liste"
-          style={{ "--zv-liste-spalten": "1.2fr 1fr 1fr 1.4fr 1fr 1.2fr 1.8fr 1fr 1.6fr" } as CSSProperties}
-        >
-          <div className="zv-liste-kopf">
-            <span>Standort</span>
-            <span>Datum</span>
-            <span>Betrag</span>
-            <span>Zweck</span>
-            <span>Typ</span>
-            <span>Mitarbeiter</span>
-            <span>Teilnehmer</span>
-            <span>Status</span>
-            <span></span>
-          </div>
-          {standortBuchungen.map((b) => (
-            <div key={b.id} className="zv-info-karte">
-              <span className="zv-liste-zelle-titel">{b.standortName}</span>
-              <span className="zv-liste-zelle" data-label="Datum">
-                <strong>{formatDatum(b.datum)}</strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Betrag">
-                <strong
-                  className="zv-mono"
-                  style={{ color: b.betragCent < 0 ? "var(--zv-status-danger)" : "var(--zv-status-ok)" }}
-                >
-                  {formatBetrag(b.betragCent)}
-                </strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Zweck">
-                <strong>{b.verwendungszweck}</strong>
-                <span className="zv-mono zv-beleg-nr">{formatBelegnummer(b.belegnummer)}</span>
-              </span>
-              <span className="zv-liste-zelle" data-label="Typ">
-                <strong>{b.typBezeichnung}</strong>
-              </span>
-              <span className="zv-liste-zelle" data-label="Mitarbeiter">
-                {b.gebuchtVonName ?? "–"}
-              </span>
-              <span className="zv-liste-zelle" data-label="Teilnehmer">
-                {b.teilnehmer.length > 0 ? (
-                  <span title={b.teilnehmer.map((t) => t.name).join(", ")}>
-                    {b.teilnehmer.length === 1 ? (
-                      b.teilnehmer[0].name
-                    ) : (
-                      <>
-                        {b.teilnehmer.length} Teilnehmende
-                        {b.teilnehmer.some((t) => t.klientId) && b.teilnehmer.some((t) => t.benutzerId) && (
-                          <span className="zv-sub-inline">
-                            (<IKlienten style={{ verticalAlign: "-2px" }} />/<IMitarbeitende style={{ verticalAlign: "-2px" }} />)
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </span>
-                ) : (
-                  "–"
-                )}
-              </span>
-              <span className="zv-liste-zelle" data-label="Status">
-                {b.storniert ? (
-                  <span className="zv-pill zv-pill-vergeben">
-                    <ISStorniert />
-                    Storniert
-                  </span>
-                ) : b.offenerStornoantrag ? (
-                  <>
-                    <span className="zv-pill zv-pill-offen">
-                      <ISOffen />
-                      Storno beantragt
-                    </span>
-                    <span className="zv-sub-inline zv-sub-inline-zeile">
-                      von {b.offenerStornoantrag.beantragtVonName}: {b.offenerStornoantrag.grund}
-                    </span>
-                  </>
-                ) : (
-                  <span className="zv-pill zv-pill-ok">
-                    <ISErledigt />
-                    Aktiv
-                  </span>
-                )}
-              </span>
-              <span
-                className={`zv-liste-zelle-aktionen${!b.hatUnterschrift && b.storniert ? " zv-liste-zelle-aktionen-leer" : ""}`}
-              >
-                {b.hatUnterschrift && (
-                  <button className="zv-link-btn" onClick={() => unterschriftAnzeigen(b.id)}>
-                    <IUnterschrift />
-                    Unterschrift
-                  </button>
-                )}
-                {!b.storniert && !b.offenerStornoantrag && (
-                  <button className="zv-link-btn" onClick={() => setStornoBeantragenBuchung(b)}>
-                    <IStornieren />
-                    Storno beantragen
-                  </button>
-                )}
-                {b.offenerStornoantrag && (
-                  <>
-                    <button className="zv-link-btn" onClick={() => stornoEntscheiden(b, "genehmigt")}>
-                      <IGenehmigen />
-                      Genehmigen
-                    </button>
-                    <button className="zv-link-btn" onClick={() => setStornoAblehnenBuchung(b)}>
-                      <IAblehnen />
-                      Ablehnen
-                    </button>
-                  </>
-                )}
-              </span>
-              {offeneUnterschrift?.buchungId === b.id && (
-                <div style={{ gridColumn: "1 / -1", marginTop: "var(--zv-space-2)" }}>
-                  <img src={offeneUnterschrift.url} alt="Unterschrift" style={{ maxHeight: 100 }} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <KassenbuchJournal
+          buchungen={neuesterZuerst(standortBuchungen)}
+          salden={standortSalden}
+          bezugLabel="Standort"
+          bezug={(b) => b.standortName}
+          zusatz={(b) =>
+            [
+              b.typBezeichnung,
+              b.gebuchtVonName,
+              b.teilnehmer.length > 0
+                ? b.teilnehmer.length === 1
+                  ? b.teilnehmer[0].name
+                  : `${b.teilnehmer.length} Teilnehmende`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          }
+          aktionen={zeilenAktionen}
+          unterschrift={unterschriftBild}
+        />
       )}
       </>
       )}

@@ -22,6 +22,7 @@ import {
   ArrowRight,
   ArrowUp,
   Ban,
+  Lock,
   Banknote,
   BedDouble,
   BookX,
@@ -342,3 +343,4 @@ export const IGemeinschaftsraum = baue(Sofa);
 export const IBaumAnsicht = baue(ListTree);
 export const IGrundrissAnsicht = baue(KartenSymbol);
 export const IHochladen = baue(Upload);
+export const ISperre = baue(Lock);

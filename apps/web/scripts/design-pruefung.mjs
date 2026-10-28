@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1 + 4;
+const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1 + 4 + 3;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -304,6 +304,9 @@ async function messePaare(page) {
       pruefe("Heute: Lage-Folgezeile achtung auf Flaeche", q(".zv-pruef-heute-folge"), 4.5);
       pruefe("Heute: naechster Termin (Uhrzeit)", q(".zv-pruef-heute-uhr"), 4.5);
       pruefe("Heute: vergangener Termin (durchgestrichen)", q(".zv-pruef-heute-vorbei"), 4.5);
+      pruefe("Zeitleiste: Balkentext auf Balken", q(".zv-pruef-zl-balken"), 4.5);
+      pruefe("Journal: stornierter Betrag auf Flaeche", q(".zv-pruef-journal-storno"), 4.5);
+      pruefe("Journal: Tabellenkopf auf Flaeche", q(".zv-pruef-journal-kopf"), 4.5);
       pruefe("Eingabefeldrand auf Hintergrund", q(".zv-pruef-input-bg"), 3, "border");
       pruefe("Aktiver Menuepunkt (accent-strong auf accent-soft)", q(".zv-pruef-nav-aktiv"), 4.5);
       pruefe("Gedaempft auf ausgewaehlter Zeile", q(".zv-pruef-auswahl-tg"), 4.5);
@@ -396,6 +399,8 @@ ${["bg", "surface", "s2"].map((f) => `
     <span class="zv-todo-frist zv-todo-frist-achtung zv-mono zv-pruef-heute-frist">seit 3 Tagen</span>
     <span class="zv-lage-folge zv-lage-folge-achtung zv-pruef-heute-folge">4 offen</span>
   </div>
+  <div style="position:relative;height:32px;background:var(--zv-surface)"><button class="zv-zl-balken zv-pruef-zl-balken" style="left:4px;top:4px;width:120px"><span>Sophie B.</span></button></div>
+  <table class="zv-journal" style="background:var(--zv-surface)"><thead><tr><th class="zv-pruef-journal-kopf">Datum</th></tr></thead><tbody><tr class="zv-journal-storniert"><td class="zv-journal-zahl zv-pruef-journal-storno">12,00 &euro;</td></tr></tbody></table>
   <ol class="zv-zeitleiste" style="background:var(--zv-bg);padding:8px">
     <li class="zv-zeit-naechster"><span class="zv-zeit-uhr zv-mono zv-pruef-heute-uhr">14:00&ndash;15:00</span></li>
     <li class="zv-zeit-vorbei"><span class="zv-zeit-titel zv-pruef-heute-vorbei">Vorbei</span></li>

@@ -28,7 +28,7 @@ const PW = process.env.PRUEF_PASSWORT ?? "dev-passwort-nur-lokal";
 const LEITUNG = process.env.PRUEF_LEITUNG ?? "leitung@drk-musterverband.test";
 
 /** Seite -> Ueberschrift/Marker, damit "gerendert" gemessen wird und nicht ein leeres Geruest. */
-const ANSICHTEN = ["Heute", "Nachrichten", "Kalender", "Aufgaben", "Klienten", "Mitarbeitende", "Belegung", "Tagesberichte", "Kassenbuch", "Einstellungen", "Schichtübergabe", "HZL", "Vertretung", "Organigramm"];
+const ANSICHTEN = ["Heute", "Nachrichten", "Kalender", "Aufgaben", "Klienten", "Mitarbeitende", "Belegung", "Tagesberichte", "Kassenbuch", "Einstellungen", "Schichtübergabe", "HZL", "Vertretung", "Organigramm", "Belegung (Zeitleiste)", "Klientenakte"];
 const ELTERN = { Schichtübergabe: "Heute", HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende" };
 const MOBIL_NAME = { Tagesberichte: "Bericht" };
 const BREITEN = [390, 1440];
@@ -42,7 +42,21 @@ const browser = await chromium.launch().catch(async () => {
   throw new Error("Chromium nicht startbar");
 });
 
+/** Ansichten, die erst nach einem zweiten Schritt erscheinen -> Marker, der sie belegt. */
+const TIEFE = {
+  "Belegung (Zeitleiste)": { basis: "Belegung", klick: 'button:has-text("Zimmer und Belegung")', marker: ".zv-zl-zeile" },
+  Klientenakte: { basis: "Klienten", klick: ".zv-info-karte-klickbar", marker: ".zv-akte-kopf" },
+};
+
 async function waehlen(page, label) {
+  const tiefe = TIEFE[label];
+  if (tiefe) {
+    await waehlen(page, tiefe.basis);
+    await page.waitForTimeout(500);
+    await page.locator(tiefe.klick).first().click();
+    await page.waitForSelector(tiefe.marker, { timeout: 8000 });
+    return;
+  }
   const side = page.locator(`.zv-sidebar-nav button:has-text("${label}")`);
   if (await side.first().isVisible().catch(() => false)) { await side.first().click(); return; }
   const knopf = ELTERN[label] ?? label;
