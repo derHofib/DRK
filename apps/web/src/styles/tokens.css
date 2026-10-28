@@ -1,21 +1,34 @@
 /*
  * DESIGNSYSTEM ZIMMERAKTE
  * =======================
- * Loest das Platzhaltersystem der fruehen Phasen ab. Die Grundregel von
- * damals gilt unveraendert weiter und ist der Grund, warum dieser Austausch
- * ueberhaupt an einer Datei moeglich war: KEINE Komponente verdrahtet je
- * eine Farbe fest, alles laeuft ueber die Custom Properties hier.
+ * Grundregel seit den fruehen Phasen und der Grund, warum jeder
+ * Austausch des Erscheinungsbilds an DIESER Datei moeglich ist: KEINE
+ * Komponente verdrahtet je eine Farbe, einen Radius oder einen Abstand
+ * fest, alles laeuft ueber die Custom Properties hier.
  *
  * DIE EINE IDEE
  * -------------
- * Pastell ist die Flaechensprache, der Akzent ist die Handlungssprache.
- * "Leuchtende Pastellfarben" heisst nicht, dass der Speichern-Knopf pastell
- * wird -- bei einer Anwendung, die Geld und Klientenakten verwaltet, waere
- * das unseriös und nicht kontrastfest. Es heisst: Flaechen, Chips, Karten,
- * Leerzustaende und selbst die Neutraltoene tragen einen hellen Hauch der
- * Markenfarbe; Aktionen tragen einen kraeftigen, lesbaren Ton derselben
- * Familie. Im Dunkelmodus dreht sich das um -- dort IST die Akzentflaeche
- * pastellig hell, mit dunkler Schrift darauf.
+ * Ruhige Flaeche, sparsame Signale. Die Anwendung wird schichtweise und
+ * unter Zeitdruck benutzt -- wer im Fruehdienst die Akte oeffnet, muss in
+ * einer Sekunde sehen, was zu tun ist. Jede eingefaerbte Flaeche
+ * konkurriert um genau diese Sekunde.
+ *
+ *   - Die Flaeche ist NEUTRAL (ein leichter, fester Gruenstich, kein
+ *     Pastell). Struktur entsteht ueber Haarlinien, Gruppenlabels und
+ *     Typografie -- nicht ueber Schatten, Verlaeufe oder farbige Karten.
+ *     Die fruehere Pastell-Flaechensprache hat dazu gefuehrt, dass Karten,
+ *     Kartenkoepfe, Leerzustaende und Chips alle gleich laut waren; das
+ *     Auge fand keinen Einstieg mehr.
+ *   - Der AKZENT ist ausschliesslich Handlungsfarbe: Primaerknopf, aktiver
+ *     Menuepunkt, Links. --zv-accent-soft gibt es nur noch fuer den
+ *     aktiven Menuepunkt und ausgewaehlte Zeilen. Wenn der Akzent nur dort
+ *     steht, heisst er ueberall dasselbe: "hier kannst du handeln".
+ *   - KORALLE (--zv-achtung*) ist ausschliesslich Aufmerksamkeit: heute,
+ *     ueberfaellig, offen, ungelesen. Nie dekorativ -- eine dekorative
+ *     Koralle wuerde die eine Farbe entwerten, auf die sich die
+ *     Mitarbeitenden beim schnellen Hinsehen verlassen. Sie ist fest und
+ *     folgt dem Akzent NICHT, damit "koralle heisst: kuemmere dich" bei
+ *     jedem Traeger gleich gilt.
  *
  * WIE DIE AKZENTFARBE FUNKTIONIERT (der Kern)
  * -------------------------------------------
@@ -31,8 +44,9 @@
  * der Fehlermodus "bei Tuerkis geht's, bei Gelb ist der Knopf unlesbar".
  *
  * Wer die Werte hier aendert: die Kontrastmatrix in
- * scripts/design-pruefung.mjs misst 9 Paletten x 2 Themes im echten Browser
- * und schlaegt fehl, wenn ein Paar unter die Schwelle faellt.
+ * scripts/design-pruefung.mjs misst alle Paletten plus vier Extremfaelle x
+ * 2 Themes im echten Browser und schlaegt fehl, wenn ein Paar unter die
+ * Schwelle faellt.
  */
 
 /*
@@ -45,13 +59,13 @@
 @property --zv-accent-h {
   syntax: "<number>";
   inherits: true;
-  /* DRK-Rot (#e3000f), siehe PASTELL_PALETTEN in packages/shared. */
-  initial-value: 28.1;
+  /* Tannengruen (#2d6a4f), AKZENTFARBE_STANDARD in packages/shared. */
+  initial-value: 162.2;
 }
 @property --zv-accent-c {
   syntax: "<number>";
   inherits: true;
-  initial-value: 0.125;
+  initial-value: 0.0777;
 }
 
 /*
@@ -107,7 +121,9 @@
     oklch(0.4 var(--zv-accent-c) var(--zv-accent-h)),
     oklch(0.87 calc(var(--zv-accent-c) * 0.75) var(--zv-accent-h))
   );
-  /* Das Pastell: Pill-Hintergrund, ausgewaehlte Zeile, Kartenkopf. */
+  /* NUR aktiver Menuepunkt und ausgewaehlte Zeile -- nicht fuer Karten,
+     Kartenkoepfe, Tags oder Leerzustaende (siehe Kopf: der Akzent heisst
+     ueberall "hier handeln" bzw. "hier bist du"). */
   --zv-accent-soft: light-dark(
     oklch(0.955 calc(var(--zv-accent-c) * 0.38) var(--zv-accent-h)),
     oklch(0.3 calc(var(--zv-accent-c) * 0.55) var(--zv-accent-h))
@@ -125,7 +141,8 @@
     oklch(0.99 0 0),
     oklch(0.2 calc(var(--zv-accent-c) * 0.6) var(--zv-accent-h))
   );
-  /* Rein dekorativ (Login-Schimmer) -- nie Traeger von Text. */
+  /* Rein grafisch (Fortschrittsbalken, Laufzeitbalken) -- nie Traeger
+     von Text. */
   --zv-accent-vivid: light-dark(
     oklch(0.7 calc(var(--zv-accent-c) * 1.1) var(--zv-accent-h)),
     oklch(0.85 calc(var(--zv-accent-c) * 0.9) var(--zv-accent-h))
@@ -136,94 +153,144 @@
   );
 
   /* ------------------------------------------------------------------
-     Neutrale -- mit einem Hauch Farbton
-     Das ist der Trick, der eine Oberflaeche "aus einem Guss" wirken laesst,
-     ohne sie einzufaerben. Auf 0 setzen schaltet es ab; bei achromatischer
-     Wahl (c = 0) entfaellt es automatisch.
+     Neutrale -- fester, leichter Gruenstich statt Akzent-Tint
+     ------------------------------------------------------------------
+     HELL folgt dem Akzent NICHT mehr. Frueher trugen Flaechen und Text
+     einen Hauch der Akzentfarbe; bei DRK-Rot wurde die Oberflaeche dadurch
+     spuerbar rosa, bei Honig gelblich. Eine Fachanwendung, in der Ordnung
+     das Versprechen ist, braucht einen Grund, der bei jedem Traeger gleich
+     aussieht. Der Gruenstich (Farbton 135-160, Buntheit <= 0,02) ist aus
+     der hecaso-Marke (Tannengruen) abgeleitet und so leise, dass er als
+     "warmes Neutral" und nicht als Farbe gelesen wird.
 
-     HELL folgt weiterhin dem AKZENT (--zv-tint-l aus --zv-accent-c) -- dort
-     gilt seit jeher dieselbe Unabhaengigkeit fuer --zv-bg/--zv-surface, die
-     jetzt fuer Dunkel nachgezogen wird (s.u.), also bleibt der helle Zweig
-     unveraendert.
+     DUNKEL folgt seit Migration 0029 der eigenstaendig einstellbaren
+     dunklen Grundfarbe (--zv-dunkel-h/-c); dieselbe Staffelung wie hell
+     (Hintergrund dunkler als Flaeche, Flaeche gedaempft knapp darueber).
+     --zv-dunkel-c ist bereits die fertige Zielchroma (siehe
+     GRUNDFARBE_CHROMA_MAX in farbe.ts), deshalb ohne weiteren Faktor.
 
-     DUNKEL folgt seit Migration 0029 NICHT mehr dem Akzent, sondern der
-     eigenstaendig einstellbaren dunklen Grundfarbe (--zv-dunkel-c): sonst
-     wanderte der Dunkelmodus-Hintergrund bei jeder Akzentaenderung mit --
-     im Hellen war --zv-bg dagegen schon immer reines Weiss, unabhaengig
-     vom Akzent. --zv-dunkel-c ist bereits die fertige Zielchroma (siehe
-     GRUNDFARBE_CHROMA_MAX in farbe.ts), deshalb hier ohne weiteren Faktor.
+     Die Staffelung bg < surface ist Absicht: Flaechen heben sich ueber
+     ihren Rahmen UND einen kleinen Helligkeitssprung vom Hintergrund ab --
+     dadurch braucht keine Karte mehr einen Schatten.
      ------------------------------------------------------------------ */
-  --zv-tint-l: calc(var(--zv-accent-c) * 0.075);
   --zv-tint-d: var(--zv-dunkel-c);
 
-  /*
-   * Hell bewusst OHNE Tint, anders als die uebrigen Neutraltoene hier:
-   * bei kraeftiger Buntheit (z.B. DRK-Rot) faerbte der Seitenhintergrund
-   * sonst spuerbar rosa ein -- Karten grenzen sich ueber Rand/Schatten ab
-   * (siehe .zv-card), nicht ueber einen Helligkeitsunterschied zum
-   * Hintergrund, daher kostet reines Weiss hier nichts an Kontur.
-   */
+  /* Seitenhintergrund (#F4F6F3) */
   --zv-bg: light-dark(
-    oklch(1 0 0),
+    oklch(0.971 0.0045 135),
     oklch(0.185 var(--zv-tint-d) var(--zv-dunkel-h))
   );
-  --zv-surface: light-dark(oklch(1 0 0), oklch(0.225 var(--zv-tint-d) var(--zv-dunkel-h)));
+  /* Flaeche (#FFFFFF) -- Listen, Tabellen, Seitenleiste */
+  --zv-surface: light-dark(oklch(1 0 0), oklch(0.215 var(--zv-tint-d) var(--zv-dunkel-h)));
+  /* Flaeche gedaempft (#F7F9F6) -- Gruppenkoepfe in Listen/Tabellen,
+     Fusszeilen von Flaechen. */
   --zv-surface-2: light-dark(
-    oklch(0.968 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.265 var(--zv-tint-d) var(--zv-dunkel-h))
+    oklch(0.98 0.0045 135),
+    oklch(0.245 var(--zv-tint-d) var(--zv-dunkel-h))
   );
-  /* Zeilen-Hover in Tabellen. */
+  --zv-surface-gedaempft: var(--zv-surface-2);
+  /* Zeilen- und Menue-Hover (#EDF1EC) */
   --zv-surface-3: light-dark(
-    oklch(0.935 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.315 var(--zv-tint-d) var(--zv-dunkel-h))
+    oklch(0.952 0.006 145),
+    oklch(0.28 var(--zv-tint-d) var(--zv-dunkel-h))
   );
+  /* Rahmen (#DCE2DC) -- Umriss von Flaechen */
   --zv-border: light-dark(
-    oklch(0.905 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.34 var(--zv-tint-d) var(--zv-dunkel-h))
+    oklch(0.907 0.0103 145),
+    oklch(0.33 var(--zv-tint-d) var(--zv-dunkel-h))
+  );
+  /* Haarlinie (#E6EBE6) -- Trenner INNERHALB einer Flaeche (Zeilen,
+     Spalten der Lage-Leiste). Leiser als der Umriss, damit die Flaeche als
+     Ganzes lesbar bleibt und die Zeilen trotzdem getrennt sind. */
+  --zv-haarlinie: light-dark(
+    oklch(0.935 0.0085 145),
+    oklch(0.285 var(--zv-tint-d) var(--zv-dunkel-h))
+  );
+  /* Rahmen stark (#C3CCC4) -- Sekundaerknoepfe. Bewusst NICHT fuer
+     Eingabefelder, siehe --zv-border-strong: ein beschrifteter Knopf ist
+     ueber seinen Text als Bedienelement erkennbar, ein leeres Feld nur
+     ueber seinen Rand. */
+  --zv-border-knopf: light-dark(
+    oklch(0.836 0.0147 149),
+    oklch(0.4 var(--zv-tint-d) var(--zv-dunkel-h))
   );
   /*
-   * Raender, die ein BEDIENELEMENT abgrenzen (Eingabefelder). Die Werte
-   * sind gemessen, nicht geschaetzt: WCAG 1.4.11 verlangt 3:1 fuer
-   * Umrisse, die ein Bedienelement identifizieren, und weil die
-   * Eingabefelder dieselbe Flaechenfarbe haben wie die Karte darunter,
-   * ist dieser Rand das EINZIGE Merkmal, das sie erkennbar macht.
-   * Die erste Fassung (0.845 / 0.42) lag bei 1,60:1 hell und 2,02:1 dunkel
-   * -- aufgefallen in der Kontrastmatrix, nicht am Auge.
-   *
-   * Bewusst getrennt von --zv-border: rein dekorative Trennlinien
-   * (Kartenumrisse, Tabellenzeilen) faellt SC 1.4.11 nicht, sie duerfen
-   * und sollen leiser bleiben.
+   * Raender, die ein EINGABEFELD abgrenzen. Gemessen, nicht geschaetzt:
+   * WCAG 1.4.11 verlangt 3:1 fuer Umrisse, die ein Bedienelement
+   * identifizieren, und weil Eingabefelder dieselbe Flaechenfarbe haben
+   * wie die Flaeche darunter, ist dieser Rand das EINZIGE Merkmal, das sie
+   * erkennbar macht. Der Entwurfswert #C3CCC4 laege bei 1,65:1 -- deshalb
+   * gibt es dafuer eigens --zv-border-knopf. Die erste Fassung des alten
+   * Systems (0.845 / 0.42) lag bei 1,60:1 hell und 2,02:1 dunkel --
+   * aufgefallen in der Kontrastmatrix, nicht am Auge.
    */
   --zv-border-strong: light-dark(
-    oklch(0.66 var(--zv-tint-l) var(--zv-accent-h)),
+    oklch(0.62 0.014 150),
     oklch(0.54 var(--zv-tint-d) var(--zv-dunkel-h))
   );
 
+  /* Text (#18231D) */
   --zv-text: light-dark(
-    oklch(0.25 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.955 var(--zv-tint-l) var(--zv-accent-h))
+    oklch(0.243 0.0193 160),
+    oklch(0.955 calc(var(--zv-tint-d) * 0.5) var(--zv-dunkel-h))
   );
+  /* Text sekundaer (#4A5850) -- Metazeilen, Beschriftungen */
   --zv-text-muted: light-dark(
-    oklch(0.44 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.745 var(--zv-tint-l) var(--zv-accent-h))
+    oklch(0.446 0.0218 160),
+    oklch(0.8 calc(var(--zv-tint-d) * 0.8) var(--zv-dunkel-h))
   );
+  --zv-text-sekundaer: var(--zv-text-muted);
   /*
-   * Zweiter behobener Fehler des alten Systems: --zv-text-faint war #8c8c8c
-   * -- 3,36:1 auf Weiss und nur 2,87:1 auf --zv-surface-2, wo die
-   * Tabellenkoepfe stehen. Der Token traegt aber echten Inhalt (alle
-   * Leerzustaende, "Kein Klient zugeordnet", saemtliche Tabellenkoepfe).
-   * Die Werte hier sind so bemessen, dass sie AUCH auf --zv-surface-2 noch
-   * >= 4,5:1 halten -- das ist die haertere Bedingung.
+   * Text gedaempft (#5E6B63). Traegt echten Inhalt (Kontextzeile,
+   * Gruppenlabels, Leerzustaende, Tabellenkoepfe) und muss deshalb auf
+   * --zv-bg UND --zv-surface UND --zv-surface-2 >= 4,5:1 halten -- auf
+   * --zv-bg ist die haerteste Bedingung (hell gemessen 5,14:1). Das alte
+   * #8c8c8c lag bei 3,36:1 und war der zweite behobene Fehler des alten
+   * Systems.
    */
   --zv-text-faint: light-dark(
-    oklch(0.54 var(--zv-tint-l) var(--zv-accent-h)),
-    oklch(0.65 var(--zv-tint-l) var(--zv-accent-h))
+    oklch(0.514 0.0201 159),
+    oklch(0.7 calc(var(--zv-tint-d) * 0.8) var(--zv-dunkel-h))
   );
+  --zv-text-gedaempft: var(--zv-text-faint);
+
+  /* ------------------------------------------------------------------
+     Aufmerksamkeit -- Koralle, fest, nie dekorativ (siehe Kopf)
+     ------------------------------------------------------------------ */
+  /*
+   * Koralle als Flaeche/Marker: Heute-Linie, angekuendigter Auszug,
+   * naechster Termin. Bewusst einen Hauch dunkler als die Markenfarbe
+   * #E07A5F (--zv-marke-sonne bleibt unveraendert): die laege auf Weiss
+   * bei 2,95:1 und damit knapp unter den 3:1, die WCAG 1.4.11 fuer
+   * bedeutungstragende Grafik verlangt. So 3,41:1 auf Weiss, 3,14:1 auf
+   * dem Seitenhintergrund.
+   */
+  --zv-achtung: light-dark(oklch(0.65 0.135 36), oklch(0.74 0.12 36));
+  /* Koralle als TEXT (#A8432A): ueberfaellige Fristen, Zaehler. */
+  --zv-achtung-text: light-dark(oklch(0.515 0.139 35), oklch(0.82 0.11 36));
+  /* Hintergrund fuer Achtung-Tags (#FBE9E3). */
+  --zv-achtung-soft: light-dark(oklch(0.947 0.0213 39), oklch(0.32 0.06 36));
+
+  /* ------------------------------------------------------------------
+     Status-Tags -- vier Varianten, feste Farbtoene
+     neutral / erledigt (gruen) / Frist (Bernstein) / achtung (Koralle).
+     Fest statt vom Akzent abgeleitet: "gruen heisst erledigt" muss auch
+     beim Traeger mit gruenem oder rotem Akzent gelten.
+     ------------------------------------------------------------------ */
+  --zv-tag-neutral-bg: light-dark(oklch(0.952 0.004 145), oklch(0.3 var(--zv-tint-d) var(--zv-dunkel-h)));
+  --zv-tag-neutral-text: light-dark(oklch(0.39 0.02 160), oklch(0.85 calc(var(--zv-tint-d) * 0.8) var(--zv-dunkel-h)));
+  --zv-tag-erledigt-bg: light-dark(oklch(0.939 0.0149 158), oklch(0.3 0.045 158));
+  --zv-tag-erledigt-text: light-dark(oklch(0.382 0.0616 163), oklch(0.85 0.08 158));
+  /* Bernstein #FFF3D6 / #7A5300 */
+  --zv-tag-frist-bg: light-dark(oklch(0.966 0.04 88), oklch(0.31 0.055 75));
+  --zv-tag-frist-text: light-dark(oklch(0.473 0.0988 77), oklch(0.86 0.1 85));
+  --zv-tag-achtung-bg: var(--zv-achtung-soft);
+  --zv-tag-achtung-text: var(--zv-achtung-text);
 
   /* ------------------------------------------------------------------
      Status -- feste Farbtoene, gleiche Helligkeitsdisziplin
-     Semantik darf dem Akzent NICHT folgen: "gruen heisst bezahlt" muss
-     unabhaengig von der Hausfarbe gelten.
+     Fuer Hinweise, Fehler und Betraege (Storno, negativ). Semantik darf
+     dem Akzent NICHT folgen.
      ------------------------------------------------------------------ */
   --zv-status-ok: light-dark(oklch(0.5 0.11 152), oklch(0.8 0.11 152));
   --zv-status-ok-bg: light-dark(oklch(0.955 0.038 152), oklch(0.3 0.055 152));
@@ -237,24 +304,37 @@
   /* ------------------------------------------------------------------
      Form
      ------------------------------------------------------------------ */
+  /*
+   * Drei Radien, keine groesseren: 6 fuer Tags, 10 fuer Knoepfe, Felder und
+   * Menuepunkte, 12 fuer Flaechen (leicht angehoben auf Wunsch: Kaesten
+   * sollen weicher wirken, aber weiterhin eindeutig eckig-sachlich). Grosse Radien lassen Flaechen weich und
+   * "verspielt" wirken -- bei einer Akte mit Geld und Fristen soll die Form
+   * nicht mehr behaupten als der Inhalt. --zv-radius-pill bleibt NUR fuer
+   * echte Kreise (Punkte, Farbfelder, Schalter), nicht fuer Tags.
+   */
   --zv-radius-s: 6px;
   --zv-radius-m: 10px;
-  --zv-radius-l: 16px;
+  --zv-radius-l: 12px;
   --zv-radius-pill: 999px;
 
-  /* Schatten sind keine Farben -- light-dark() nur auf ihre Farbanteile. */
-  --zv-schatten-farbe-1: light-dark(
-    oklch(0.25 0.02 var(--zv-accent-h) / 0.07),
-    oklch(0 0 0 / 0.45)
-  );
-  --zv-schatten-farbe-2: light-dark(
-    oklch(0.25 0.02 var(--zv-accent-h) / 0.06),
-    oklch(0 0 0 / 0.35)
-  );
-  --zv-shadow-1: 0 1px 2px var(--zv-schatten-farbe-1), 0 4px 12px var(--zv-schatten-farbe-2);
+  /* Masse der Status-Tags (.zv-pill): fest, damit Tags in Tabellenzeilen
+     und Listen auf einer Linie stehen, egal welcher Text darin steht. */
+  --zv-tag-hoehe: 22px;
+  --zv-tag-schrift: 12px;
+
+  /*
+   * Schatten nur noch fuer Ebenen, die wirklich SCHWEBEN (Modal,
+   * Seitenpanel, Befehlspalette, Menues, Tooltips). Flaechen in der Seite
+   * grenzen sich ueber Rahmen und Helligkeit ab; ein Schatten dort sagt
+   * "ich liege obenauf" und luegt. --zv-shadow-1 ist deshalb bewusst
+   * "none" -- alle bisherigen Karten-Verwendungen verlieren ihn so an
+   * einer Stelle.
+   */
+  --zv-schatten-farbe-1: light-dark(oklch(0.25 0.02 160 / 0.08), oklch(0 0 0 / 0.45));
+  --zv-schatten-farbe-2: light-dark(oklch(0.25 0.02 160 / 0.07), oklch(0 0 0 / 0.35));
+  --zv-shadow-1: none;
   --zv-shadow-2: 0 2px 4px var(--zv-schatten-farbe-1), 0 8px 24px var(--zv-schatten-farbe-2);
   --zv-shadow-3: 0 4px 8px var(--zv-schatten-farbe-1), 0 16px 48px var(--zv-schatten-farbe-2);
-  /* Alias, damit .zv-card/.zv-room-card unveraendert weiterlaufen. */
   --zv-shadow: var(--zv-shadow-1);
 
   --zv-ring: 0 0 0 3px var(--zv-accent-ring);
@@ -262,7 +342,7 @@
 
   /* Abdunklung hinter einem Modal -- in beiden Themes gleich dunkel, damit
      der Kontrast zur (hellen oder dunklen) Karte davor immer stimmt. */
-  --zv-scrim: oklch(0.15 0.02 var(--zv-accent-h) / 0.5);
+  --zv-scrim: oklch(0.15 0.02 160 / 0.5);
 
   /* ------------------------------------------------------------------
      Abstand, Typografie, Icons, Bewegung
@@ -287,6 +367,13 @@
      --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
      Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
   --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Die Arbeitsschrift der Oberflaeche selbst: Ueberschriften, Navigation,
+     Knoepfe, Tags, Tabellenkoepfe. Gleiche Familie wie die Wortmarke --
+     bewusst: die UI-Schrift (Figtree) fuehrt, der Fliesstext (Source Sans
+     3) liest sich dahinter weg, Zahlen (Plex Mono) stehen als Daten
+     erkennbar daneben. Drei Schriften, drei Aufgaben, keine Mischung
+     innerhalb einer Aufgabe. */
+  --zv-font-ui: var(--zv-font-marke);
 
   /*
    * Feste hecaso-Markenfarben (Haus-Umriss + Sonnenbogen in
@@ -300,12 +387,28 @@
   --zv-marke-haus: light-dark(#2d6a4f, #f3f6f0);
   --zv-marke-sonne: light-dark(#e07a5f, #f6a58b);
 
-  --zv-text-xs: 11.5px;
-  --zv-text-s: 12.5px;
+  /*
+   * Schriftskala. 15 px Basis (Source Sans 3 laeuft klein), Metadaten 13,
+   * Gruppenlabels 11-12 halbfett in Versalien. Die alten Namen -xs..-2xl
+   * bleiben als Staffel erhalten, damit bestehende Regeln nicht brechen;
+   * neue Regeln nehmen die sprechenden Namen.
+   */
+  --zv-text-label: 12px;
+  --zv-text-meta: 13px;
+  --zv-text-basis: 15px;
+  --zv-text-abschnitt: 17px;
+  --zv-text-titel: 32px;
+  --zv-text-xs: 12px;
+  --zv-text-s: 13px;
   --zv-text-m: 14px;
   --zv-text-l: 15px;
   --zv-text-xl: 17px;
   --zv-text-2xl: 21px;
+  --zv-weight-bold: 700;
+  /* Laufweiten: enger beim grossen Titel (sonst wirkt 32 px Figtree
+     luftig), weiter bei Versalien (sonst kleben die Buchstaben). */
+  --zv-laufweite-titel: -0.02em;
+  --zv-laufweite-label: 0.07em;
   --zv-weight-medium: 500;
   --zv-weight-semibold: 600;
   --zv-leading-tight: 1.3;
@@ -328,6 +431,11 @@
    */
   --zv-signature-paper: #ffffff;
   --zv-signature-ink: #1a1a1a;
+
+  /* Breite der Seitenleiste (ausgeklappt). Ein Token, weil sie an fuenf
+     Stellen zaehlt: Leiste, Innenflaeche, Hover-Ausklappen und die beiden
+     Seitenpanel-Regeln, die rechts davon beginnen muessen. */
+  --zv-sidebar-breite: 248px;
 
   --zv-content-max: 760px;
   --zv-content-max-weit: 1040px;

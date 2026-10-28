@@ -381,6 +381,8 @@ export const api = {
   mandantChatLoeschfristSetzen: (tage: number) =>
     request<MandantDto>("/mandant/me/chat-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
+  // Das eigene Konto (Name, Positionen) -- fuer den Benutzerblock der Seitenleiste.
+  benutzerIch: () => request<BenutzerListEintragDto>("/benutzer/ich"),
   benutzerAnlegen: (payload: { name: string; email: string; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
   passwortResetErstellen: (benutzerId: string) =>

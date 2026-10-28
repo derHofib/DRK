@@ -31,7 +31,14 @@ import {
   IZiehen,
   IZuruecksetzen,
 } from "../components/icons";
-import { STANDARD_REITER, reiterNachReihenfolge, type HauptReiter } from "../navigation";
+import {
+  MENUE_GRUPPEN,
+  STANDARD_REITER,
+  gruppeNeuOrdnen,
+  reiterDerGruppe,
+  type HauptReiter,
+  type MenueGruppeId,
+} from "../navigation";
 
 type Bereich = "profil" | "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
 
@@ -189,18 +196,6 @@ function MenuReihenfolge({
   reihenfolge: HauptReiter[];
   onAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
-  const eintraege = reiterNachReihenfolge(reihenfolge);
-  const [ziehtIndex, setZiehtIndex] = useState<number | null>(null);
-  const [zielIndex, setZielIndex] = useState<number | null>(null);
-
-  function verschieben(von: number, nach: number) {
-    if (von === nach || von < 0 || nach < 0 || von >= reihenfolge.length || nach >= reihenfolge.length) return;
-    const neu = [...reihenfolge];
-    const [stueck] = neu.splice(von, 1);
-    neu.splice(nach, 0, stueck);
-    onAendern(neu);
-  }
-
   return (
     <section className="zv-einstellungen-abschnitt">
       <h3>
@@ -208,9 +203,51 @@ function MenuReihenfolge({
         Reihenfolge der Menüpunkte
       </h3>
       <p className="zv-sub">
-        Gilt nur für dich, auf diesem Gerät. Zum Verschieben ziehen oder die Pfeile nutzen.
+        Gilt nur für dich, auf diesem Gerät. Die Reihenfolge gilt innerhalb der Gruppe; zum Verschieben ziehen oder die
+        Pfeile nutzen.
       </p>
-      <ul className="zv-reihenfolge-liste">
+      {MENUE_GRUPPEN.map((g) => (
+        <MenuReihenfolgeGruppe key={g.id} gruppe={g.id} label={g.label} reihenfolge={reihenfolge} onAendern={onAendern} />
+      ))}
+      <button
+        type="button"
+        className="zv-btn zv-btn-still zv-btn-klein"
+        onClick={() => onAendern(STANDARD_REITER.map((r) => r.wert))}
+      >
+        <IZuruecksetzen />
+        Standardreihenfolge wiederherstellen
+      </button>
+    </section>
+  );
+}
+
+function MenuReihenfolgeGruppe({
+  gruppe,
+  label,
+  reihenfolge,
+  onAendern,
+}: {
+  gruppe: MenueGruppeId;
+  label: string;
+  reihenfolge: HauptReiter[];
+  onAendern: (reihenfolge: HauptReiter[]) => void;
+}) {
+  const eintraege = reiterDerGruppe(reihenfolge, gruppe);
+  const [ziehtIndex, setZiehtIndex] = useState<number | null>(null);
+  const [zielIndex, setZielIndex] = useState<number | null>(null);
+
+  function verschieben(von: number, nach: number) {
+    if (von === nach || von < 0 || nach < 0 || von >= eintraege.length || nach >= eintraege.length) return;
+    const neu = eintraege.map((r) => r.wert);
+    const [stueck] = neu.splice(von, 1);
+    neu.splice(nach, 0, stueck);
+    onAendern(gruppeNeuOrdnen(reihenfolge, gruppe, neu));
+  }
+
+  return (
+    <>
+      <h4 className="zv-gruppenlabel">{label}</h4>
+      <ul className="zv-reihenfolge-liste" aria-label={`Reihenfolge ${label}`}>
         {eintraege.map((r, i) => (
           <li
             key={r.wert}
@@ -264,15 +301,7 @@ function MenuReihenfolge({
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className="zv-btn zv-btn-still zv-btn-klein"
-        onClick={() => onAendern(STANDARD_REITER.map((r) => r.wert))}
-      >
-        <IZuruecksetzen />
-        Standardreihenfolge wiederherstellen
-      </button>
-    </section>
+    </>
   );
 }
 
@@ -412,7 +441,7 @@ function Traegerfarbe({
             maxLength={7}
           />
           {!AKZENTFARBE_MUSTER.test(hexFeld) && (
-            <span className="zv-sub-inline">Bitte im Format #e3000f.</span>
+            <span className="zv-sub-inline">Bitte im Format #2d6a4f.</span>
           )}
         </div>
       </div>

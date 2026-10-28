@@ -17,23 +17,18 @@
 }
 
 /*
- * Pastellschimmer hinter der Anmeldekarte -- die einzige Stelle, an der die
- * Markenfarbe grossflaechig auftritt. Bewusst nur auf .zv-shell (Login) und
- * nicht auf .zv-shell-app: hinter Tabellen und Formularen waere das Unruhe
- * ohne Nutzen.
+ * Frueher lag hier ein Farbverlauf in der Markenfarbe hinter der Anmeldekarte.
+ * Entfernt: ruhige, sachliche Oberflaeche auch auf der Anmeldeseite -- die
+ * Marke traegt das Zeichen in der Karte, nicht eine Flaeche dahinter.
  */
-.zv-shell::before {
-  content: "";
-  position: absolute;
-  inset: -30% -10% auto -10%;
-  height: 70%;
-  background: radial-gradient(
-    ellipse 60% 60% at 50% 40%,
-    var(--zv-accent-vivid) 0%,
-    transparent 70%
-  );
-  opacity: 0.16;
-  pointer-events: none;
+.zv-shell > .zv-card {
+  width: min(100% - var(--zv-space-5), 400px);
+  box-shadow: none;
+}
+.zv-login-slogan {
+  margin: 0 0 var(--zv-space-4);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
 }
 
 .zv-content {
@@ -55,7 +50,7 @@
  * statt die Liste zu verschmaelern -- die Liste bleibt exakt so breit wie
  * sie ist. position:fixed macht das unabhaengig vom Seiteninhalt; die
  * Sidebar bleibt sichtbar (deshalb "left" nur ab 641px auf ihre Breite
- * gesetzt, siehe .zv-sidebar { width: 240px }). Auf dem Handy (Sidebar
+ * gesetzt, siehe .zv-sidebar { width: 248px }). Auf dem Handy (Sidebar
  * ohnehin ausgeblendet) deckt das Panel automatisch den ganzen Bildschirm
  * ab -- entspricht dem bisherigen "Liste ODER Detail"-Verhalten, nur ohne
  * eigene Sonderregel dafuer.
@@ -114,7 +109,7 @@
 
 @media (min-width: 641px) {
   .zv-seitenpanel-hintergrund {
-    left: 240px;
+    left: var(--zv-sidebar-breite);
   }
 
   .zv-seitenpanel {
@@ -123,11 +118,11 @@
     /* 720px ist genug fuer die Klientenakte samt Tabs; auf schmalen
        Fenstern (knapp ueber 641px) bleibt trotzdem ein Streifen der
        abgedunkelten Liste sichtbar, statt das Fenster zu sprengen. */
-    width: min(720px, calc(100vw - 240px - var(--zv-space-6)));
+    width: min(720px, calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-6)));
   }
 
   .zv-seitenpanel.zv-seitenpanel-vollbild {
-    left: 240px;
+    left: var(--zv-sidebar-breite);
     width: auto;
   }
 }
@@ -173,7 +168,7 @@
 }
 
 /*
- * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (240px/68px) --
+ * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (248px/68px) --
  * ihr eigentlicher Inhalt sitzt in .zv-sidebar-inner, absolut positioniert
  * ueber ihr. Das ist keine Spielerei: nur so kann die "Beim Ueberfahren
  * ausklappen"-Einstellung (weiter unten) den Inhalt breiter zeichnen als
@@ -183,19 +178,28 @@
  * Layouts, keine reine Optik.
  */
 .zv-sidebar {
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   flex: none;
-  position: relative;
+  /* Sticky mit Viewport-Hoehe statt "streckt sich auf die Seitenhoehe":
+     so bleiben Einstellungen, Benutzerblock und Abmelden immer im Bild,
+     auch auf langen Seiten, und die Hauptnavigation scrollt bei Bedarf
+     fuer sich. align-self, weil Flex-Kinder sonst auf Seitenhoehe
+     gestreckt werden und sticky ins Leere liefe. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .zv-sidebar-inner {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   display: flex;
   flex-direction: column;
-  gap: var(--zv-space-6);
-  padding: var(--zv-space-5) var(--zv-space-4);
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-5) var(--zv-space-3);
   background: var(--zv-surface);
   border-right: 1px solid var(--zv-border);
 }
@@ -226,8 +230,8 @@
    (Source Sans 3), Figtree hat ein eigenes Gewicht dafuer. */
 .zv-brand-text strong {
   font-family: var(--zv-font-marke);
-  font-size: var(--zv-text-l);
-  font-weight: 600;
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-bold);
   letter-spacing: -0.02em;
   color: var(--zv-marke-haus);
 }
@@ -249,14 +253,17 @@
 .zv-sidebar-nav button {
   display: flex;
   align-items: center;
-  gap: var(--zv-space-2);
-  padding: var(--zv-space-2) var(--zv-space-3);
-  border-radius: var(--zv-radius-s);
+  gap: var(--zv-space-3);
+  /* 44 px: Mindestgroesse fuer Touch und zugleich die Hoehe, bei der eine
+     Gruppe aus drei, vier Punkten ruhig wirkt statt gedraengt. */
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
   border: none;
   background: none;
-  color: var(--zv-text-muted);
-  font-size: var(--zv-text-m);
-  font-family: inherit;
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-basis);
+  font-family: var(--zv-font-ui);
   font-weight: var(--zv-weight-medium);
   text-align: left;
   cursor: pointer;
@@ -264,13 +271,101 @@
 }
 
 .zv-sidebar-nav button:hover {
-  background: var(--zv-surface-2);
+  background: var(--zv-surface-3);
   color: var(--zv-text);
 }
 
+/* Aktiv = die EINE Stelle, an der accent-soft in der Navigation steht. */
 .zv-sidebar-nav button.active {
   background: var(--zv-accent-soft);
   color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Gruppenlabel (ARBEIT / MENSCHEN / HAUS): Struktur ueber Typografie statt
+   ueber Kaesten. Auch in den Einstellungen und in Listen verwendbar. */
+.zv-gruppenlabel {
+  margin: 0;
+  padding: var(--zv-space-5) var(--zv-space-3) var(--zv-space-2);
+  font-family: var(--zv-font-ui);
+  font-size: 11px;
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zv-text-gedaempft);
+}
+
+.zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  padding-top: var(--zv-space-3);
+}
+
+.zv-mandant-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-mandant-zeile span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzerblock {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3);
+  border-top: 1px solid var(--zv-haarlinie);
+}
+
+/* Kachel statt Kreis: rund waere ein Avatar-Foto-Versprechen, das es hier
+   nicht gibt. Initialen auf accent-soft, wie ein ausgewaehlter Eintrag. */
+.zv-benutzer-kachel {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-bold);
+}
+
+.zv-benutzer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.zv-benutzer-name {
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzer-rolle {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-gedaempft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* "Klienten" mit aufklappbarem Unterpunkt "Anwärter" (Shell.tsx). Nur im
@@ -302,7 +397,21 @@
 }
 
 .zv-sidebar-unterpunkte button {
-  font-size: var(--zv-text-s);
+  font-size: var(--zv-text-meta);
+  /* Unterpunkte sind kleiner als Hauptpunkte (44 px): sonst brauchen die
+     drei Gruppen mit ihren Unterpunkten mehr als eine Bildschirmhoehe. */
+  min-height: 36px;
+}
+
+/* Die Hauptnavigation scrollt, der Fuss (Einstellungen, Benutzerblock,
+   Abmelden) bleibt stehen. Nur ausgeklappt: eingeklappt zeichnet
+   .zv-sidebar-nav button:hover::after die Sprechblase ueber den Rand
+   hinaus, ein overflow-Container wuerde sie abschneiden -- und
+   eingeklappt (nur Icons, keine Unterpunkte) passt alles ohnehin. */
+.zv-sidebar[data-eingeklappt="false"] .zv-sidebar-nav-haupt {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .zv-sidebar-foot {
@@ -343,6 +452,28 @@
 .zv-sidebar[data-eingeklappt="true"] .zv-brand-text,
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-label {
   display: none;
+}
+
+/* Eingeklappt ersetzt eine Haarlinie das Gruppenlabel: die Gruppen bleiben
+   erkennbar, ohne dass Text in 68 px gequetscht wird. */
+.zv-sidebar[data-eingeklappt="true"] .zv-gruppenlabel {
+  height: 0;
+  padding: 0;
+  margin: var(--zv-space-3) var(--zv-space-2);
+  overflow: hidden;
+  border-top: 1px solid var(--zv-haarlinie);
+  font-size: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  display: none;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-mandant-zeile,
+.zv-sidebar[data-eingeklappt="true"] .zv-benutzerblock {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-brand {
@@ -391,7 +522,7 @@
   font-size: var(--zv-text-xs);
   font-weight: var(--zv-weight-semibold);
   white-space: nowrap;
-  box-shadow: var(--zv-shadow-1);
+  box-shadow: var(--zv-shadow-2);
   z-index: 5;
   pointer-events: none;
 }
@@ -407,7 +538,7 @@
    ------------------------------------------------------------------ */
 .zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-inner,
 .zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-inner {
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   padding-left: var(--zv-space-4);
   padding-right: var(--zv-space-4);
   box-shadow: var(--zv-shadow-3);
@@ -455,7 +586,6 @@
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-l);
-  box-shadow: var(--zv-shadow-2);
   padding: var(--zv-space-6);
   width: 100%;
   max-width: 380px;
@@ -692,21 +822,22 @@
   width: 100%;
 }
 
-/* Tonal: traegt die Markenfarbe als Flaeche, ohne mit dem primaeren
-   Knopf um Aufmerksamkeit zu konkurrieren. */
+/* Weiss mit Rahmen statt tonaler Akzentflaeche: der Akzent als Flaeche
+   gehoert nur dem Primaerknopf. Zwei Knoepfe in Akzentfarbe nebeneinander
+   wuerden die Frage "was ist die naechste Handlung?" wieder offen lassen. */
 .zv-btn-sekundaer {
-  background: var(--zv-accent-soft);
-  color: var(--zv-accent-strong);
-  border-color: transparent;
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border-color: var(--zv-border-knopf);
 }
 .zv-btn-sekundaer:hover:not(:disabled) {
-  background: var(--zv-accent-soft-strong);
+  background: var(--zv-surface-3);
 }
 
 .zv-btn-still {
   background: transparent;
   color: var(--zv-text-muted);
-  border-color: var(--zv-border-strong);
+  border-color: var(--zv-border-knopf);
 }
 .zv-btn-still:hover:not(:disabled) {
   background: var(--zv-surface-2);
@@ -905,9 +1036,60 @@
   color: var(--zv-text);
 }
 
+/* Aktiver Reiter: dunkle Schrift und dunkler Strich statt Akzent. Reiter
+   zeigen "wo bist du" -- Akzent ist fuer "was kannst du tun" reserviert. */
 .zv-tabbar button.active {
-  color: var(--zv-accent-strong);
-  border-bottom-color: var(--zv-accent);
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+/* Unterstrich-Reiter unter dem Seitenkopf (StandortReiter u. a.). Gleiche
+   Optik wie .zv-tabbar, aber ohne Flaeche und Seitenrand, weil sie im
+   Inhalt stehen und nicht am Bildschirmrand. Scrollt selbst. */
+.zv-reiter {
+  display: flex;
+  gap: var(--zv-space-1);
+  margin-bottom: var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zv-reiter button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
+  /* Der Strich ueberdeckt die Linie des Containers (margin-bottom: -1px). */
+  margin-bottom: -1px;
+  padding: var(--zv-space-3);
+  min-height: 44px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.zv-reiter button:hover {
+  color: var(--zv-text);
+}
+
+.zv-reiter button.active {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+.zv-reiter-zaehler {
+  font-size: var(--zv-text-meta);
+  font-weight: 400;
+  color: var(--zv-text-gedaempft);
 }
 
 /* ==================================================================
@@ -935,9 +1117,10 @@
 
 .zv-table th {
   text-align: left;
-  font-size: var(--zv-text-xs);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--zv-laufweite-label);
   font-weight: var(--zv-weight-semibold);
   /* Bewusst -muted und nicht -faint: die Koepfe stehen auf --zv-surface-2,
      und dort war die alte Kombination nur 2,87:1. */
@@ -965,44 +1148,64 @@
    stehen die Stellen sauber untereinander. */
 .zv-num {
   text-align: right;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
   white-space: nowrap;
 }
 
 /* ==================================================================
    Pills
    ================================================================== */
+/*
+ * Status-Tag. Eckig (4 px) statt Pille und neutral als Grundzustand: ein
+ * Tag ist eine Auskunft, kein Knopf -- die runde, akzentfarbene Pille sah
+ * anklickbar aus. Feste Hoehe, damit Tags in Tabellenzeilen auf einer
+ * Linie stehen. Vier Varianten: neutral / erledigt / frist / achtung.
+ */
 .zv-pill {
   display: inline-flex;
   align-items: center;
   gap: var(--zv-space-1);
-  font-size: var(--zv-text-xs);
+  height: var(--zv-tag-hoehe);
+  font-size: var(--zv-tag-schrift);
   font-weight: var(--zv-weight-semibold);
-  padding: 3px 10px;
-  border-radius: var(--zv-radius-pill);
-  border: 1px solid transparent;
-  background: var(--zv-accent-soft);
-  color: var(--zv-accent-strong);
+  line-height: 1;
+  padding: 0 var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  border: 0;
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
   white-space: nowrap;
 }
 
 .zv-pill-vergeben {
-  background: var(--zv-surface-2);
-  color: var(--zv-text-muted);
-  border-color: var(--zv-border);
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
 }
 
 .zv-pill-zugeordnet,
+.zv-pill-erledigt,
 .zv-pill-ok {
-  background: var(--zv-status-ok-bg);
-  color: var(--zv-status-ok);
+  background: var(--zv-tag-erledigt-bg);
+  color: var(--zv-tag-erledigt-text);
+}
+
+.zv-pill-frist {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+/* Koralle: heute, ueberfaellig, offen, ungelesen, frei -- nie dekorativ. */
+.zv-pill-achtung {
+  background: var(--zv-tag-achtung-bg);
+  color: var(--zv-tag-achtung-text);
 }
 
 /* Mehrbettzimmer mit noch mindestens einem freien Platz -- zwischen
    "zugeordnet" (ganz leer) und "vergeben" (voll). */
 .zv-pill-teilweise {
-  background: var(--zv-status-warn-bg);
-  color: var(--zv-status-warn);
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
 }
 
 .zv-pill-danger {
@@ -1011,8 +1214,8 @@
 }
 
 .zv-pill-offen {
-  background: var(--zv-status-warn-bg);
-  color: var(--zv-status-warn);
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
 }
 
 .zv-pill-info {
@@ -1033,17 +1236,14 @@
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
   border-radius: var(--zv-radius-m);
-  box-shadow: var(--zv-shadow-1);
   padding: var(--zv-space-4);
-  /* Schmale Akzentkante links -- traegt die Markenfarbe in die Flaeche,
-     ohne Text zu ueberlagern. */
-  border-left: 3px solid var(--zv-accent-soft-strong);
-  transition: box-shadow var(--zv-transition-base), transform var(--zv-transition-base);
+  /* Keine Akzentkante und kein Anheben beim Hover mehr: der Akzent ist
+     Handlungsfarbe, eine Karte ist keine Handlung. */
+  transition: border-color var(--zv-transition-fast);
 }
 
 .zv-room-card:hover {
-  box-shadow: var(--zv-shadow-2);
-  transform: translateY(-1px);
+  border-color: var(--zv-border-strong);
 }
 
 .zv-room-head {
@@ -1247,6 +1447,7 @@
    schmalen Spalten mitten im Wort umbricht. */
 .zv-mono {
   font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
   white-space: nowrap;
 }
 
@@ -1261,21 +1462,42 @@
   flex-wrap: wrap;
 }
 
+/* Seitentitel 32/700: der Screen sagt zuerst, WO man ist; die Aufgabe
+   darunter sagt, was zu tun ist. Der Titel muss dafuer gross genug sein,
+   um in einem Blick zu sitzen, und eng genug gesetzt, um nicht zu
+   schwimmen. Abschnittstitel (h3) bleiben 17/700. */
 .zv-seiten-kopf h2 {
-  font-size: var(--zv-text-xl);
-  font-weight: var(--zv-weight-semibold);
-  letter-spacing: -0.01em;
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-titel);
+  font-weight: var(--zv-weight-bold);
+  letter-spacing: var(--zv-laufweite-titel);
+  line-height: 1.15;
   margin: 0;
+}
+
+/* Kontextzeile ueber dem Seitentitel, z. B. "MO 26.10.2026 · KW 44 ·
+   FRUEHDIENST". Mono, weil sie fast nur aus Daten besteht und sich so
+   von der Ueberschrift absetzt, ohne Farbe zu brauchen. */
+.zv-kontextzeile {
+  display: block;
+  margin: 0 0 var(--zv-space-1);
+  font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
+  font-size: var(--zv-text-meta);
+  line-height: 1.3;
+  color: var(--zv-text-gedaempft);
+  text-transform: uppercase;
 }
 
 /* Etagen-Block innerhalb eines Standorts (Zimmer.tsx) -- bewusst leiser als
    .zv-seiten-kopf h2: der Standort ist die Ueberschrift, die Etage nur eine
    Unterteilung innerhalb davon. */
 .zv-etagen-kopf {
-  font-size: var(--zv-text-s);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
   font-weight: var(--zv-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--zv-laufweite-label);
   color: var(--zv-text-muted);
   margin: 0 0 var(--zv-space-2);
 }
@@ -1387,7 +1609,7 @@
   gap: var(--zv-space-2);
   padding: 7px var(--zv-space-3);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--zv-radius-s);
   background: transparent;
   color: var(--zv-text-muted);
   font-size: var(--zv-text-s);
@@ -1439,7 +1661,10 @@
   border-color: var(--zv-text);
 }
 
-/* Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
+/* Bewusst Literalwerte (einzige Ausnahme von Regel 7 in dieser Datei): Die
+   Farbfelder zeigen beliebige, vom Nutzer gewaehlte Toene -- der Haken darf
+   deshalb von keinem Theme-Token abhaengen, sonst wuerde er auf manchem Feld
+   unsichtbar. Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
    Deshalb ein dunkler Haken mit heller Aura statt reinem Weiss. */
 .zv-swatch svg {
   color: oklch(0.25 0 0);
@@ -1786,9 +2011,7 @@
     background: var(--zv-surface);
     border: 1px solid var(--zv-border);
     border-radius: var(--zv-radius-m);
-    box-shadow: var(--zv-shadow-1);
     padding: var(--zv-space-4);
-    border-left: 3px solid var(--zv-accent-soft-strong);
   }
 
   .zv-info-karte-aktiv {
@@ -2086,8 +2309,8 @@
   width: 150px;
   padding: var(--zv-space-3);
   border-radius: var(--zv-radius-m);
-  border: 2px solid var(--zv-accent);
-  background: var(--zv-accent-soft);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface-2);
 }
 
 .zv-raumbaum-etage strong {
@@ -2372,9 +2595,11 @@ button.zv-raumknoten:focus-visible {
   padding: 0 5px;
   margin-left: auto;
   flex-shrink: 0;
-  border-radius: var(--zv-radius-pill);
-  background: var(--zv-accent);
-  color: var(--zv-accent-contrast);
+  /* achtung-Tag: ein Zaehler heisst "ungelesen/offen" -- genau das, wofuer
+     Koralle reserviert ist. Der Akzent bliebe fuer Handlungen frei. */
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-achtung-soft);
+  color: var(--zv-achtung-text);
   font-size: var(--zv-text-xs);
   font-weight: var(--zv-weight-semibold);
   line-height: 1;
@@ -2389,6 +2614,8 @@ button.zv-raumknoten:focus-visible {
   width: 8px;
   height: 8px;
   padding: 0;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-achtung);
 }
 
 .zv-sidebar-nav button,
@@ -3863,7 +4090,7 @@ li:last-child > .zv-kontakt-zeile,
 .zv-palette mark {
   background: var(--zv-accent-soft-strong);
   color: inherit;
-  border-radius: 2px;
+  border-radius: var(--zv-radius-s);
   padding: 0 1px;
 }
 
@@ -4044,4 +4271,838 @@ li:last-child > .zv-kontakt-zeile,
 .zv-warteschlange-liste {
   margin: var(--zv-space-1) 0 0;
   padding-left: var(--zv-space-4);
+}
+
+/* ==================================================================
+   UI-Schrift (Figtree)
+   ==================================================================
+   Ganz am Ende und mit erhoehter Spezifitaet (button[class] > .zv-btn),
+   weil viele Knopf-Klassen weiter oben "font-family: inherit" setzen und
+   sonst gewinnen wuerden. Eingabefelder bleiben bewusst bei Source Sans:
+   was Nutzer:innen tippen, ist Text, kein Bedienelement. */
+h1,
+h2,
+h3,
+h4,
+button,
+button[class],
+.zv-btn,
+.zv-pill,
+.zv-nav-badge,
+.zv-sidebar-nav a,
+.zv-tabbar a,
+.zv-segmented button,
+.zv-link-btn {
+  font-family: var(--zv-font-ui);
+}
+
+/* ==================================================================
+   Heute (Dashboard.tsx)
+   ==================================================================
+   Eine Flaeche fuer die Lage, eine Liste fuer alles, was zu tun ist.
+   Struktur nur ueber Haarlinien und Gruppenlabels -- keine Karten, keine
+   Schatten. Koralle erscheint nur dort, wo etwas ueberfaellig oder offen
+   ist (Frist, Lage-Folgezeile, naechster Termin). */
+.zv-kopf-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-wrap: wrap;
+}
+
+/* Suchfeld ist ein Knopf: es oeffnet die Befehlspalette, tippen passiert
+   dort. Ein echtes Eingabefeld hier waere ein zweiter Suchweg mit eigener
+   Ergebnisliste. */
+.zv-suchfeld {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 44px;
+  min-width: 220px;
+  padding: 0 var(--zv-space-3);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-meta);
+  cursor: pointer;
+}
+.zv-suchfeld:hover {
+  border-color: var(--zv-border-strong);
+}
+.zv-suchfeld span {
+  flex: 1;
+  text-align: left;
+}
+.zv-suchfeld kbd {
+  font-size: var(--zv-text-label);
+  color: var(--zv-text-muted);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  padding: 1px var(--zv-space-1);
+}
+@media (max-width: 640px) {
+  .zv-suchfeld {
+    min-width: 0;
+    flex: 1;
+  }
+  .zv-suchfeld kbd {
+    display: none;
+  }
+}
+
+.zv-neu-menue {
+  position: relative;
+}
+.zv-neu-liste {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--zv-space-1));
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+}
+.zv-neu-liste button {
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.zv-neu-liste button:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-heute {
+  transition: opacity var(--zv-transition-base);
+  min-width: 0;
+}
+
+/* Lage: vier Spalten auf einer Flaeche, durch Haarlinien getrennt. */
+.zv-lage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  margin-bottom: var(--zv-space-5);
+}
+.zv-lage-spalte {
+  padding: var(--zv-space-4);
+  min-width: 0;
+  border-left: 1px solid var(--zv-border);
+}
+.zv-lage-spalte:first-child {
+  border-left: 0;
+}
+@media (max-width: 640px) {
+  .zv-lage {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* Nach dem Umbruch trennt eine obere Linie die zweite Reihe; die linke
+     Linie gilt nur noch fuer die rechte Spalte. */
+  .zv-lage-spalte:nth-child(odd) {
+    border-left: 0;
+  }
+  .zv-lage-spalte:nth-child(n + 3) {
+    border-top: 1px solid var(--zv-border);
+  }
+}
+.zv-lage-label {
+  margin: 0;
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-lage-wert {
+  margin: var(--zv-space-1) 0;
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--zv-text);
+}
+.zv-lage-folge {
+  margin: 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-lage-folge-achtung {
+  color: var(--zv-achtung-text);
+}
+
+.zv-heute-spalten {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .zv-heute-spalten {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.zv-abschnittskopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--zv-space-3);
+}
+.zv-abschnittskopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-abschnitt);
+  font-weight: var(--zv-weight-bold);
+}
+/* Die Filter scrollen selbst, wenn sie auf dem Handy nicht nebeneinander
+   passen -- nie die Seite. */
+.zv-abschnittskopf .zv-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.zv-abschnittskopf .zv-segmented button {
+  white-space: nowrap;
+}
+
+.zv-todo-gruppe {
+  margin-bottom: var(--zv-space-5);
+}
+.zv-gruppenlabel-inline {
+  margin: 0 0 var(--zv-space-1);
+  padding-bottom: var(--zv-space-2);
+  border-bottom: 1px solid var(--zv-border-strong);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-gruppenlabel-inline .zv-mono {
+  margin-left: var(--zv-space-1);
+}
+
+.zv-todo-liste,
+.zv-rand-liste,
+.zv-zeitleiste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-todo-zeile {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 56px;
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-todo-zeile .zv-pill {
+  justify-self: start;
+}
+.zv-todo-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zv-todo-titel {
+  font-size: var(--zv-text-basis);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+  overflow-wrap: anywhere;
+}
+.zv-todo-meta {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+.zv-todo-frist {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.zv-todo-frist-achtung {
+  color: var(--zv-achtung-text);
+  font-weight: 500;
+}
+/* Handy: Tag und Frist ziehen in die Zeile ueber den Titel, die Aktion
+   steht darunter -- vier Spalten passen bei 390 px nicht. */
+@media (max-width: 640px) {
+  .zv-todo-zeile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tag frist"
+      "text text"
+      "aktion aktion";
+    row-gap: var(--zv-space-2);
+  }
+  .zv-todo-zeile .zv-pill {
+    grid-area: tag;
+  }
+  .zv-todo-zeile .zv-todo-frist {
+    grid-area: frist;
+  }
+  .zv-todo-zeile .zv-todo-text {
+    grid-area: text;
+  }
+  .zv-todo-zeile .zv-btn {
+    grid-area: aktion;
+    justify-self: start;
+  }
+}
+
+.zv-heute-rand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+  min-width: 0;
+}
+.zv-rand-leer {
+  margin: 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+/* Zeitleiste: Punkt auf einer senkrechten Haarlinie. Der naechste Termin
+   ist koralle (Aufmerksamkeit), Vergangenes durchgestrichen und leiser. */
+.zv-zeitleiste li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 var(--zv-space-3) var(--zv-space-5);
+  border-left: 1px solid var(--zv-border-strong);
+  margin-left: 5px;
+}
+.zv-zeitleiste li:last-child {
+  border-left-color: transparent;
+}
+.zv-zeit-punkt {
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  border: 2px solid var(--zv-border-strong);
+}
+.zv-zeit-naechster .zv-zeit-punkt {
+  background: var(--zv-achtung);
+  border-color: var(--zv-achtung);
+}
+.zv-zeit-uhr {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-zeit-naechster .zv-zeit-uhr {
+  color: var(--zv-achtung-text);
+  font-weight: 500;
+}
+.zv-zeit-titel {
+  font-size: var(--zv-text-basis);
+  font-weight: var(--zv-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.zv-zeit-vorbei .zv-zeit-titel,
+.zv-zeit-vorbei .zv-zeit-uhr {
+  text-decoration: line-through;
+  color: var(--zv-text-muted);
+  font-weight: 400;
+}
+
+.zv-rand-liste li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-rand-nummer {
+  font-size: var(--zv-text-basis);
+  font-weight: 500;
+}
+
+/* ==================================================================
+   Belegungszeitleiste (components/Belegungszeitleiste.tsx)
+   ==================================================================
+   Eigener Scrollcontainer (.zv-zl) mit sticky Zimmerspalte: breite Zeit-
+   achsen scrollen hier, nie die Seite. Haarlinien statt Karten; Koralle
+   nur fuer "heute", angekuendigten Auszug und freie Plaetze. */
+.zv-zl-werkzeug {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+.zv-zl-legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-zl-legende li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+.zv-zl-probe {
+  display: inline-block;
+  width: 24px;
+  height: 12px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  border: 1px solid var(--zv-accent);
+}
+.zv-zl-probe-geplant {
+  background: transparent;
+  border-style: dashed;
+}
+.zv-zl-probe-auszug {
+  border-right: 3px solid var(--zv-achtung);
+}
+
+.zv-zl {
+  --zv-zl-label: 148px;
+  overflow-x: auto;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+}
+.zv-zl-zeile {
+  display: flex;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-zl-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 var(--zv-zl-label);
+  width: var(--zv-zl-label);
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0 var(--zv-space-3);
+  background: var(--zv-surface);
+  border: 0;
+  border-right: 1px solid var(--zv-border);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.zv-zl-label:hover {
+  background: var(--zv-surface-2);
+}
+.zv-zl-nummer {
+  font-size: var(--zv-text-basis);
+  font-weight: 500;
+}
+.zv-zl-typ {
+  color: var(--zv-text-muted);
+  flex: 1;
+  min-width: 0;
+}
+/* Freies Zimmer: leise Hinterlegung der ganzen Zeile (auch unter der
+   sticky Spalte), das Koralle-Tag traegt die eigentliche Aussage. */
+.zv-zl-frei,
+.zv-zl-frei .zv-zl-label {
+  background: var(--zv-surface-2);
+}
+.zv-zl-kopf .zv-zl-label {
+  cursor: default;
+}
+.zv-zl-spur {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+.zv-zl-spur::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--zv-zl-heute, -1px);
+  width: 2px;
+  background: var(--zv-achtung);
+  pointer-events: none;
+}
+.zv-zl-kopf .zv-zl-spur::after {
+  display: none;
+}
+.zv-zl-kopf {
+  background: var(--zv-surface);
+}
+.zv-zl-marke {
+  position: absolute;
+  top: var(--zv-space-2);
+  padding-left: var(--zv-space-1);
+  font-size: var(--zv-text-label);
+  color: var(--zv-text-muted);
+  border-left: 1px solid var(--zv-border-strong);
+  line-height: 1;
+}
+.zv-zl-etage {
+  position: sticky;
+  left: 0;
+  margin: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: var(--zv-surface);
+}
+.zv-zl-balken {
+  position: absolute;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  border: 1px solid var(--zv-accent);
+  color: var(--zv-accent-strong);
+  font-size: var(--zv-text-meta);
+  font-weight: var(--zv-weight-semibold);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  z-index: 1;
+}
+.zv-zl-balken span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zv-zl-balken-geplant {
+  background: transparent;
+  border-style: dashed;
+}
+.zv-zl-balken-auszug {
+  border-right: 3px solid var(--zv-achtung);
+}
+
+.zv-detail-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-5);
+}
+
+/* ==================================================================
+   Klientenakte: Kopf, Ueberblick (KlientDetail.tsx)
+   ================================================================== */
+.zv-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.zv-akte-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-3) var(--zv-space-5);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-akte-haupt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-4);
+  min-width: 0;
+  flex: 1 1 420px;
+}
+.zv-initialen-kachel {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-bold);
+  letter-spacing: 0.02em;
+}
+.zv-akte-titel {
+  min-width: 0;
+}
+.zv-akte-titel h2 {
+  margin: 0;
+  font-size: var(--zv-text-titel);
+  letter-spacing: var(--zv-laufweite-titel);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.zv-akte-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-4);
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+/* Kein Trennzeichen zwischen den Angaben: ein Punkt am Zeilenanfang nach
+   dem Umbruch (Handy) liest sich wie ein Fehler; der Abstand genuegt. */
+.zv-akte-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+.zv-akte-pdfs {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-4);
+}
+
+.zv-ueberblick {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .zv-ueberblick {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.zv-ueberblick-rand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+  min-width: 0;
+}
+.zv-schnelleintrag {
+  display: flex;
+  gap: var(--zv-space-2);
+  align-items: flex-start;
+  margin-bottom: var(--zv-space-4);
+}
+.zv-schnelleintrag textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  font: inherit;
+}
+.zv-chronik {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-chronik li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-chronik-datum {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-chronik-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zv-chronik-inhalt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.zv-rand-wert {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+}
+.zv-rand-wert.zv-mono {
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+}
+.zv-laufzeit {
+  height: 6px;
+  margin-top: var(--zv-space-2);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface-3);
+  overflow: hidden;
+}
+.zv-laufzeit > div {
+  height: 100%;
+  background: var(--zv-accent);
+}
+.zv-kontaktliste li {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+}
+
+/* ==================================================================
+   Kassenbuch: Kassenstand, HZL-Flaeche, Journal
+   ================================================================== */
+.zv-abschnittstitel {
+  margin: 0;
+  font-size: var(--zv-text-abschnitt);
+  font-weight: var(--zv-weight-bold);
+}
+.zv-kassenstand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-6);
+  padding: var(--zv-space-4) 0 var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-kassenstand-wert {
+  margin: var(--zv-space-1) 0;
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+  line-height: 1.1;
+}
+.zv-kassenstand-klein {
+  color: var(--zv-text-sekundaer);
+}
+.zv-journal-werkzeug {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+.zv-journal-hinweis {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-3) 0 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+.zv-hzl-flaeche {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-5);
+}
+.zv-hzl-fortschritt-text {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-hzl-balken {
+  width: 240px;
+  max-width: 100%;
+}
+
+.zv-journal-wrapper {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+.zv-hzl-flaeche .zv-journal-wrapper {
+  max-height: none;
+}
+.zv-journal {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--zv-text-meta);
+}
+.zv-journal th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: var(--zv-surface);
+  border-bottom: 1px solid var(--zv-border-strong);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.zv-journal td {
+  padding: var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  vertical-align: top;
+}
+.zv-journal tbody tr:last-child td {
+  border-bottom: 0;
+}
+.zv-journal .zv-journal-zahl {
+  text-align: right;
+  white-space: nowrap;
+}
+.zv-journal-beleg {
+  color: var(--zv-text-muted);
+  white-space: nowrap;
+}
+.zv-journal-zweck {
+  min-width: 220px;
+}
+.zv-journal-zweck > span {
+  display: block;
+}
+.zv-journal-zweck > .zv-pill {
+  display: inline-flex;
+  margin-top: var(--zv-space-1);
+}
+.zv-journal-text {
+  font-size: var(--zv-text-basis);
+  overflow-wrap: anywhere;
+}
+.zv-journal-saldo {
+  font-weight: 500;
+}
+.zv-journal-aktionen {
+  white-space: nowrap;
+}
+.zv-journal-aktionen > * + * {
+  margin-left: var(--zv-space-3);
+}
+/* Storniert: durchgestrichen, aber lesbar -- die Zeile bleibt als Beleg
+   sichtbar (Bauplan Punkt 03), nur ohne Zahlenwirkung. */
+.zv-journal-storniert .zv-journal-text,
+.zv-journal-storniert .zv-journal-zahl {
+  text-decoration: line-through;
+  color: var(--zv-text-muted);
 }

@@ -46,7 +46,7 @@ await page.getByLabel(/Träger-Kennung/i).fill(slug);
 await page.getByLabel(/E-Mail/i).fill(email);
 await page.locator("#passwort").fill(passwort);
 await page.getByRole("button", { name: /Anmelden/i }).click();
-await page.getByRole("button", { name: /^Dashboard$/ }).first().waitFor();
+await page.getByRole("button", { name: /^Heute$/ }).first().waitFor();
 await page.waitForTimeout(800);
 
 // --- Oeffnen / Schliessen / Fokus ------------------------------------------
@@ -74,7 +74,7 @@ await page.keyboard.press("Escape");
 await page.getByRole("button", { name: "Schließen" }).first().click().catch(() => {});
 
 // --- Kein Vorladen, Mindestlaenge, Entprellen ------------------------------
-await page.getByRole("button", { name: /^Dashboard$/ }).first().click();
+await page.getByRole("button", { name: /^Heute$/ }).first().click();
 await page.waitForTimeout(500);
 anfragen.length = 0;
 await page.keyboard.press("Control+k");

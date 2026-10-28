@@ -116,7 +116,7 @@ pruefe((await mehrKnopf.getAttribute("aria-expanded")) === "true", "Mehr-Knopf h
 const panel = mobilPage.locator("#zv-sammelmenue-panel");
 pruefe(await panel.isVisible(), "Sammelmenue-Panel sichtbar");
 
-const dashboardEintrag = panel.getByRole("menuitem", { name: /Dashboard/i });
+const dashboardEintrag = panel.getByRole("menuitem", { name: /Heute/i });
 await dashboardEintrag.click();
 await mobilPage.waitForTimeout(400);
 pruefe(!(await panel.isVisible().catch(() => false)), "Panel schließt sich nach Auswahl eines Eintrags");

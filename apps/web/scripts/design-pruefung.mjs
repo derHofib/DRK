@@ -96,10 +96,11 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46;
+const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1 + 4 + 3;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
+  ["Tannengruen", "#2d6a4f"],
   ["DRK Rot", "#e3000f"],
   ["Salbei", "#79c7a8"],
   ["Petrol", "#5ec4c0"],
@@ -275,6 +276,41 @@ async function messePaare(page) {
       pruefe("Uebergabe-Karte: Punkttext", q(".zv-pruef-uk-text"), 4.5);
       pruefe("Uebergabe-Karte: Pill Nachtrag (info)", q(".zv-pruef-uk-pill"), 4.5);
       pruefe("Uebergabe-Karte: Aufgabe-Verweis (Link)", q(".zv-pruef-uk-link"), 4.5);
+
+      // Redesign "ruhige Fachanwendung": neue Neutraltoene, Tags, Koralle.
+      // Jeder Text-Token wird auf JEDER Flaeche gemessen, auf der er
+      // vorkommt -- gedaempfter Text steht als Kontextzeile direkt auf dem
+      // Seitenhintergrund, als Gruppenlabel auf Flaeche gedaempft.
+      for (const flaeche of ["bg", "surface", "s2"]) {
+        pruefe("Text auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .t"), 4.5);
+        pruefe("Text sekundaer auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ts"), 4.5);
+        pruefe("Text gedaempft auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .tg"), 4.5);
+        pruefe("Achtung-Text auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ta"), 4.5);
+        pruefe("Link auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .zv-link-btn"), 4.5);
+        // Koralle als Marker (Heute-Linie, Auszugskante): Grafik mit
+        // Bedeutung, WCAG 1.4.11 -> 3:1.
+        pruefe("Achtung-Marker auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .ma"), 3, "border");
+        // Akzent als Grafik (Fortschritts-/Laufzeitbalken).
+        pruefe("Akzent-Balken auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .mb"), 3, "border");
+      }
+      pruefe("Kontextzeile (gedaempft, Mono) auf Hintergrund", q(".zv-pruef-kontext"), 4.5);
+      pruefe("Tag neutral", q(".zv-pruef-tag-neutral"), 4.5);
+      pruefe("Tag erledigt", q(".zv-pruef-tag-erledigt"), 4.5);
+      pruefe("Tag Frist", q(".zv-pruef-tag-frist"), 4.5);
+      pruefe("Tag achtung", q(".zv-pruef-tag-achtung"), 4.5);
+      // Heute: die echten Klassen, nicht Nachbauten -- eine umbenannte
+      // Klasse in app.css faellt hier sofort auf (Messung bricht ab).
+      pruefe("Heute: ueberfaellige Frist auf Flaeche", q(".zv-pruef-heute-frist"), 4.5);
+      pruefe("Heute: Lage-Folgezeile achtung auf Flaeche", q(".zv-pruef-heute-folge"), 4.5);
+      pruefe("Heute: naechster Termin (Uhrzeit)", q(".zv-pruef-heute-uhr"), 4.5);
+      pruefe("Heute: vergangener Termin (durchgestrichen)", q(".zv-pruef-heute-vorbei"), 4.5);
+      pruefe("Zeitleiste: Balkentext auf Balken", q(".zv-pruef-zl-balken"), 4.5);
+      pruefe("Journal: stornierter Betrag auf Flaeche", q(".zv-pruef-journal-storno"), 4.5);
+      pruefe("Journal: Tabellenkopf auf Flaeche", q(".zv-pruef-journal-kopf"), 4.5);
+      pruefe("Eingabefeldrand auf Hintergrund", q(".zv-pruef-input-bg"), 3, "border");
+      pruefe("Aktiver Menuepunkt (accent-strong auf accent-soft)", q(".zv-pruef-nav-aktiv"), 4.5);
+      pruefe("Gedaempft auf ausgewaehlter Zeile", q(".zv-pruef-auswahl-tg"), 4.5);
+      pruefe("Text auf Hover-Zeile", q(".zv-pruef-hover-tg"), 4.5);
       return ergebnisse;
     `
     )
@@ -343,6 +379,43 @@ const PRUEFSEITE = `
   <div class="zv-palette-fuss zv-pruef-pal-fuss">Esc schlie&szlig;en</div>
 </div>
 <span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>
+<div style="background:var(--zv-bg)">
+<p class="zv-kontextzeile zv-pruef-kontext">Mo 26.10.2026 &middot; KW 44 &middot; Fruehdienst</p>
+${["bg", "surface", "s2"].map((f) => `
+  <div class="zv-pruef-n-${f}" style="padding:8px;background:${{ bg: "var(--zv-bg)", surface: "var(--zv-surface)", s2: "var(--zv-surface-2)" }[f]}">
+    <span class="t" style="color:var(--zv-text)">Text</span>
+    <span class="ts" style="color:var(--zv-text-sekundaer)">Sekundaer</span>
+    <span class="tg" style="color:var(--zv-text-gedaempft)">Gedaempft</span>
+    <span class="ta" style="color:var(--zv-achtung-text)">ueberfaellig</span>
+    <button class="zv-link-btn">Verweis</button>
+    <div class="ma" style="border-top:2px solid var(--zv-achtung)"></div>
+    <div class="mb" style="border-top:2px solid var(--zv-accent)"></div>
+  </div>`).join("")}
+  <span class="zv-pill zv-pruef-tag-neutral">neutral</span>
+  <span class="zv-pill zv-pill-erledigt zv-pruef-tag-erledigt">erledigt</span>
+  <span class="zv-pill zv-pill-frist zv-pruef-tag-frist">endet in 37 T.</span>
+  <span class="zv-pill zv-pill-achtung zv-pruef-tag-achtung">frei</span>
+  <div style="background:var(--zv-surface);padding:8px">
+    <span class="zv-todo-frist zv-todo-frist-achtung zv-mono zv-pruef-heute-frist">seit 3 Tagen</span>
+    <span class="zv-lage-folge zv-lage-folge-achtung zv-pruef-heute-folge">4 offen</span>
+  </div>
+  <div style="position:relative;height:32px;background:var(--zv-surface)"><button class="zv-zl-balken zv-pruef-zl-balken" style="left:4px;top:4px;width:120px"><span>Sophie B.</span></button></div>
+  <table class="zv-journal" style="background:var(--zv-surface)"><thead><tr><th class="zv-pruef-journal-kopf">Datum</th></tr></thead><tbody><tr class="zv-journal-storniert"><td class="zv-journal-zahl zv-pruef-journal-storno">12,00 &euro;</td></tr></tbody></table>
+  <ol class="zv-zeitleiste" style="background:var(--zv-bg);padding:8px">
+    <li class="zv-zeit-naechster"><span class="zv-zeit-uhr zv-mono zv-pruef-heute-uhr">14:00&ndash;15:00</span></li>
+    <li class="zv-zeit-vorbei"><span class="zv-zeit-titel zv-pruef-heute-vorbei">Vorbei</span></li>
+  </ol>
+  <!-- Eigene Flaeche bewusst transparent: gemessen wird der Rand gegen den
+       Seitenhintergrund AUSSERHALB des Felds, die haertere Seite. -->
+  <div class="zv-pruef-input-bg" style="border:1px solid var(--zv-border-strong);height:8px"></div>
+  <div style="background:var(--zv-accent-soft)">
+    <span class="zv-pruef-nav-aktiv" style="color:var(--zv-accent-strong)">Heute</span>
+    <span class="zv-pruef-auswahl-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
+  </div>
+  <div style="background:var(--zv-surface-3)">
+    <span class="zv-pruef-hover-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
+  </div>
+</div>
 <article class="zv-uebergabe-karte">
   <h3 class="zv-pruef-uk-titel">Sp&auml;tdienst &middot; Haus Eins</h3>
   <p class="zv-sub-inline zv-pruef-uk-meta">24.10. 21:12 &middot; von Leitung</p>
@@ -382,6 +455,37 @@ async function main() {
         );
 
         const paare = await messePaare(page);
+
+        /*
+         * Schriften wirklich geladen? Fehlt eine woff2 (Pfad, Hash, falscher
+         * Schnitt), faellt die Oberflaeche still auf die Systemschrift
+         * zurueck und sieht "fast richtig" aus -- gemessen wird deshalb
+         * ueber document.fonts, nicht ueber den CSS-Wert.
+         */
+        const fehlendeSchriften = await page.evaluate(async () => {
+          const wanted = [
+            '700 32px "Figtree Variable"',
+            '400 15px "Source Sans 3 Variable"',
+            '400 13px "IBM Plex Mono"',
+            '500 13px "IBM Plex Mono"',
+          ];
+          const fehlt = [];
+          for (const w of wanted) {
+            // load() liefert die passenden, nun geladenen Faces; leer =
+            // keine @font-face-Regel trifft, "error" = Datei nicht ladbar.
+            const faces = await document.fonts.load(w, "Aa1").catch(() => []);
+            // Gewicht muss exakt vorhanden sein: fehlt der 500er-Schnitt,
+            // liefert der Browser still den 400er und load() meldet Erfolg.
+            const gewicht = w.slice(0, 3);
+            const trifft = faces.some((f) => f.weight === gewicht || f.weight.includes(" "));
+            if (!faces.length || !trifft || faces.some((f) => f.status !== "loaded")) fehlt.push(w);
+          }
+          return fehlt;
+        });
+        if (fehlendeSchriften.length) {
+          console.error(`  SCHRIFT NICHT GELADEN (${theme}/${name}): ${fehlendeSchriften.join(", ")}`);
+          fehlerZahl += fehlendeSchriften.length;
+        }
 
         /*
          * Ohne diese Schranke ist das ganze Skript wertlos: misst es nichts,

@@ -235,7 +235,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
       ladeZimmer();
       ladeKlienten();
     } catch (err) {
-      setZuweisungFehler(err instanceof Error ? err.message : "Klient konnte nicht zugewiesen werden.");
+      setZuweisungFehler(err instanceof Error ? err.message : "Klient:in konnte nicht zugewiesen werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -252,7 +252,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
       setWartelisteZimmer(null);
       ladeZimmer();
     } catch (err) {
-      setWartelisteFehler(err instanceof Error ? err.message : "Klient konnte nicht auf die Warteliste gesetzt werden.");
+      setWartelisteFehler(err instanceof Error ? err.message : "Klient:in konnte nicht auf die Warteliste gesetzt werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -530,7 +530,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
                       {z.bewohner.length} / {z.kapazitaet} {z.kapazitaet === 1 ? "Platz belegt" : "Plätze belegt"}
                     </p>
                     {z.bewohner.length === 0 ? (
-                      <div className="zv-room-klient zv-sub-inline">Kein Klient zugeordnet</div>
+                      <div className="zv-room-klient zv-sub-inline">Keine Klient:in zugeordnet</div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         {z.bewohner.map((bew) => (
@@ -807,7 +807,9 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
       ))}
 
       {zimmer.length === 0 && !fehler && (
-        <Leerzustand icon={ILeerZimmer}>Noch keine Zimmer angelegt.</Leerzustand>
+        <Leerzustand icon={ILeerZimmer} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={formularOeffnen}>Zimmer anlegen</button>}>
+          Noch keine Zimmer angelegt.
+        </Leerzustand>
       )}
 
       <datalist id="zv-etagen-vorschlaege">
@@ -956,14 +958,14 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
             )}
             {wartelistenKlient ? (
               <div className="zv-field">
-                <label>Klient</label>
+                <label>Klient:in</label>
                 <p className="zv-sub" style={{ margin: 0 }}>
                   {wartelistenKlient.name} (von der Warteliste)
                 </p>
               </div>
             ) : (
               <div className="zv-field">
-                <label htmlFor="zuweisung-klient">Klient</label>
+                <label htmlFor="zuweisung-klient">Klient:in</label>
                 <select id="zuweisung-klient" name="klientId" required autoFocus defaultValue="">
                   <option value="" disabled>
                     Bitte wählen
@@ -977,7 +979,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
                     ))}
                 </select>
                 {klienten.filter((k) => k.aktuellesZimmer === null).length === 0 && (
-                  <span className="zv-sub-inline">Alle Klienten haben bereits ein Zimmer.</span>
+                  <span className="zv-sub-inline">Alle Klient:innen haben bereits ein Zimmer.</span>
                 )}
               </div>
             )}
@@ -1012,7 +1014,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
               </div>
             )}
             <div className="zv-field">
-              <label htmlFor="warteliste-klient">Klient</label>
+              <label htmlFor="warteliste-klient">Klient:in</label>
               <select id="warteliste-klient" name="klientId" required autoFocus defaultValue="">
                 <option value="" disabled>
                   Bitte wählen

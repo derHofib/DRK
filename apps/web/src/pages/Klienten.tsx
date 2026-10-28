@@ -106,7 +106,7 @@ export function Klienten({
       setFormularOffen(false);
       laden();
     } catch (err) {
-      setFormFehler(err instanceof Error ? err.message : "Klient konnte nicht angelegt werden.");
+      setFormFehler(err instanceof Error ? err.message : "Klient:in konnte nicht angelegt werden.");
     }
   }
 
@@ -230,7 +230,7 @@ export function Klienten({
       </div>
 
       {formularOffen && (
-        <Modal titel="Neuer Klient" onClose={() => setFormularOffen(false)}>
+        <Modal titel="Neue Klient:in" onClose={() => setFormularOffen(false)}>
           <form onSubmit={anlegen}>
             {formFehler && (
               <div className="zv-hinweis zv-hinweis-fehler">
@@ -283,9 +283,9 @@ export function Klienten({
         <>
           {klienten.length === 0 ? (
             ansicht === "archiv" ? (
-              <Leerzustand icon={ILeerArchiv}>Keine archivierten Klienten.</Leerzustand>
+              <Leerzustand icon={ILeerArchiv}>Keine archivierten Klient:innen.</Leerzustand>
             ) : (
-              <Leerzustand icon={ILeerKlienten}>Keine Klienten erfasst.</Leerzustand>
+              <Leerzustand icon={ILeerKlienten}>Keine Klient:innen erfasst.</Leerzustand>
             )
           ) : (
             <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.3fr" } as CSSProperties}>

@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { RaumplanDto, RaumplanEtageDto, RaumplanPositionDto } from "@zimmerakte/shared";
+import type { BelegungsverlaufEintragDto, RaumplanDto, RaumplanEtageDto, RaumplanPositionDto, StandortDto } from "@zimmerakte/shared";
 
 type Zimmer = RaumplanEtageDto["zimmer"][number];
 type Gemeinschaftsraum = RaumplanEtageDto["raeume"][number];
@@ -8,14 +8,17 @@ import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Zimmer as ZimmerVerwaltung } from "./Zimmer";
 import { Seitenpanel } from "../components/Seitenpanel";
+import { StandortReiter } from "../components/StandortReiter";
 import { PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
+import { Belegungszeitleiste } from "../components/Belegungszeitleiste";
 import {
   IAbbrechen,
   IBaumAnsicht,
   IBearbeiten,
+  IEinziehen,
   IFehler,
   IGemeinschaftsraum,
   IGrundrissAnsicht,
@@ -28,7 +31,7 @@ import {
   IZimmer,
 } from "../components/icons";
 
-type Ansicht = "baum" | "grundriss" | "verwalten";
+type Ansicht = "zeit" | "grundriss" | "verwalten";
 type Objektart = "zimmer" | "raum";
 
 const ANSICHT_SPEICHER = "zimmerakte_raumplan_ansicht";
@@ -37,9 +40,9 @@ const ANSICHT_SPEICHER = "zimmerakte_raumplan_ansicht";
 function ladeAnsicht(): Ansicht {
   try {
     const gespeichert = localStorage.getItem(ANSICHT_SPEICHER);
-    return gespeichert === "grundriss" || gespeichert === "verwalten" ? gespeichert : "baum";
+    return gespeichert === "grundriss" || gespeichert === "verwalten" ? gespeichert : "zeit";
   } catch {
-    return "baum";
+    return "zeit";
   }
 }
 
@@ -61,7 +64,36 @@ const schluessel = (art: Objektart, id: string) => `${art}:${id}`;
  * angelegt -- hier kommen nur die Gemeinschaftsraeume dazu, die dort keinen
  * Platz haben (sie zaehlen nicht als Wohnplatz, siehe Migration 0051).
  */
-export function StandortRaeume({ standortId }: { standortId: string }) {
+export function StandortRaeume({
+  standortId,
+  onStandortWaehlen,
+}: {
+  standortId: string;
+  /** null = "Alle Standorte" (Uebersicht). */
+  onStandortWaehlen: (id: string | null) => void;
+}) {
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  // Belegte/vorhandene Plaetze je Standort fuer den Zaehler am Reiter. Aus
+  // der Dashboard-Antwort statt einer eigenen Abfrage: dort ist die Zaehlung
+  // (Plaetze, nicht Zimmer) schon festgelegt und getestet.
+  const [plaetze, setPlaetze] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api
+      .standorteListe()
+      .then((l) => {
+        const aktive = l.filter((s) => s.aktiv);
+        setStandorte(aktive);
+        Promise.all(
+          aktive.map((st) =>
+            api
+              .dashboard(st.id)
+              .then((d) => [st.id, `${d.zimmer.gesamt - d.zimmer.frei}/${d.zimmer.gesamt}`] as const)
+              .catch(() => null),
+          ),
+        ).then((paare) => setPlaetze(Object.fromEntries(paare.filter((p) => p !== null))));
+      })
+      .catch(() => {});
+  }, []);
   const [plan, setPlan] = useState<RaumplanDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [ansicht, setAnsicht] = useState<Ansicht>(() => ladeAnsicht());
@@ -132,10 +164,8 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
 
       <div className="zv-seiten-kopf">
         <div>
-          <h2>{plan?.standort.name ?? "Standort"}</h2>
-          <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            Zimmer und Gemeinschaftsräume
-          </p>
+          <p className="zv-kontextzeile">{plan ? plan.standort.name : "Standort"}</p>
+          <h2>Belegung</h2>
         </div>
         {ansicht !== "verwalten" && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-2)" }}>
@@ -153,17 +183,23 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
         )}
       </div>
 
+      <StandortReiter
+        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((st) => ({ id: st.id, label: st.name, zaehler: plaetze[st.id] }))]}
+        aktiv={standortId}
+        onWaehle={onStandortWaehlen}
+      />
+
       {plan && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-3)", marginBottom: "var(--zv-space-4)" }}>
           <div className="zv-segmented" role="radiogroup" aria-label="Ansicht">
             <button
               role="radio"
-              aria-checked={ansicht === "baum"}
-              className={ansicht === "baum" ? "active" : ""}
-              onClick={() => ansichtWaehlen("baum")}
+              aria-checked={ansicht === "zeit"}
+              className={ansicht === "zeit" ? "active" : ""}
+              onClick={() => ansichtWaehlen("zeit")}
             >
               <IBaumAnsicht />
-              Baum
+              Zeitleiste
             </button>
             <button
               role="radio"
@@ -211,8 +247,8 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
 
       {ansicht === "verwalten" && <ZimmerVerwaltung standortId={standortId} />}
 
-      {plan && ansicht === "baum" && (
-        <Raumbaum etagen={plan.etagen} onOeffnen={oeffneDetail} />
+      {plan && ansicht === "zeit" && (
+        <Belegungszeitleiste etagen={plan.etagen} onOeffnen={(id) => oeffneDetail("zimmer", id)} />
       )}
 
       {plan && ansicht === "grundriss" && etage && (
@@ -250,6 +286,7 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
               setPanelOffen(false);
               ansichtWaehlen("verwalten");
             }}
+            onAktualisiert={laden}
           />
         )}
         {detailRaum && plan && (
@@ -286,67 +323,6 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
 function belegungsPill(belegt: number, kapazitaet: number) {
   const klasse = belegt === 0 ? "zv-pill-zugeordnet" : belegt >= kapazitaet ? "zv-pill-vergeben" : "zv-pill-teilweise";
   return <span className={`zv-pill ${klasse}`}>{belegt} / {kapazitaet}</span>;
-}
-
-function Raumbaum({
-  etagen,
-  onOeffnen,
-}: {
-  etagen: RaumplanEtageDto[];
-  onOeffnen: (art: Objektart, id: string) => void;
-}) {
-  return (
-    <div className="zv-raumbaum">
-      {etagen.map((e) => (
-        <div key={e.etage} className="zv-raumbaum-zeile">
-          <div className="zv-raumbaum-etage">
-            <strong>{e.etage}</strong>
-            <span>
-              {e.zimmer.length} Zimmer · {e.raeume.length} {e.raeume.length === 1 ? "Raum" : "Räume"}
-            </span>
-          </div>
-          <div className="zv-raumbaum-aeste">
-            {e.zimmer.map((z) => (
-              <div key={z.id} className="zv-raumbaum-ast">
-                <button className="zv-raumknoten" onClick={() => onOeffnen("zimmer", z.id)} title="Details zum Zimmer">
-                  <span className="zv-raumknoten-kopf">
-                    <IZimmer />
-                    Zimmer {z.nummer}
-                    {belegungsPill(z.bewohner.length, z.kapazitaet)}
-                  </span>
-                  <span className="zv-raumknoten-sub">
-                    {z.bewohner.length === 0 ? "frei" : z.bewohner.map((b) => b.name).join(", ")}
-                  </span>
-                </button>
-              </div>
-            ))}
-            {e.raeume.map((r) => (
-              <div key={r.id} className="zv-raumbaum-ast">
-                <button
-                  className="zv-raumknoten zv-raumknoten-gemeinschaft"
-                  onClick={() => onOeffnen("raum", r.id)}
-                  title="Details zum Raum"
-                >
-                  <span className="zv-raumknoten-kopf">
-                    <IGemeinschaftsraum />
-                    {r.name}
-                    <span className="zv-pill zv-pill-info">Gemeinschaft</span>
-                  </span>
-                </button>
-              </div>
-            ))}
-            {e.zimmer.length === 0 && e.raeume.length === 0 && (
-              <div className="zv-raumbaum-ast">
-                <div className="zv-raumknoten zv-raumknoten-gemeinschaft">
-                  <span className="zv-raumknoten-sub">Keine Räume auf dieser Etage.</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 interface Karte {
@@ -679,13 +655,43 @@ function ZimmerDetail({
   etage,
   standort,
   onVerwalten,
+  onAktualisiert,
 }: {
   zimmer: Zimmer;
   etage: string;
   standort: string;
   onVerwalten: () => void;
+  onAktualisiert: () => void;
 }) {
   const belegt = zimmer.bewohner.length;
+  const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
+  const [aufgabeOffen, setAufgabeOffen] = useState(false);
+  const [aufgabeTitel, setAufgabeTitel] = useState("");
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+  const [aufgabeFehler, setAufgabeFehler] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.belegungsverlauf(zimmer.id).then(setVerlauf).catch(() => setVerlauf([]));
+  }, [zimmer.id]);
+
+  async function aufgabeAnlegen(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!aufgabeTitel.trim()) return;
+    setWirdGespeichert(true);
+    setAufgabeFehler(null);
+    try {
+      await api.aufgabeAnlegen({ titel: aufgabeTitel.trim(), zimmerId: zimmer.id });
+      setAufgabeTitel("");
+      setAufgabeOffen(false);
+      onAktualisiert();
+    } catch (err) {
+      setAufgabeFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht angelegt werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  const fruehere = verlauf.filter((v) => !v.istAktuell && !v.geplant);
   return (
     <div>
       <h2 style={{ margin: 0 }}>Zimmer {zimmer.nummer}</h2>
@@ -776,10 +782,56 @@ function ZimmerDetail({
         )}
       </Abschnitt>
 
-      <button className="zv-btn zv-btn-sekundaer" onClick={onVerwalten} style={{ marginTop: "var(--zv-space-5)" }}>
-        <IZimmer />
-        Einzug, Auszug, Warteliste, Kapazität …
-      </button>
+      <Abschnitt titel="Belegungshistorie">
+        {fruehere.length === 0 ? (
+          <p className="zv-sub">Keine früheren Belegungen.</p>
+        ) : (
+          <ul className="zv-detail-liste">
+            {fruehere.map((v) => (
+              <li key={v.id}>
+                <strong>{v.name}</strong>
+                <span className="zv-sub zv-mono">
+                  {formatDatum(v.einzug)} – {v.auszug ? formatDatum(v.auszug) : "offen"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Abschnitt>
+
+      {aufgabeOffen && (
+        <form onSubmit={aufgabeAnlegen} style={{ marginTop: "var(--zv-space-4)" }}>
+          <div className="zv-field">
+            <label htmlFor="zimmer-aufgabe-titel">Aufgabe für Zimmer {zimmer.nummer}</label>
+            <input
+              id="zimmer-aufgabe-titel"
+              value={aufgabeTitel}
+              onChange={(e) => setAufgabeTitel(e.target.value)}
+              autoFocus
+            />
+          </div>
+          {aufgabeFehler && <p className="zv-fehlertext">{aufgabeFehler}</p>}
+          <div style={{ display: "flex", gap: "var(--zv-space-2)", marginTop: "var(--zv-space-2)" }}>
+            <button className="zv-btn" type="submit" disabled={wirdGespeichert || !aufgabeTitel.trim()}>
+              Anlegen
+            </button>
+            <button className="zv-btn zv-btn-sekundaer" type="button" onClick={() => setAufgabeOffen(false)}>
+              Abbrechen
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="zv-detail-aktionen">
+        <button className="zv-btn" onClick={onVerwalten}>
+          <IEinziehen />
+          Klient:in einziehen lassen
+        </button>
+        <button className="zv-btn zv-btn-sekundaer" onClick={() => setAufgabeOffen(true)} disabled={aufgabeOffen}>
+          <INeu />
+          Aufgabe anlegen
+        </button>
+      </div>
     </div>
   );
 }

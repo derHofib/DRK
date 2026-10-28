@@ -135,6 +135,7 @@ export function Login({
         <h1>
           <MarkenZeichen iconGroesse={26} />
         </h1>
+        <p className="zv-login-slogan">Ordnung im Hintergrund. Nähe im Vordergrund.</p>
         <p className="zv-sub">{klient ? "Anmeldung für Klient:innen" : "Anmeldung"}</p>
 
         {fehler ? (

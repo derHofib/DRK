@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
 import type {
   BenutzerListEintragDto,
   KassenbuchungDto,
@@ -56,7 +56,7 @@ import { dateiZuBase64 } from "../datei";
 import { formatBetrag, formatDatum } from "../format";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
-type Tab = "uebersicht" | "kostenuebernahmen" | "rechnungen" | "kassenbuch" | "tagesberichte";
+type Tab = "ueberblick" | "tagesberichte" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
 
 const eingabeFeldStil = {
   padding: "6px 8px",
@@ -69,7 +69,11 @@ const eingabeFeldStil = {
 
 export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
-  const [tab, setTab] = useState<Tab>("uebersicht");
+  const [tab, setTab] = useState<Tab>("ueberblick");
+  // Fuer Zaehler am Reiter und die Chronik im Ueberblick; nach jedem
+  // Tabwechsel neu geholt, damit ein im Tab angelegter Bericht sofort zaehlt.
+  const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
+  const [berichtFormularBeiStart, setBerichtFormularBeiStart] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [anonymisierenOffen, setAnonymisierenOffen] = useState(false);
   const [wirdAnonymisiert, setWirdAnonymisiert] = useState(false);
@@ -83,6 +87,16 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
 
   useEffect(laden, [klientId]);
 
+  const berichteLaden = useCallback(() => {
+    api.tagesberichteListe(klientId).then(setBerichte).catch(() => setBerichte([]));
+  }, [klientId]);
+  useEffect(berichteLaden, [berichteLaden, tab]);
+
+  function berichtSchreiben() {
+    setBerichtFormularBeiStart(true);
+    setTab("tagesberichte");
+  }
+
   async function anonymisieren() {
     setFehler(null);
     setWirdAnonymisiert(true);
@@ -91,7 +105,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setAnonymisierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht anonymisiert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht anonymisiert werden.");
     } finally {
       setWirdAnonymisiert(false);
     }
@@ -105,7 +119,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setArchivierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht archiviert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht archiviert werden.");
     } finally {
       setWirdArchiviert(false);
     }
@@ -119,7 +133,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       setEntarchivierenOffen(false);
       laden();
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Klient konnte nicht entarchiviert werden.");
+      setFehler(err instanceof Error ? err.message : "Klient:in konnte nicht entarchiviert werden.");
     } finally {
       setWirdArchiviert(false);
     }
@@ -154,78 +168,105 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
       )}
 
       {klient && (
-        <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <div>
-              <h2 style={{ margin: "0 0 4px", fontSize: 19 }}>
+        <header className="zv-akte-kopf">
+          <div className="zv-akte-haupt">
+            <span className="zv-initialen-kachel" aria-hidden="true">
+              {klient.vorname.charAt(0)}
+              {klient.nachname.charAt(0)}
+            </span>
+            <div className="zv-akte-titel">
+              <h2>
                 {klient.vorname} {klient.nachname}
               </h2>
-              <p className="zv-sub" style={{ margin: 0 }}>
-                Aktenzeichen {klient.aktenzeichen} · {klient.amt}
-                {klient.geburtsdatum && <> · geb. {formatDatum(klient.geburtsdatum)}</>} · HZL{" "}
-                {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}
+              <p className="zv-akte-meta">
+                {klient.geburtsdatum && (
+                  <span>
+                    <span className="zv-mono">{formatDatum(klient.geburtsdatum)}</span> ({alterIn(klient.geburtsdatum)} J.)
+                  </span>
+                )}
+                {klient.aktuellesZimmer && (
+                  <span>
+                    Zimmer <span className="zv-mono">{klient.aktuellesZimmer.nummer}</span>, {klient.aktuellesZimmer.standortName}
+                  </span>
+                )}
+                {klient.aufnahmeAm && (
+                  <span>
+                    seit <span className="zv-mono">{formatDatum(klient.aufnahmeAm)}</span>
+                  </span>
+                )}
+                {klient.stammdaten?.bezugsbetreuerName && (
+                  <span>
+                    Bezugsbetreuung{" "}
+                    <button type="button" className="zv-link-btn" onClick={() => setTab("stammdaten")}>
+                      {klient.stammdaten.bezugsbetreuerName}
+                    </button>
+                  </span>
+                )}
+              </p>
+              <p className="zv-akte-meta">
+                <span>
+                  Aktenzeichen <span className="zv-mono">{klient.aktenzeichen}</span>
+                </span>
+                <span>{klient.amt}</span>
+                <span>HZL {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}</span>
+                {klient.archiviertAm && (
+                  <span className="zv-pill zv-pill-neutral">
+                    <IArchivieren />
+                    Archiviert am {formatDatum(klient.archiviertAm.slice(0, 10))}
+                    {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
+                  </span>
+                )}
+                {klient.anonymisiertAm && (
+                  <span className="zv-pill zv-pill-vergeben">
+                    <ILoeschen />
+                    Anonymisiert am {formatDatum(klient.anonymisiertAm.slice(0, 10))}
+                  </span>
+                )}
               </p>
             </div>
-            {klient.anonymisiertAm ? (
-              <span className="zv-pill zv-pill-vergeben">
-                <ILoeschen />
-                Anonymisiert am {formatDatum(klient.anonymisiertAm.slice(0, 10))}
-              </span>
+          </div>
+
+          <div className="zv-akte-aktionen">
+            {!klient.archiviertAm && (
+              <button type="button" className="zv-btn" onClick={berichtSchreiben}>
+                <INeu />
+                Tagesbericht schreiben
+              </button>
+            )}
+            {klient.archiviertAm ? (
+              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setEntarchivierenOffen(true)}>
+                <IEntarchivieren />
+                Entarchivieren
+              </button>
             ) : (
-              <button className="zv-link-btn" onClick={() => setAnonymisierenOffen(true)}>
+              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setArchivierenOffen(true)}>
+                <IArchivieren />
+                Archivieren
+              </button>
+            )}
+            {!klient.anonymisiertAm && (
+              <button type="button" className="zv-btn zv-btn-still" onClick={() => setAnonymisierenOffen(true)}>
                 <ILoeschen />
-                Klient anonymisieren
+                Anonymisieren
               </button>
             )}
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: "1px solid var(--zv-border)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {klient.archiviertAm ? (
-                <span className="zv-pill zv-pill-neutral">
-                  <IArchivieren />
-                  Archiviert am {formatDatum(klient.archiviertAm.slice(0, 10))}
-                  {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
-                </span>
-              ) : (
-                <button className="zv-link-btn" onClick={() => setArchivierenOffen(true)}>
-                  <IArchivieren />
-                  Klient archivieren
+          {klient.archivPdfs.length > 0 && (
+            <div className="zv-akte-pdfs">
+              {klient.archivPdfs.map((pdf) => (
+                <button key={pdf.id} className="zv-link-btn" onClick={() => archivPdfHerunterladen(pdf.id)}>
+                  <IHerunterladen />
+                  Aktenauszug {formatDatum(pdf.erstelltAm.slice(0, 10))}
                 </button>
-              )}
-              {klient.archiviertAm && (
-                <button className="zv-link-btn" onClick={() => setEntarchivierenOffen(true)}>
-                  <IEntarchivieren />
-                  Entarchivieren
-                </button>
-              )}
+              ))}
             </div>
-            {klient.archivPdfs.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {klient.archivPdfs.map((pdf) => (
-                  <button key={pdf.id} className="zv-link-btn" onClick={() => archivPdfHerunterladen(pdf.id)}>
-                    <IHerunterladen />
-                    Aktenauszug {formatDatum(pdf.erstelltAm.slice(0, 10))}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          )}
+        </header>
       )}
 
       {anonymisierenOffen && (
-        <Modal titel="Klient anonymisieren" onClose={() => setAnonymisierenOffen(false)}>
+        <Modal titel="Klient:in anonymisieren" onClose={() => setAnonymisierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Name und Geburtsdatum dieses Klienten werden dauerhaft überschrieben (Recht auf Löschung, Art. 17
             DSGVO). Aktenzeichen, Amt sowie Kassenbuch- und Rechnungshistorie bleiben als Belege erhalten. Diese
@@ -233,13 +274,13 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           </p>
           <button className="zv-btn zv-btn-gefahr zv-btn-block" onClick={anonymisieren} disabled={wirdAnonymisiert}>
             <ILoeschen />
-            {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient jetzt anonymisieren"}
+            {wirdAnonymisiert ? "Wird anonymisiert…" : "Klient:in jetzt anonymisieren"}
           </button>
         </Modal>
       )}
 
       {archivierenOffen && (
-        <Modal titel="Klient archivieren" onClose={() => setArchivierenOffen(false)}>
+        <Modal titel="Klient:in archivieren" onClose={() => setArchivierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Es wird ein vollständiger PDF-Aktenauszug erzeugt (Stammdaten, Kontakte, Unterbringungshistorie,
             Kassenbuch, Kostenübernahmen, Rechnungen, Tagesberichte samt Anhängen) und dauerhaft gespeichert. Der
@@ -249,46 +290,48 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           </p>
           <button className="zv-btn zv-btn-block" onClick={archivieren} disabled={wirdArchiviert}>
             <IArchivieren />
-            {wirdArchiviert ? "Wird archiviert…" : "Klient jetzt archivieren"}
+            {wirdArchiviert ? "Wird archiviert…" : "Klient:in jetzt archivieren"}
           </button>
         </Modal>
       )}
 
       {entarchivierenOffen && (
-        <Modal titel="Klient entarchivieren" onClose={() => setEntarchivierenOffen(false)}>
+        <Modal titel="Klient:in entarchivieren" onClose={() => setEntarchivierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Der Klient ist danach wieder normal bearbeitbar und erscheint wieder in der aktiven Klientenliste. Die
             bereits erzeugten Aktenauszüge bleiben unverändert erhalten.
           </p>
           <button className="zv-btn zv-btn-block" onClick={entarchivieren} disabled={wirdArchiviert}>
             <IEntarchivieren />
-            {wirdArchiviert ? "Wird entarchiviert…" : "Klient jetzt entarchivieren"}
+            {wirdArchiviert ? "Wird entarchiviert…" : "Klient:in jetzt entarchivieren"}
           </button>
         </Modal>
       )}
 
-      <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>
-        <button className={tab === "uebersicht" ? "active" : ""} onClick={() => setTab("uebersicht")}>
-          <IUebersicht />
-          Übersicht
-        </button>
-        <button className={tab === "kostenuebernahmen" ? "active" : ""} onClick={() => setTab("kostenuebernahmen")}>
-          <IKostenuebernahme />
-          Kostenübernahmen
-        </button>
-        <button className={tab === "rechnungen" ? "active" : ""} onClick={() => setTab("rechnungen")}>
-          <IRechnung />
-          Rechnungen
-        </button>
-        <button className={tab === "kassenbuch" ? "active" : ""} onClick={() => setTab("kassenbuch")}>
-          <IKassenbuch />
-          Kassenbuch
-        </button>
-        <button className={tab === "tagesberichte" ? "active" : ""} onClick={() => setTab("tagesberichte")}>
-          <ITagesberichte />
-          Tagesberichte
-        </button>
-      </div>
+      <nav className="zv-reiter" aria-label="Bereiche der Akte">
+        {(
+          [
+            ["ueberblick", "Überblick", undefined],
+            ["tagesberichte", "Tagesberichte", berichte.length],
+            ["kassenbuch", "Kassenbuch", undefined],
+            ["kostenuebernahmen", "Kostenübernahmen", undefined],
+            ["rechnungen", "Rechnungen", undefined],
+            ["stammdaten", "Stammdaten", undefined],
+            ["zugang", "Zugang & Freigaben", undefined],
+          ] as [Tab, string, number | undefined][]
+        ).map(([wert, label, zaehler]) => (
+          <button
+            key={wert}
+            type="button"
+            className={tab === wert ? "active" : ""}
+            aria-current={tab === wert ? "true" : undefined}
+            onClick={() => setTab(wert)}
+          >
+            {label}
+            {zaehler !== undefined && <span className="zv-mono zv-reiter-zaehler">{zaehler}</span>}
+          </button>
+        ))}
+      </nav>
 
       {klient?.archiviertAm && (
         <div className="zv-hinweis zv-hinweis-info" style={{ marginBottom: 16 }}>
@@ -310,17 +353,33 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         disabled={!!klient?.archiviertAm}
         style={{ border: 0, padding: 0, margin: 0, minInlineSize: "auto" }}
       >
-        {tab === "uebersicht" && klient && <UebersichtTab klient={klient} onGeaendert={laden} />}
+        {tab === "ueberblick" && klient && (
+          <UeberblickTab
+            klient={klient}
+            berichte={berichte}
+            onBerichtAngelegt={berichteLaden}
+            onAlleBerichte={() => setTab("tagesberichte")}
+            onKontakte={() => setTab("stammdaten")}
+          />
+        )}
+        {tab === "tagesberichte" && (
+          <TagesberichteTab
+            klientId={klientId}
+            startMitFormular={berichtFormularBeiStart}
+            onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
+          />
+        )}
+        {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
         {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
         {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
-        {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
-        {tab === "tagesberichte" && <TagesberichteTab klientId={klientId} />}
+        {tab === "stammdaten" && klient && <StammdatenTab klient={klient} onGeaendert={laden} />}
+        {tab === "zugang" && <KlientZugang klientId={klientId} />}
       </fieldset>
     </div>
   );
 }
 
-function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGeaendert: () => void }) {
+function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGeaendert: () => void }) {
   const [aktuelleKostenuebernahme, setAktuelleKostenuebernahme] = useState<KostenuebernahmeDto | null | undefined>(
     undefined
   );
@@ -421,7 +480,7 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
       setWartelisteOffen(false);
       onGeaendert();
     } catch (err) {
-      setFormFehler(err instanceof Error ? err.message : "Klient konnte nicht auf die Warteliste gesetzt werden.");
+      setFormFehler(err instanceof Error ? err.message : "Klient:in konnte nicht auf die Warteliste gesetzt werden.");
     } finally {
       setWirdGespeichert(false);
     }
@@ -727,7 +786,202 @@ function UebersichtTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     />
 
     <KontakteAbschnitt klientId={klient.id} kontakte={klient.kontakte} onGeaendert={onGeaendert} />
-    <KlientZugang klientId={klient.id} />
+    </div>
+  );
+}
+
+function alterIn(geburtsdatum: string): number {
+  const heute = new Date();
+  const [j, m, t] = geburtsdatum.slice(0, 10).split("-").map(Number);
+  let alter = heute.getFullYear() - j;
+  if (heute.getMonth() + 1 < m || (heute.getMonth() + 1 === m && heute.getDate() < t)) alter -= 1;
+  return alter;
+}
+
+function tageBis(datum: string): number {
+  const [j, m, t] = datum.slice(0, 10).split("-").map(Number);
+  const heute = new Date();
+  return Math.round(
+    (Date.UTC(j, m - 1, t) - Date.UTC(heute.getFullYear(), heute.getMonth(), heute.getDate())) / 86_400_000,
+  );
+}
+
+/**
+ * Ueberblick: links die Chronik (juengste Tagesberichte, Schnelleintrag),
+ * rechts das, was man bei einem Blick auf die Person wissen will --
+ * Kostenuebernahme mit Laufzeit, Barbetrag, Kontakte. Alles Weitere
+ * (Stammdaten bearbeiten, Rechnungen, ...) hat einen eigenen Reiter, damit
+ * hier nichts scrollen muss, um das Wichtige zu finden.
+ */
+function UeberblickTab({
+  klient,
+  berichte,
+  onBerichtAngelegt,
+  onAlleBerichte,
+  onKontakte,
+}: {
+  klient: KlientDetailDto;
+  berichte: TagesberichtDto[];
+  onBerichtAngelegt: () => void;
+  onAlleBerichte: () => void;
+  onKontakte: () => void;
+}) {
+  const [kostenuebernahme, setKostenuebernahme] = useState<KostenuebernahmeDto | null | undefined>(undefined);
+  const [barbetragCent, setBarbetragCent] = useState<number | null>(null);
+  const [text, setText] = useState("");
+  const [wirdGespeichert, setWirdGespeichert] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .kostenuebernahmenListe(klient.id)
+      .then((liste) => {
+        const heute = new Date().toISOString().slice(0, 10);
+        const aktuelle = liste
+          .filter((k) => k.von <= heute && (k.bis === null || k.bis >= heute))
+          .sort((a, b) => b.von.localeCompare(a.von));
+        setKostenuebernahme(aktuelle[0] ?? null);
+      })
+      .catch(() => setKostenuebernahme(null));
+    // Stornierte Buchungen zaehlen nicht -- wie im Kassenstand (siehe
+    // kassenbuchung.service.ts: Saldo nur ueber NOT storniert).
+    api
+      .kassenbuchungenListe({ klientId: klient.id })
+      .then((liste) => setBarbetragCent(liste.filter((b) => !b.storniert).reduce((summe, b) => summe + b.betragCent, 0)))
+      .catch(() => setBarbetragCent(null));
+  }, [klient.id]);
+
+  async function schnellEintrag(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setWirdGespeichert(true);
+    setFehler(null);
+    try {
+      await api.tagesberichtAnlegen({ klientId: klient.id, datum: new Date().toISOString().slice(0, 10), text: text.trim() });
+      setText("");
+      onBerichtAngelegt();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Eintrag konnte nicht gespeichert werden.");
+    } finally {
+      setWirdGespeichert(false);
+    }
+  }
+
+  const ku = kostenuebernahme;
+  const kuGesamt = ku && ku.bis ? Math.max(1, tageBis(ku.bis) - tageBis(ku.von)) : null;
+  const kuVerbleibend = ku && ku.bis ? tageBis(ku.bis) : null;
+  const kuFortschritt = kuGesamt && kuVerbleibend !== null ? Math.min(100, Math.max(0, ((kuGesamt - kuVerbleibend) / kuGesamt) * 100)) : 0;
+
+  return (
+    <div className="zv-ueberblick">
+      <section aria-label="Chronik">
+        <div className="zv-abschnittskopf">
+          <h3>Chronik</h3>
+          <button type="button" className="zv-link-btn" onClick={onAlleBerichte}>
+            Alle Tagesberichte
+          </button>
+        </div>
+        <form className="zv-schnelleintrag" onSubmit={schnellEintrag}>
+          <label htmlFor="schnelleintrag" className="zv-sr-only">
+            Schnelleintrag für heute
+          </label>
+          <textarea
+            id="schnelleintrag"
+            rows={2}
+            value={text}
+            placeholder="Kurzer Eintrag für heute …"
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button className="zv-btn zv-btn-sekundaer" type="submit" disabled={wirdGespeichert || !text.trim()}>
+            <ISpeichern />
+            Speichern
+          </button>
+        </form>
+        {fehler && <p className="zv-fehlertext">{fehler}</p>}
+        {berichte.length === 0 ? (
+          <Leerzustand icon={ILeerTagesberichte}>Noch kein Tagesbericht. Der erste Eintrag steht oben.</Leerzustand>
+        ) : (
+          <ol className="zv-chronik">
+            {berichte.slice(0, 6).map((b) => (
+              <li key={b.id}>
+                <span className="zv-chronik-datum zv-mono">{formatDatum(b.datum)}</span>
+                <span className="zv-chronik-text">
+                  <span className="zv-chronik-inhalt">{b.text}</span>
+                  <span className="zv-todo-meta">
+                    {b.autorName ?? "unbekannt"}
+                    {b.tags.length > 0 && ` · ${b.tags.map((t) => t.name).join(", ")}`}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <aside className="zv-ueberblick-rand">
+        <section aria-label="Kostenübernahme">
+          <div className="zv-abschnittskopf">
+            <h3>Kostenübernahme</h3>
+          </div>
+          {ku === undefined ? null : ku === null ? (
+            <p className="zv-rand-leer">Keine laufende Kostenübernahme erfasst.</p>
+          ) : (
+            <div>
+              <p className="zv-rand-wert">{ku.amt}</p>
+              <p className="zv-todo-meta">
+                <span className="zv-mono">{formatDatum(ku.von)}</span>
+                {" – "}
+                {ku.bis ? <span className="zv-mono">{formatDatum(ku.bis)}</span> : "unbefristet"}
+              </p>
+              {ku.bis && (
+                <div
+                  className="zv-laufzeit"
+                  role="img"
+                  aria-label={`${Math.round(kuFortschritt)} Prozent der Laufzeit vergangen`}
+                >
+                  <div style={{ width: `${kuFortschritt}%` }} />
+                </div>
+              )}
+              {kuVerbleibend !== null && kuVerbleibend <= 30 && (
+                <p className="zv-lage-folge zv-lage-folge-achtung" style={{ marginTop: "var(--zv-space-2)" }}>
+                  {kuVerbleibend < 0 ? "abgelaufen" : `endet in ${kuVerbleibend} ${kuVerbleibend === 1 ? "Tag" : "Tagen"}`}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section aria-label="Barbetrag">
+          <div className="zv-abschnittskopf">
+            <h3>Barbetrag</h3>
+          </div>
+          <p className="zv-rand-wert zv-mono">{barbetragCent === null ? "–" : formatBetrag(barbetragCent)}</p>
+          <p className="zv-todo-meta">Summe der nicht stornierten Buchungen</p>
+        </section>
+
+        <section aria-label="Kontakte">
+          <div className="zv-abschnittskopf">
+            <h3>Kontakte</h3>
+            <button type="button" className="zv-link-btn" onClick={onKontakte}>
+              Bearbeiten
+            </button>
+          </div>
+          {klient.kontakte.length === 0 ? (
+            <p className="zv-rand-leer">Keine Kontakte erfasst.</p>
+          ) : (
+            <ul className="zv-rand-liste zv-kontaktliste">
+              {klient.kontakte.map((k) => (
+                <li key={k.id}>
+                  <span className="zv-todo-titel">{k.name}</span>
+                  <span className="zv-todo-meta">
+                    {[k.beziehung, k.telefon].filter(Boolean).join(" · ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </aside>
     </div>
   );
 }
@@ -1489,7 +1743,7 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
         </div>
       )}
       {buchungen.length === 0 ? (
-        <Leerzustand icon={ILeerKassenbuch}>Keine Kassenbuch-Einträge für diesen Klienten.</Leerzustand>
+        <Leerzustand icon={ILeerKassenbuch}>Keine Kassenbuch-Einträge für diese Klient:in.</Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.2fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
@@ -1537,12 +1791,25 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
   );
 }
 
-function TagesberichteTab({ klientId }: { klientId: string }) {
+function TagesberichteTab({
+  klientId,
+  startMitFormular = false,
+  onFormularGenutzt,
+}: {
+  klientId: string;
+  startMitFormular?: boolean;
+  onFormularGenutzt?: () => void;
+}) {
   const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
   const [tagVorschlaege, setTagVorschlaege] = useState<TagDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [formularOffen, setFormularOffen] = useState(false);
+  // "Tagesbericht schreiben" im Kopf der Akte oeffnet direkt das Formular --
+  // sonst waere der primaere Knopf nur ein Tabwechsel und ein Klick zu wenig.
+  const [formularOffen, setFormularOffen] = useState(startMitFormular);
   const [formFehler, setFormFehler] = useState<string | null>(null);
+  useEffect(() => {
+    if (startMitFormular) onFormularGenutzt?.();
+  }, [startMitFormular, onFormularGenutzt]);
 
   function laden() {
     api.tagesberichteListe(klientId).then(setBerichte).catch((err) => setFehler(err.message));
@@ -1670,7 +1937,7 @@ function TagesberichteTab({ klientId }: { klientId: string }) {
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
 
       {berichte.length === 0 ? (
-        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diesen Klienten erfasst.</Leerzustand>
+        <Leerzustand icon={ILeerTagesberichte}>Noch keine Tagesberichte für diese Klient:in erfasst.</Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "0.9fr 2.6fr 1.5fr 1.5fr" } as CSSProperties}>
           <div className="zv-liste-kopf">

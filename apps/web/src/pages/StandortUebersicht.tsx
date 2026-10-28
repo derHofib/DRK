@@ -2,7 +2,8 @@ import { CSSProperties, useEffect, useState } from "react";
 import type { StandortDto, StandortUebersichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
-import { IFehler, IKassenbuch, IKlienten, ILeerStandorte, IStandort, IZimmer } from "../components/icons";
+import { IFehler, IKassenbuch, IKlienten, ILeerStandorte, IZimmer } from "../components/icons";
+import { StandortReiter } from "../components/StandortReiter";
 import { formatBetrag, formatDatum } from "../format";
 
 const AUSWAHL_SPEICHER = "zimmerakte_standorte_auswahl";
@@ -30,7 +31,7 @@ function speichereAuswahl(id: string) {
  * enthaelt damit nur die erlaubten Standorte; die Verwaltung (Anlegen,
  * Umbenennen, Deaktivieren) bleibt in den Einstellungen.
  */
-export function StandortUebersicht() {
+export function StandortUebersicht({ onBelegungOeffnen }: { onBelegungOeffnen: (standortId: string) => void }) {
   const [standorte, setStandorte] = useState<StandortDto[] | null>(null);
   const [auswahl, setAuswahl] = useState<string | null>(() => ladeAuswahl());
   const [daten, setDaten] = useState<StandortUebersichtDto | null>(null);
@@ -80,33 +81,34 @@ export function StandortUebersicht() {
 
       <div className="zv-seiten-kopf">
         <div>
-          <h2>Standorte</h2>
+          <p className="zv-kontextzeile">
+            {daten ? `${daten.standort.name} · ${daten.zimmer.anzahl} Zimmer` : "Alle Standorte"}
+          </p>
+          <h2>Belegung</h2>
           {daten && (
             <p className="zv-sub" style={{ margin: "2px 0 0" }}>
               {daten.standort.adresse}
             </p>
           )}
         </div>
+        {auswahl && (
+          <button className="zv-btn" onClick={() => onBelegungOeffnen(auswahl)}>
+            <IZimmer />
+            Zimmer und Belegung
+          </button>
+        )}
       </div>
 
       {standorte !== null && standorte.length === 0 && !fehler && (
         <Leerzustand icon={ILeerStandorte}>Ihnen ist kein Standort zugeordnet.</Leerzustand>
       )}
 
-      {standorte && standorte.length > 1 && (
-        <div className="zv-tabbar" style={{ padding: 0, marginBottom: 20 }}>
-          {standorte.map((s) => (
-            <button
-              key={s.id}
-              className={auswahl === s.id ? "active" : ""}
-              aria-current={auswahl === s.id ? "true" : undefined}
-              onClick={() => waehlen(s.id)}
-            >
-              <IStandort />
-              {s.name}
-            </button>
-          ))}
-        </div>
+      {standorte && (
+        <StandortReiter
+          eintraege={standorte.map((st) => ({ id: st.id, label: st.name }))}
+          aktiv={auswahl}
+          onWaehle={(id) => id && waehlen(id)}
+        />
       )}
 
       {daten && daten.standort.id === auswahl && (

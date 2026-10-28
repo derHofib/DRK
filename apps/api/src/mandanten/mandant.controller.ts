@@ -19,7 +19,7 @@ const hexFarbe = (beispiel: string) =>
 // sich aber denselben Endpunkt und dieselbe Rollenpruefung.
 const erscheinungsbildSchema = z
   .object({
-    akzentfarbe: hexFarbe("#e3000f").optional(),
+    akzentfarbe: hexFarbe("#2d6a4f").optional(),
     dunkelGrundfarbe: hexFarbe("#10131a").optional(),
   })
   .refine((wert) => wert.akzentfarbe !== undefined || wert.dunkelGrundfarbe !== undefined, {

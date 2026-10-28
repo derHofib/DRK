@@ -120,14 +120,16 @@ async function anmelden(page, email = LEITUNG) {
  * Unterpunkte (navigation.ts/UNTERPUNKTE) haben keinen eigenen Knopf in der
  * mobilen Leiste: man erreicht sie ueber das Gruppen-Panel ihres Elternpunkts.
  */
-const ELTERN_VON_UNTERPUNKT = { Aufgaben: "Dashboard", HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende" };
+const ELTERN_VON_UNTERPUNKT = { Schichtübergabe: "Heute", HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende" };
+/** Seit dem Redesign heisst "Tagesberichte" in der mobilen Leiste "Bericht" (Platz fuer fuenf Felder). */
+const MOBIL_NAME = { Tagesberichte: "Bericht" };
 
 /**
  * Funktioniert unabhaengig von der Fensterbreite: die Desktop-Sidebar
  * zeigt immer alle Reiter direkt (kein Sammelmenue-Konzept dort). Auf der
- * mobilen Reiterleiste liegen nur vier Reiter direkt (heute Dashboard,
- * Klienten, Nachrichten, Kalender), der Rest im Sammelmenue ("Mehr").
- * Punkte mit Unterpunkten (Dashboard, Klienten, Kassenbuch, Mitarbeitende)
+ * mobilen Reiterleiste liegen nur vier Reiter direkt (Heute, Klienten,
+ * Nachrichten, Bericht), der Rest im Sammelmenue ("Mehr").
+ * Punkte mit Unterpunkten (Heute, Klienten, Kassenbuch, Mitarbeitende)
  * oeffnen mobil zuerst ein Gruppen-Panel statt zu navigieren; das Ziel
  * steht darin als Menueeintrag.
  */
@@ -138,7 +140,7 @@ async function reiterWaehlen(page, label) {
     return;
   }
   const knopf = ELTERN_VON_UNTERPUNKT[label] ?? label;
-  const direkt = page.locator(`.zv-tabbar-app button:has-text("${knopf}")`);
+  const direkt = page.locator(`.zv-tabbar-app button:has-text("${MOBIL_NAME[knopf] ?? knopf}")`);
   if (await direkt.first().isVisible().catch(() => false)) {
     await direkt.first().click();
   } else {
@@ -164,7 +166,11 @@ if (laufe(1)) {
   // (Sammelmenue), siehe Shell.tsx/REITER_MOBIL_SICHTBAR.
   ok(await page.locator(".zv-tabbar-app button").count() === 5, "Mobile Reiterleiste hat 4 Reiter + 'Mehr'");
   const reiter = await page.locator(".zv-tabbar-app button").allInnerTexts();
-  ok(reiter.includes("Nachrichten") && reiter.includes("Kalender"), `Reiter "Nachrichten" und "Kalender" direkt sichtbar (${reiter.join(", ")})`);
+  ok(
+    ["Heute", "Klienten", "Nachrichten", "Bericht"].every((n) => reiter.some((t) => t.includes(n))),
+    `Reiter Heute, Klienten, Nachrichten, Bericht direkt sichtbar (${reiter.join(", ")})`
+  );
+  ok(!reiter.includes("Kalender"), "Kalender liegt im Sammelmenue, nicht in der Leiste");
   ok(reiter.includes("Mehr"), `Sammelmenue-Knopf "Mehr" vorhanden (${reiter.join(", ")})`);
   ok(!reiter.includes("Einstellungen"), "Reiter \"Einstellungen\" ist ins Sammelmenue gewandert, nicht mehr direkt sichtbar");
   ok(await page.locator(".zv-tabbar-app svg").count() >= 5, "Jeder Reiter traegt ein Icon");
@@ -256,7 +262,10 @@ if (laufe(4)) {
   await page.waitForSelector(".zv-hinweis-erfolg", { timeout: 5000 });
   ok(true, "Speichern meldet Erfolg");
 
-  await page.reload({ waitUntil: "networkidle" });
+  // Angemeldet bleibt eine Chat-Verbindung offen (useChatEreignisse), "networkidle"
+  // wird also nie erreicht -- auf die gerenderte Shell warten statt auf Netzstille.
+  await page.reload({ waitUntil: "load" });
+  await page.waitForSelector(".zv-content", { timeout: 10000 });
   await reiterWaehlen(page, "Einstellungen");
   await page.waitForSelector(".zv-swatch-grid");
   const nachReload = await knopfFarbe();
@@ -269,6 +278,17 @@ if (laufe(4)) {
   const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page2 = await ctx2.newPage();
   await anmelden(page2, ANDERE);
+  // Die Markenfarbe kommt per eigener Anfrage NACH dem ersten Rendern der
+  // Shell; sofortiges Lesen misst den Standardwert. Warten, bis der erwartete
+  // Farbton ankommt -- bleibt er aus, laeuft das Warten ab und die Aussage
+  // unten wird trotzdem falsch (kein Freibrief).
+  await page2
+    .waitForFunction(
+      (soll) => Math.abs(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--zv-accent-h")) - parseFloat(soll)) < 1,
+      erwarteterFarbton,
+      { timeout: 8000 },
+    )
+    .catch(() => {});
   const andererNutzer = await page2.evaluate(() => {
     const b = document.querySelector(".zv-topbar .zv-btn");
     const c = document.createElement("canvas"); c.width = c.height = 1;
@@ -310,8 +330,8 @@ if (laufe(5)) {
 
     // Zimmer/Mitarbeitende/Einstellungen liegen seit Phase 8 im
     // Sammelmenue -- reiterWaehlen() oeffnet es bei Bedarf automatisch.
-    // Aufgaben ist Unterpunkt von Dashboard (ueber dessen Gruppen-Panel erreichbar).
-    for (const reiter of ["Dashboard", "Standorte", "Klienten", "Nachrichten", "Kalender", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
+    // Schichtuebergabe ist Unterpunkt von Heute (ueber dessen Gruppen-Panel erreichbar).
+    for (const reiter of ["Heute", "Belegung", "Klienten", "Nachrichten", "Kalender", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Schichtübergabe", "Einstellungen"]) {
       await reiterWaehlen(page, reiter);
       await page.waitForTimeout(250);
       const ueberlauf = await page.evaluate(() =>
@@ -364,12 +384,12 @@ if (laufe(6)) {
     "aria-controls verweist auf das Panel"
   );
 
-  // Zieleintrag anklicken -> Route wechselt, Menue ist zu. "Tagesberichte" liegt im Sammelmenue
-  // und hat keine Unterpunkte (Dashboard/Klienten/Nachrichten/Kalender sind seit den Chat-Commits direkt sichtbar).
-  await page.click('#zv-sammelmenue-panel button:has-text("Tagesberichte")');
+  // Zieleintrag anklicken -> Route wechselt, Menue ist zu. "Kalender" liegt im Sammelmenue
+  // und hat keine Unterpunkte (Heute/Klienten/Nachrichten/Bericht sind direkt sichtbar).
+  await page.click('#zv-sammelmenue-panel button:has-text("Kalender")');
   await page.waitForTimeout(300);
   ok((await page.locator("#zv-sammelmenue-panel").count()) === 0, "Panel ist nach Auswahl geschlossen");
-  ok(await page.locator("h2:has-text('Tagesberichte')").isVisible(), "Route ist zu Tagesberichte gewechselt");
+  ok(await page.locator(".zv-kalender").first().isVisible(), "Route ist zu Kalender gewechselt");
   ok(
     (await mehrKnopf.getAttribute("class"))?.includes("active") ?? false,
     "Mehr-Knopf zeigt aktiven Zustand, wenn die aktuelle Route im Sammelmenue liegt"

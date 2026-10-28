@@ -103,7 +103,9 @@ export function Standorte() {
       </div>
 
       {standorte.length === 0 && !fehler ? (
-        <Leerzustand icon={ILeerStandorte}>Noch keine Standorte angelegt.</Leerzustand>
+        <Leerzustand icon={ILeerStandorte} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => { setFormFehler(null); setNeuFormularOffen(true); }}>Standort anlegen</button>}>
+          Noch keine Standorte angelegt.
+        </Leerzustand>
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 2fr 1fr 1.6fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
