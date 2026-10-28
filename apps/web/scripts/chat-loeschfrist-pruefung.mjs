@@ -38,7 +38,7 @@ async function anmelden(email, viewport = { width: 1280, height: 900 }, colorSch
   await page.getByLabel(/E-Mail/i).fill(email);
   await page.locator("#passwort").fill(passwort);
   await page.getByRole("button", { name: /Anmelden/i }).click();
-  await page.getByRole("button", { name: /^Dashboard$/ }).first().waitFor();
+  await page.getByRole("button", { name: /^Heute$/ }).first().waitFor();
   return { context, page };
 }
 

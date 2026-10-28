@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MandantDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MandantDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
@@ -23,8 +23,9 @@ import {
   IZuklappen,
 } from "../components/icons";
 import {
+  MENUE_GRUPPEN,
   ladeMenuReihenfolge,
-  reiterNachReihenfolge,
+  reiterDerGruppe,
   speichereMenuReihenfolge,
   STANDARD_REITER,
   UNTERPUNKTE,
@@ -51,8 +52,29 @@ import { Einstellungen } from "./Einstellungen";
 import { Nachrichten } from "./Nachrichten";
 import { Kalender } from "./Kalender";
 
-/** Nur auf der mobilen Reiterleiste relevant -- die Sidebar zeigt immer alle. */
-const MOBIL_SICHTBAR_ANZAHL = 4;
+/**
+ * Die vier Punkte, die auf dem Handy immer direkt in der unteren Leiste
+ * stehen (plus "Mehr"): das, was im Dienst am haeufigsten gebraucht wird.
+ * Fest statt aus der einstellbaren Reihenfolge abgeleitet -- die gilt jetzt
+ * je Gruppe, und eine Leiste, deren Inhalt davon abhaengt, in welcher
+ * Gruppe man etwas nach oben geschoben hat, waere nicht vorhersagbar. Die
+ * Sidebar zeigt weiterhin immer alle. "Bericht" ist die Kurzform von
+ * Tagesberichte, damit das Wort in eine Leiste mit fuenf Feldern passt.
+ */
+const MOBIL_DIREKT: { wert: HauptReiter; label: string }[] = [
+  { wert: "dashboard", label: "Heute" },
+  { wert: "klienten", label: "Klienten" },
+  { wert: "nachrichten", label: "Nachrichten" },
+  { wert: "tagesberichte", label: "Bericht" },
+];
+
+/** "Anna Beispiel" -> "AB"; ein einzelnes Wort -> dessen erste zwei Buchstaben. */
+function initialen(name: string): string {
+  const teile = name.trim().split(/\s+/).filter(Boolean);
+  if (teile.length === 0) return "?";
+  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
+  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
+}
 
 /** Zaehler am Menuepunkt; 0 = unsichtbar. */
 function NavBadge({ anzahl }: { anzahl: number }) {
@@ -139,6 +161,7 @@ function speichereBoolean(schluessel: string, wert: boolean) {
 
 export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => void; onUebergabeStarten: (start: UebergabeStart) => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
+  const [ich, setIch] = useState<BenutzerListEintragDto | null>(null);
   const { badge: chatBadge } = useChatEreignisse();
   const badgeFuer = (w: HauptReiter) => (w === "nachrichten" ? chatBadge : 0);
   // Nach dem Uebergabemodus (ersetzt die Shell, siehe App.tsx) zurueck dorthin, wo man war.
@@ -184,15 +207,18 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // "Standorte". Serverseitig schon auf die erlaubten gefiltert
   // (StandortService.findeAlle), hier kommt nichts dazu.
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
-  const standortUnterpunkte: UnterpunktEintrag[] | undefined =
-    standorte.length > 0
-      ? standorte.map((s) => ({ wert: `standort:${s.id}` as const, label: s.name, icon: IStandort }))
-      : undefined;
-  const unterpunkteVon = (haupt: HauptReiter): UnterpunktEintrag[] | undefined =>
-    haupt === "standorte" ? standortUnterpunkte : UNTERPUNKTE[haupt];
-  const REITER = reiterNachReihenfolge(menuReihenfolge);
-  const REITER_MOBIL_SICHTBAR = REITER.slice(0, MOBIL_SICHTBAR_ANZAHL);
-  const REITER_MOBIL_MEHR = REITER.slice(MOBIL_SICHTBAR_ANZAHL);
+  const unterpunkteVon = (haupt: HauptReiter): UnterpunktEintrag[] | undefined => UNTERPUNKTE[haupt];
+  // Alle Hauptpunkte in Menuereihenfolge (Gruppen nacheinander, Einstellungen
+  // zuletzt) -- Grundlage fuer "Mehr" auf dem Handy und fuer Panel-Titel.
+  const REITER = [
+    ...MENUE_GRUPPEN.flatMap((g) => reiterDerGruppe(menuReihenfolge, g.id)),
+    ...STANDARD_REITER.filter((r) => r.wert === "einstellungen"),
+  ];
+  const REITER_MOBIL_SICHTBAR = MOBIL_DIREKT.map((m) => ({
+    ...REITER.find((r) => r.wert === m.wert)!,
+    label: m.label,
+  }));
+  const REITER_MOBIL_MEHR = REITER.filter((r) => !MOBIL_DIREKT.some((m) => m.wert === r.wert));
 
   useEffect(() => speichereBoolean(SIDEBAR_SPEICHER, eingeklappt), [eingeklappt]);
   useEffect(() => speichereBoolean(SIDEBAR_HOVER_SPEICHER, hoverAusklappen), [hoverAusklappen]);
@@ -311,6 +337,13 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
 
   useEffect(() => {
     api
+      .benutzerIch()
+      .then(setIch)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api
       .eigenerMandant()
       .then((m) => {
         setMandant(m);
@@ -378,7 +411,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       .map((u) => ({ schluessel: `nav:${u.wert}`, titel: u.label, icon: u.icon, ausfuehren: () => geheZu(u.wert) })),
     ...standorte.map((st) => ({
       schluessel: `nav:standort:${st.id}`,
-      titel: `Standort: ${st.name}`,
+      titel: `Belegung: ${st.name}`,
       hinweis: "Standort wechseln",
       icon: IStandort,
       ausfuehren: () => geheZu(`standort:${st.id}`),
@@ -396,6 +429,121 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     entwurfLoeschen();
     onLoggedOut();
   }, [onLoggedOut]);
+
+  /** Ein Hauptpunkt der Seitenleiste -- mit Unterpunkten, Klienten-Ansichten oder schlicht. */
+  function renderReiter({ wert, label, icon: Icon }: { wert: HauptReiter; label: string; icon: (typeof STANDARD_REITER)[number]["icon"] }) {
+    const aktiv = hauptreiterVon(tab) === wert;
+    const unterpunkte = unterpunkteVon(wert);
+    if (unterpunkte) {
+      const offen = gruppeOffen[wert] ?? true;
+      return (
+        <div key={wert} className="zv-sidebar-gruppe">
+          <div className="zv-sidebar-gruppe-zeile">
+            <button
+              className={tab === wert ? "active" : ""}
+              onClick={() => tabWaehlen(wert)}
+              aria-current={tab === wert ? "page" : undefined}
+              title={label}
+            >
+              <Icon />
+              <span className="zv-sidebar-label">{label}</span>
+            </button>
+            <button
+              type="button"
+              className="zv-icon-btn zv-sidebar-gruppe-pfeil"
+              onClick={() => setGruppeOffen((g) => ({ ...g, [wert]: !offen }))}
+              aria-expanded={offen}
+              aria-label={offen ? `Unterpunkte von ${label} einklappen` : `Unterpunkte von ${label} ausklappen`}
+              title={offen ? "Einklappen" : "Ausklappen"}
+            >
+              {offen ? <IZuklappen /> : <IAufklappen />}
+            </button>
+          </div>
+          {offen && (
+            <div className="zv-sidebar-unterpunkte">
+              {unterpunkte.map((u) => (
+                <button
+                  key={u.wert}
+                  className={tab === u.wert ? "active" : ""}
+                  onClick={() => tabWaehlen(u.wert)}
+                  aria-current={tab === u.wert ? "page" : undefined}
+                  title={u.label}
+                >
+                  <u.icon />
+                  <span className="zv-sidebar-label">{u.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (wert !== "klienten") {
+      return (
+        <button
+          key={wert}
+          className={aktiv ? "active" : ""}
+          onClick={() => tabWaehlen(wert)}
+          aria-current={aktiv ? "page" : undefined}
+          title={label}
+        >
+          <Icon />
+          <span className="zv-sidebar-label">{label}</span>
+          <NavBadge anzahl={badgeFuer(wert)} />
+        </button>
+      );
+    }
+    // "Klienten" bekommt aufklappbare Unterpunkte "Anwärter" und "Archiv"
+    // (siehe Klienten.tsx) -- der Pfeil klappt nur die Unterzeilen ein/aus,
+    // der Hauptknopf navigiert weiterhin direkt auf die Klienten-Seite.
+    return (
+      <div key={wert} className="zv-sidebar-gruppe">
+        <div className="zv-sidebar-gruppe-zeile">
+          <button
+            className={tab === "klienten" ? "active" : ""}
+            onClick={() => {
+              tabWaehlen("klienten");
+              setKlientenAnsicht("aktiv");
+            }}
+            aria-current={tab === "klienten" ? "page" : undefined}
+            title={label}
+          >
+            <Icon />
+            <span className="zv-sidebar-label">{label}</span>
+          </button>
+          <button
+            type="button"
+            className="zv-icon-btn zv-sidebar-gruppe-pfeil"
+            onClick={() => setKlientenUnterpunkteOffen((v) => !v)}
+            aria-expanded={klientenUnterpunkteOffen}
+            aria-label={klientenUnterpunkteOffen ? "Unterpunkte von Klienten einklappen" : "Unterpunkte von Klienten ausklappen"}
+            title={klientenUnterpunkteOffen ? "Einklappen" : "Ausklappen"}
+          >
+            {klientenUnterpunkteOffen ? <IZuklappen /> : <IAufklappen />}
+          </button>
+        </div>
+        {klientenUnterpunkteOffen && (
+          <div className="zv-sidebar-unterpunkte">
+            {KLIENTEN_UNTERPUNKTE.map((u) => (
+              <button
+                key={u.ansicht}
+                className={tab === "klienten" && klientenAnsicht === u.ansicht ? "active" : ""}
+                onClick={() => {
+                  tabWaehlen("klienten");
+                  setKlientenAnsicht(u.ansicht);
+                }}
+                aria-current={tab === "klienten" && klientenAnsicht === u.ansicht ? "page" : undefined}
+                title={u.label}
+              >
+                <u.icon />
+                <span className="zv-sidebar-label">{u.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="zv-app-layout">
@@ -426,131 +574,41 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             </span>
             <div className="zv-brand-text">
               <strong>hecaso</strong>
-              {mandant && <span>{mandant.name}</span>}
             </div>
           </div>
+          {mandant && (
+            // Bewusst kein Knopf mit Pfeil: es gibt (noch) keinen Traegerwechsel,
+            // eine Schaltflaeche ohne Wirkung waere eine Attrappe.
+            <div className="zv-mandant-zeile" title={mandant.name}>
+              <ITraeger />
+              <span className="zv-sidebar-label">{mandant.name}</span>
+            </div>
+          )}
 
-          <nav className="zv-sidebar-nav">
-            {REITER.map(({ wert, label, icon: Icon }) => {
-              const unterpunkte = unterpunkteVon(wert);
-              if (unterpunkte) {
-                const offen = gruppeOffen[wert] ?? true;
-                return (
-                  <div key={wert} className="zv-sidebar-gruppe">
-                    <div className="zv-sidebar-gruppe-zeile">
-                      <button
-                        className={tab === wert ? "active" : ""}
-                        onClick={() => tabWaehlen(wert)}
-                        aria-current={tab === wert ? "page" : undefined}
-                        title={label}
-                      >
-                        <Icon />
-                        <span className="zv-sidebar-label">{label}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="zv-icon-btn zv-sidebar-gruppe-pfeil"
-                        onClick={() => setGruppeOffen((g) => ({ ...g, [wert]: !offen }))}
-                        aria-expanded={offen}
-                        aria-label={offen ? `Unterpunkte von ${label} einklappen` : `Unterpunkte von ${label} ausklappen`}
-                        title={offen ? "Einklappen" : "Ausklappen"}
-                      >
-                        {offen ? <IZuklappen /> : <IAufklappen />}
-                      </button>
-                    </div>
-                    {offen && (
-                      <div className="zv-sidebar-unterpunkte">
-                        {unterpunkte.map((u) => (
-                          <button
-                            key={u.wert}
-                            className={tab === u.wert ? "active" : ""}
-                            onClick={() => tabWaehlen(u.wert)}
-                            aria-current={tab === u.wert ? "page" : undefined}
-                            title={u.label}
-                          >
-                            <u.icon />
-                            <span className="zv-sidebar-label">{u.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              if (wert !== "klienten") {
-                return (
-                  <button
-                    key={wert}
-                    className={tab === wert ? "active" : ""}
-                    onClick={() => tabWaehlen(wert)}
-                    aria-current={tab === wert ? "page" : undefined}
-                    title={label}
-                  >
-                    <Icon />
-                    <span className="zv-sidebar-label">{label}</span>
-                    <NavBadge anzahl={badgeFuer(wert)} />
-                  </button>
-                );
-              }
-              // "Klienten" bekommt einen aufklappbaren Unterpunkt
-              // "Anwärter" (siehe navigation.ts/Klienten.tsx) -- der
-              // Pfeil klappt nur die Unterzeilen ein/aus, der Hauptknopf
-              // navigiert weiterhin direkt auf die Klienten-Seite.
-              return (
-                <div key={wert} className="zv-sidebar-gruppe">
-                  <div className="zv-sidebar-gruppe-zeile">
-                    <button
-                      className={tab === "klienten" ? "active" : ""}
-                      onClick={() => {
-                        tabWaehlen("klienten");
-                        setKlientenAnsicht("aktiv");
-                      }}
-                      aria-current={tab === "klienten" ? "page" : undefined}
-                      title={label}
-                    >
-                      <Icon />
-                      <span className="zv-sidebar-label">{label}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="zv-icon-btn zv-sidebar-gruppe-pfeil"
-                      onClick={() => setKlientenUnterpunkteOffen((v) => !v)}
-                      aria-expanded={klientenUnterpunkteOffen}
-                      aria-label={
-                        klientenUnterpunkteOffen
-                          ? "Unterpunkte von Klienten einklappen"
-                          : "Unterpunkte von Klienten ausklappen"
-                      }
-                      title={klientenUnterpunkteOffen ? "Einklappen" : "Ausklappen"}
-                    >
-                      {klientenUnterpunkteOffen ? <IZuklappen /> : <IAufklappen />}
-                    </button>
-                  </div>
-                  {klientenUnterpunkteOffen && (
-                    <div className="zv-sidebar-unterpunkte">
-                      {KLIENTEN_UNTERPUNKTE.map((u) => (
-                        <button
-                          key={u.ansicht}
-                          className={tab === "klienten" && klientenAnsicht === u.ansicht ? "active" : ""}
-                          onClick={() => {
-                            tabWaehlen("klienten");
-                            setKlientenAnsicht(u.ansicht);
-                          }}
-                          aria-current={tab === "klienten" && klientenAnsicht === u.ansicht ? "page" : undefined}
-                          title={u.label}
-                        >
-                          <u.icon />
-                          <span className="zv-sidebar-label">{u.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+          <nav className="zv-sidebar-nav zv-sidebar-nav-haupt" aria-label="Hauptmenü">
+            {MENUE_GRUPPEN.map((g) => (
+              <div key={g.id} role="group" aria-labelledby={`zv-gruppe-${g.id}`} className="zv-sidebar-gruppenblock">
+                <div className="zv-gruppenlabel" id={`zv-gruppe-${g.id}`}>
+                  {g.label}
                 </div>
-              );
-            })}
+                {reiterDerGruppe(menuReihenfolge, g.id).map(renderReiter)}
+              </div>
+            ))}
           </nav>
 
           <div className="zv-sidebar-foot">
+            <nav className="zv-sidebar-nav" aria-label="Einstellungen">
+              {STANDARD_REITER.filter((r) => r.wert === "einstellungen").map(renderReiter)}
+            </nav>
+            <div className="zv-benutzerblock" title={ich ? `${ich.name}` : undefined}>
+              <span className="zv-benutzer-kachel" aria-hidden="true">
+                {ich ? initialen(ich.name) : "·"}
+              </span>
+              <span className="zv-benutzer-text zv-sidebar-label">
+                <span className="zv-benutzer-name">{ich?.name ?? "…"}</span>
+                <span className="zv-benutzer-rolle">{ich ? (ich.positionen[0]?.titel ?? "Keine Position") : ""}</span>
+              </span>
+            </div>
             <div className="zv-sidebar-foot-icons">
               <ThemeToggle />
               <button
@@ -711,8 +769,10 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         >
           <WarteschlangeLeiste />
           {tab === "dashboard" && <Dashboard />}
-          {tab === "standorte" && <StandortUebersicht />}
-          {tab.startsWith("standort:") && <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} />}
+          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={(id) => geheZu(`standort:${id}`)} />}
+          {tab.startsWith("standort:") && (
+            <StandortRaeume key={tab} standortId={tab.slice("standort:".length)} onStandortWaehlen={(id) => geheZu(id ? `standort:${id}` : "standorte")} />
+          )}
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}

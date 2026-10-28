@@ -239,4 +239,21 @@ describe("POST /benutzer -- Mitarbeitende anlegen", () => {
     const listeB = await als(tokenBereichsleitungB).get("/benutzer");
     expect(listeB.body.some((b: { email: string }) => b.email === email)).toBe(false);
   });
+
+  it("GET /benutzer/ich liefert genau das eigene Konto -- auch ohne Mitarbeitendenrechte", async () => {
+    const res = await als(tokenBetreuerA).get("/benutzer/ich");
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe(`betreuer-a-${suffix}@beispiel.test`);
+    expect(res.body.passwort_hash).toBeUndefined();
+    expect(Array.isArray(res.body.positionen)).toBe(true);
+
+    const andere = await als(tokenBereichsleitungB).get("/benutzer/ich");
+    expect(andere.body.email).toBe(`bereichsleitung-b-${suffix}@beispiel.test`);
+    expect(andere.body.email).not.toBe(res.body.email);
+  });
+
+  it("GET /benutzer/ich ohne Token -> 401", async () => {
+    const res = await request(app.getHttpServer()).get("/benutzer/ich");
+    expect(res.status).toBe(401);
+  });
 });

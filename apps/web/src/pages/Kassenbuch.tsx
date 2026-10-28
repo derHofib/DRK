@@ -12,6 +12,7 @@ import { api } from "../api/client";
 import { einreihen, entfernen, senden, useWarteschlange } from "../offline/warteschlange";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
+import { StandortReiter } from "../components/StandortReiter";
 import { Modal } from "../components/Modal";
 import {
   IAblehnen,
@@ -472,22 +473,11 @@ export function Kassenbuch({
         )}
       </div>
 
-      {standorte.length > 0 && (
-        <div className="zv-field" style={{ maxWidth: 260, marginBottom: 14 }}>
-          <select
-            aria-label="Nach Standort filtern"
-            value={filterStandortId}
-            onChange={(e) => setFilterStandortId(e.target.value)}
-          >
-            <option value="">Alle Standorte</option>
-            {standorte.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <StandortReiter
+        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((st) => ({ id: st.id, label: st.name }))]}
+        aktiv={filterStandortId || null}
+        onWaehle={(id) => setFilterStandortId(id ?? "")}
+      />
 
       {formularOffen && (
         <Modal titel="Neue Buchung" onClose={() => setFormularOffen(false)}>

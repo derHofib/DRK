@@ -38,7 +38,7 @@ async function anmelden(email, viewport = { width: 1280, height: 900 }) {
   await page.getByLabel(/E-Mail/i).fill(email);
   await page.locator("#passwort").fill(passwort);
   await page.getByRole("button", { name: /Anmelden/i }).click();
-  await page.getByRole("button", { name: /^Dashboard$/ }).first().waitFor();
+  await page.getByRole("button", { name: /^Heute$/ }).first().waitFor();
   return { context, page };
 }
 async function zurUebergabe(page) {
@@ -91,7 +91,7 @@ pruefe((await pa.getByText("Noch keine Übergabe gesendet.").count()) === 1, "Le
   await pa.keyboard.press("Control+k");
   await pa.getByRole("dialog", { name: "Befehlspalette" }).waitFor();
   await pa.keyboard.press("Escape");
-  await pa.getByRole("button", { name: /^Dashboard$/ }).first().click();
+  await pa.getByRole("button", { name: /^Heute$/ }).first().click();
   await pa.waitForTimeout(800);
   pruefe((await pa.locator('section[aria-label="Ungelesene Schichtübergaben"]').count()) === 0, "Autor:in sieht die eigene Übergabe nicht als ungelesen auf dem Dashboard");
 
@@ -115,7 +115,7 @@ pruefe((await pa.getByText("Noch keine Übergabe gesendet.").count()) === 1, "Le
   await karte.first().waitFor({ state: "detached" });
   pruefe(true, "'Gelesen' lässt die Karte verschwinden");
   await pk.reload();
-  await pk.getByRole("button", { name: /^Dashboard$/ }).first().waitFor();
+  await pk.getByRole("button", { name: /^Heute$/ }).first().waitFor();
   await pk.waitForTimeout(800);
   pruefe((await pk.locator('section[aria-label="Ungelesene Schichtübergaben"]').count()) === 0, "... auch nach Neuladen (serverseitig gespeichert)");
 

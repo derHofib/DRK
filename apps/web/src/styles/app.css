@@ -55,7 +55,7 @@
  * statt die Liste zu verschmaelern -- die Liste bleibt exakt so breit wie
  * sie ist. position:fixed macht das unabhaengig vom Seiteninhalt; die
  * Sidebar bleibt sichtbar (deshalb "left" nur ab 641px auf ihre Breite
- * gesetzt, siehe .zv-sidebar { width: 240px }). Auf dem Handy (Sidebar
+ * gesetzt, siehe .zv-sidebar { width: 248px }). Auf dem Handy (Sidebar
  * ohnehin ausgeblendet) deckt das Panel automatisch den ganzen Bildschirm
  * ab -- entspricht dem bisherigen "Liste ODER Detail"-Verhalten, nur ohne
  * eigene Sonderregel dafuer.
@@ -114,7 +114,7 @@
 
 @media (min-width: 641px) {
   .zv-seitenpanel-hintergrund {
-    left: 240px;
+    left: var(--zv-sidebar-breite);
   }
 
   .zv-seitenpanel {
@@ -123,11 +123,11 @@
     /* 720px ist genug fuer die Klientenakte samt Tabs; auf schmalen
        Fenstern (knapp ueber 641px) bleibt trotzdem ein Streifen der
        abgedunkelten Liste sichtbar, statt das Fenster zu sprengen. */
-    width: min(720px, calc(100vw - 240px - var(--zv-space-6)));
+    width: min(720px, calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-6)));
   }
 
   .zv-seitenpanel.zv-seitenpanel-vollbild {
-    left: 240px;
+    left: var(--zv-sidebar-breite);
     width: auto;
   }
 }
@@ -173,7 +173,7 @@
 }
 
 /*
- * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (240px/68px) --
+ * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (248px/68px) --
  * ihr eigentlicher Inhalt sitzt in .zv-sidebar-inner, absolut positioniert
  * ueber ihr. Das ist keine Spielerei: nur so kann die "Beim Ueberfahren
  * ausklappen"-Einstellung (weiter unten) den Inhalt breiter zeichnen als
@@ -183,19 +183,28 @@
  * Layouts, keine reine Optik.
  */
 .zv-sidebar {
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   flex: none;
-  position: relative;
+  /* Sticky mit Viewport-Hoehe statt "streckt sich auf die Seitenhoehe":
+     so bleiben Einstellungen, Benutzerblock und Abmelden immer im Bild,
+     auch auf langen Seiten, und die Hauptnavigation scrollt bei Bedarf
+     fuer sich. align-self, weil Flex-Kinder sonst auf Seitenhoehe
+     gestreckt werden und sticky ins Leere liefe. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .zv-sidebar-inner {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   display: flex;
   flex-direction: column;
-  gap: var(--zv-space-6);
-  padding: var(--zv-space-5) var(--zv-space-4);
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-5) var(--zv-space-3);
   background: var(--zv-surface);
   border-right: 1px solid var(--zv-border);
 }
@@ -226,8 +235,8 @@
    (Source Sans 3), Figtree hat ein eigenes Gewicht dafuer. */
 .zv-brand-text strong {
   font-family: var(--zv-font-marke);
-  font-size: var(--zv-text-l);
-  font-weight: 600;
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-bold);
   letter-spacing: -0.02em;
   color: var(--zv-marke-haus);
 }
@@ -249,14 +258,17 @@
 .zv-sidebar-nav button {
   display: flex;
   align-items: center;
-  gap: var(--zv-space-2);
-  padding: var(--zv-space-2) var(--zv-space-3);
-  border-radius: var(--zv-radius-s);
+  gap: var(--zv-space-3);
+  /* 44 px: Mindestgroesse fuer Touch und zugleich die Hoehe, bei der eine
+     Gruppe aus drei, vier Punkten ruhig wirkt statt gedraengt. */
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
   border: none;
   background: none;
-  color: var(--zv-text-muted);
-  font-size: var(--zv-text-m);
-  font-family: inherit;
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-basis);
+  font-family: var(--zv-font-ui);
   font-weight: var(--zv-weight-medium);
   text-align: left;
   cursor: pointer;
@@ -264,13 +276,101 @@
 }
 
 .zv-sidebar-nav button:hover {
-  background: var(--zv-surface-2);
+  background: var(--zv-surface-3);
   color: var(--zv-text);
 }
 
+/* Aktiv = die EINE Stelle, an der accent-soft in der Navigation steht. */
 .zv-sidebar-nav button.active {
   background: var(--zv-accent-soft);
   color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Gruppenlabel (ARBEIT / MENSCHEN / HAUS): Struktur ueber Typografie statt
+   ueber Kaesten. Auch in den Einstellungen und in Listen verwendbar. */
+.zv-gruppenlabel {
+  margin: 0;
+  padding: var(--zv-space-5) var(--zv-space-3) var(--zv-space-2);
+  font-family: var(--zv-font-ui);
+  font-size: 11px;
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zv-text-gedaempft);
+}
+
+.zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  padding-top: var(--zv-space-3);
+}
+
+.zv-mandant-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-mandant-zeile span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzerblock {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3);
+  border-top: 1px solid var(--zv-haarlinie);
+}
+
+/* Kachel statt Kreis: rund waere ein Avatar-Foto-Versprechen, das es hier
+   nicht gibt. Initialen auf accent-soft, wie ein ausgewaehlter Eintrag. */
+.zv-benutzer-kachel {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-bold);
+}
+
+.zv-benutzer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.zv-benutzer-name {
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzer-rolle {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-gedaempft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* "Klienten" mit aufklappbarem Unterpunkt "Anwärter" (Shell.tsx). Nur im
@@ -302,7 +402,21 @@
 }
 
 .zv-sidebar-unterpunkte button {
-  font-size: var(--zv-text-s);
+  font-size: var(--zv-text-meta);
+  /* Unterpunkte sind kleiner als Hauptpunkte (44 px): sonst brauchen die
+     drei Gruppen mit ihren Unterpunkten mehr als eine Bildschirmhoehe. */
+  min-height: 36px;
+}
+
+/* Die Hauptnavigation scrollt, der Fuss (Einstellungen, Benutzerblock,
+   Abmelden) bleibt stehen. Nur ausgeklappt: eingeklappt zeichnet
+   .zv-sidebar-nav button:hover::after die Sprechblase ueber den Rand
+   hinaus, ein overflow-Container wuerde sie abschneiden -- und
+   eingeklappt (nur Icons, keine Unterpunkte) passt alles ohnehin. */
+.zv-sidebar[data-eingeklappt="false"] .zv-sidebar-nav-haupt {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .zv-sidebar-foot {
@@ -343,6 +457,28 @@
 .zv-sidebar[data-eingeklappt="true"] .zv-brand-text,
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-label {
   display: none;
+}
+
+/* Eingeklappt ersetzt eine Haarlinie das Gruppenlabel: die Gruppen bleiben
+   erkennbar, ohne dass Text in 68 px gequetscht wird. */
+.zv-sidebar[data-eingeklappt="true"] .zv-gruppenlabel {
+  height: 0;
+  padding: 0;
+  margin: var(--zv-space-3) var(--zv-space-2);
+  overflow: hidden;
+  border-top: 1px solid var(--zv-haarlinie);
+  font-size: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  display: none;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-mandant-zeile,
+.zv-sidebar[data-eingeklappt="true"] .zv-benutzerblock {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .zv-sidebar[data-eingeklappt="true"] .zv-sidebar-brand {
@@ -407,7 +543,7 @@
    ------------------------------------------------------------------ */
 .zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-inner,
 .zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-inner {
-  width: 240px;
+  width: var(--zv-sidebar-breite);
   padding-left: var(--zv-space-4);
   padding-right: var(--zv-space-4);
   box-shadow: var(--zv-shadow-3);
@@ -905,9 +1041,60 @@
   color: var(--zv-text);
 }
 
+/* Aktiver Reiter: dunkle Schrift und dunkler Strich statt Akzent. Reiter
+   zeigen "wo bist du" -- Akzent ist fuer "was kannst du tun" reserviert. */
 .zv-tabbar button.active {
-  color: var(--zv-accent-strong);
-  border-bottom-color: var(--zv-accent);
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+/* Unterstrich-Reiter unter dem Seitenkopf (StandortReiter u. a.). Gleiche
+   Optik wie .zv-tabbar, aber ohne Flaeche und Seitenrand, weil sie im
+   Inhalt stehen und nicht am Bildschirmrand. Scrollt selbst. */
+.zv-reiter {
+  display: flex;
+  gap: var(--zv-space-1);
+  margin-bottom: var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zv-reiter button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
+  /* Der Strich ueberdeckt die Linie des Containers (margin-bottom: -1px). */
+  margin-bottom: -1px;
+  padding: var(--zv-space-3);
+  min-height: 44px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.zv-reiter button:hover {
+  color: var(--zv-text);
+}
+
+.zv-reiter button.active {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+.zv-reiter-zaehler {
+  font-size: var(--zv-text-meta);
+  font-weight: 400;
+  color: var(--zv-text-gedaempft);
 }
 
 /* ==================================================================
@@ -2410,9 +2597,11 @@ button.zv-raumknoten:focus-visible {
   padding: 0 5px;
   margin-left: auto;
   flex-shrink: 0;
-  border-radius: var(--zv-radius-pill);
-  background: var(--zv-accent);
-  color: var(--zv-accent-contrast);
+  /* achtung-Tag: ein Zaehler heisst "ungelesen/offen" -- genau das, wofuer
+     Koralle reserviert ist. Der Akzent bliebe fuer Handlungen frei. */
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-achtung-soft);
+  color: var(--zv-achtung-text);
   font-size: var(--zv-text-xs);
   font-weight: var(--zv-weight-semibold);
   line-height: 1;
@@ -2427,6 +2616,8 @@ button.zv-raumknoten:focus-visible {
   width: 8px;
   height: 8px;
   padding: 0;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-achtung);
 }
 
 .zv-sidebar-nav button,

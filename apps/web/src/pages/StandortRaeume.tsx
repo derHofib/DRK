@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { RaumplanDto, RaumplanEtageDto, RaumplanPositionDto } from "@zimmerakte/shared";
+import type { RaumplanDto, RaumplanEtageDto, RaumplanPositionDto, StandortDto } from "@zimmerakte/shared";
 
 type Zimmer = RaumplanEtageDto["zimmer"][number];
 type Gemeinschaftsraum = RaumplanEtageDto["raeume"][number];
@@ -8,6 +8,7 @@ import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Zimmer as ZimmerVerwaltung } from "./Zimmer";
 import { Seitenpanel } from "../components/Seitenpanel";
+import { StandortReiter } from "../components/StandortReiter";
 import { PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
@@ -61,7 +62,21 @@ const schluessel = (art: Objektart, id: string) => `${art}:${id}`;
  * angelegt -- hier kommen nur die Gemeinschaftsraeume dazu, die dort keinen
  * Platz haben (sie zaehlen nicht als Wohnplatz, siehe Migration 0051).
  */
-export function StandortRaeume({ standortId }: { standortId: string }) {
+export function StandortRaeume({
+  standortId,
+  onStandortWaehlen,
+}: {
+  standortId: string;
+  /** null = "Alle Standorte" (Uebersicht). */
+  onStandortWaehlen: (id: string | null) => void;
+}) {
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  useEffect(() => {
+    api
+      .standorteListe()
+      .then((l) => setStandorte(l.filter((s) => s.aktiv)))
+      .catch(() => {});
+  }, []);
   const [plan, setPlan] = useState<RaumplanDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [ansicht, setAnsicht] = useState<Ansicht>(() => ladeAnsicht());
@@ -132,10 +147,8 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
 
       <div className="zv-seiten-kopf">
         <div>
-          <h2>{plan?.standort.name ?? "Standort"}</h2>
-          <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            Zimmer und Gemeinschaftsräume
-          </p>
+          <p className="zv-kontextzeile">{plan ? plan.standort.name : "Standort"}</p>
+          <h2>Belegung</h2>
         </div>
         {ansicht !== "verwalten" && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-2)" }}>
@@ -152,6 +165,12 @@ export function StandortRaeume({ standortId }: { standortId: string }) {
           </div>
         )}
       </div>
+
+      <StandortReiter
+        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((st) => ({ id: st.id, label: st.name }))]}
+        aktiv={standortId}
+        onWaehle={onStandortWaehlen}
+      />
 
       {plan && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-3)", marginBottom: "var(--zv-space-4)" }}>

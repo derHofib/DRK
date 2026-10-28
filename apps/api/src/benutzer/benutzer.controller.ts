@@ -27,6 +27,15 @@ export class BenutzerController {
     return this.benutzer.findeAlleImEigenenMandanten();
   }
 
+  // Vor allen ":id"-Routen und bewusst ohne Rechtepruefung: jede
+  // angemeldete Person darf ihren EIGENEN Namen und ihre Positionen sehen
+  // (Benutzerblock in der Seitenleiste). Welche Person gemeint ist, kommt aus
+  // dem verifizierten Token, nie aus dem Request.
+  @Get("ich")
+  async ich() {
+    return this.benutzer.findeEigenes();
+  }
+
   @Post()
   async anlegen(@Body() body: unknown) {
     return this.benutzer.anlegen(anlegenSchema.parse(body));

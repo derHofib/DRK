@@ -84,6 +84,18 @@ export class BenutzerService {
     });
   }
 
+  /**
+   * Das eigene Konto, im Format der Liste. Filtert die Liste statt eine
+   * zweite Abfrage zu pflegen: so koennen Name und Positionen hier nie
+   * anders aussehen als in der Mitarbeitendenliste.
+   */
+  async findeEigenes(): Promise<BenutzerListEintrag> {
+    const ctx = requireTenantContext();
+    const eigenes = (await this.findeAlleImEigenenMandanten()).find((b) => b.id === ctx.benutzerId);
+    if (!eigenes) throw new NotFoundException("Konto nicht gefunden.");
+    return eigenes;
+  }
+
   // Das Anlegen selbst vergibt keine Rechte mehr (siehe Entwickler-
   // Accounttyp-Umstellung) -- ein frischer Benutzer hat null Rechte, bis
   // jemand mit organigramm.manage-permissions ihn auf eine Position setzt

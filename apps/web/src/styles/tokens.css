@@ -431,6 +431,11 @@
   --zv-signature-paper: #ffffff;
   --zv-signature-ink: #1a1a1a;
 
+  /* Breite der Seitenleiste (ausgeklappt). Ein Token, weil sie an fuenf
+     Stellen zaehlt: Leiste, Innenflaeche, Hover-Ausklappen und die beiden
+     Seitenpanel-Regeln, die rechts davon beginnen muessen. */
+  --zv-sidebar-breite: 248px;
+
   --zv-content-max: 760px;
   --zv-content-max-weit: 1040px;
 }
