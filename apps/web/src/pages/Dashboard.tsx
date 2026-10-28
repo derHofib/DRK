@@ -1,6 +1,6 @@
 import { CSSProperties, useEffect, useState } from "react";
 import type { DashboardDto, StandortDto } from "@zimmerakte/shared";
-import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
+import { AUFGABE_PRIORITAET_LABEL, DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { UebergabeKarten } from "../components/UebergabeKarten";
 import { api } from "../api/client";
 import { faelligkeitsHinweis, PRIORITAET_ICON, PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
@@ -22,7 +22,7 @@ import {
   IZimmer,
   IZuruecksetzen,
 } from "../components/icons";
-import { formatBetrag, formatDatum } from "../format";
+import { formatBetrag, formatDatum, kontextzeile } from "../format";
 import {
   geleseneSichtbarkeit,
   sichtbarkeitSpeichern,
@@ -33,7 +33,6 @@ import {
   type WidgetId,
 } from "../dashboard/sichtbarkeit";
 
-const HEUTE = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
 /**
  * Reine Anzeigepraeferenz dieses Geraets, genau wie die Widget-Sichtbarkeit
@@ -135,11 +134,13 @@ export function Dashboard() {
 
       <div className="zv-seiten-kopf">
         <div>
+          <p className="zv-kontextzeile">{kontextzeile(new Date(), DIENST_LABEL[dienstNachUhrzeit()])}</p>
           <h2>Dashboard</h2>
-          <p className="zv-sub" style={{ margin: "2px 0 0" }}>
-            {HEUTE}
-            {standorte.length === 1 && ` · ${standorte[0].name}`}
-          </p>
+          {standorte.length === 1 && (
+            <p className="zv-sub" style={{ margin: "2px 0 0" }}>
+              {standorte[0].name}
+            </p>
+          )}
         </div>
         <button className="zv-btn zv-btn-sekundaer" onClick={() => setAnpassenOffen(true)}>
           <IAnpassen />

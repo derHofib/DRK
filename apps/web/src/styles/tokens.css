@@ -366,6 +366,13 @@
      --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
      Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
   --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Die Arbeitsschrift der Oberflaeche selbst: Ueberschriften, Navigation,
+     Knoepfe, Tags, Tabellenkoepfe. Gleiche Familie wie die Wortmarke --
+     bewusst: die UI-Schrift (Figtree) fuehrt, der Fliesstext (Source Sans
+     3) liest sich dahinter weg, Zahlen (Plex Mono) stehen als Daten
+     erkennbar daneben. Drei Schriften, drei Aufgaben, keine Mischung
+     innerhalb einer Aufgabe. */
+  --zv-font-ui: var(--zv-font-marke);
 
   /*
    * Feste hecaso-Markenfarben (Haus-Umriss + Sonnenbogen in
@@ -379,12 +386,28 @@
   --zv-marke-haus: light-dark(#2d6a4f, #f3f6f0);
   --zv-marke-sonne: light-dark(#e07a5f, #f6a58b);
 
-  --zv-text-xs: 11.5px;
-  --zv-text-s: 12.5px;
+  /*
+   * Schriftskala. 15 px Basis (Source Sans 3 laeuft klein), Metadaten 13,
+   * Gruppenlabels 11-12 halbfett in Versalien. Die alten Namen -xs..-2xl
+   * bleiben als Staffel erhalten, damit bestehende Regeln nicht brechen;
+   * neue Regeln nehmen die sprechenden Namen.
+   */
+  --zv-text-label: 12px;
+  --zv-text-meta: 13px;
+  --zv-text-basis: 15px;
+  --zv-text-abschnitt: 17px;
+  --zv-text-titel: 32px;
+  --zv-text-xs: 12px;
+  --zv-text-s: 13px;
   --zv-text-m: 14px;
   --zv-text-l: 15px;
   --zv-text-xl: 17px;
   --zv-text-2xl: 21px;
+  --zv-weight-bold: 700;
+  /* Laufweiten: enger beim grossen Titel (sonst wirkt 32 px Figtree
+     luftig), weiter bei Versalien (sonst kleben die Buchstaben). */
+  --zv-laufweite-titel: -0.02em;
+  --zv-laufweite-label: 0.07em;
   --zv-weight-medium: 500;
   --zv-weight-semibold: 600;
   --zv-leading-tight: 1.3;

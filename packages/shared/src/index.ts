@@ -1144,6 +1144,20 @@ export const DIENST_LABEL: Record<Dienst, string> = {
   nacht: "Nachtdienst",
 };
 
+/**
+ * Welcher Dienst gerade laeuft, aus der Uhrzeit abgeleitet (Fruehdienst
+ * 05-13, Spaetdienst 13-21, sonst Nacht). Eine Quelle fuer Schichtuebergabe
+ * UND die Kontextzeile ueber den Seitentiteln -- zwei eigene Grenzen liessen
+ * die Seite "Fruehdienst" sagen, waehrend die Uebergabe schon "Spaet"
+ * vorschlaegt. Nur ein Vorschlag: der Dienstplan kennt die Wahrheit.
+ */
+export function dienstNachUhrzeit(uhr: Date = new Date()): Dienst {
+  const h = uhr.getHours();
+  if (h >= 5 && h < 13) return "frueh";
+  if (h >= 13 && h < 21) return "spaet";
+  return "nacht";
+}
+
 export interface SchichtuebergabePunktDto {
   id: string;
   position: number;

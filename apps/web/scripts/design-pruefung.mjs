@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 46 + 3 * 7 + 8;
+const ERWARTETE_PAARE = 46 + 3 * 7 + 8 + 1;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -293,6 +293,7 @@ async function messePaare(page) {
         // Akzent als Grafik (Fortschritts-/Laufzeitbalken).
         pruefe("Akzent-Balken auf " + flaeche, q(".zv-pruef-n-" + flaeche + " .mb"), 3, "border");
       }
+      pruefe("Kontextzeile (gedaempft, Mono) auf Hintergrund", q(".zv-pruef-kontext"), 4.5);
       pruefe("Tag neutral", q(".zv-pruef-tag-neutral"), 4.5);
       pruefe("Tag erledigt", q(".zv-pruef-tag-erledigt"), 4.5);
       pruefe("Tag Frist", q(".zv-pruef-tag-frist"), 4.5);
@@ -370,6 +371,7 @@ const PRUEFSEITE = `
 </div>
 <span class="zv-beleg-nr zv-mono zv-pruef-beleg-nr">KB-00042</span>
 <div style="background:var(--zv-bg)">
+<p class="zv-kontextzeile zv-pruef-kontext">Mo 26.10.2026 &middot; KW 44 &middot; Fruehdienst</p>
 ${["bg", "surface", "s2"].map((f) => `
   <div class="zv-pruef-n-${f}" style="padding:8px;background:${{ bg: "var(--zv-bg)", surface: "var(--zv-surface)", s2: "var(--zv-surface-2)" }[f]}">
     <span class="t" style="color:var(--zv-text)">Text</span>
@@ -434,6 +436,37 @@ async function main() {
         );
 
         const paare = await messePaare(page);
+
+        /*
+         * Schriften wirklich geladen? Fehlt eine woff2 (Pfad, Hash, falscher
+         * Schnitt), faellt die Oberflaeche still auf die Systemschrift
+         * zurueck und sieht "fast richtig" aus -- gemessen wird deshalb
+         * ueber document.fonts, nicht ueber den CSS-Wert.
+         */
+        const fehlendeSchriften = await page.evaluate(async () => {
+          const wanted = [
+            '700 32px "Figtree Variable"',
+            '400 15px "Source Sans 3 Variable"',
+            '400 13px "IBM Plex Mono"',
+            '500 13px "IBM Plex Mono"',
+          ];
+          const fehlt = [];
+          for (const w of wanted) {
+            // load() liefert die passenden, nun geladenen Faces; leer =
+            // keine @font-face-Regel trifft, "error" = Datei nicht ladbar.
+            const faces = await document.fonts.load(w, "Aa1").catch(() => []);
+            // Gewicht muss exakt vorhanden sein: fehlt der 500er-Schnitt,
+            // liefert der Browser still den 400er und load() meldet Erfolg.
+            const gewicht = w.slice(0, 3);
+            const trifft = faces.some((f) => f.weight === gewicht || f.weight.includes(" "));
+            if (!faces.length || !trifft || faces.some((f) => f.status !== "loaded")) fehlt.push(w);
+          }
+          return fehlt;
+        });
+        if (fehlendeSchriften.length) {
+          console.error(`  SCHRIFT NICHT GELADEN (${theme}/${name}): ${fehlendeSchriften.join(", ")}`);
+          fehlerZahl += fehlendeSchriften.length;
+        }
 
         /*
          * Ohne diese Schranke ist das ganze Skript wertlos: misst es nichts,

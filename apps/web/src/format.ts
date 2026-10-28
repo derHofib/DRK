@@ -83,3 +83,25 @@ export function osmLink(lat: number, lng: number): string {
 export function formatKoordinate(wert: number): string {
   return wert.toLocaleString("de-DE", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
 }
+
+/** ISO-Kalenderwoche (Donnerstagsregel), lokal gerechnet. */
+export function kalenderwoche(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const tag = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - tag);
+  const jahrStart = Date.UTC(t.getUTCFullYear(), 0, 1);
+  return Math.ceil(((t.getTime() - jahrStart) / 86400000 + 1) / 7);
+}
+
+/**
+ * Kontextzeile ueber dem Seitentitel: "MO 26.10.2026 · KW 44 · FRUEHDIENST".
+ */
+export function kontextzeile(jetzt: Date = new Date(), dienst?: string): string {
+  const tag = WOCHENTAG_KURZ[jetzt.getDay()];
+  const teile = [
+    `${tag} ${formatDatum(lokalesDatum(jetzt))}`,
+    `KW ${kalenderwoche(jetzt)}`,
+  ];
+  if (dienst) teile.push(dienst);
+  return teile.join(" \u00b7 ");
+}

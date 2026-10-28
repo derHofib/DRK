@@ -6,6 +6,7 @@ import {
   SchichtuebergabeDto,
   StandortDto,
   ZimmerListEintragDto,
+  dienstNachUhrzeit,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
@@ -49,14 +50,6 @@ function entwurfLesen(): Entwurf | null {
   } catch {
     return null;
   }
-}
-
-/** Vorschlag fuer den Dienst, der gerade uebergibt -- aenderbar. */
-function dienstNachUhrzeit(): Dienst {
-  const h = new Date().getHours();
-  if (h >= 5 && h < 13) return "frueh";
-  if (h >= 13 && h < 21) return "spaet";
-  return "nacht";
 }
 
 export function Schichtuebergabe() {

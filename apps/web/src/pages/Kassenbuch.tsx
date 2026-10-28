@@ -36,7 +36,7 @@ import {
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
 import type { UebergabeStart } from "./HzlUebergabe";
-import { formatBetrag, formatDatum } from "../format";
+import { formatBetrag, formatDatum, kontextzeile } from "../format";
 
 type Richtung = "einzahlung" | "auszahlung";
 type Ziel = "klient" | "standort";
@@ -443,6 +443,7 @@ export function Kassenbuch({
 
       <div className="zv-seiten-kopf">
         <div>
+          <p className="zv-kontextzeile">{kontextzeile()}</p>
           <h2>{ansicht === "hzl" ? "HZL" : "Kassenbuch"}</h2>
           <p className="zv-sub" style={{ margin: "2px 0 0" }}>
             {(() => {

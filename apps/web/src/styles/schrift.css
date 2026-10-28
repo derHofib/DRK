@@ -1,6 +1,8 @@
 /*
- * Source Sans 3 (Fliesstext/Ueberschriften) + IBM Plex Mono (Zahlen,
- * Aktenzeichen), beide selbst ausgeliefert -- nur das Latin-Subset.
+ * Drei Schriften, drei Aufgaben: Figtree (UI: Ueberschriften, Navigation,
+ * Knoepfe, Tags), Source Sans 3 (Fliesstext, Tabelleninhalt), IBM Plex Mono
+ * (Zahlen, Betraege, Daten, Zimmer- und Belegnummern, Aktenzeichen). Alle
+ * selbst ausgeliefert -- nur das Latin-Subset.
  *
  * Bewusst kein Google-Fonts-CDN: das ist in Deutschland abgemahnt worden
  * (LG Muenchen I, 3 O 17493/20), und bei einer Anwendung mit Klientendaten
@@ -40,12 +42,28 @@
     U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* 500 fuer hervorgehobene Zahlen (Kassenstand, Lage-Leiste, Zimmernummer):
+   ein eigener Schnitt statt synthetischem Fettdruck, der Plex Mono
+   verzerrt und die Ziffernbreite veraendert. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /*
- * Figtree: ausschliesslich die hecaso-Wortmarke (Login-Titel,
- * Sidebar-Markenname, siehe MarkenZeichen.tsx) -- NICHT der Fliesstext der
- * Anwendung, der bleibt bei Source Sans 3. Gleicher Grund wie oben: selbst
- * ausgeliefert statt Google-Fonts-CDN, deshalb @fontsource-variable/figtree
- * statt des fonts.googleapis.com-Links aus der Markenvorgabe.
+ * Figtree: die UI-Schrift (--zv-font-ui) -- Ueberschriften, Navigation,
+ * Knoepfe, Tags, Tabellenkoepfe -- und die hecaso-Wortmarke (siehe
+ * MarkenZeichen.tsx). NICHT der Fliesstext: der bleibt bei Source Sans 3.
+ * Eine variable Datei deckt alle Gewichte ab, deshalb kostet die
+ * Ausweitung von "nur Wortmarke" auf "ganze UI" keinen zusaetzlichen
+ * Abruf. Gleicher Grund wie oben: selbst ausgeliefert statt Google-Fonts-
+ * CDN, deshalb @fontsource-variable/figtree statt des
+ * fonts.googleapis.com-Links aus der Markenvorgabe.
  */
 @font-face {
   font-family: "Figtree Variable";
