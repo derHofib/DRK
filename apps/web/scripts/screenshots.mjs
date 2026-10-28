@@ -83,7 +83,6 @@ for (const theme of ["hell", "dunkel"]) {
   await page.waitForSelector(".zv-lage");
   await aufnahme(page, `${theme}-02-heute`);
   await reiter(page, "Belegung");
-  await page.locator('button:has-text("Zimmer und Belegung")').first().click();
   await page.waitForSelector(".zv-zl-zeile");
   await aufnahme(page, `${theme}-03-belegung`);
   await reiter(page, "Klienten");
@@ -107,7 +106,6 @@ for (const theme of ["hell", "dunkel"]) {
   await page.waitForSelector(".zv-lage");
   await aufnahme(page, "mobil-heute");
   await reiter(page, "Belegung", true);
-  await page.locator('button:has-text("Zimmer und Belegung")').first().click();
   await page.waitForSelector(".zv-zl-zeile");
   await aufnahme(page, "mobil-belegung");
   await reiter(page, "Kassenbuch", true);
