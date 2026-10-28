@@ -17,6 +17,9 @@ const standorteSetzenSchema = z.object({
 
 const aktivSetzenSchema = z.object({ aktiv: z.boolean() });
 
+// null = Person verliert jede Position (und damit alle Rechte).
+const positionWechselnSchema = z.object({ positionId: z.string().uuid().nullable() });
+
 @Controller("benutzer")
 @Authenticated()
 export class BenutzerController {
@@ -61,5 +64,14 @@ export class BenutzerController {
       throw new BadRequestException("Erwartet { aktiv: true | false }.");
     }
     return this.benutzer.aktivSetzen(id, eingabe.data.aktiv);
+  }
+
+  @Put(":id/position")
+  async positionWechseln(@Param("id") id: string, @Body() body: unknown) {
+    const eingabe = positionWechselnSchema.safeParse(body);
+    if (!eingabe.success) {
+      throw new BadRequestException("Erwartet { positionId: <uuid> | null }.");
+    }
+    return this.benutzer.positionWechseln(id, eingabe.data.positionId);
   }
 }

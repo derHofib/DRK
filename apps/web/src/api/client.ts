@@ -390,6 +390,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ aktiv }),
     }),
+  benutzerPositionWechseln: (benutzerId: string, positionId: string | null) =>
+    request<{ id: string }>(`/benutzer/${benutzerId}/position`, {
+      method: "PUT",
+      body: JSON.stringify({ positionId }),
+    }),
   benutzerStandorteSetzen: (benutzerId: string, standortIds: string[]) =>
     request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),
 
