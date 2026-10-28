@@ -264,8 +264,8 @@ export function Mitarbeitende() {
                   </span>
                 ) : (
                   b.positionen.map((p, i) => (
-                    <span key={i} className="zv-pill" style={{ marginRight: 4 }}>
-                      {p.titel} ({p.accountTypName})
+                    <span key={i} className="zv-pill" style={{ marginRight: 4 }} title={`${p.titel} (${p.accountTypName})`}>
+                      <span className="zv-pill-text">{p.titel}</span>
                     </span>
                   ))
                 )}

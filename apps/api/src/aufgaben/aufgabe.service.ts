@@ -2,9 +2,7 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { TenantContext, requireTenantContext } from "../common/tenant-context";
-import { ermittleErlaubteStandortIds, klientIstErlaubt } from "../common/standort-restriction";
-import { KlientNamen } from "../common/klient-namen";
-import { aktuellerTeilnehmer } from "../common/tenant-context";
+import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
 
 export type AufgabePrioritaet = "niedrig" | "normal" | "hoch";
@@ -25,9 +23,6 @@ export interface AufgabeEintrag {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
-  klientId: string | null;
-  klientName: string | null;
-  uebergabePunktId: string | null;
 }
 
 export interface AufgabenAnzahl {
@@ -104,24 +99,18 @@ export class AufgabeService {
     faelligAm?: string;
     zimmerId?: string;
     zugewiesenAn?: string;
-    /** Nur aus der Schichtuebergabe (schichtuebergabe.service.ts) gesetzt. */
-    klientId?: string;
-    schichtuebergabePunktId?: string;
   }): Promise<AufgabeEintrag> {
     const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
       if (input.zimmerId) {
         await this.pruefeZimmerErlaubt(client, ctx, input.zimmerId);
       }
-      if (input.klientId && !(await klientIstErlaubt(client, ctx.benutzerId, input.klientId))) {
-        throw new NotFoundException("Klient:in nicht gefunden.");
-      }
       if (input.zugewiesenAn) {
         await this.pruefeBenutzerErlaubt(client, input.zugewiesenAn);
       }
       const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO aufgabe (mandant_id, titel, beschreibung, prioritaet, faellig_am, zimmer_id, zugewiesen_an, erstellt_von, klient_id, schichtuebergabe_punkt_id)
-         VALUES ($1, $2, $3, COALESCE($4::aufgabe_prioritaet, 'normal'), $5, $6, $7, $8, $9, $10)
+        `INSERT INTO aufgabe (mandant_id, titel, beschreibung, prioritaet, faellig_am, zimmer_id, zugewiesen_an, erstellt_von)
+         VALUES ($1, $2, $3, COALESCE($4::aufgabe_prioritaet, 'normal'), $5, $6, $7, $8)
          RETURNING id`,
         [
           ctx.mandantId,
@@ -132,8 +121,6 @@ export class AufgabeService {
           input.zimmerId ?? null,
           input.zugewiesenAn ?? null,
           ctx.benutzerId,
-          input.klientId ?? null,
-          input.schichtuebergabePunktId ?? null,
         ]
       );
       return this.findeEinzelne(client, ctx, rows[0].id);
@@ -357,10 +344,8 @@ export class AufgabeService {
         a.zugewiesen_an, zb.name AS zugewiesen_an_name,
         a.erstellt_von, eb.name AS erstellt_von_name,
         a.erledigt_am, ab.name AS erledigt_von_name,
-        a.erstellt_am,
-        a.klient_id, k.vorname AS klient_vorname, k.nachname AS klient_nachname, a.schichtuebergabe_punkt_id
+        a.erstellt_am
       FROM aufgabe a
-      LEFT JOIN klient k ON k.id = a.klient_id
       LEFT JOIN zimmer z ON z.id = a.zimmer_id
       LEFT JOIN standort s ON s.id = z.standort_id
       LEFT JOIN benutzer zb ON zb.id = a.zugewiesen_an
@@ -371,19 +356,11 @@ export class AufgabeService {
       `,
       params
     );
-    // Namen beim Lesen anonymisieren (CLAUDE.md Regel 6): wer die Klient:in
-    // nicht sehen darf, bekommt Initialen.
-    const namen = new KlientNamen(client, aktuellerTeilnehmer());
-    const eintraege: AufgabeEintrag[] = [];
-    for (const r of rows) {
-      const klientName = r.klient_id ? await namen.name(r.klient_id, r.klient_vorname, r.klient_nachname) : null;
-      eintraege.push(zuEintrag(r, klientName));
-    }
-    return eintraege;
+    return rows.map(zuEintrag);
   }
 }
 
-function zuEintrag(r: any, klientName: string | null): AufgabeEintrag {
+function zuEintrag(r: any): AufgabeEintrag {
   return {
     id: r.id,
     titel: r.titel,
@@ -400,8 +377,5 @@ function zuEintrag(r: any, klientName: string | null): AufgabeEintrag {
     erledigtAm: r.erledigt_am,
     erledigtVonName: r.erledigt_von_name,
     erstelltAm: r.erstellt_am,
-    klientId: r.klient_id,
-    klientName,
-    uebergabePunktId: r.schichtuebergabe_punkt_id,
   };
 }

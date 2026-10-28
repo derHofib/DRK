@@ -47,8 +47,6 @@ const MITARBEITER_RECHTE: readonly RechtEintrag[] = [
   { modul: "anwaerter", aktion: "ansehen", scope: "einrichtung" },
   { modul: "tagesberichte", aktion: "ansehen", scope: "einrichtung" },
   { modul: "tagesberichte", aktion: "anlegen", scope: "einrichtung" },
-  { modul: "schichtuebergabe", aktion: "ansehen", scope: "einrichtung" },
-  { modul: "schichtuebergabe", aktion: "schreiben", scope: "einrichtung" },
   { modul: "standorte", aktion: "ansehen", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "ansehen", scope: "einrichtung" },
 ];

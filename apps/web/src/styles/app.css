@@ -1051,8 +1051,13 @@
   display: flex;
   gap: var(--zv-space-1);
   margin-bottom: var(--zv-space-5);
-  border-bottom: 1px solid var(--zv-border);
+  /* Haarlinie als inset-Schatten statt border-bottom, und die Knoepfe ohne
+     negativen Rand: der alte -1px-Ueberstand ueber die Border hinaus machte
+     den Container (overflow-x:auto erzwingt overflow-y:auto) vertikal
+     scrollbar -- genau der zweite Balken, der dort nicht existieren darf. */
+  box-shadow: inset 0 -1px 0 var(--zv-border);
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1061,8 +1066,6 @@
   align-items: center;
   gap: var(--zv-space-2);
   flex-shrink: 0;
-  /* Der Strich ueberdeckt die Linie des Containers (margin-bottom: -1px). */
-  margin-bottom: -1px;
   padding: var(--zv-space-3);
   min-height: 44px;
   background: none;
@@ -1090,6 +1093,25 @@
   font-size: var(--zv-text-meta);
   font-weight: 400;
   color: var(--zv-text-gedaempft);
+}
+
+/* Schmale, zurueckhaltende Scrollbalken app-weit statt der groben
+   System-Balken (Tab-Leisten, Tabellen, Zeitleiste). Farbe nur ueber Tokens;
+   der Daumen wird erst beim Ueberfahren kraeftiger. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--zv-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
 }
 
 /* ==================================================================
@@ -4124,136 +4146,6 @@ li:last-child > .zv-kontakt-zeile,
   display: block;
   font-size: var(--zv-text-s);
   color: var(--zv-text-muted);
-}
-
-/* ==================================================================
-   Schichtuebergabe (pages/Schichtuebergabe.tsx, components/UebergabeAnzeige.tsx)
-   ================================================================== */
-.zv-uebergabe-karte {
-  background: var(--zv-surface);
-  border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-m);
-  padding: var(--zv-space-4);
-  margin-bottom: var(--zv-space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--zv-space-3);
-}
-.zv-uebergabe-karte-kopf {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--zv-space-3);
-  flex-wrap: wrap;
-}
-.zv-uebergabe-karte-kopf h3 {
-  font-size: var(--zv-text-l);
-  margin: 0;
-}
-.zv-uebergabe-punkte {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.zv-uebergabe-punkte li {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--zv-space-1) var(--zv-space-3);
-  padding: var(--zv-space-3) 0;
-  border-top: 1px solid var(--zv-border);
-}
-.zv-uebergabe-punkt-text {
-  grid-column: 1;
-}
-.zv-uebergabe-punkt-meta {
-  grid-column: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zv-space-1) var(--zv-space-3);
-  font-size: var(--zv-text-s);
-  color: var(--zv-text-muted);
-}
-.zv-uebergabe-punkt-aktion {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  display: flex;
-  align-items: center;
-}
-.zv-uebergabe-punkt-aktion .zv-link-btn {
-  min-height: 44px;
-}
-@media (max-width: 640px) {
-  .zv-uebergabe-punkte li {
-    grid-template-columns: 1fr;
-  }
-  .zv-uebergabe-punkt-aktion {
-    grid-column: 1;
-    grid-row: auto;
-  }
-}
-.zv-uebergabe-nachtrag {
-  display: flex;
-  flex-direction: column;
-  gap: var(--zv-space-1);
-}
-.zv-uebergabe-nachtrag-zeile {
-  display: flex;
-  gap: var(--zv-space-2);
-  flex-wrap: wrap;
-}
-.zv-uebergabe-nachtrag-zeile input {
-  flex: 1 1 220px;
-  min-height: 44px;
-}
-.zv-uebergabe-nachtrag-zeile select,
-.zv-uebergabe-nachtrag-zeile .zv-btn {
-  min-height: 44px;
-}
-.zv-uebergabe-kopfzeile {
-  display: flex;
-  gap: var(--zv-space-4);
-  flex-wrap: wrap;
-  margin-bottom: var(--zv-space-3);
-}
-.zv-uebergabe-kopfzeile label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--zv-space-1);
-  font-size: var(--zv-text-s);
-  color: var(--zv-text-muted);
-}
-.zv-uebergabe-kopfzeile select {
-  min-height: 44px;
-}
-.zv-uebergabe-entwurf {
-  list-style: none;
-  margin: 0 0 var(--zv-space-3);
-  padding: 0;
-}
-.zv-uebergabe-entwurf li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--zv-space-3);
-  padding: var(--zv-space-2) 0;
-  border-top: 1px solid var(--zv-border);
-}
-.zv-uebergabe-entwurf .zv-link-btn {
-  min-height: 44px;
-  min-width: 44px;
-}
-.zv-uebergabe-bezug {
-  color: var(--zv-text-muted);
-}
-.zv-uebergabe-senden {
-  display: flex;
-  align-items: center;
-  gap: var(--zv-space-3);
-  flex-wrap: wrap;
-  margin-top: var(--zv-space-3);
-}
-.zv-uebergabe-senden .zv-btn {
-  min-height: 44px;
 }
 
 /* ==================================================================

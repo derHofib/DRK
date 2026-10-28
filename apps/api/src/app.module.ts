@@ -26,7 +26,6 @@ import { KalenderModule } from "./kalender/kalender.module";
 import { ChatModule } from "./chat/chat.module";
 import { ProfilModule } from "./profil/profil.module";
 import { SucheModule } from "./suche/suche.module";
-import { SchichtuebergabeModule } from "./schichtuebergabe/schichtuebergabe.module";
 
 @Module({
   imports: [
@@ -72,7 +71,6 @@ import { SchichtuebergabeModule } from "./schichtuebergabe/schichtuebergabe.modu
     ChatModule,
     ProfilModule,
     SucheModule,
-    SchichtuebergabeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

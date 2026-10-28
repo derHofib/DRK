@@ -595,10 +595,6 @@ export interface AufgabeDto {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
-  /** Aus einer Schichtuebergabe uebernommen: betroffene Klient:in und Herkunft. */
-  klientId: string | null;
-  klientName: string | null;
-  uebergabePunktId: string | null;
 }
 
 export interface AufgabenAnzahlDto {
@@ -1153,43 +1149,12 @@ export const DIENST_LABEL: Record<Dienst, string> = {
 
 /**
  * Welcher Dienst gerade laeuft, aus der Uhrzeit abgeleitet (Fruehdienst
- * 05-13, Spaetdienst 13-21, sonst Nacht). Eine Quelle fuer Schichtuebergabe
- * UND die Kontextzeile ueber den Seitentiteln -- zwei eigene Grenzen liessen
- * die Seite "Fruehdienst" sagen, waehrend die Uebergabe schon "Spaet"
- * vorschlaegt. Nur ein Vorschlag: der Dienstplan kennt die Wahrheit.
+ * 05-13, Spaetdienst 13-21, sonst Nacht) -- fuer die Kontextzeile ueber den
+ * Seitentiteln. Nur ein Vorschlag: der Dienstplan kennt die Wahrheit.
  */
 export function dienstNachUhrzeit(uhr: Date = new Date()): Dienst {
   const h = uhr.getHours();
   if (h >= 5 && h < 13) return "frueh";
   if (h >= 13 && h < 21) return "spaet";
   return "nacht";
-}
-
-export interface SchichtuebergabePunktDto {
-  id: string;
-  position: number;
-  text: string;
-  klientId: string | null;
-  klientName: string | null;
-  zimmerId: string | null;
-  zimmerNummer: string | null;
-  /** Nach dem Senden ergaenzt -- die urspruenglichen Punkte bleiben unveraendert. */
-  nachtrag: boolean;
-  erstelltVonName: string;
-  erstelltAm: string;
-  aufgaben: { id: string; titel: string; erledigt: boolean }[];
-}
-
-export interface SchichtuebergabeDto {
-  id: string;
-  standortId: string;
-  standortName: string;
-  dienst: Dienst;
-  verfasstVonName: string;
-  gesendetAm: string;
-  gelesen: boolean;
-  gelesenAnzahl: number;
-  /** Selbst verfasst -- die eigene Uebergabe muss nicht bestaetigt werden. */
-  eigene: boolean;
-  punkte: SchichtuebergabePunktDto[];
 }

@@ -20,9 +20,8 @@ RUN pnpm --filter @zimmerakte/api build
 # (src/index.ts). Node selbst laedt .ts unter node_modules nicht
 # (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING) -- solange die API nur Typen
 # daraus importierte, fiel das nie auf, weil tsc solche Importe entfernt.
-# Seit suche.service (formatBelegnummer) und schichtuebergabe.service
-# (DIENST_LABEL) Werte daraus laden, startete der Container nicht mehr. Deshalb
-# hier einmal nach CommonJS kompilieren; die Bedingung "zimmerakte-laufzeit"
+# Seit suche.service (formatBelegnummer) Werte daraus laedt, startete der
+# Container nicht mehr. Deshalb hier einmal nach CommonJS kompilieren; die Bedingung "zimmerakte-laufzeit"
 # im CMD unten waehlt dist/ statt src/ (siehe exports in
 # packages/shared/package.json). Alle anderen Werkzeuge sehen weiter src/.
 RUN pnpm --filter @zimmerakte/shared build:laufzeit

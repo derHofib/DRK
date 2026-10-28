@@ -120,7 +120,7 @@ async function anmelden(page, email = LEITUNG) {
  * Unterpunkte (navigation.ts/UNTERPUNKTE) haben keinen eigenen Knopf in der
  * mobilen Leiste: man erreicht sie ueber das Gruppen-Panel ihres Elternpunkts.
  */
-const ELTERN_VON_UNTERPUNKT = { Schichtübergabe: "Heute", HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende", Belegung: "Standorte" };
+const ELTERN_VON_UNTERPUNKT = { HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende", Belegung: "Standorte" };
 /** Seit dem Redesign heisst "Tagesberichte" in der mobilen Leiste "Bericht" (Platz fuer fuenf Felder). */
 const MOBIL_NAME = { Tagesberichte: "Bericht" };
 
@@ -330,8 +330,7 @@ if (laufe(5)) {
 
     // Zimmer/Mitarbeitende/Einstellungen liegen seit Phase 8 im
     // Sammelmenue -- reiterWaehlen() oeffnet es bei Bedarf automatisch.
-    // Schichtuebergabe ist Unterpunkt von Heute (ueber dessen Gruppen-Panel erreichbar).
-    for (const reiter of ["Heute", "Standorte", "Belegung", "Klienten", "Nachrichten", "Kalender", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Schichtübergabe", "Einstellungen"]) {
+    for (const reiter of ["Heute", "Standorte", "Belegung", "Klienten", "Nachrichten", "Kalender", "Kassenbuch", "Mitarbeitende", "Aufgaben", "Einstellungen"]) {
       await reiterWaehlen(page, reiter);
       await page.waitForTimeout(250);
       const ueberlauf = await page.evaluate(() =>
