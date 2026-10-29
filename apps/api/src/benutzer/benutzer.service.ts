@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
@@ -24,6 +24,7 @@ export interface BenutzerListEintrag {
   positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
   standortIds: string[];
+  einheitIds: string[];
 }
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (benutzer_mandant_id_email_key,
@@ -88,12 +89,32 @@ export class BenutzerService {
          GROUP BY b.id, b.email, b.name, b.aktiv
          ORDER BY b.name`
       );
+      // Wo die Person laut Rang arbeitet: Heimat-Einheit, weitere Einheiten und
+      // Einheiten der Besetzung ihrer aktuellen Linienpositionen (ein
+      // Sammelrang zaehlt seine Heimat-Einheit nicht, Migration 0067).
+      const { rows: einheiten } = await client.query<{ benutzer_id: string; einheit_ids: string[] }>(
+        `SELECT pb.benutzer_id, array_agg(DISTINCT u.id) AS einheit_ids
+         FROM org_position_besetzung pb
+         JOIN org_position p ON p.id = pb.position_id AND p.aktiv AND p.typ = 'linie'
+         CROSS JOIN LATERAL (
+           SELECT p.org_unit_id AS id WHERE NOT p.ist_sammelrang
+           UNION
+           SELECT w.org_unit_id FROM org_position_weitere_einheit w WHERE w.position_id = p.id
+           UNION
+           SELECT e.org_unit_id FROM org_position_besetzung_einheit e WHERE e.besetzung_id = pb.id
+         ) x
+         JOIN org_unit u ON u.id = x.id AND u.typ = 'einrichtung'
+         WHERE pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+         GROUP BY pb.benutzer_id`
+      );
+      const einheitenJeBenutzer = new Map(einheiten.map((e) => [e.benutzer_id, e.einheit_ids]));
       return rows.map((r) => ({
         id: r.id,
         email: r.email,
         name: r.name,
         aktiv: r.aktiv,
         standortIds: r.standort_ids,
+        einheitIds: einheitenJeBenutzer.get(r.id) ?? [],
         positionen: eindeutigePositionen(r.positionen),
       }));
     });
@@ -351,7 +372,8 @@ export class BenutzerService {
   async positionWechseln(
     zielBenutzerId: string,
     positionIdEingabe: string | null,
-    accountTypId?: string
+    accountTypId?: string,
+    einheitIdsEingabe?: string[]
   ): Promise<{ id: string; positionen: BenutzerListEintrag["positionen"] }> {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("organigramm", "manage-permissions"))) {
@@ -369,8 +391,24 @@ export class BenutzerService {
         // Ein Rang ist der Account-Typ, nicht eine schon vorhandene Position:
         // sonst waeren selbst angelegte Typen ohne Position nicht waehlbar.
         let positionId = positionIdEingabe;
+        // Standorte nur mit gewaehltem Typ und nicht fuer Vollzugriff: dessen
+        // Rechte gelten ohnehin fuer den ganzen Mandanten.
+        let einheitIds = einheitIdsEingabe === undefined ? undefined : [...new Set(einheitIdsEingabe)];
         if (accountTypId !== undefined) {
-          positionId = await this.positionFuerAccountTyp(client, accountTypId, ctx.mandantId, ctx.benutzerId);
+          const ziel = await this.positionFuerAccountTyp(client, accountTypId, ctx.mandantId, ctx.benutzerId, einheitIds !== undefined);
+          positionId = ziel.id;
+          if (ziel.istVollzugriff) einheitIds = undefined;
+        } else {
+          einheitIds = undefined;
+        }
+        if (einheitIds !== undefined && einheitIds.length > 0) {
+          const { rows: gueltig } = await client.query(
+            "SELECT 1 FROM org_unit WHERE id = ANY($1) AND typ = 'einrichtung'",
+            [einheitIds]
+          );
+          if (gueltig.length !== einheitIds.length) {
+            throw new BadRequestException("Mindestens ein gewählter Standort ist keine Einrichtung dieses Mandanten.");
+          }
         }
 
         if (positionId !== null) {
@@ -401,20 +439,29 @@ export class BenutzerService {
         // Vertreter -- sonst wuerde eine Person mit "Mitarbeiter" in sechs
         // Einheiten beim Speichern auf eine einzige zusammenschrumpfen.
         const zielRang = positionId === null ? null : await this.rangVon(client, positionId);
-        const behalten = offen.find((b) => b.laeuft && (b.position_id === positionId || b.rang === zielRang));
+        // Mit Standorten zaehlt nur die EXAKTE Position: ein gleichnamiger Rang
+        // in einer Einrichtung wird dann durch die Sammelposition ersetzt.
+        const mitStandorten = einheitIds !== undefined;
+        const behalten = offen.find(
+          (b) => b.laeuft && (b.position_id === positionId || (!mitStandorten && b.rang === zielRang))
+        );
 
-        const beenden = offen.filter((b) => b !== behalten && !(zielRang !== null && b.rang === zielRang && b.laeuft)).map((b) => b.id);
+        const beenden = offen
+          .filter((b) => b !== behalten && (mitStandorten || !(zielRang !== null && b.rang === zielRang && b.laeuft)))
+          .map((b) => b.id);
+        let besetzungId = behalten?.id ?? null;
         if (positionId !== null && !behalten) {
           const { rows: neu } = await client.query<{ id: string }>(
             `INSERT INTO org_position_besetzung (mandant_id, position_id, benutzer_id, erstellt_von)
              VALUES ($1, $2, $3, $4) RETURNING id`,
             [ctx.mandantId, positionId, zielBenutzerId, ctx.benutzerId]
           );
+          besetzungId = neu[0].id;
           // Die Standorte der Person ziehen mit um: ihre bisherigen Positionen
           // waren ihr Standortzugang (je Einheit eine Position). Ohne
           // Uebernahme haette sie nach dem Rangwechsel nur noch den Anker der
           // neuen Position und still fuenf Standorte verloren.
-          if (beenden.length > 0) {
+          if (beenden.length > 0 && !mitStandorten) {
             await client.query(
               `INSERT INTO org_position_besetzung_einheit (mandant_id, besetzung_id, org_unit_id)
                SELECT $1, $2, u.id
@@ -442,16 +489,28 @@ export class BenutzerService {
             [beenden]
           );
         }
+        if (mitStandorten && besetzungId !== null) {
+          // Ersetzen statt ergaenzen: der Dialog zeigt den vollen Stand, was
+          // dort abgewaehlt wurde, soll auch wirklich weg sein.
+          await client.query("DELETE FROM org_position_besetzung_einheit WHERE besetzung_id = $1", [besetzungId]);
+          if (einheitIds!.length > 0) {
+            await client.query(
+              `INSERT INTO org_position_besetzung_einheit (mandant_id, besetzung_id, org_unit_id)
+               SELECT $1, $2, unnest($3::uuid[])`,
+              [ctx.mandantId, besetzungId, einheitIds]
+            );
+          }
+        }
 
         const nachher = await this.ladePositionen(client, zielBenutzerId);
-        if ((positionId !== null && !behalten) || beenden.length > 0) {
+        if ((positionId !== null && !behalten) || beenden.length > 0 || mitStandorten) {
           await this.audit.protokollieren(client, {
             modul: "mitarbeitende",
             aktion: "rang-aendern",
             objektTyp: "benutzer",
             objektId: zielBenutzerId,
             vorher: { positionen: vorher },
-            nachher: { positionen: nachher },
+            nachher: { positionen: nachher, ...(mitStandorten ? { standortIds: einheitIds } : {}) },
           });
         }
         return { id: zielBenutzerId, positionen: nachher };
@@ -467,34 +526,41 @@ export class BenutzerService {
   }
 
   /**
-   * Eine vorhandene aktive Linienposition dieses Account-Typs, sonst wird sie
-   * an der Traeger-Wurzel angelegt (Titel = Typname). Die Wurzel ist als
-   * Anker bewusst neutral: Einrichtungs-Scopes ergeben dort nichts, die
-   * Standorte kommen allein aus den Einheiten der Besetzung (fail closed).
+   * Die Position fuer einen Rang (Account-Typ). Bevorzugt den Sammelrang
+   * (Migration 0067: eine Position fuer alle, Standorte an der Besetzung),
+   * dann eine vorhandene aktive Linienposition; mitStandorten verlangt
+   * zwingend einen Sammelrang. Fehlt er, wird er an der Traeger-Wurzel
+   * angelegt, ohne feste Sollzahl. Die Wurzel ist als Heimat-Einheit nur
+   * Platzhalter und zaehlt bei einem Sammelrang nicht als Rechte-Anker
+   * (fail closed: ohne Standort kein einheitsbezogener Zugriff).
    */
   private async positionFuerAccountTyp(
     client: PoolClient,
     accountTypId: string,
     mandantId: string,
-    benutzerId: string
-  ): Promise<string> {
-    const { rows: typRows } = await client.query<{ name: string }>("SELECT name FROM account_typ WHERE id = $1", [
-      accountTypId,
-    ]);
+    benutzerId: string,
+    mitStandorten: boolean
+  ): Promise<{ id: string; istVollzugriff: boolean }> {
+    const { rows: typRows } = await client.query<{ name: string; ist_vollzugriff: boolean }>(
+      "SELECT name, ist_vollzugriff FROM account_typ WHERE id = $1",
+      [accountTypId]
+    );
     if (typRows.length === 0) throw new NotFoundException("Account-Typ nicht gefunden.");
+    const istVollzugriff = typRows[0].ist_vollzugriff;
 
     const { rows: vorhanden } = await client.query<{ id: string }>(
       `SELECT id FROM org_position
        WHERE account_typ_id = $1 AND aktiv AND typ = 'linie' AND NOT ist_geplant
-       ORDER BY (titel = $2) DESC, erstellt_am
+         AND ($3::boolean = false OR ist_sammelrang)
+       ORDER BY ist_sammelrang DESC, (titel = $2) DESC, erstellt_am
        LIMIT 1`,
-      [accountTypId, typRows[0].name]
+      [accountTypId, typRows[0].name, mitStandorten && !istVollzugriff]
     );
-    if (vorhanden.length > 0) return vorhanden[0].id;
+    if (vorhanden.length > 0) return { id: vorhanden[0].id, istVollzugriff };
 
     const { rows: neu } = await client.query<{ id: string }>(
-      `INSERT INTO org_position (mandant_id, org_unit_id, titel, account_typ_id, soll_besetzung, erstellt_von)
-       SELECT $1, ou.id, $2, $3, 1, $4 FROM org_unit ou WHERE ou.typ = 'traeger'
+      `INSERT INTO org_position (mandant_id, org_unit_id, titel, account_typ_id, soll_besetzung, ist_sammelrang, erstellt_von)
+       SELECT $1, ou.id, $2, $3, NULL, true, $4 FROM org_unit ou WHERE ou.typ = 'traeger'
        RETURNING id`,
       [mandantId, typRows[0].name, accountTypId, benutzerId]
     );
@@ -507,7 +573,7 @@ export class BenutzerService {
       vorher: null,
       nachher: { titel: typRows[0].name, accountTypId },
     });
-    return neu[0].id;
+    return { id: neu[0].id, istVollzugriff };
   }
 
   private async rangVon(client: PoolClient, positionId: string): Promise<string | null> {

@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { AccountTypDto, BenutzerListEintragDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
+import type { AccountTypDto, BenutzerListEintragDto, OrgUnitDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
@@ -24,6 +24,8 @@ export function Mitarbeitende() {
 
   const [rangZiel, setRangZiel] = useState<BenutzerListEintragDto | null>(null);
   const [rangTypen, setRangTypen] = useState<AccountTypDto[]>([]);
+  const [rangEinrichtungen, setRangEinrichtungen] = useState<OrgUnitDto[]>([]);
+  const [rangTypWahl, setRangTypWahl] = useState("");
   const [rangFehler, setRangFehler] = useState<string | null>(null);
   const [rangWirdGespeichert, setRangWirdGespeichert] = useState(false);
 
@@ -35,7 +37,10 @@ export function Mitarbeitende() {
   async function rangOeffnen(b: BenutzerListEintragDto) {
     setFehler(null);
     try {
-      setRangTypen(await api.organigrammAccountTypen());
+      const [typen, einheiten] = await Promise.all([api.organigrammAccountTypen(), api.organigrammOrgUnits()]);
+      setRangTypen(typen);
+      setRangEinrichtungen(einheiten.filter((u) => u.typ === "einrichtung" && u.aktiv));
+      setRangTypWahl(typen.find((t) => t.name === b.positionen[0]?.accountTypName)?.id ?? "");
       setRangFehler(null);
       setRangZiel(b);
     } catch (err) {
@@ -46,11 +51,18 @@ export function Mitarbeitende() {
   async function rangSpeichern(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!rangZiel) return;
-    const wert = String(new FormData(e.currentTarget).get("accountTypId"));
+    const form = new FormData(e.currentTarget);
+    const wert = String(form.get("accountTypId"));
+    // Vollzugriff gilt ohnehin fuer den ganzen Mandanten: dort keine Standorte.
+    const mitStandorten = wert !== "" && !rangTypen.find((t) => t.id === wert)?.istVollzugriff;
     setRangFehler(null);
     setRangWirdGespeichert(true);
     try {
-      await api.benutzerPositionWechseln(rangZiel.id, wert === "" ? null : wert);
+      await api.benutzerPositionWechseln(
+        rangZiel.id,
+        wert === "" ? null : wert,
+        mitStandorten ? form.getAll("einheitIds").map(String) : undefined
+      );
       setRangZiel(null);
       laden();
     } catch (err) {
@@ -352,7 +364,8 @@ export function Mitarbeitende() {
               <select
                 id="rang-position"
                 name="accountTypId"
-                defaultValue={rangTypen.find((t) => t.name === rangZiel.positionen[0]?.accountTypName)?.id ?? ""}
+                value={rangTypWahl}
+                onChange={(e) => setRangTypWahl(e.target.value)}
               >
                 <option value="">Keine Position</option>
                 {rangTypen.map((t) => (
@@ -362,6 +375,28 @@ export function Mitarbeitende() {
                 ))}
               </select>
             </div>
+            {rangTypWahl !== "" && !rangTypen.find((t) => t.id === rangTypWahl)?.istVollzugriff && (
+              <fieldset className="zv-field" style={{ border: 0, padding: 0, margin: "16px 0 0" }}>
+                <legend>Arbeitet an</legend>
+                <p className="zv-sub" style={{ marginTop: 0 }}>
+                  Die Rechte dieses Rangs gelten für {rangZiel.name} nur an den angehakten Einrichtungen. Ohne Haken
+                  gelten sie an keiner.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {rangEinrichtungen.map((u) => (
+                    <label key={u.id} className="zv-checkbox-zeile">
+                      <input
+                        type="checkbox"
+                        name="einheitIds"
+                        value={u.id}
+                        defaultChecked={rangZiel.einheitIds.includes(u.id)}
+                      />
+                      {u.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <button className="zv-btn zv-btn-block" type="submit" disabled={rangWirdGespeichert} style={{ marginTop: 20 }}>
               <ISpeichern />
               {rangWirdGespeichert ? "Speichert…" : "Speichern"}

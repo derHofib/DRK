@@ -136,6 +136,10 @@ export interface BenutzerListEintragDto {
   aktiv: boolean;
   // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
   standortIds: string[];
+  // Einrichtungen, an denen die Person laut Rang arbeitet (Positionen und
+  // Standorte ihrer Besetzung) -- nicht zu verwechseln mit standortIds, der
+  // Sichtbarkeitsbeschraenkung.
+  einheitIds: string[];
 }
 
 export interface StandortDto {
@@ -697,7 +701,8 @@ export interface PositionDto {
   accountTypId: string;
   istGeplant: boolean;
   aktiv: boolean;
-  sollBesetzung: number;
+  /** null = keine feste Sollzahl (Sammelrang, Migration 0067). */
+  sollBesetzung: number | null;
   gueltigAb: string;
   gueltigBis: string | null;
   besetztMit: BesetzungDto[];

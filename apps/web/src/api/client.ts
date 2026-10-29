@@ -391,10 +391,12 @@ export const api = {
       body: JSON.stringify({ aktiv }),
     }),
   // Ein Rang ist ein Account-Typ (accountTypId); null entzieht jede Position.
-  benutzerPositionWechseln: (benutzerId: string, accountTypId: string | null) =>
+  // einheitIds = Einrichtungen der Person (ersetzt den Stand); weglassen
+  // laesst ihre Standorte unveraendert.
+  benutzerPositionWechseln: (benutzerId: string, accountTypId: string | null, einheitIds?: string[]) =>
     request<{ id: string }>(`/benutzer/${benutzerId}/position`, {
       method: "PUT",
-      body: JSON.stringify(accountTypId === null ? { positionId: null } : { accountTypId }),
+      body: JSON.stringify(accountTypId === null ? { positionId: null } : { accountTypId, einheitIds }),
     }),
   benutzerStandorteSetzen: (benutzerId: string, standortIds: string[]) =>
     request<string[]>(`/benutzer/${benutzerId}/standorte`, { method: "PUT", body: JSON.stringify({ standortIds }) }),

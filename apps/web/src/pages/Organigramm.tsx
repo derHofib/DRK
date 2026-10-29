@@ -107,7 +107,12 @@ interface Knoten {
  * zwischen Teilbaeumen fuehren. Eine spaetere Drag&Drop-Ansicht kann das
  * bei Bedarf genauer darstellen.
  */
-function baueBaum(orgUnits: OrgUnitDto[], positionen: PositionDto[]): Knoten | null {
+function baueBaum(orgUnits: OrgUnitDto[], alle: PositionDto[]): Knoten | null {
+  // Deaktivierte Positionen ohne Besetzung sind erledigt (die Oberflaeche
+  // kann sie nicht wieder aktivieren) und bleiben in der Tabelle sichtbar.
+  // Im Baum waeren sie nur graue "Vakant"-Karten, etwa die alten
+  // Einrichtungs-Positionen nach dem Zusammenfuehren (Migration 0068).
+  const positionen = alle.filter((p) => p.aktiv || p.besetztMit.length > 0);
   const einheitKnoten = new Map<string, Knoten>();
   for (const u of orgUnits) {
     einheitKnoten.set(u.id, { schluessel: `u:${u.id}`, art: "einheit", einheit: u, kinder: [], tiefe: 0, x: 0 });
@@ -565,7 +570,7 @@ function zielOptionen(quelle: Knoten, alle: Knoten[], orgUnitNamen: Map<string, 
 function positionsStatus(p: PositionDto): { label: string; klasse: string } {
   if (p.istGeplant) return { label: "Geplant (Platzhalter)", klasse: "zv-pill-info" };
   if (p.besetztMit.length === 0) return { label: "Vakant", klasse: "zv-pill-neutral" };
-  if (p.besetztMit.length < p.sollBesetzung) {
+  if (p.sollBesetzung !== null && p.besetztMit.length < p.sollBesetzung) {
     return { label: `Besetzt ${p.besetztMit.length}/${p.sollBesetzung}`, klasse: "zv-pill-teilweise" };
   }
   return { label: "Besetzt", klasse: "zv-pill-ok" };

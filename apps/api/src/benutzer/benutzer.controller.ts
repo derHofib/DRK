@@ -21,7 +21,9 @@ const aktivSetzenSchema = z.object({ aktiv: z.boolean() });
 // accountTypId waehlt einen Rang auch dann, wenn es dafuer noch keine Position gibt.
 const positionWechselnSchema = z.union([
   z.object({ positionId: z.string().uuid().nullable() }),
-  z.object({ accountTypId: z.string().uuid() }),
+  // einheitIds = die Einrichtungen, an denen die Person arbeitet (ersetzt den
+  // bisherigen Stand); ohne Angabe bleiben ihre Standorte unveraendert.
+  z.object({ accountTypId: z.string().uuid(), einheitIds: z.array(z.string().uuid()).optional() }),
 ]);
 
 @Controller("benutzer")
@@ -77,7 +79,7 @@ export class BenutzerController {
       throw new BadRequestException("Erwartet { positionId: <uuid> | null } oder { accountTypId: <uuid> }.");
     }
     return "accountTypId" in eingabe.data
-      ? this.benutzer.positionWechseln(id, null, eingabe.data.accountTypId)
+      ? this.benutzer.positionWechseln(id, null, eingabe.data.accountTypId, eingabe.data.einheitIds)
       : this.benutzer.positionWechseln(id, eingabe.data.positionId);
   }
 }
