@@ -197,6 +197,19 @@ describe("Benutzer: Rang aus Account-Typ, Standorte an der Besetzung", () => {
     expect(await klientenOrgUnits(bernd)).toEqual([einrichtungAId]);
   });
 
+  it("GET /organigramm/positions nennt je Besetzung ihre Standorte (Grundlage fuer die Anzeige unter jeder Einrichtung)", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/organigramm/positions")
+      .set("Authorization", `Bearer ${tokenGf}`);
+    expect(res.status).toBe(200);
+    const pos = res.body.find((p: { titel: string }) => p.titel === "Bereichsleiter");
+    const jeName = Object.fromEntries(
+      pos.besetztMit.map((b: { benutzerName: string; orgUnitIds: string[] }) => [b.benutzerName, new Set(b.orgUnitIds)])
+    );
+    expect(jeName.anna).toEqual(new Set([einrichtungAId, einrichtungBId]));
+    expect(jeName.bernd).toEqual(new Set([einrichtungAId]));
+  });
+
   it("unbekannter Account-Typ -> 404", async () => {
     const res = await put(anna, { accountTypId: randomUUID() });
     expect(res.status).toBe(404);

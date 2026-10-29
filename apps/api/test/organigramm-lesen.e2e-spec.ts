@@ -222,6 +222,7 @@ describe("Organigramm: lesende Endpunkte", () => {
           benutzerId: expect.any(String),
           benutzerName: benMitNamenName,
           gueltigAb: expect.any(String),
+          orgUnitIds: [],
         },
       ]);
     });
@@ -233,7 +234,7 @@ describe("Organigramm: lesende Endpunkte", () => {
       // Gegenprobe gegen die zuvor sichtbaren echten Daten: ohne das Recht
       // wird redigiert, nicht einfach dieselbe Antwort erneut geliefert.
       expect(position.besetztMit).toEqual([
-        { besetzungId: expect.any(String), benutzerId: null, benutzerName: null, gueltigAb: expect.any(String) },
+        { besetzungId: expect.any(String), benutzerId: null, benutzerName: null, gueltigAb: expect.any(String), orgUnitIds: [] },
       ]);
     });
 

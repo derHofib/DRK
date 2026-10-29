@@ -679,6 +679,11 @@ export interface BesetzungDto {
   benutzerId: string | null;
   benutzerName: string | null;
   gueltigAb: string;
+  /**
+   * Standorte dieser einen Besetzung (Migration 0066). Leer = die Person
+   * arbeitet an der Einheit der Position selbst. Keine Personendaten.
+   */
+  orgUnitIds: string[];
 }
 
 export interface PositionDto {
