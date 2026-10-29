@@ -8,6 +8,13 @@ interface AktivePosition {
   id: string;
   orgUnitId: string;
   /**
+   * Sammelrang (Migration 0067): die Heimat-Einheit ist nur Platzhalter und
+   * zaehlt NICHT als Anker, die Anker kommen allein aus den Einheiten der
+   * Besetzung -- sonst traefe z. B. "subtree" vom Traeger aus den ganzen
+   * Mandanten.
+   */
+  istSammelrang: boolean;
+  /**
    * Zusaetzliche Organisationseinheiten einer Linienposition (Migration
    * 0047, org_position_weitere_einheit -- z.B. eine Einrichtungsleitung mit
    * zwei Einrichtungen) UND die Einheiten der einzelnen Besetzung (Migration
@@ -133,7 +140,7 @@ export class RechteService {
 
   private async aktivePositionen(client: import("pg").PoolClient, benutzerId: string): Promise<AktivePosition[]> {
     const { rows } = await client.query(
-      `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff,
+      `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, p.ist_sammelrang, a.ist_vollzugriff,
               COALESCE(
                 (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
                 '{}'
@@ -152,6 +159,7 @@ export class RechteService {
     return rows.map((r) => ({
       id: r.id,
       orgUnitId: r.org_unit_id,
+      istSammelrang: r.ist_sammelrang,
       weitereOrgUnitIds: r.weitere_org_unit_ids,
       typ: r.typ,
       accountTypId: r.account_typ_id,
@@ -272,7 +280,7 @@ export class RechteService {
       return rows.map((r) => r.descendant_id);
     }
 
-    const anker = [position.orgUnitId, ...position.weitereOrgUnitIds];
+    const anker = position.istSammelrang ? [...position.weitereOrgUnitIds] : [position.orgUnitId, ...position.weitereOrgUnitIds];
 
     switch (scope) {
       case "own":
@@ -429,7 +437,7 @@ export class RechteService {
   async simuliereFuerPosition(positionId: string): Promise<SimulationZelleDto[]> {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query(
-        `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, a.ist_vollzugriff,
+        `SELECT p.id, p.org_unit_id, p.typ, p.account_typ_id, p.ist_sammelrang, a.ist_vollzugriff,
                 COALESCE(
                   (SELECT array_agg(w.org_unit_id) FROM org_position_weitere_einheit w WHERE w.position_id = p.id),
                   '{}'
@@ -442,6 +450,7 @@ export class RechteService {
       const position: AktivePosition = {
         id: rows[0].id,
         orgUnitId: rows[0].org_unit_id,
+        istSammelrang: rows[0].ist_sammelrang,
         weitereOrgUnitIds: rows[0].weitere_org_unit_ids,
         typ: rows[0].typ,
         accountTypId: rows[0].account_typ_id,

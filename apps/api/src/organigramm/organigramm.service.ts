@@ -43,7 +43,8 @@ export interface PositionDto {
   accountTypId: string;
   istGeplant: boolean;
   aktiv: boolean;
-  sollBesetzung: number;
+  /** null = keine feste Sollzahl (Sammelrang, Migration 0067). */
+  sollBesetzung: number | null;
   gueltigAb: string;
   gueltigBis: string | null;
   besetztMit: BesetzungDto[];

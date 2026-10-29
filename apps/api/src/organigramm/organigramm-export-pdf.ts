@@ -53,7 +53,7 @@ const POSITION_TYP_LABEL: Record<PositionDto["typ"], string> = {
 function positionsStatusText(p: PositionDto): string {
   if (p.istGeplant) return "Geplant (Platzhalter)";
   if (p.besetztMit.length === 0) return "Vakant";
-  if (p.besetztMit.length < p.sollBesetzung) return `Besetzt ${p.besetztMit.length}/${p.sollBesetzung}`;
+  if (p.sollBesetzung !== null && p.besetztMit.length < p.sollBesetzung) return `Besetzt ${p.besetztMit.length}/${p.sollBesetzung}`;
   return "Besetzt";
 }
 
