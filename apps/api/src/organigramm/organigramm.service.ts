@@ -22,6 +22,8 @@ export interface BesetzungDto {
   benutzerId: string | null;
   benutzerName: string | null;
   gueltigAb: string;
+  /** Standorte genau dieser Besetzung (Migration 0066); leer = Einheit der Position. */
+  orgUnitIds: string[];
 }
 
 export interface PositionDto {
@@ -92,7 +94,11 @@ const POSITIONEN_SELECT = `
            jsonb_agg(
              jsonb_build_object(
                'besetzungId', b.id, 'benutzerId', b.benutzer_id, 'benutzerName', bu.name,
-               'gueltigAb', b.gueltig_ab
+               'gueltigAb', b.gueltig_ab,
+               'orgUnitIds', COALESCE(
+                 (SELECT array_agg(e.org_unit_id) FROM org_position_besetzung_einheit e WHERE e.besetzung_id = b.id),
+                 '{}'
+               )
              )
              ORDER BY bu.name
            ) FILTER (WHERE b.id IS NOT NULL),

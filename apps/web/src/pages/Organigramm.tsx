@@ -80,6 +80,13 @@ interface Knoten {
    * Position als Ganzes, nicht zu einem einzelnen weiteren Auftrittsort.
    */
   istWeitereZuordnung?: boolean;
+  /**
+   * Untermenge von istWeitereZuordnung: die Karte zeigt die Personen, deren
+   * BESETZUNG diese Einheit als Standort hat (Migration 0066), nicht die
+   * Position als Ganzes. Anders als bei weitere_einheit gehoert die Einheit
+   * hier nur den Personen, die sie haben -- nicht allen auf der Position.
+   */
+  istBesetzungsZuordnung?: boolean;
   /** Nur gesetzt, wenn der Knoten wegen Einklappen (kollabiert-Set) seine Kinder verbirgt. */
   versteckteNachkommen?: number;
   /**
@@ -116,8 +123,32 @@ function baueBaum(orgUnits: OrgUnitDto[], positionen: PositionDto[]): Knoten | n
   }
   if (!wurzel) return null;
 
-  const positionenJeEinheit = new Map<string, PositionDto[]>();
+  // Personen mit eigenen Standorten an der Besetzung stehen unter JEDEM davon
+  // (je Einheit eine Karte mit nur ihren Leuten), nicht gesammelt an der
+  // Einheit der geteilten Rang-Position. Sonst sähe man auf der Karte
+  // "Haus B" auch die Mitarbeitenden, die dort gar nicht arbeiten.
+  const besetzungsKarten: { position: PositionDto; einheitId: string }[] = [];
+  const heimatPositionen: PositionDto[] = [];
   for (const p of positionen) {
+    const mitStandorten = p.besetztMit.filter((b) => b.orgUnitIds.length > 0);
+    if (mitStandorten.length === 0) {
+      heimatPositionen.push(p);
+      continue;
+    }
+    const daheim = p.besetztMit.filter((b) => b.orgUnitIds.length === 0 || b.orgUnitIds.includes(p.orgUnitId));
+    if (daheim.length > 0) heimatPositionen.push({ ...p, besetztMit: daheim });
+    const einheitIds = new Set(mitStandorten.flatMap((b) => b.orgUnitIds));
+    einheitIds.delete(p.orgUnitId);
+    for (const einheitId of einheitIds) {
+      besetzungsKarten.push({
+        position: { ...p, besetztMit: mitStandorten.filter((b) => b.orgUnitIds.includes(einheitId)) },
+        einheitId,
+      });
+    }
+  }
+
+  const positionenJeEinheit = new Map<string, PositionDto[]>();
+  for (const p of heimatPositionen) {
     const liste = positionenJeEinheit.get(p.orgUnitId) ?? [];
     liste.push(p);
     positionenJeEinheit.set(p.orgUnitId, liste);
@@ -160,6 +191,21 @@ function baueBaum(orgUnits: OrgUnitDto[], positionen: PositionDto[]): Knoten | n
         istWeitereZuordnung: true,
       });
     }
+  }
+
+  for (const { position, einheitId } of besetzungsKarten) {
+    const einheit = einheitKnoten.get(einheitId);
+    if (!einheit) continue;
+    einheit.kinder.push({
+      schluessel: `p:${position.id}:besetzung:${einheitId}`,
+      art: "position",
+      position,
+      kinder: [],
+      tiefe: 0,
+      x: 0,
+      istWeitereZuordnung: true,
+      istBesetzungsZuordnung: true,
+    });
   }
 
   return wurzel;
@@ -243,6 +289,7 @@ function wendeLeitungsStruktur(wurzel: Knoten): Knoten {
       // die alte Karte die einzige Darstellung weiterer Einheiten.
       if (
         kind.istWeitereZuordnung &&
+        !kind.istBesetzungsZuordnung &&
         kind.position?.typ === "linie" &&
         !kind.position.parentPositionId
       ) {

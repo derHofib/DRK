@@ -18,7 +18,11 @@ const standorteSetzenSchema = z.object({
 const aktivSetzenSchema = z.object({ aktiv: z.boolean() });
 
 // null = Person verliert jede Position (und damit alle Rechte).
-const positionWechselnSchema = z.object({ positionId: z.string().uuid().nullable() });
+// accountTypId waehlt einen Rang auch dann, wenn es dafuer noch keine Position gibt.
+const positionWechselnSchema = z.union([
+  z.object({ positionId: z.string().uuid().nullable() }),
+  z.object({ accountTypId: z.string().uuid() }),
+]);
 
 @Controller("benutzer")
 @Authenticated()
@@ -70,8 +74,10 @@ export class BenutzerController {
   async positionWechseln(@Param("id") id: string, @Body() body: unknown) {
     const eingabe = positionWechselnSchema.safeParse(body);
     if (!eingabe.success) {
-      throw new BadRequestException("Erwartet { positionId: <uuid> | null }.");
+      throw new BadRequestException("Erwartet { positionId: <uuid> | null } oder { accountTypId: <uuid> }.");
     }
-    return this.benutzer.positionWechseln(id, eingabe.data.positionId);
+    return "accountTypId" in eingabe.data
+      ? this.benutzer.positionWechseln(id, null, eingabe.data.accountTypId)
+      : this.benutzer.positionWechseln(id, eingabe.data.positionId);
   }
 }

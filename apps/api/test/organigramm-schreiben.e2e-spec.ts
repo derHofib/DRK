@@ -343,7 +343,7 @@ describe("Organigramm: schreibende Endpunkte", () => {
       expect(res.status).toBe(201);
       expect(res.body.istGeplant).toBe(false);
       expect(res.body.besetztMit).toEqual([
-        { besetzungId: expect.any(String), benutzerId: benWorker1, benutzerName: "worker1", gueltigAb: gestern },
+        { besetzungId: expect.any(String), benutzerId: benWorker1, benutzerName: "worker1", gueltigAb: gestern, orgUnitIds: [] },
       ]);
       besetzungId = res.body.besetztMit[0].besetzungId;
     });
@@ -365,7 +365,7 @@ describe("Organigramm: schreibende Endpunkte", () => {
       const res = await als(tokenGf).post(`/organigramm/positions/${posId}/besetzen`, { benutzerId: benWorker2 });
       expect(res.status).toBe(201);
       expect(res.body.besetztMit).toEqual([
-        { besetzungId: expect.any(String), benutzerId: benWorker2, benutzerName: "worker2", gueltigAb: expect.any(String) },
+        { besetzungId: expect.any(String), benutzerId: benWorker2, benutzerName: "worker2", gueltigAb: expect.any(String), orgUnitIds: [] },
       ]);
     });
 
