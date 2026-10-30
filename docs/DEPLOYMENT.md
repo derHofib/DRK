@@ -37,6 +37,28 @@ Anleitung überträgt genau das auf einen Server.
   lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINT   # eine Zeile mit TYPE "crypt" über dem Docker-Pfad
   ```
 
+### 1.1 Nachweis der Datenträgerverschlüsselung
+
+Auf eigener Hardware oder einer VM mit LUKS prüft das Skript es selbst
+(Exit 0 = ok, 1 = nicht erkannt, 2 = nicht prüfbar):
+
+```bash
+sh scripts/pruefe-datentraeger.sh
+```
+
+Bei Verschlüsselung durch den Hoster ist sie in der VM nicht sichtbar, das
+Skript meldet dann „nicht erkannt". Dann gilt die schriftliche Bestätigung des
+Hosters. Sie muss enthalten: Verfahren (z. B. AES-256/XTS), dass sie für das
+Volume mit der Datenbank **und** für Snapshots/Backups des Hosters gilt, und
+wer die Schlüssel verwaltet. Beides (Skriptausgabe oder Bestätigung) gehört mit
+Datum in die Akte zur Auftragsverarbeitung. Nach jedem Serverumzug oder
+Hosterwechsel erneut prüfen.
+
+Zum Schutzumfang: Die Verschlüsselung schützt vor Diebstahl und Weitergabe von
+Platten, Snapshots und Altbackups. Sie schützt **nicht** vor Zugriff auf den
+laufenden Server (Root, SQL-Injection). Dagegen helfen Row Level Security, die
+App-Rolle ohne `BYPASSRLS` und der Zugriff nur über die App.
+
 ## 2. Repository auf den Server holen
 
 ```bash
