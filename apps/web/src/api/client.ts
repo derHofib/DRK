@@ -50,6 +50,7 @@ import type {
   StandortUebersichtDto,
   RaumplanDto,
   TagDto,
+  TagesberichtAenderungDto,
   TagesberichtDto,
   TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
@@ -634,6 +635,9 @@ export const api = {
     tagNamen?: string[];
     dokumente?: { base64: string; dateiname: string; mimeType: string }[];
   }) => request<TagesberichtDto>("/tagesberichte", { method: "POST", body: JSON.stringify(payload) }),
+  tagesberichtBearbeiten: (id: string, payload: { text?: string; datum?: string }) =>
+    request<TagesberichtDto>(`/tagesberichte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  tagesberichtHistorie: (id: string) => request<TagesberichtAenderungDto[]>(`/tagesberichte/${id}/historie`),
   tagesberichtTagHinzufuegen: (tagesberichtId: string, name: string) =>
     request<TagesberichtDto>(`/tagesberichte/${tagesberichtId}/tags`, {
       method: "POST",

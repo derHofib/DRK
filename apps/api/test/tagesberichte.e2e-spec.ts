@@ -143,6 +143,7 @@ describe("Tagesberichte", () => {
       "DELETE FROM tagesbericht_tag WHERE mandant_id = ANY($1)",
       [[mandantId, mandantBId]]
     );
+    await admin.query("DELETE FROM tagesbericht_aenderung WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM tagesbericht_dokument WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM tagesbericht WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
     await admin.query("DELETE FROM tag WHERE mandant_id = ANY($1)", [[mandantId, mandantBId]]);
@@ -164,6 +165,8 @@ describe("Tagesberichte", () => {
       get: (path: string) => request(http).get(path).set("Authorization", `Bearer ${token}`),
       post: (path: string, body: Record<string, unknown>) =>
         request(http).post(path).set("Authorization", `Bearer ${token}`).send(body),
+      patch: (path: string, body: Record<string, unknown>) =>
+        request(http).patch(path).set("Authorization", `Bearer ${token}`).send(body),
       delete: (path: string) => request(http).delete(path).set("Authorization", `Bearer ${token}`),
     };
   }
@@ -286,6 +289,128 @@ describe("Tagesberichte", () => {
     expect(zukunft.status).toBe(400);
     const ok = await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient1, datum: heute, text: "Heute." });
     expect(ok.status).toBe(201);
+  });
+
+  /**
+   * Bearbeiten mit Historie: die Protokollierung sitzt in Triggern
+   * (Migration 0069), deshalb pruefen die Tests auch, dass sie sich weder
+   * umgehen noch nachtraeglich veraendern laesst.
+   */
+  describe("Bearbeiten und Historie", () => {
+    let berichtId: string;
+
+    beforeAll(async () => {
+      const res = await als(tokenBereichsleitung).post("/tagesberichte", {
+        klientId: klient1,
+        datum: "2026-09-01",
+        text: "Ursprungstext.",
+        tagNamen: ["Anfangstag"],
+        dokumente: [{ base64: TEST_PDF_BASE64, dateiname: "anfang.pdf", mimeType: "application/pdf" }],
+      });
+      berichtId = res.body.id;
+    });
+
+    it("Anlegen mit Tags/Dokumenten erzeugt keine Historie (Ursprungsfassung)", async () => {
+      const h = await als(tokenBereichsleitung).get(`/tagesberichte/${berichtId}/historie`);
+      expect(h.status).toBe(200);
+      expect(h.body).toEqual([]);
+    });
+
+    it("Autor bearbeitet; Historie nennt alten und neuen Text, Datum und wer", async () => {
+      const res = await als(tokenBereichsleitung).patch(`/tagesberichte/${berichtId}`, {
+        text: "Korrigierter Text.",
+        datum: "2026-09-02",
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.text).toBe("Korrigierter Text.");
+      expect(res.body.anzahlAenderungen).toBe(1);
+      const h = await als(tokenBereichsleitung).get(`/tagesberichte/${berichtId}/historie`);
+      expect(h.body).toHaveLength(1);
+      expect(h.body[0]).toMatchObject({
+        art: "bearbeitet",
+        textAlt: "Ursprungstext.",
+        textNeu: "Korrigierter Text.",
+        datumAlt: "2026-09-01",
+        datumNeu: "2026-09-02",
+        geaendertVonName: "Bereichsleitung Test",
+      });
+    });
+
+    it("protokolliert nachtraeglich hinzugefuegte Tags, entfernte Tags und Dokumente samt Person", async () => {
+      const tag = await als(tokenEinrichtungsleitungS1).post(`/tagesberichte/${berichtId}/tags`, { name: "Spaeter" });
+      const spaeterId = tag.body.tags.find((t: { name: string }) => t.name === "Spaeter").id;
+      await als(tokenEinrichtungsleitungS1).delete(`/tagesberichte/${berichtId}/tags/${spaeterId}`);
+      await als(tokenEinrichtungsleitungS1).post(`/tagesberichte/${berichtId}/dokumente`, {
+        base64: TEST_PNG_BASE64,
+        dateiname: "nachtrag.png",
+        mimeType: "image/png",
+      });
+      const h = await als(tokenBereichsleitung).get(`/tagesberichte/${berichtId}/historie`);
+      const arten = h.body.map((e: { art: string }) => e.art);
+      expect(arten).toEqual(expect.arrayContaining(["tag_hinzugefuegt", "tag_entfernt", "dokument_hinzugefuegt"]));
+      const doc = h.body.find((e: { art: string }) => e.art === "dokument_hinzugefuegt");
+      expect(doc).toMatchObject({ dokumentName: "nachtrag.png", geaendertVonName: "Einrichtungsleitung S1 Test" });
+      expect(h.body.find((e: { art: string }) => e.art === "tag_entfernt").tagName).toBe("Spaeter");
+    });
+
+    it("Nicht-Autor darf Text nicht bearbeiten (403), bearbeitbar ist false", async () => {
+      const res = await als(tokenEinrichtungsleitungS1).patch(`/tagesberichte/${berichtId}`, { text: "Fremd." });
+      expect(res.status).toBe(403);
+      const liste = await als(tokenEinrichtungsleitungS1).get(`/tagesberichte?klientId=${klient1}`);
+      expect(liste.body.find((b: { id: string }) => b.id === berichtId).bearbeitbar).toBe(false);
+    });
+
+    it("lehnt Datum in der Zukunft, leeren Text und leere Anfrage mit 400 ab", async () => {
+      const morgen = new Date();
+      morgen.setUTCDate(morgen.getUTCDate() + 2);
+      const zukunft = await als(tokenBereichsleitung).patch(`/tagesberichte/${berichtId}`, {
+        datum: morgen.toISOString().slice(0, 10),
+      });
+      expect(zukunft.status).toBe(400);
+      expect((await als(tokenBereichsleitung).patch(`/tagesberichte/${berichtId}`, { text: "  " })).status).toBe(400);
+      expect((await als(tokenBereichsleitung).patch(`/tagesberichte/${berichtId}`, {})).status).toBe(400);
+    });
+
+    it("Mandantentrennung: anderer Mandant bekommt 404 auf Bearbeiten und Historie", async () => {
+      expect((await als(tokenBereichsleitungB).patch(`/tagesberichte/${berichtId}`, { text: "x" })).status).toBe(404);
+      expect((await als(tokenBereichsleitungB).get(`/tagesberichte/${berichtId}/historie`)).status).toBe(404);
+    });
+
+    it("Datenbank: Historie ist unveraenderlich, Autor/Klient sind nicht aenderbar", async () => {
+      const app_ = new Client({ connectionString: process.env.APP_DATABASE_URL });
+      await app_.connect();
+      try {
+        await app_.query("BEGIN");
+        await app_.query("SELECT set_config('app.mandant_id', $1, true)", [mandantId]);
+        await expect(app_.query("DELETE FROM tagesbericht_aenderung")).rejects.toThrow(/permission denied/);
+        await app_.query("ROLLBACK");
+        await app_.query("BEGIN");
+        await app_.query("SELECT set_config('app.mandant_id', $1, true)", [mandantId]);
+        await expect(app_.query("UPDATE tagesbericht SET klient_id = klient_id")).rejects.toThrow(/permission denied/);
+        await app_.query("ROLLBACK");
+      } finally {
+        await app_.end();
+      }
+    });
+
+    it("Datenbank: direkte Textaenderung ohne App-Code wird trotzdem protokolliert (Trigger)", async () => {
+      const app_ = new Client({ connectionString: process.env.APP_DATABASE_URL });
+      await app_.connect();
+      try {
+        await app_.query("BEGIN");
+        await app_.query("SELECT set_config('app.mandant_id', $1, true)", [mandantId]);
+        await app_.query("UPDATE tagesbericht SET text = 'Direkt.' WHERE id = $1", [berichtId]);
+        await app_.query("COMMIT");
+      } finally {
+        await app_.end();
+      }
+      const { rows } = await admin.query(
+        "SELECT text_alt, text_neu FROM tagesbericht_aenderung WHERE tagesbericht_id = $1 AND text_neu = 'Direkt.'",
+        [berichtId]
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].text_alt).toBe("Korrigierter Text.");
+    });
   });
 
   /**

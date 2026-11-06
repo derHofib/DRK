@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
@@ -29,6 +29,10 @@ const listeSchema = z
   })
   .refine((q) => !q.von || !q.bis || q.von <= q.bis, { message: "„von“ darf nicht nach „bis“ liegen." });
 
+const bearbeitenSchema = z
+  .object({ text: z.string().trim().min(1).optional(), datum: z.string().date().optional() })
+  .refine((b) => b.text !== undefined || b.datum !== undefined, { message: "Nichts zu ändern angegeben." });
+
 const tagHinzufuegenSchema = z.object({
   name: z.string().min(1),
 });
@@ -54,6 +58,20 @@ export class TagesberichtController {
   @Post("tagesberichte")
   async anlegen(@Body() body: unknown) {
     return this.tagesberichte.anlegen(anlegenSchema.parse(body));
+  }
+
+  @Patch("tagesberichte/:id")
+  async bearbeiten(@Param("id") id: string, @Body() body: unknown) {
+    const parsed = bearbeitenSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues.map((i) => i.message).join(" "));
+    }
+    return this.tagesberichte.bearbeiten(id, parsed.data);
+  }
+
+  @Get("tagesberichte/:id/historie")
+  async historie(@Param("id") id: string) {
+    return this.tagesberichte.historie(id);
   }
 
   @Post("tagesberichte/:id/tags")

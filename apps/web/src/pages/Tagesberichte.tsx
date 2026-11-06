@@ -1,5 +1,5 @@
 import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
-import type { KlientListEintragDto, TagDto, TagesberichtDto } from "@zimmerakte/shared";
+import type { KlientListEintragDto, TagDto, TagesberichtAenderungDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
 import { formatDatum, heuteBerlin } from "../format";
@@ -46,14 +46,21 @@ export function TagesberichtZeile({
   onTagEntfernen,
   onTagHinzufuegen,
   onDokumentHinzufuegen,
+  onGeaendert,
 }: {
   bericht: TagesberichtDto;
   zeigeKlient: boolean;
   onTagEntfernen: (tagId: string) => void;
   onTagHinzufuegen: (name: string) => void;
   onDokumentHinzufuegen: (base64: string, dateiname: string, mimeType: string) => void;
+  /** Nach erfolgreichem Bearbeiten: Liste neu laden. */
+  onGeaendert: () => void;
 }) {
   const [neuerTag, setNeuerTag] = useState("");
+  const [bearbeiten, setBearbeiten] = useState<{ text: string; datum: string } | null>(null);
+  const [bearbeitenFehler, setBearbeitenFehler] = useState<string | null>(null);
+  const [historie, setHistorie] = useState<TagesberichtAenderungDto[] | null>(null);
+  const [historieOffen, setHistorieOffen] = useState(false);
   const [offenesDokument, setOffenesDokument] = useState<{ id: string; url: string } | null>(null);
 
   async function dokumentAnzeigen(dokumentId: string) {
@@ -74,6 +81,29 @@ export function TagesberichtZeile({
     return () => URL.revokeObjectURL(url);
   }, [offenesDokument]);
 
+  // Neu laden, sobald eine weitere Aenderung protokolliert wurde (Tag, Dokument,
+  // Bearbeitung) -- sonst zeigt eine geoeffnete Historie veralteten Stand.
+  useEffect(() => {
+    if (!historieOffen) return;
+    api
+      .tagesberichtHistorie(bericht.id)
+      .then(setHistorie)
+      .catch(() => setHistorie([]));
+  }, [historieOffen, bericht.id, bericht.anzahlAenderungen]);
+
+  async function speichern(e: FormEvent) {
+    e.preventDefault();
+    if (!bearbeiten) return;
+    setBearbeitenFehler(null);
+    try {
+      await api.tagesberichtBearbeiten(bericht.id, { text: bearbeiten.text, datum: bearbeiten.datum });
+      setBearbeiten(null);
+      onGeaendert();
+    } catch (err) {
+      setBearbeitenFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht gespeichert werden.");
+    }
+  }
+
   async function dateiAusgewaehlt(e: ChangeEvent<HTMLInputElement>) {
     const datei = e.target.files?.[0];
     e.target.value = "";
@@ -91,8 +121,61 @@ export function TagesberichtZeile({
         </span>
       )}
       <span className="zv-liste-zelle" data-label="Bericht">
-        {bericht.text}
-        {bericht.autorName && <div className="zv-sub-inline">Verfasst von {bericht.autorName}</div>}
+        {bearbeiten ? (
+          <form onSubmit={speichern} style={{ display: "grid", gap: 8 }}>
+            <input
+              type="date"
+              value={bearbeiten.datum}
+              max={heuteBerlin()}
+              onChange={(e) => setBearbeiten({ ...bearbeiten, datum: e.target.value })}
+              aria-label="Datum des Tagesberichts"
+            />
+            <textarea
+              value={bearbeiten.text}
+              rows={4}
+              onChange={(e) => setBearbeiten({ ...bearbeiten, text: e.target.value })}
+              aria-label="Text des Tagesberichts"
+            />
+            {bearbeitenFehler && <div role="alert">{bearbeitenFehler}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="submit" disabled={!bearbeiten.text.trim() || !bearbeiten.datum}>
+                Speichern
+              </button>
+              <button type="button" onClick={() => setBearbeiten(null)}>
+                Abbrechen
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            {bericht.text}
+            {bericht.autorName && <div className="zv-sub-inline">Verfasst von {bericht.autorName}</div>}
+            <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+              {bericht.bearbeitbar && (
+                <button
+                  type="button"
+                  className="zv-link-btn"
+                  style={{ fontSize: "var(--zv-text-xs)" }}
+                  onClick={() => setBearbeiten({ text: bericht.text, datum: bericht.datum })}
+                >
+                  Bearbeiten
+                </button>
+              )}
+              {bericht.anzahlAenderungen > 0 && (
+                <button
+                  type="button"
+                  className="zv-link-btn"
+                  style={{ fontSize: "var(--zv-text-xs)" }}
+                  aria-expanded={historieOffen}
+                  onClick={() => setHistorieOffen((o) => !o)}
+                >
+                  Historie ({bericht.anzahlAenderungen})
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {historieOffen && historie && <AenderungsHistorie eintraege={historie} />}
       </span>
       <span className="zv-liste-zelle" data-label="Tags">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -175,6 +258,51 @@ export function TagesberichtZeile({
         )}
       </span>
     </div>
+  );
+}
+
+function zeitpunkt(iso: string): string {
+  const d = new Date(iso);
+  return `${formatDatum(new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(d))}, ${new Intl.DateTimeFormat(
+    "de-DE",
+    { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" }
+  ).format(d)} Uhr`;
+}
+
+/** Neueste Aenderung zuerst; "bearbeitet" zeigt den fruehere Text, nicht nur dass es eine Aenderung gab. */
+function AenderungsHistorie({ eintraege }: { eintraege: TagesberichtAenderungDto[] }) {
+  return (
+    <ul className="zv-sub-inline" style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 8 }}>
+      {eintraege.map((e) => {
+        const wer = e.geaendertVonName ?? "Unbekannt";
+        const kopf = `${zeitpunkt(e.geaendertAm)} · ${wer}`;
+        return (
+          <li key={e.id}>
+            <strong>{kopf}</strong>
+            <div>
+              {e.art === "tag_hinzugefuegt" && `Tag „${e.tagName}“ hinzugefügt`}
+              {e.art === "tag_entfernt" && `Tag „${e.tagName}“ entfernt`}
+              {e.art === "dokument_hinzugefuegt" && `Dokument „${e.dokumentName}“ hinzugefügt`}
+              {e.art === "bearbeitet" && (
+                <>
+                  {e.datumAlt !== e.datumNeu && (
+                    <div>
+                      Datum: {formatDatum(e.datumAlt ?? "")} → {formatDatum(e.datumNeu ?? "")}
+                    </div>
+                  )}
+                  {e.textAlt !== e.textNeu && (
+                    <>
+                      <div>Früherer Text:</div>
+                      <blockquote style={{ margin: "2px 0", whiteSpace: "pre-wrap" }}>{e.textAlt}</blockquote>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -625,6 +753,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
                   onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
                   onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
                   onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
+                  onGeaendert={laden}
                 />
               ))}
             </div>

@@ -569,6 +569,21 @@ export interface TagesberichtDto {
   text: string;
   tags: TagDto[];
   dokumente: TagesberichtDokumentDto[];
+  anzahlAenderungen: number;
+  bearbeitbar: boolean;
+}
+
+export interface TagesberichtAenderungDto {
+  id: string;
+  art: "bearbeitet" | "tag_hinzugefuegt" | "tag_entfernt" | "dokument_hinzugefuegt";
+  geaendertAm: string;
+  geaendertVonName: string | null;
+  textAlt: string | null;
+  textNeu: string | null;
+  datumAlt: string | null;
+  datumNeu: string | null;
+  tagName: string | null;
+  dokumentName: string | null;
 }
 
 export type AufgabePrioritaet = "niedrig" | "normal" | "hoch";

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { heuteBerlin } from "../common/heute";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
@@ -24,6 +24,19 @@ export interface TagesberichtDokumentDto {
   erstelltAm: string;
 }
 
+export interface TagesberichtAenderungDto {
+  id: string;
+  art: "bearbeitet" | "tag_hinzugefuegt" | "tag_entfernt" | "dokument_hinzugefuegt";
+  geaendertAm: string;
+  geaendertVonName: string | null;
+  textAlt: string | null;
+  textNeu: string | null;
+  datumAlt: string | null;
+  datumNeu: string | null;
+  tagName: string | null;
+  dokumentName: string | null;
+}
+
 export interface TagesberichtDto {
   id: string;
   klientId: string;
@@ -35,11 +48,16 @@ export interface TagesberichtDto {
   text: string;
   tags: TagDto[];
   dokumente: TagesberichtDokumentDto[];
+  /** Anzahl protokollierter nachtraeglicher Aenderungen (Details: /historie). */
+  anzahlAenderungen: number;
+  /** Nur der Autor darf den Text/das Datum aendern. */
+  bearbeitbar: boolean;
 }
 
 const AUSWAHL = `
   SELECT
-    t.id, t.klient_id, k.vorname, k.nachname, b.name AS autor_name, t.datum, t.text,
+    t.id, t.klient_id, k.vorname, k.nachname, b.name AS autor_name, t.datum, t.text, t.autor_id,
+    (SELECT count(*)::int FROM tagesbericht_aenderung a WHERE a.tagesbericht_id = t.id) AS anzahl_aenderungen,
     COALESCE(
       json_agg(DISTINCT jsonb_build_object('id', tag.id, 'name', tag.name)) FILTER (WHERE tag.id IS NOT NULL),
       '[]'
@@ -100,7 +118,7 @@ export class TagesberichtService {
          ORDER BY t.datum DESC, t.erstellt_am DESC`,
         params
       );
-      return rows.map(zuDto);
+      return rows.map((r) => zuDto(r, ctx.benutzerId));
     });
   }
 
@@ -137,7 +155,71 @@ export class TagesberichtService {
       for (const dokument of input.dokumente ?? []) {
         await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
       }
-      return ladeEinen(client, tagesberichtId);
+      return ladeEinen(client, tagesberichtId, benutzerId);
+    });
+  }
+
+  /**
+   * Nur der Autor darf Text und Datum aendern: die Historie nennt, wer
+   * bearbeitet hat, und fremde Berichte still umzuschreiben waere genau das,
+   * was die Nachvollziehbarkeit verhindern soll. Die Historie selbst schreibt
+   * ein Trigger (Migration 0069), nicht dieser Code.
+   */
+  async bearbeiten(tagesberichtId: string, input: { text?: string; datum?: string }): Promise<TagesberichtDto> {
+    const { benutzerId } = requireTenantContext();
+    if (input.datum !== undefined && input.datum > heuteBerlin()) {
+      throw new BadRequestException("Ein Tagesbericht darf nicht in der Zukunft liegen.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{ klient_id: string; autor_id: string | null }>(
+        "SELECT klient_id, autor_id FROM tagesbericht WHERE id = $1",
+        [tagesberichtId]
+      );
+      if (!rows[0] || !(await klientIstErlaubt(client, benutzerId, rows[0].klient_id))) {
+        throw new NotFoundException("Tagesbericht nicht gefunden.");
+      }
+      if (await klientIstArchiviert(client, rows[0].klient_id)) {
+        throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
+      }
+      if (rows[0].autor_id !== benutzerId) {
+        throw new ForbiddenException("Nur die Autorin bzw. der Autor darf diesen Tagesbericht bearbeiten.");
+      }
+      await client.query(
+        "UPDATE tagesbericht SET text = COALESCE($2, text), datum = COALESCE($3::date, datum) WHERE id = $1",
+        [tagesberichtId, input.text ?? null, input.datum ?? null]
+      );
+      return ladeEinen(client, tagesberichtId, benutzerId);
+    });
+  }
+
+  async historie(tagesberichtId: string): Promise<TagesberichtAenderungDto[]> {
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const klientId = await klientIdDesBerichts(client, tagesberichtId);
+      if (!klientId || !(await klientIstErlaubt(client, benutzerId, klientId))) {
+        throw new NotFoundException("Tagesbericht nicht gefunden.");
+      }
+      const { rows } = await client.query(
+        `SELECT a.id, a.art, a.geaendert_am, b.name AS von, a.text_alt, a.text_neu,
+                a.datum_alt, a.datum_neu, a.tag_name, a.dokument_name
+         FROM tagesbericht_aenderung a
+         LEFT JOIN benutzer b ON b.id = a.geaendert_von
+         WHERE a.tagesbericht_id = $1
+         ORDER BY a.geaendert_am DESC`,
+        [tagesberichtId]
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        art: r.art,
+        geaendertAm: r.geaendert_am instanceof Date ? r.geaendert_am.toISOString() : r.geaendert_am,
+        geaendertVonName: r.von,
+        textAlt: r.text_alt,
+        textNeu: r.text_neu,
+        datumAlt: r.datum_alt,
+        datumNeu: r.datum_neu,
+        tagName: r.tag_name,
+        dokumentName: r.dokument_name,
+      }));
     });
   }
 
@@ -162,7 +244,7 @@ export class TagesberichtService {
         throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
-      return ladeEinen(client, tagesberichtId);
+      return ladeEinen(client, tagesberichtId, benutzerId);
     });
   }
 
@@ -208,7 +290,7 @@ export class TagesberichtService {
         throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
       }
       await tagZuweisen(client, mandantId, tagesberichtId, name);
-      return ladeEinen(client, tagesberichtId);
+      return ladeEinen(client, tagesberichtId, benutzerId);
     });
   }
 
@@ -286,15 +368,15 @@ async function dokumentSpeichern(
   );
 }
 
-async function ladeEinen(client: PoolClient, id: string): Promise<TagesberichtDto> {
+async function ladeEinen(client: PoolClient, id: string, benutzerId: string): Promise<TagesberichtDto> {
   const { rows } = await client.query(
     `${AUSWAHL} WHERE t.id = $1 GROUP BY t.id, k.vorname, k.nachname, b.name`,
     [id]
   );
-  return zuDto(rows[0]);
+  return zuDto(rows[0], benutzerId);
 }
 
-function zuDto(r: any): TagesberichtDto {
+function zuDto(r: any, benutzerId: string): TagesberichtDto {
   return {
     id: r.id,
     klientId: r.klient_id,
@@ -305,5 +387,7 @@ function zuDto(r: any): TagesberichtDto {
     text: r.text,
     tags: r.tags,
     dokumente: r.dokumente,
+    anzahlAenderungen: r.anzahl_aenderungen,
+    bearbeitbar: r.autor_id !== null && r.autor_id === benutzerId,
   };
 }

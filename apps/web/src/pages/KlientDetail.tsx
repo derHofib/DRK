@@ -1958,6 +1958,7 @@ function TagesberichteTab({
               onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
               onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
               onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
+              onGeaendert={laden}
             />
           ))}
         </div>
