@@ -3330,6 +3330,87 @@ li:last-child > .zv-kontakt-zeile,
   background: var(--zv-text-faint);
 }
 
+.zv-kal-umschalter {
+  display: flex;
+  margin-bottom: var(--zv-space-3);
+}
+
+/* Jahresansicht: zwoelf Monate als Miniaturen. Die Tageszellen sind bewusst
+   keine Buttons (zu klein fuer ein sauberes Tippziel); angesprungen wird ueber
+   den Monatsnamen, der als 44-px-Knopf ausgelegt ist. */
+.zv-kal-jahr {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-mini {
+  min-width: 0;
+  padding: var(--zv-space-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-kal-mini.heute {
+  border-color: var(--zv-accent);
+}
+
+.zv-kal-mini-titel {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.zv-kal-mini-titel:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-mini-raster {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  text-align: center;
+  font-size: var(--zv-text-xs);
+}
+
+.zv-kal-mini-kopf {
+  color: var(--zv-text-muted);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-kal-mini-tag {
+  padding: 2px 0;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text);
+}
+
+.zv-kal-mini-tag.belegt {
+  background: var(--zv-accent-soft);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-kal-mini-tag.abgesagt {
+  color: var(--zv-text-muted);
+  text-decoration: line-through;
+}
+
+.zv-kal-mini-tag.heute {
+  outline: 1px solid var(--zv-accent);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
 .zv-kal-listenkopf {
   display: flex;
   flex-wrap: wrap;
