@@ -562,6 +562,8 @@ export interface TagesberichtDto {
   id: string;
   klientId: string;
   klientName: string;
+  /** "Nachname, Vorname" -- Sortierschluessel fuer die Uebersicht. */
+  klientSortierName: string;
   autorName: string | null;
   datum: string;
   text: string;

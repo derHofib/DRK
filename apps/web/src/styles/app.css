@@ -5043,3 +5043,30 @@ button[class],
     min-height: 40px;
   }
 }
+
+/* ==================================================================
+   Tagesberichte: Filterleiste und Klient-Gruppen
+   ================================================================== */
+.zv-filterleiste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+/* Die Schnellwahl hat sechs Eintraege: auf schmalen Bildschirmen muss sie
+   umbrechen statt die Seite aufzureissen. */
+.zv-filterleiste .zv-segmented {
+  flex-wrap: wrap;
+  align-self: flex-start;
+}
+
+.zv-gruppe {
+  display: contents;
+}
+
+.zv-gruppe-kopf {
+  margin: var(--zv-space-4) 0 var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  color: var(--zv-text);
+}

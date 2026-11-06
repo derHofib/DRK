@@ -621,8 +621,12 @@ export const api = {
     request<RechnungDto>(`/rechnungen/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, grund }) }),
   rechnungDokumentUrl: (rechnungId: string) => blobUrl(`/rechnungen/${rechnungId}/dokument`),
 
-  tagesberichteListe: (klientId?: string) =>
-    request<TagesberichtDto[]>(`/tagesberichte${klientId ? `?klientId=${klientId}` : ""}`),
+  tagesberichteListe: (filter: { klientId?: string; von?: string; bis?: string } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v) q.set(k, v);
+    const qs = q.toString();
+    return request<TagesberichtDto[]>(`/tagesberichte${qs ? `?${qs}` : ""}`);
+  },
   tagesberichtAnlegen: (payload: {
     klientId: string;
     datum: string;

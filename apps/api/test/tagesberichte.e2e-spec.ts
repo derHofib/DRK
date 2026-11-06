@@ -197,6 +197,22 @@ describe("Tagesberichte", () => {
     expect(res.body.every((t: { klientId: string }) => t.klientId === klient1)).toBe(true);
   });
 
+  it("Zeitraum: von/bis grenzen inklusiv ein, ungueltige Angaben ergeben 400", async () => {
+    for (const datum of ["2026-03-01", "2026-03-15", "2026-03-31", "2026-04-01"]) {
+      await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient1, datum, text: `Zeitraum ${datum}` });
+    }
+    const res = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}&von=2026-03-01&bis=2026-03-31`);
+    expect(res.status).toBe(200);
+    const daten = res.body.map((t: { datum: string }) => t.datum).sort();
+    expect(daten).toEqual(["2026-03-01", "2026-03-15", "2026-03-31"]);
+
+    const nurVon = await als(tokenBereichsleitung).get(`/tagesberichte?klientId=${klient1}&von=2026-04-01`);
+    expect(nurVon.body.every((t: { datum: string }) => t.datum >= "2026-04-01")).toBe(true);
+
+    expect((await als(tokenBereichsleitung).get("/tagesberichte?von=kein-datum")).status).toBe(400);
+    expect((await als(tokenBereichsleitung).get("/tagesberichte?von=2026-05-02&bis=2026-05-01")).status).toBe(400);
+  });
+
   it("wiederverwendet einen bestehenden Tag mit demselben Namen statt einen Duplikat-Tag anzulegen", async () => {
     const erster = await als(tokenBereichsleitung).post("/tagesberichte", {
       klientId: klient1,

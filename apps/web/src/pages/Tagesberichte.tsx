@@ -1,10 +1,19 @@
-import { ChangeEvent, CSSProperties, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import type { KlientListEintragDto, TagDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
 import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
+import {
+  SCHNELLWAHL_LABEL,
+  SORTIERUNG_LABEL,
+  gruppiereNachKlient,
+  sortiere,
+  zeitraumFuer,
+  type Schnellwahl,
+  type Sortierung,
+} from "./tagesberichte-filter";
 import { IAbbrechen, IDokument, IFehler, ILeerTagesberichte, INeu, ISpeichern, ITag } from "../components/icons";
 
 /**
@@ -171,15 +180,50 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   const [formularOffen, setFormularOffen] = useState(Boolean(startKlientId));
   const [formFehler, setFormFehler] = useState<string | null>(null);
 
+  // Zeitraum wird serverseitig gefiltert (kann ueber Jahre gross werden);
+  // Klient-Filter und Sortierung arbeiten auf der geladenen Liste, damit sie
+  // ohne Nachladen sofort reagieren.
+  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>("alle");
+  const [von, setVon] = useState("");
+  const [bis, setBis] = useState("");
+  const [klientFilter, setKlientFilter] = useState("");
+  const [sortierung, setSortierung] = useState<Sortierung>("datum-neu");
+
   function laden() {
-    api.tagesberichteListe().then(setBerichte).catch((err) => setFehler(err.message));
+    api
+      .tagesberichteListe({ von, bis })
+      .then((liste) => {
+        setBerichte(liste);
+        setFehler(null);
+      })
+      .catch((err) => setFehler(err.message));
     api.tagsListe().then(setTagVorschlaege).catch(() => {});
   }
 
   useEffect(() => {
+    if (von && bis && von > bis) return;
     laden();
+  }, [von, bis]);
+
+  useEffect(() => {
     api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
   }, []);
+
+  function schnellwahlWaehlen(wahl: Schnellwahl) {
+    const z = zeitraumFuer(wahl);
+    setSchnellwahl(wahl);
+    setVon(z.von);
+    setBis(z.bis);
+  }
+
+  const zeitraumUngueltig = Boolean(von && bis && von > bis);
+  const sichtbar = useMemo(
+    () => sortiere(klientFilter ? berichte.filter((b) => b.klientId === klientFilter) : berichte, sortierung),
+    [berichte, klientFilter, sortierung]
+  );
+  const nachKlientSortiert = sortierung === "klient-az" || sortierung === "klient-za";
+  const gruppen = useMemo(() => (nachKlientSortiert ? gruppiereNachKlient(sichtbar) : []), [sichtbar, nachKlientSortiert]);
+  const filterAktiv = Boolean(von || bis || klientFilter);
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -314,24 +358,117 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
 
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
 
-      {berichte.length === 0 ? (
-        <Leerzustand
-          icon={ILeerTagesberichte}
-          aktion={
+      <div className="zv-filterleiste" role="search" aria-label="Tagesberichte filtern und sortieren">
+        <div className="zv-segmented" role="group" aria-label="Schnellwahl Zeitraum">
+          {(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => (
             <button
+              key={w}
               type="button"
-              className="zv-btn zv-btn-sekundaer"
-              onClick={() => {
-                setFormFehler(null);
-                setFormularOffen(true);
-              }}
+              className={schnellwahl === w ? "active" : undefined}
+              aria-pressed={schnellwahl === w}
+              onClick={() => schnellwahlWaehlen(w)}
             >
-              Tagesbericht schreiben
+              {SCHNELLWAHL_LABEL[w]}
             </button>
-          }
-        >
-          Noch keine Tagesberichte erfasst.
-        </Leerzustand>
+          ))}
+        </div>
+        <div className="zv-field-row">
+          <div className="zv-field">
+            <label htmlFor="tb-von">Von</label>
+            <input
+              id="tb-von"
+              type="date"
+              value={von}
+              max={bis || undefined}
+              onChange={(e) => {
+                setSchnellwahl(null);
+                setVon(e.target.value);
+              }}
+            />
+          </div>
+          <div className="zv-field">
+            <label htmlFor="tb-bis">Bis</label>
+            <input
+              id="tb-bis"
+              type="date"
+              value={bis}
+              min={von || undefined}
+              onChange={(e) => {
+                setSchnellwahl(null);
+                setBis(e.target.value);
+              }}
+            />
+          </div>
+          <div className="zv-field">
+            <label htmlFor="tb-klient">Klient:in</label>
+            <select id="tb-klient" value={klientFilter} onChange={(e) => setKlientFilter(e.target.value)}>
+              <option value="">Alle Klient:innen</option>
+              {klienten.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.vorname} {k.nachname}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="zv-field">
+            <label htmlFor="tb-sort">Sortierung</label>
+            <select id="tb-sort" value={sortierung} onChange={(e) => setSortierung(e.target.value as Sortierung)}>
+              {(Object.keys(SORTIERUNG_LABEL) as Sortierung[]).map((o) => (
+                <option key={o} value={o}>
+                  {SORTIERUNG_LABEL[o]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {zeitraumUngueltig && (
+          <div className="zv-hinweis zv-hinweis-fehler">
+            <IFehler />
+            „Von“ liegt nach „Bis“ – bitte den Zeitraum korrigieren.
+          </div>
+        )}
+        <div className="zv-sub-inline" aria-live="polite">
+          {sichtbar.length} {sichtbar.length === 1 ? "Bericht" : "Berichte"}
+          {filterAktiv && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="zv-link-btn"
+                onClick={() => {
+                  schnellwahlWaehlen("alle");
+                  setKlientFilter("");
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {sichtbar.length === 0 ? (
+        filterAktiv ? (
+          <Leerzustand icon={ILeerTagesberichte}>Keine Tagesberichte für diese Auswahl.</Leerzustand>
+        ) : (
+          <Leerzustand
+            icon={ILeerTagesberichte}
+            aktion={
+              <button
+                type="button"
+                className="zv-btn zv-btn-sekundaer"
+                onClick={() => {
+                  setFormFehler(null);
+                  setFormularOffen(true);
+                }}
+              >
+                Tagesbericht schreiben
+              </button>
+            }
+          >
+            Noch keine Tagesberichte erfasst.
+          </Leerzustand>
+        )
       ) : (
         <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.1fr 1fr 2.6fr 1.5fr 1.5fr" } as CSSProperties}>
           <div className="zv-liste-kopf">
@@ -341,15 +478,24 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
             <span>Tags</span>
             <span>Dokumente</span>
           </div>
-          {berichte.map((b) => (
-            <TagesberichtZeile
-              key={b.id}
-              bericht={b}
-              zeigeKlient
-              onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
-              onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
-              onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
-            />
+          {(nachKlientSortiert ? gruppen : [{ klientId: "", klientName: "", berichte: sichtbar }]).map((g) => (
+            <div key={g.klientId || "alle"} className="zv-gruppe">
+              {nachKlientSortiert && (
+                <h3 className="zv-gruppe-kopf">
+                  {g.klientName} <span className="zv-sub-inline">({g.berichte.length})</span>
+                </h3>
+              )}
+              {g.berichte.map((b) => (
+                <TagesberichtZeile
+                  key={b.id}
+                  bericht={b}
+                  zeigeKlient
+                  onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
+                  onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
+                  onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

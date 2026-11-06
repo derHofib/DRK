@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
@@ -19,6 +19,16 @@ const anlegenSchema = z.object({
   dokumente: z.array(dokumentSchema).optional(),
 });
 
+// Zeitraum als geschlossenes Intervall [von, bis]; beide Grenzen optional.
+// Kein globaler ZodError-Filter: sonst wird ein kaputtes Datum zum 500er.
+const listeSchema = z
+  .object({
+    klientId: z.string().uuid().optional(),
+    von: z.string().date().optional(),
+    bis: z.string().date().optional(),
+  })
+  .refine((q) => !q.von || !q.bis || q.von <= q.bis, { message: "„von“ darf nicht nach „bis“ liegen." });
+
 const tagHinzufuegenSchema = z.object({
   name: z.string().min(1),
 });
@@ -29,8 +39,16 @@ export class TagesberichtController {
   constructor(private readonly tagesberichte: TagesberichtService) {}
 
   @Get("tagesberichte")
-  async list(@Query("klientId") klientId?: string) {
-    return this.tagesberichte.findeAlle(klientId);
+  async list(@Query() query: Record<string, unknown>) {
+    const parsed = listeSchema.safeParse({
+      klientId: query.klientId || undefined,
+      von: query.von || undefined,
+      bis: query.bis || undefined,
+    });
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues.map((i) => i.message).join(" "));
+    }
+    return this.tagesberichte.findeAlle(parsed.data.klientId, { von: parsed.data.von, bis: parsed.data.bis });
   }
 
   @Post("tagesberichte")

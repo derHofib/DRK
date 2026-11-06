@@ -88,7 +88,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   useEffect(laden, [klientId]);
 
   const berichteLaden = useCallback(() => {
-    api.tagesberichteListe(klientId).then(setBerichte).catch(() => setBerichte([]));
+    api.tagesberichteListe({ klientId }).then(setBerichte).catch(() => setBerichte([]));
   }, [klientId]);
   useEffect(berichteLaden, [berichteLaden, tab]);
 
@@ -1812,7 +1812,7 @@ function TagesberichteTab({
   }, [startMitFormular, onFormularGenutzt]);
 
   function laden() {
-    api.tagesberichteListe(klientId).then(setBerichte).catch((err) => setFehler(err.message));
+    api.tagesberichteListe({ klientId }).then(setBerichte).catch((err) => setFehler(err.message));
     api.tagsListe().then(setTagVorschlaege).catch(() => {});
   }
 

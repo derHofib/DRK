@@ -27,6 +27,8 @@ export interface TagesberichtDto {
   id: string;
   klientId: string;
   klientName: string;
+  /** "Nachname, Vorname" -- Sortierschluessel fuer die Uebersicht. */
+  klientSortierName: string;
   autorName: string | null;
   datum: string;
   text: string;
@@ -69,7 +71,7 @@ export class TagesberichtService {
    * klientStandortBedingung: ein standortbeschraenkter Betreuer sieht
    * auch im allgemeinen Menuepunkt nur Berichte "ihrer" Klient:innen.
    */
-  async findeAlle(klientId?: string): Promise<TagesberichtDto[]> {
+  async findeAlle(klientId?: string, zeitraum: { von?: string; bis?: string } = {}): Promise<TagesberichtDto[]> {
     const ctx = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const erlaubteStandorte = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
@@ -79,6 +81,14 @@ export class TagesberichtService {
       if (klientId) {
         params.push(klientId);
         bedingungen.push(`t.klient_id = $${params.length}`);
+      }
+      if (zeitraum.von) {
+        params.push(zeitraum.von);
+        bedingungen.push(`t.datum >= $${params.length}`);
+      }
+      if (zeitraum.bis) {
+        params.push(zeitraum.bis);
+        bedingungen.push(`t.datum <= $${params.length}`);
       }
       bedingungen.push(klientStandortBedingung(erlaubteStandorte, "k", params));
 
@@ -283,6 +293,7 @@ function zuDto(r: any): TagesberichtDto {
     id: r.id,
     klientId: r.klient_id,
     klientName: `${r.vorname} ${r.nachname}`,
+    klientSortierName: `${r.nachname}, ${r.vorname}`,
     autorName: r.autor_name,
     datum: r.datum,
     text: r.text,
