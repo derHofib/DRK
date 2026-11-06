@@ -5148,6 +5148,202 @@ button[class],
 
 .zv-gruppe-kopf {
   margin: var(--zv-space-4) 0 var(--zv-space-2);
+  padding: 0 var(--zv-space-4);
   font-size: var(--zv-text-m);
   color: var(--zv-text);
+}
+
+/* ---- Filterleiste im Stil "Suche + Chips + Dropdown-Pillen" ---- */
+.zv-filterleiste {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  /* Auf dem Handy scrollt die Leiste waagerecht, statt in viele Zeilen zu
+     brechen und die Liste nach unten zu druecken. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.zv-filterleiste > * {
+  flex: 0 0 auto;
+}
+
+.zv-filter-suche {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 200px;
+  min-height: 36px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-suche:focus-within {
+  border-color: var(--zv-accent);
+  box-shadow: 0 0 0 3px var(--zv-accent-soft, transparent);
+}
+
+.zv-filter-suche svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zv-filter-suche input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--zv-text);
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+}
+
+.zv-filter-pille {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+}
+
+.zv-filter-pille-knopf,
+.zv-filter-x {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 34px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-filter-pille-knopf svg {
+  width: 16px;
+  height: 16px;
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-pille:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-filter-pille.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft, var(--zv-surface-2));
+}
+
+.zv-filter-pille.aktiv .zv-filter-pille-knopf svg {
+  color: var(--zv-accent-strong);
+}
+
+.zv-filter-x {
+  padding: 0 var(--zv-space-2);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-x:hover {
+  color: var(--zv-text);
+}
+
+.zv-filter-wert {
+  color: var(--zv-text-muted);
+}
+
+/* "+ Filter": gleiche Huelle wie die Pillen, nur der Knopf selbst. */
+.zv-filter-plus {
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+}
+
+.zv-filter-trenner {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--zv-space-1) 0;
+  background: var(--zv-border);
+}
+
+.zv-filter-popover {
+  position: fixed;
+  z-index: 45;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-filter-liste {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.zv-filter-liste button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  min-height: 36px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text);
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-filter-liste button:hover,
+.zv-filter-liste button:focus-visible {
+  background: var(--zv-surface-2);
+}
+
+.zv-filter-liste button[aria-selected="true"] {
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-filter-datumsfelder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+
+@media (max-width: 720px) {
+  .zv-filter-pille-knopf,
+  .zv-filter-suche {
+    min-height: 44px;
+  }
+  .zv-filter-pille {
+    min-height: 44px;
+  }
+}
+
+.zv-filter-leer {
+  padding: var(--zv-space-3);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-m);
 }

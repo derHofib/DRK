@@ -36,6 +36,9 @@ import {
   CalendarX2,
   Check,
   ChevronDown,
+  ArrowUpDown,
+  FilterX,
+  User,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -257,6 +260,9 @@ export const IPrioritaetNiedrig = baue(SignalLow);
 
 /* Richtungen */
 export const IAufklappen = baue(ChevronDown);
+export const ISortierung = baue(ArrowUpDown);
+export const IFilterLoeschen = baue(FilterX);
+export const IPerson = baue(User);
 export const IZuklappen = baue(ChevronUp);
 export const IVor = baue(ChevronRight);
 export const IZurueckPfeil = baue(ChevronLeft);

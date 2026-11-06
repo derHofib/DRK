@@ -12,7 +12,20 @@ import { IMehrAktionen } from "./icons";
  * Ein Klick auf einen Eintrag schliesst das Menue; die Aktionen selbst
  * oeffnen ihre eigenen Dialoge.
  */
-export function AktionsMenue({ label, children }: { label: string; children: ReactNode }) {
+export function AktionsMenue({
+  label,
+  children,
+  variante,
+  beschriftung,
+  icon,
+}: {
+  label: string;
+  children: ReactNode;
+  /** "pille": beschrifteter Knopf im Stil der Filterleiste statt Drei-Punkte-Icon. */
+  variante?: "pille";
+  beschriftung?: string;
+  icon?: ReactNode;
+}) {
   const [pos, setPos] = useState<{ top: number; right: number; hoch: boolean } | null>(null);
   const knopf = useRef<HTMLButtonElement>(null);
   const menue = useRef<HTMLDivElement>(null);
@@ -61,13 +74,20 @@ export function AktionsMenue({ label, children }: { label: string; children: Rea
       <button
         ref={knopf}
         type="button"
-        className="zv-icon-btn"
+        className={variante === "pille" ? "zv-filter-pille zv-filter-pille-knopf zv-filter-plus" : "zv-icon-btn"}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={offen}
         onClick={umschalten}
       >
-        <IMehrAktionen />
+        {variante === "pille" ? (
+          <>
+            {icon}
+            {beschriftung}
+          </>
+        ) : (
+          <IMehrAktionen />
+        )}
       </button>
       {pos && (
         <div

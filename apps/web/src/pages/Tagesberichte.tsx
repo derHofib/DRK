@@ -14,7 +14,23 @@ import {
   type Schnellwahl,
   type Sortierung,
 } from "./tagesberichte-filter";
-import { IAbbrechen, IDokument, IFehler, ILeerTagesberichte, INeu, ISpeichern, ITag } from "../components/icons";
+import {
+  IAbbrechen,
+  IDokument,
+  IFehler,
+  IFilterLoeschen,
+  IKalender,
+  IKlienten,
+  ILeerTagesberichte,
+  INeu,
+  IPerson,
+  ISortierung,
+  ISpeichern,
+  ISuche,
+  ITag,
+} from "../components/icons";
+import { FilterAuswahl, FilterPille } from "../components/Filterleiste";
+import { AktionsMenue } from "../components/AktionsMenue";
 
 /**
  * Zeile eines Tagesberichts -- wird sowohl vom allgemeinen Menuepunkt hier
@@ -188,6 +204,12 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   const [bis, setBis] = useState("");
   const [klientFilter, setKlientFilter] = useState("");
   const [sortierung, setSortierung] = useState<Sortierung>("datum-neu");
+  const [suche, setSuche] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [autorFilter, setAutorFilter] = useState("");
+  // Tag- und Autor-Filter sind Zusatzfilter: erst ueber "+ Filter" sichtbar,
+  // damit die Leiste im Normalfall schmal bleibt.
+  const [zusatz, setZusatz] = useState<{ tag: boolean; autor: boolean }>({ tag: false, autor: false });
 
   function laden() {
     api
@@ -217,13 +239,43 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   }
 
   const zeitraumUngueltig = Boolean(von && bis && von > bis);
-  const sichtbar = useMemo(
-    () => sortiere(klientFilter ? berichte.filter((b) => b.klientId === klientFilter) : berichte, sortierung),
-    [berichte, klientFilter, sortierung]
+  const sichtbar = useMemo(() => {
+    const q = suche.trim().toLocaleLowerCase("de");
+    const gefiltert = berichte.filter(
+      (b) =>
+        (!klientFilter || b.klientId === klientFilter) &&
+        (!tagFilter || b.tags.some((t) => t.name === tagFilter)) &&
+        (!autorFilter || b.autorName === autorFilter) &&
+        (!q ||
+          [b.text, b.klientName, b.autorName ?? "", ...b.tags.map((t) => t.name)].some((f) =>
+            f.toLocaleLowerCase("de").includes(q)
+          ))
+    );
+    return sortiere(gefiltert, sortierung);
+  }, [berichte, klientFilter, tagFilter, autorFilter, suche, sortierung]);
+  const tagOptionen = useMemo(
+    () => [...new Set(berichte.flatMap((b) => b.tags.map((t) => t.name)))].sort((a, b) => a.localeCompare(b, "de")),
+    [berichte]
   );
+  const autorOptionen = useMemo(
+    () => [...new Set(berichte.map((b) => b.autorName).filter((a): a is string => Boolean(a)))].sort((a, b) => a.localeCompare(b, "de")),
+    [berichte]
+  );
+  const zeitraumText = schnellwahl
+    ? SCHNELLWAHL_LABEL[schnellwahl]
+    : [von && formatDatum(von), bis && formatDatum(bis)].filter(Boolean).join(" – ") || null;
+  const klientText = klienten.find((k) => k.id === klientFilter);
+  function alleZuruecksetzen() {
+    schnellwahlWaehlen("alle");
+    setKlientFilter("");
+    setTagFilter("");
+    setAutorFilter("");
+    setSuche("");
+    setZusatz({ tag: false, autor: false });
+  }
   const nachKlientSortiert = sortierung === "klient-az" || sortierung === "klient-za";
   const gruppen = useMemo(() => (nachKlientSortiert ? gruppiereNachKlient(sichtbar) : []), [sichtbar, nachKlientSortiert]);
-  const filterAktiv = Boolean(von || bis || klientFilter);
+  const filterAktiv = Boolean(von || bis || klientFilter || tagFilter || autorFilter || suche.trim());
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -359,92 +411,168 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
 
       <div className="zv-filterleiste" role="search" aria-label="Tagesberichte filtern und sortieren">
-        <div className="zv-segmented" role="group" aria-label="Schnellwahl Zeitraum">
-          {(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => (
-            <button
-              key={w}
-              type="button"
-              className={schnellwahl === w ? "active" : undefined}
-              aria-pressed={schnellwahl === w}
-              onClick={() => schnellwahlWaehlen(w)}
-            >
-              {SCHNELLWAHL_LABEL[w]}
-            </button>
-          ))}
-        </div>
-        <div className="zv-field-row">
-          <div className="zv-field">
-            <label htmlFor="tb-von">Von</label>
-            <input
-              id="tb-von"
-              type="date"
-              value={von}
-              max={bis || undefined}
-              onChange={(e) => {
-                setSchnellwahl(null);
-                setVon(e.target.value);
-              }}
-            />
-          </div>
-          <div className="zv-field">
-            <label htmlFor="tb-bis">Bis</label>
-            <input
-              id="tb-bis"
-              type="date"
-              value={bis}
-              min={von || undefined}
-              onChange={(e) => {
-                setSchnellwahl(null);
-                setBis(e.target.value);
-              }}
-            />
-          </div>
-          <div className="zv-field">
-            <label htmlFor="tb-klient">Klient:in</label>
-            <select id="tb-klient" value={klientFilter} onChange={(e) => setKlientFilter(e.target.value)}>
-              <option value="">Alle Klient:innen</option>
-              {klienten.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.vorname} {k.nachname}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="zv-field">
-            <label htmlFor="tb-sort">Sortierung</label>
-            <select id="tb-sort" value={sortierung} onChange={(e) => setSortierung(e.target.value as Sortierung)}>
-              {(Object.keys(SORTIERUNG_LABEL) as Sortierung[]).map((o) => (
-                <option key={o} value={o}>
-                  {SORTIERUNG_LABEL[o]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {zeitraumUngueltig && (
-          <div className="zv-hinweis zv-hinweis-fehler">
-            <IFehler />
-            „Von“ liegt nach „Bis“ – bitte den Zeitraum korrigieren.
-          </div>
-        )}
-        <div className="zv-sub-inline" aria-live="polite">
-          {sichtbar.length} {sichtbar.length === 1 ? "Bericht" : "Berichte"}
-          {filterAktiv && (
+        <label className="zv-filter-suche">
+          <ISuche />
+          <input
+            type="search"
+            value={suche}
+            onChange={(e) => setSuche(e.target.value)}
+            placeholder="Suchen…"
+            aria-label="Tagesberichte durchsuchen"
+          />
+        </label>
+
+        <FilterPille
+          icon={<IKalender />}
+          label="Zeitraum"
+          wert={von || bis ? (zeitraumText ? `: ${zeitraumText}` : "") : null}
+          onEntfernen={() => schnellwahlWaehlen("alle")}
+        >
+          {(schliessen) => (
             <>
-              {" · "}
-              <button
-                type="button"
-                className="zv-link-btn"
-                onClick={() => {
-                  schnellwahlWaehlen("alle");
-                  setKlientFilter("");
+              <FilterAuswahl
+                optionen={(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => ({ wert: w, label: SCHNELLWAHL_LABEL[w] }))}
+                gewaehlt={schnellwahl}
+                onWaehlen={(w) => {
+                  schnellwahlWaehlen(w);
+                  schliessen();
                 }}
-              >
-                Filter zurücksetzen
-              </button>
+              />
+              <div className="zv-filter-datumsfelder">
+                <div className="zv-field">
+                  <label htmlFor="tb-von">Von</label>
+                  <input
+                    id="tb-von"
+                    type="date"
+                    value={von}
+                    max={bis || undefined}
+                    onChange={(e) => {
+                      setSchnellwahl(null);
+                      setVon(e.target.value);
+                    }}
+                  />
+                </div>
+                <div className="zv-field">
+                  <label htmlFor="tb-bis">Bis</label>
+                  <input
+                    id="tb-bis"
+                    type="date"
+                    value={bis}
+                    min={von || undefined}
+                    onChange={(e) => {
+                      setSchnellwahl(null);
+                      setBis(e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
             </>
           )}
+        </FilterPille>
+
+        <FilterPille
+          icon={<IKlienten />}
+          label="Klient:in"
+          wert={klientText ? `: ${klientText.vorname} ${klientText.nachname}` : null}
+          onEntfernen={() => setKlientFilter("")}
+        >
+          {(schliessen) => (
+            <FilterAuswahl
+              optionen={klienten.map((k) => ({ wert: k.id, label: `${k.vorname} ${k.nachname}` }))}
+              gewaehlt={klientFilter || null}
+              onWaehlen={(id) => {
+                setKlientFilter(id);
+                schliessen();
+              }}
+            />
+          )}
+        </FilterPille>
+
+        {zusatz.tag && (
+          <FilterPille icon={<ITag />} label="Tag" wert={tagFilter ? `: ${tagFilter}` : null} onEntfernen={() => setTagFilter("")} startOffen={!tagFilter}>
+            {(schliessen) => (
+              <FilterAuswahl
+                optionen={tagOptionen.map((t) => ({ wert: t, label: t }))}
+                gewaehlt={tagFilter || null}
+                onWaehlen={(t) => {
+                  setTagFilter(t);
+                  schliessen();
+                }}
+              />
+            )}
+          </FilterPille>
+        )}
+        {zusatz.autor && (
+          <FilterPille
+            icon={<IPerson />}
+            label="Verfasst von"
+            wert={autorFilter ? `: ${autorFilter}` : null}
+            onEntfernen={() => setAutorFilter("")}
+            startOffen={!autorFilter}
+          >
+            {(schliessen) => (
+              <FilterAuswahl
+                optionen={autorOptionen.map((a) => ({ wert: a, label: a }))}
+                gewaehlt={autorFilter || null}
+                onWaehlen={(a) => {
+                  setAutorFilter(a);
+                  schliessen();
+                }}
+              />
+            )}
+          </FilterPille>
+        )}
+
+        {(!zusatz.tag || !zusatz.autor) && (
+          <AktionsMenue label="Filter hinzufügen" variante="pille" beschriftung="Filter" icon={<INeu />}>
+            {!zusatz.tag && (
+              <button type="button" role="menuitem" onClick={() => setZusatz((z) => ({ ...z, tag: true }))}>
+                <ITag /> Tag
+              </button>
+            )}
+            {!zusatz.autor && (
+              <button type="button" role="menuitem" onClick={() => setZusatz((z) => ({ ...z, autor: true }))}>
+                <IPerson /> Verfasst von
+              </button>
+            )}
+          </AktionsMenue>
+        )}
+
+        <span className="zv-filter-trenner" aria-hidden="true" />
+
+        <FilterPille icon={<ISortierung />} label="Sortierung" wert={null}>
+          {(schliessen) => (
+            <FilterAuswahl
+              optionen={(Object.keys(SORTIERUNG_LABEL) as Sortierung[]).map((o) => ({ wert: o, label: SORTIERUNG_LABEL[o] }))}
+              gewaehlt={sortierung}
+              onWaehlen={(o) => {
+                setSortierung(o);
+                schliessen();
+              }}
+            />
+          )}
+        </FilterPille>
+
+        <button
+          type="button"
+          className="zv-icon-btn"
+          aria-label="Alle Filter zurücksetzen"
+          title="Alle Filter zurücksetzen"
+          disabled={!filterAktiv}
+          onClick={alleZuruecksetzen}
+        >
+          <IFilterLoeschen />
+        </button>
+      </div>
+
+      {zeitraumUngueltig && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          „Von“ liegt nach „Bis“ – bitte den Zeitraum korrigieren.
         </div>
+      )}
+      <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+        {sichtbar.length} {sichtbar.length === 1 ? "Bericht" : "Berichte"} · {SORTIERUNG_LABEL[sortierung]}
       </div>
 
       {sichtbar.length === 0 ? (
