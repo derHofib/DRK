@@ -452,7 +452,7 @@ async function main() {
         const fehlendeSchriften = await page.evaluate(async () => {
           const wanted = [
             '700 32px "Figtree Variable"',
-            '400 15px "Source Sans 3 Variable"',
+            '400 15px "Inter Variable"',
             '400 13px "IBM Plex Mono"',
             '500 13px "IBM Plex Mono"',
           ];

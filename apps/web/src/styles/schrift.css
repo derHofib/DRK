@@ -1,6 +1,6 @@
 /*
- * Drei Schriften, drei Aufgaben: Figtree (UI: Ueberschriften, Navigation,
- * Knoepfe, Tags), Source Sans 3 (Fliesstext, Tabelleninhalt), IBM Plex Mono
+ * Schriften: Inter (UI und Fliesstext -- neutrale, im Web uebliche, auch auf
+ * kleinen Bildschirmen gut lesbare Schrift), IBM Plex Mono
  * (Zahlen, Betraege, Daten, Zimmer- und Belegnummern, Aktenzeichen). Alle
  * selbst ausgeliefert -- nur das Latin-Subset.
  *
@@ -9,7 +9,7 @@
  * ist ein Drittanbieter-Abruf beim Seitenaufbau nicht verhandelbar. Bewusst
  * auch keine per Hand abgelegte Binaerdatei: so haengt die Schriftversion an
  * der pnpm-lock.yaml statt an einem Download von irgendwann (siehe
- * @fontsource-variable/source-sans-3, @fontsource/ibm-plex-mono).
+ * @fontsource-variable/inter, @fontsource/ibm-plex-mono).
  *
  * Bewusst diese Regeln von Hand statt der Paket-eigenen index.css: die
  * bringt zusaetzlich Kyrillisch, Griechisch und Vietnamesisch mit. Deren
@@ -22,11 +22,11 @@
  * insbesondere die deutschen Umlaute und ß ab (U+0000-00FF).
  */
 @font-face {
-  font-family: "Source Sans 3 Variable";
+  font-family: "Inter Variable";
   font-style: normal;
   font-display: swap;
   font-weight: 200 900;
-  src: url("@fontsource-variable/source-sans-3/files/source-sans-3-latin-wght-normal.woff2")
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
     format("woff2-variations");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
     U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -56,12 +56,8 @@
 }
 
 /*
- * Figtree: die UI-Schrift (--zv-font-ui) -- Ueberschriften, Navigation,
- * Knoepfe, Tags, Tabellenkoepfe -- und die hecaso-Wortmarke (siehe
- * MarkenZeichen.tsx). NICHT der Fliesstext: der bleibt bei Source Sans 3.
- * Eine variable Datei deckt alle Gewichte ab, deshalb kostet die
- * Ausweitung von "nur Wortmarke" auf "ganze UI" keinen zusaetzlichen
- * Abruf. Gleicher Grund wie oben: selbst ausgeliefert statt Google-Fonts-
+ * Figtree: nur noch die hecaso-Wortmarke (siehe MarkenZeichen.tsx), die
+ * Markenschrift ist Produktidentitaet, nicht Arbeitsschrift. Gleicher Grund wie oben: selbst ausgeliefert statt Google-Fonts-
  * CDN, deshalb @fontsource-variable/figtree statt des
  * fonts.googleapis.com-Links aus der Markenvorgabe.
  */

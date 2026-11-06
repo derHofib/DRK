@@ -357,23 +357,20 @@
 
   /* Die Familiennamen sind nicht frei gewaehlt -- sie muessen zu den
      @font-face-Regeln in schrift.css passen (@fontsource-variable/
-     source-sans-3 bzw. @fontsource/ibm-plex-mono). Dahinter die
+     inter bzw. @fontsource/ibm-plex-mono). Dahinter die
      Systemkette, damit die Oberflaeche auch waehrend des Ladens
      (font-display: swap) und bei blockierter Schrift vollstaendig lesbar
      bleibt. */
-  --zv-font-body: "Source Sans 3 Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --zv-font-body: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --zv-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
   /* Nur fuer die hecaso-Wortmarke (MarkenZeichen.tsx) -- bewusst nicht
      --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
      Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
   --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* Die Arbeitsschrift der Oberflaeche selbst: Ueberschriften, Navigation,
-     Knoepfe, Tags, Tabellenkoepfe. Gleiche Familie wie die Wortmarke --
-     bewusst: die UI-Schrift (Figtree) fuehrt, der Fliesstext (Source Sans
-     3) liest sich dahinter weg, Zahlen (Plex Mono) stehen als Daten
-     erkennbar daneben. Drei Schriften, drei Aufgaben, keine Mischung
-     innerhalb einer Aufgabe. */
-  --zv-font-ui: var(--zv-font-marke);
+  /* UI und Fliesstext teilen sich eine neutrale Schrift (Inter): auf
+     kleinen Bildschirmen lesbar, im Web gewohnt. Eigene Variable bleibt,
+     damit UI und Text bei Bedarf wieder getrennt werden koennen. */
+  --zv-font-ui: var(--zv-font-body);
 
   /*
    * Feste hecaso-Markenfarben (Haus-Umriss + Sonnenbogen in
@@ -388,7 +385,7 @@
   --zv-marke-sonne: light-dark(#e07a5f, #f6a58b);
 
   /*
-   * Schriftskala. 15 px Basis (Source Sans 3 laeuft klein), Metadaten 13,
+   * Schriftskala. 15 px Basis (Inter hat eine grosse x-Hoehe und bleibt bei 15 px gut lesbar), Metadaten 13,
    * Gruppenlabels 11-12 halbfett in Versalien. Die alten Namen -xs..-2xl
    * bleiben als Staffel erhalten, damit bestehende Regeln nicht brechen;
    * neue Regeln nehmen die sprechenden Namen.

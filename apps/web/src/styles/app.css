@@ -227,7 +227,7 @@
 
 /* hecaso-Schriftzug: eigene Markenschrift/-farbe, siehe tokens.css
    --zv-font-marke/--zv-marke-haus -- bewusst nicht --zv-weight-semibold
-   (Source Sans 3), Figtree hat ein eigenes Gewicht dafuer. */
+   (Inter), Figtree hat ein eigenes Gewicht dafuer. */
 .zv-brand-text strong {
   font-family: var(--zv-font-marke);
   font-size: var(--zv-text-2xl);
@@ -4166,11 +4166,11 @@ li:last-child > .zv-kontakt-zeile,
 }
 
 /* ==================================================================
-   UI-Schrift (Figtree)
+   UI-Schrift (Inter)
    ==================================================================
    Ganz am Ende und mit erhoehter Spezifitaet (button[class] > .zv-btn),
    weil viele Knopf-Klassen weiter oben "font-family: inherit" setzen und
-   sonst gewinnen wuerden. Eingabefelder bleiben bewusst bei Source Sans:
+   sonst gewinnen wuerden. Eingabefelder bleiben bewusst bei Inter:
    was Nutzer:innen tippen, ist Text, kein Bedienelement. */
 h1,
 h2,

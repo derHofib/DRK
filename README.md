@@ -2374,7 +2374,7 @@ bewusste Abgrenzungen zum Rest der Anwendung:
   schrift.css-Kommentar zum LG-München-Google-Fonts-Urteil, dasselbe gilt
   hier) erscheint ausschließlich in der hecaso-Wortmarke
   (`components/MarkenZeichen.tsx`, neue CSS-Variable `--zv-font-marke`).
-  Tabellen, Formulare und Fließtext bleiben bei Source Sans 3 + IBM Plex
+  Tabellen, Formulare und Fließtext bleiben bei Inter + IBM Plex
   Mono. Beide Entscheidungen explizit vom Auftraggeber bestätigt (Rückfrage
   vor der Umsetzung), um nicht versehentlich das token-basierte
   Mandanten-Designsystem (CLAUDE.md Regel 7) mit der Produktmarke zu
@@ -2392,7 +2392,7 @@ Rundung und dickerem Strich (13 statt 9 px), wie in der Vorgabe für
 Größen ≤128 px vorgesehen.
 
 Geprüft: `pnpm build` sauber (die Figtree-woff2-Datei erscheint im
-PWA-Precache neben Source Sans 3/IBM Plex Mono). Live-Browser-Check
+PWA-Precache neben Inter/IBM Plex Mono). Live-Browser-Check
 (Playwright) gegen echten Login (Hell- und Dunkel-Theme) und eine echte
 eingeloggte Sitzung: `document.title`/`<h1>`-Text ist „hecaso", die
 Wortmarke lädt nachweislich Figtree 600 in der jeweils themagerechten
@@ -2961,7 +2961,7 @@ Fachfunktion. Die Leitlinien, an denen sich jede Entscheidung messen lässt:
   **Koralle nur für Aufmerksamkeit** (heute, überfällig, offen, frei) —
   nie dekorativ, und unabhängig von der gewählten Akzentfarbe.
 - **Zahlen in IBM Plex Mono** mit tabellarischen Ziffern (Beträge, Daten,
-  Zimmer- und Belegnummern); UI in Figtree, Fließtext in Source Sans 3.
+  Zimmer- und Belegnummern); UI und Fließtext in Inter.
 - **Jede Seite beantwortet zuerst „Was habe ich jetzt zu tun?"** (Heute:
   eine Liste statt neun Kacheln).
 
