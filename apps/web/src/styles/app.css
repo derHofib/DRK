@@ -2443,7 +2443,7 @@ button.zv-raumknoten:focus-visible {
 .zv-raumknoten-sub {
   font-size: var(--zv-text-xs);
   color: var(--zv-text-muted);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Grundriss-Ansicht: Bild mit frei platzierbaren Karten darueber. Positionen
@@ -2743,7 +2743,7 @@ li:last-child > .zv-kontakt-zeile,
 .zv-kontakt-name {
   flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Zweispaltig: Liste | Verlauf. Feste Hoehe statt Seitenscroll, damit nur
@@ -2985,7 +2985,7 @@ li:last-child > .zv-kontakt-zeile,
 
 .zv-blase-text {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: var(--zv-text-m);
   line-height: var(--zv-leading-normal);
 }
@@ -3067,13 +3067,13 @@ li:last-child > .zv-kontakt-zeile,
   display: flex;
   align-items: center;
   gap: var(--zv-space-2);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-blase-karte-zeile {
   font-size: var(--zv-text-s);
   color: var(--zv-text-muted);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-blase-karte .zv-btn {
@@ -3467,7 +3467,7 @@ li:last-child > .zv-kontakt-zeile,
   min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-kal-termin-text span {
@@ -3578,7 +3578,7 @@ li:last-child > .zv-kontakt-zeile,
 
 .zv-anfrage-kopf strong {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-anfrage-ziel {
@@ -3590,7 +3590,7 @@ li:last-child > .zv-kontakt-zeile,
   margin: var(--zv-space-1) 0;
   font-size: var(--zv-text-s);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-anfrage .zv-aktionszeile {
@@ -3886,7 +3886,7 @@ li:last-child > .zv-kontakt-zeile,
 .zv-profil-liste dd {
   margin: 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .zv-profil-liste a {
@@ -4239,7 +4239,7 @@ li:last-child > .zv-kontakt-zeile,
 .zv-warteschlange-text {
   flex: 1 1 16rem;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-warteschlange-liste {
   margin: var(--zv-space-1) 0 0;
@@ -4494,12 +4494,12 @@ button[class],
   font-size: var(--zv-text-basis);
   font-weight: var(--zv-weight-semibold);
   color: var(--zv-text);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-todo-meta {
   font-size: var(--zv-text-meta);
   color: var(--zv-text-muted);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-todo-frist {
   font-size: var(--zv-text-meta);
@@ -4587,7 +4587,7 @@ button[class],
 .zv-zeit-titel {
   font-size: var(--zv-text-basis);
   font-weight: var(--zv-weight-semibold);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-zeit-vorbei .zv-zeit-titel,
 .zv-zeit-vorbei .zv-zeit-uhr {
@@ -4830,7 +4830,7 @@ button[class],
   font-size: var(--zv-text-titel);
   letter-spacing: var(--zv-laufweite-titel);
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-akte-meta {
   display: flex;
@@ -4915,7 +4915,7 @@ button[class],
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-rand-wert {
   margin: 0;
@@ -5061,7 +5061,7 @@ button[class],
 }
 .zv-journal-text {
   font-size: var(--zv-text-basis);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .zv-journal-saldo {
   font-weight: 500;
@@ -5380,4 +5380,113 @@ button[class],
   font-family: inherit;
   /* 16px: unter dieser Groesse zoomt iOS beim Fokus in das Feld hinein. */
   font-size: 16px;
+}
+
+/* ==================================================================
+   Frei anordenbare Kacheln (Standort-Uebersicht, KachelRaster.tsx)
+   Positionen stehen als --x/--y/--w/--h am Element. Die Handy-Regel
+   liest sie bewusst nicht -- dort einspaltig, ohne Ziehen.
+   ================================================================== */
+.zv-raster-leiste {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-raster {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: var(--zv-raster-zeile);
+  gap: var(--zv-raster-luecke);
+}
+
+.zv-raster-kachel {
+  grid-column: var(--x) / span var(--w);
+  grid-row: var(--y) / span var(--h);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-1);
+  /* Breite der Kachel, nicht des Fensters, entscheidet ueber die Zellenanordnung. */
+  container-type: inline-size;
+}
+
+.zv-raster-kachel-aktiv {
+  box-shadow: var(--zv-shadow-2, var(--zv-shadow-1));
+  border-color: var(--zv-accent, var(--zv-border));
+  z-index: 2;
+}
+
+.zv-raster-griff {
+  position: absolute;
+  top: var(--zv-space-1);
+  right: var(--zv-space-1);
+  z-index: 1;
+  padding: var(--zv-space-1);
+  border-radius: var(--zv-radius-s, 6px);
+  color: var(--zv-text-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.zv-raster-griff:hover { color: var(--zv-text); background: var(--zv-surface-2); }
+.zv-raster-kachel-aktiv .zv-raster-griff { cursor: grabbing; }
+
+.zv-raster-ecke {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--zv-border-strong, var(--zv-border)) 50% 58%, transparent 58% 70%, var(--zv-border-strong, var(--zv-border)) 70% 78%, transparent 78%);
+  border-bottom-right-radius: var(--zv-radius-m);
+}
+
+/* Der Inhalt scrollt, falls die Kachel kleiner gezogen wird, als er braucht,
+   statt ihn hart abzuschneiden. */
+.zv-raster-inhalt {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.zv-kachel-karte,
+.zv-kachel-stat {
+  padding: var(--zv-space-4);
+}
+.zv-kachel-karte .zv-sub { overflow-wrap: break-word; }
+
+/* Tabellen in Kacheln: ohne eigenen Rahmen (die Kachel ist der Rahmen),
+   Zellen duerfen umbrechen statt sich zu ueberlappen. */
+.zv-kachel-karte .zv-karten-liste { box-shadow: none; }
+.zv-kachel-karte .zv-liste-zelle,
+.zv-kachel-karte .zv-liste-zelle-titel,
+.zv-kachel-karte .zv-liste-kopf span {
+  overflow-wrap: break-word;
+}
+
+/* Schmale Kachel: Etage/Aktenzeichen-artige Zusatzspalten rutschen unter
+   den Titel, wie in der Handy-Ansicht, statt gequetscht zu werden. */
+@container (max-width: 420px) {
+  .zv-kachel-karte .zv-liste-kopf { display: none; }
+  .zv-kachel-karte .zv-karten-liste { background: none; border: none; overflow: visible; display: flex; flex-direction: column; gap: var(--zv-space-2); }
+  .zv-kachel-karte .zv-info-karte { grid-template-columns: 1fr; gap: var(--zv-space-1); border: 1px solid var(--zv-border); border-radius: var(--zv-radius-m); }
+  .zv-kachel-karte .zv-liste-zelle[data-label]::before { content: attr(data-label) ": "; color: var(--zv-text-faint); }
+}
+
+@media (max-width: 640px) {
+  .zv-raster { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .zv-raster-kachel { grid-column: 1; grid-row: auto; }
+  .zv-raster-griff, .zv-raster-ecke, .zv-raster-leiste { display: none; }
+  .zv-raster-inhalt { overflow: visible; }
 }

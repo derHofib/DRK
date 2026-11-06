@@ -781,7 +781,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         >
           <WarteschlangeLeiste />
           {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} />}
-          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={belegungOeffnen} />}
+          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={belegungOeffnen} nutzerId={ich?.id ?? "unbekannt"} />}
           {tab === "belegung" && (belegungStandortId ?? standorte[0]?.id) && (
             <StandortRaeume key={belegungStandortId ?? standorte[0].id} standortId={(belegungStandortId ?? standorte[0].id)} onStandortWaehlen={belegungOeffnen} />
           )}
