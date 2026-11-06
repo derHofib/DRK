@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { IAbbrechen, IAufklappen, IBestaetigen } from "./icons";
+import { IAbbrechen, IAufklappen, IBestaetigen, ISuche } from "./icons";
 
 /**
  * Baustein der Filterleiste: ein Knopf, der ein kleines Popover oeffnet.
@@ -110,25 +110,87 @@ export function FilterPille({
   );
 }
 
-/** Einfache Auswahlliste fuer das Popover (genau ein Eintrag oder keiner). */
+/** Gross-/Kleinschreibung und Akzente ignorieren ("Aerzte" findet "Ärzte" nicht, "Arzte" schon -- bewusst einfach). */
+function normalisiere(t: string): string {
+  return t.toLocaleLowerCase("de").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Auswahlliste fuer das Popover (genau ein Eintrag oder keiner).
+ *
+ * Ab SUCHE_AB Eintraegen bekommt sie ein Eingabefeld, das die Liste beim
+ * Tippen filtert (Enter waehlt den ersten Treffer, Pfeil runter springt in
+ * die Liste). Bei Zeitraum/Sortierung mit ihren wenigen festen Eintraegen
+ * waere das Feld nur Ballast -- deshalb abhaengig von der Laenge statt
+ * immer; mit `durchsuchbar` laesst es sich je Aufruf erzwingen/abschalten.
+ */
+const SUCHE_AB = 7;
+
 export function FilterAuswahl<T extends string>({
   optionen,
   gewaehlt,
   onWaehlen,
+  durchsuchbar,
 }: {
   optionen: { wert: T; label: string }[];
   gewaehlt: T | null;
   onWaehlen: (wert: T) => void;
+  durchsuchbar?: boolean;
 }) {
+  const [eingabe, setEingabe] = useState("");
+  const liste = useRef<HTMLDivElement>(null);
+  const mitSuche = durchsuchbar ?? optionen.length >= SUCHE_AB;
+  const q = normalisiere(eingabe.trim());
+  const treffer = q ? optionen.filter((o) => normalisiere(o.label).includes(q)) : optionen;
+
   if (optionen.length === 0) return <div className="zv-filter-leer">Keine Einträge vorhanden.</div>;
   return (
-    <div className="zv-filter-liste" role="listbox">
-      {optionen.map((o) => (
-        <button key={o.wert} type="button" role="option" aria-selected={gewaehlt === o.wert} onClick={() => onWaehlen(o.wert)}>
-          <span>{o.label}</span>
-          {gewaehlt === o.wert && <IBestaetigen style={{ width: 14, height: 14 }} />}
-        </button>
-      ))}
-    </div>
+    <>
+      {mitSuche && (
+        <div className="zv-filter-eingabe">
+          <ISuche />
+          <input
+            type="text"
+            value={eingabe}
+            autoFocus
+            placeholder="Eingeben zum Filtern…"
+            aria-label="Auswahl filtern"
+            onChange={(e) => setEingabe(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && treffer.length > 0) {
+                e.preventDefault();
+                onWaehlen(treffer[0].wert);
+              } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                liste.current?.querySelector<HTMLElement>("button")?.focus();
+              }
+            }}
+          />
+        </div>
+      )}
+      {treffer.length === 0 ? (
+        <div className="zv-filter-leer">Keine Treffer.</div>
+      ) : (
+        <div
+          className="zv-filter-liste"
+          role="listbox"
+          ref={liste}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            e.preventDefault();
+            const knoepfe = Array.from(liste.current!.querySelectorAll<HTMLElement>("button"));
+            const i = knoepfe.indexOf(document.activeElement as HTMLElement);
+            knoepfe[Math.max(0, Math.min(knoepfe.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))].focus();
+          }}
+        >
+          {treffer.map((o) => (
+            <button key={o.wert} type="button" role="option" aria-selected={gewaehlt === o.wert} onClick={() => onWaehlen(o.wert)}>
+              <span>{o.label}</span>
+              {gewaehlt === o.wert && <IBestaetigen style={{ width: 14, height: 14 }} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

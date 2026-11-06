@@ -5347,3 +5347,37 @@ button[class],
   color: var(--zv-text-muted);
   font-size: var(--zv-text-m);
 }
+
+.zv-filter-eingabe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-1) var(--zv-space-1) var(--zv-space-2);
+  padding: 0 var(--zv-space-3);
+  min-height: 36px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-eingabe:focus-within {
+  border-color: var(--zv-accent);
+}
+
+.zv-filter-eingabe svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.zv-filter-eingabe input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--zv-text);
+  font-family: inherit;
+  /* 16px: unter dieser Groesse zoomt iOS beim Fokus in das Feld hinein. */
+  font-size: 16px;
+}
