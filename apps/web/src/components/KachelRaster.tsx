@@ -63,8 +63,8 @@ function ladeLayout(schluessel: string, defs: KachelDef[]): Layout | null {
     const out: Layout = {};
     for (const d of defs) {
       const p = roh[d.id];
-      if (!p || ![p.x, p.y, p.w, p.h].every(Number.isFinite)) return null;
-      out[d.id] = begrenzen(p, d);
+      // Fehlende oder kaputte Eintraege (z. B. eine Kachel, die bisher ausgeblendet war) bekommen ihren Standardplatz.
+      out[d.id] = begrenzen(p && [p.x, p.y, p.w, p.h].every(Number.isFinite) ? p : d.standard, d);
     }
     return ordnen(out);
   } catch {
@@ -107,16 +107,20 @@ export function KachelRaster({ speicherSchluessel, kacheln }: { speicherSchluess
   const defsRef = useRef(kacheln);
   defsRef.current = kacheln;
 
+  // Auch beim Ein-/Ausblenden einzelner Kacheln neu aufbauen.
+  const idSchluessel = kacheln.map((k) => k.id).join("|");
   useEffect(() => {
     const geladen = ladeLayout(speicherSchluessel, kacheln);
     setLayout(geladen ?? standardLayout);
     setAngepasst(geladen !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speicherSchluessel]);
+  }, [speicherSchluessel, idSchluessel]);
 
   function speichern(l: Layout) {
     try {
-      localStorage.setItem(speicherSchluessel, JSON.stringify(l));
+      // Ausgeblendete Kacheln behalten ihren gespeicherten Platz.
+      const alt = JSON.parse(localStorage.getItem(speicherSchluessel) ?? "{}") as Layout;
+      localStorage.setItem(speicherSchluessel, JSON.stringify({ ...alt, ...l }));
     } catch {
       // Ohne Speicher bleibt das Layout bis zum Neuladen -- das Umordnen selbst geht trotzdem.
     }

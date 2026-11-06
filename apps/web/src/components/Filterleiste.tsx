@@ -194,3 +194,57 @@ export function FilterAuswahl<T extends string>({
     </>
   );
 }
+
+/**
+ * Wie FilterAuswahl, aber mit beliebig vielen gewaehlten Eintraegen: das
+ * Popover bleibt beim Anklicken offen, damit man mehrere nacheinander
+ * ankreuzen kann. Leere Auswahl heisst "kein Filter", nicht "nichts".
+ */
+export function FilterMehrfachAuswahl<T extends string>({
+  optionen,
+  gewaehlt,
+  onAendern,
+  durchsuchbar,
+}: {
+  optionen: { wert: T; label: string }[];
+  gewaehlt: T[];
+  onAendern: (neu: T[]) => void;
+  durchsuchbar?: boolean;
+}) {
+  const [eingabe, setEingabe] = useState("");
+  const mitSuche = durchsuchbar ?? optionen.length >= SUCHE_AB;
+  const q = normalisiere(eingabe.trim());
+  const treffer = q ? optionen.filter((o) => normalisiere(o.label).includes(q)) : optionen;
+  const umschalten = (w: T) => onAendern(gewaehlt.includes(w) ? gewaehlt.filter((g) => g !== w) : [...gewaehlt, w]);
+
+  if (optionen.length === 0) return <div className="zv-filter-leer">Keine Einträge vorhanden.</div>;
+  return (
+    <>
+      {mitSuche && (
+        <div className="zv-filter-eingabe">
+          <ISuche />
+          <input
+            type="text"
+            value={eingabe}
+            autoFocus
+            placeholder="Eingeben zum Filtern…"
+            aria-label="Auswahl filtern"
+            onChange={(e) => setEingabe(e.target.value)}
+          />
+        </div>
+      )}
+      {treffer.length === 0 ? (
+        <div className="zv-filter-leer">Keine Treffer.</div>
+      ) : (
+        <div className="zv-filter-liste" role="listbox" aria-multiselectable="true">
+          {treffer.map((o) => (
+            <button key={o.wert} type="button" role="option" aria-selected={gewaehlt.includes(o.wert)} onClick={() => umschalten(o.wert)}>
+              <span>{o.label}</span>
+              {gewaehlt.includes(o.wert) && <IBestaetigen style={{ width: 14, height: 14 }} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
