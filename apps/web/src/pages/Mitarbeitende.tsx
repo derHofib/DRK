@@ -1,6 +1,7 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { AccountTypDto, BenutzerListEintragDto, OrgUnitDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { AktionsMenue } from "../components/AktionsMenue";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
 import { Modal } from "../components/Modal";
@@ -302,38 +303,40 @@ export function Mitarbeitende() {
                 )}
               </span>
               <span className="zv-liste-zelle-aktionen">
-                <button className="zv-link-btn" onClick={() => profilOeffnen(b)}>
-                  <IMitarbeitende />
-                  Profil
-                </button>
-                <button className="zv-link-btn" onClick={() => rangOeffnen(b)}>
-                  <IMitarbeitende />
-                  Rang ändern
-                </button>
-                <button className="zv-link-btn" onClick={() => passwortZuruecksetzen(b)}>
-                  <IResetLink />
-                  Passwort zurücksetzen
-                </button>
-                <button
-                  className="zv-link-btn"
-                  onClick={() => {
-                    setZuweisungFehler(null);
-                    setStandortZuweisung(b);
-                  }}
-                >
-                  <IStandort />
-                  Standorte zuweisen
-                </button>
-                <button
-                  className="zv-link-btn"
-                  onClick={() => {
-                    setStatusFehler(null);
-                    setStatusAenderung(b);
-                  }}
-                >
-                  {b.aktiv ? <IDeaktivieren /> : <IAktivieren />}
-                  {b.aktiv ? "Deaktivieren" : "Reaktivieren"}
-                </button>
+                <AktionsMenue label={`Aktionen für ${b.name}`}>
+                  <button role="menuitem" onClick={() => profilOeffnen(b)}>
+                    <IMitarbeitende />
+                    Profil
+                  </button>
+                  <button role="menuitem" onClick={() => rangOeffnen(b)}>
+                    <IMitarbeitende />
+                    Rang ändern
+                  </button>
+                  <button role="menuitem" onClick={() => passwortZuruecksetzen(b)}>
+                    <IResetLink />
+                    Passwort zurücksetzen
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setZuweisungFehler(null);
+                      setStandortZuweisung(b);
+                    }}
+                  >
+                    <IStandort />
+                    Standorte zuweisen
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setStatusFehler(null);
+                      setStatusAenderung(b);
+                    }}
+                  >
+                    {b.aktiv ? <IDeaktivieren /> : <IAktivieren />}
+                    {b.aktiv ? "Deaktivieren" : "Reaktivieren"}
+                  </button>
+                </AktionsMenue>
               </span>
             </div>
           ))}

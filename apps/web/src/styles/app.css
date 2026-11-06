@@ -4998,3 +4998,48 @@ button[class],
   text-decoration: line-through;
   color: var(--zv-text-muted);
 }
+
+/* ==================================================================
+   Aktionsmenue (AktionsMenue.tsx) -- Drei-Punkte-Popover in Listenzeilen.
+   z-index ueber Seitenleiste/Kopf (40/41), unter Modal (50 und hoeher
+   ist ohnehin nie gleichzeitig offen: ein Klick schliesst das Menue).
+   ================================================================== */
+.zv-aktionsmenue {
+  position: fixed;
+  z-index: 45;
+  min-width: 210px;
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-aktionsmenue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: none;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-aktionsmenue button:hover,
+.zv-aktionsmenue button:focus-visible {
+  background: var(--zv-surface-2);
+}
+
+@media (max-width: 720px) {
+  .zv-aktionsmenue button {
+    min-height: 40px;
+  }
+}

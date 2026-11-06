@@ -62,7 +62,8 @@ await seite2.getByRole("button", { name: /^Mitarbeitende$/ }).first().click();
 await seite2.waitForTimeout(500);
 
 const zeile = seite2.locator(".zv-info-karte", { hasText: "Ausgesperrte Person" });
-await zeile.getByRole("button", { name: /Passwort zurücksetzen/i }).click();
+await zeile.getByRole("button", { name: /^Aktionen für/ }).click();
+await seite2.getByRole("menuitem", { name: /Passwort zurücksetzen/i }).click();
 await seite2.waitForTimeout(600);
 
 const modalText = await seite2.locator(".zv-modal").first().innerText();
