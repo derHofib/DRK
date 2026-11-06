@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   AufgabeDto,
   AufgabePrioritaet,
@@ -15,6 +15,7 @@ import { api, tokenBenutzerId } from "../api/client";
 import { formatDatum } from "../format";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { GrundAbfrage } from "../components/GrundAbfrage";
+import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -38,6 +39,7 @@ import {
   ISVergeben,
   ISZugeordnet,
   IStandort,
+  IZimmer,
   IVerlauf,
   IWarteliste,
   IZuklappen,
@@ -72,6 +74,13 @@ const STATUS_ICON = {
  * KEINE zweite Kopie der Logik: zwei Implementierungen derselben
  * Belegungsregeln wuerden auseinanderlaufen.
  */
+type ZimmerSortierung = "nummer-auf" | "nummer-ab" | "frei-zuerst";
+const ZIMMER_SORTIERUNG_LABEL: Record<ZimmerSortierung, string> = {
+  "nummer-auf": "Nummer aufsteigend",
+  "nummer-ab": "Nummer absteigend",
+  "frei-zuerst": "Freie Plätze zuerst",
+};
+
 export function Zimmer({ standortId }: { standortId?: string } = {}) {
   const aktuelleBenutzerId = tokenBenutzerId();
 
@@ -433,12 +442,46 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
     }
   }
 
-  const gruppen = zimmer
-    .filter((z) => !standortId || z.standortId === standortId)
-    .reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
-      (acc[z.standortName] ??= []).push(z);
-      return acc;
-    }, {});
+  const [suche, setSuche] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [standortFilter, setStandortFilter] = useState("");
+  const [etageFilter, setEtageFilter] = useState("");
+  const [sortierung, setSortierung] = useState<ZimmerSortierung>("nummer-auf");
+
+  const imBereich = zimmer.filter((z) => !standortId || z.standortId === standortId);
+  const sichtbareZimmer = useMemo(() => {
+    const nummer = (a: ZimmerListEintragDto, b: ZimmerListEintragDto) => a.nummer.localeCompare(b.nummer, "de", { numeric: true });
+    return imBereich
+      .filter(
+        (z) =>
+          (!statusFilter || z.status === statusFilter) &&
+          (!standortFilter || z.standortId === standortFilter) &&
+          (!etageFilter || z.etage === etageFilter) &&
+          trifftSuche(suche, [z.nummer, z.etage, z.standortName, ...z.bewohner.map((b) => b.name)]),
+      )
+      .sort((a, b) => {
+        switch (sortierung) {
+          case "nummer-auf":
+            return nummer(a, b);
+          case "nummer-ab":
+            return nummer(b, a);
+          case "frei-zuerst":
+            return b.kapazitaet - b.bewohner.length - (a.kapazitaet - a.bewohner.length) || nummer(a, b);
+        }
+      });
+    // imBereich ist von zimmer/standortId abgeleitet
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zimmer, standortId, statusFilter, standortFilter, etageFilter, suche, sortierung]);
+  const zimmerFilterAktiv = Boolean(statusFilter || standortFilter || etageFilter || suche.trim());
+  const standortOptionen = [...new Map(imBereich.map((z) => [z.standortId, z.standortName])).entries()]
+    .map(([wert, label]) => ({ wert, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  const etageOptionen = [...new Set(imBereich.map((z) => z.etage))].map((e) => ({ wert: e, label: e }));
+
+  const gruppen = sichtbareZimmer.reduce<Record<string, ZimmerListEintragDto[]>>((acc, z) => {
+    (acc[z.standortName] ??= []).push(z);
+    return acc;
+  }, {});
 
   /**
    * Etage ist Freitext (bewusste Entscheidung, da Gebaeude Stockwerke nicht
@@ -492,6 +535,65 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
           Neues Zimmer
         </button>
       </div>
+
+      {zimmer.length > 0 && (
+        <>
+          <Filterleiste
+            ariaLabel="Zimmer filtern und sortieren"
+            suche={{ wert: suche, onChange: setSuche, placeholder: "Zimmer, Bewohner:in…", ariaLabel: "Zimmer durchsuchen" }}
+            zusatz={[
+              ...(standortId
+                ? []
+                : [
+                    {
+                      id: "standort",
+                      label: "Standort",
+                      icon: <IStandort />,
+                      wert: standortOptionen.find((o) => o.wert === standortFilter)?.label ?? null,
+                      optionen: standortOptionen,
+                      gewaehlt: standortFilter || null,
+                      onWaehlen: setStandortFilter,
+                      onEntfernen: () => setStandortFilter(""),
+                    },
+                  ]),
+              {
+                id: "etage",
+                label: "Etage",
+                icon: <IAufklappen />,
+                wert: etageFilter || null,
+                optionen: etageOptionen,
+                gewaehlt: etageFilter || null,
+                onWaehlen: setEtageFilter,
+                onEntfernen: () => setEtageFilter(""),
+              },
+            ]}
+            sortierung={{
+              optionen: (Object.keys(ZIMMER_SORTIERUNG_LABEL) as ZimmerSortierung[]).map((o) => ({ wert: o, label: ZIMMER_SORTIERUNG_LABEL[o] })),
+              wert: sortierung,
+              onWaehlen: (o) => setSortierung(o as ZimmerSortierung),
+            }}
+            aktiv={zimmerFilterAktiv}
+            onZuruecksetzen={() => {
+              setStatusFilter("");
+              setStandortFilter("");
+              setEtageFilter("");
+              setSuche("");
+            }}
+          >
+            <OptionenFilter
+              icon={<IZimmer />}
+              label="Status"
+              optionen={Object.entries(ZIMMERSTATUS_LABEL).map(([wert, label]) => ({ wert, label }))}
+              wert={statusFilter}
+              onWaehlen={setStatusFilter}
+            />
+          </Filterleiste>
+          <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+            {sichtbareZimmer.length} Zimmer · {ZIMMER_SORTIERUNG_LABEL[sortierung]}
+          </div>
+          {sichtbareZimmer.length === 0 && <Leerzustand icon={ILeerZimmer}>Keine Zimmer für diese Auswahl.</Leerzustand>}
+        </>
+      )}
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
         <div key={standortName} style={{ marginBottom: 28 }}>

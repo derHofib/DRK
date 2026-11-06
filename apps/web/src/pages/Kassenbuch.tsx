@@ -17,6 +17,7 @@ import { StandortReiter } from "../components/StandortReiter";
 import { Modal } from "../components/Modal";
 import {
   IAblehnen,
+  IAnpassen,
   IAuszahlen,
   IFehler,
   IGenehmigen,
@@ -26,6 +27,7 @@ import {
   ILeerWoche,
   IMitarbeitende,
   INeu,
+  IPerson,
   ISErledigt,
   ISOffen,
   ISStorniert,
@@ -33,11 +35,13 @@ import {
   ISperre,
   IStandort,
   IStornieren,
+  ITag,
   IUnterschrift,
   IVor,
   IZurueckPfeil,
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
+import { Filterleiste, OptionenFilter, ZeitraumFilter, trifftSuche, useZeitraum } from "../components/Listenfilter";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { formatBetrag, formatDatum, kontextzeile } from "../format";
 
@@ -47,6 +51,14 @@ const JOURNAL_FILTER_LABEL: Record<JournalFilter, string> = {
   einnahmen: "Einnahmen",
   ausgaben: "Ausgaben",
   stornos: "Stornos",
+};
+
+type JournalSortierung = "datum-neu" | "datum-alt" | "betrag-hoch" | "betrag-tief";
+const JOURNAL_SORTIERUNG_LABEL: Record<JournalSortierung, string> = {
+  "datum-neu": "Datum: neueste zuerst",
+  "datum-alt": "Datum: älteste zuerst",
+  "betrag-hoch": "Betrag: höchster zuerst",
+  "betrag-tief": "Betrag: niedrigster zuerst",
 };
 
 type Richtung = "einzahlung" | "auszahlung";
@@ -109,6 +121,24 @@ function aktive(buchungen: KassenbuchungDto[]): KassenbuchungDto[] {
   return buchungen.filter((b) => !b.storniert);
 }
 
+function sortiereJournal(buchungen: KassenbuchungDto[], sortierung: JournalSortierung): KassenbuchungDto[] {
+  // Bei gleichem Datum/Betrag entscheidet die Belegnummer -- sonst waere die
+  // Reihenfolge von Buchungen desselben Tages nicht stabil nachvollziehbar.
+  const nachDatum = (a: KassenbuchungDto, b: KassenbuchungDto) => a.datum.localeCompare(b.datum) || a.belegnummer - b.belegnummer;
+  return [...buchungen].sort((a, b) => {
+    switch (sortierung) {
+      case "datum-neu":
+        return nachDatum(b, a);
+      case "datum-alt":
+        return nachDatum(a, b);
+      case "betrag-hoch":
+        return b.betragCent - a.betragCent || nachDatum(b, a);
+      case "betrag-tief":
+        return a.betragCent - b.betragCent || nachDatum(b, a);
+    }
+  });
+}
+
 function summeCent(buchungen: KassenbuchungDto[]): number {
   return buchungen.reduce((summe, b) => summe + b.betragCent, 0);
 }
@@ -139,6 +169,11 @@ export function Kassenbuch({
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
   const [filterKlientId, setFilterKlientId] = useState(startFilterKlientId ?? "");
   const [journalFilter, setJournalFilter] = useState<JournalFilter>("alle");
+  const [journalSuche, setJournalSuche] = useState("");
+  const [journalSortierung, setJournalSortierung] = useState<JournalSortierung>("datum-neu");
+  const [typFilter, setTypFilter] = useState("");
+  const [gebuchtVonFilter, setGebuchtVonFilter] = useState("");
+  const journalZeitraum = useZeitraum();
   const [filterStandortId, setFilterStandortId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -439,17 +474,46 @@ export function Kassenbuch({
   // offenem Antrag -- die sind auf dem Weg dorthin und sonst nirgends gebuendelt.
   const klientSalden = laufsalden(klientBuchungen);
   const standortSalden = laufsalden(standortBuchungen);
-  const zeigeKlientJournal = neuesterZuerst(
-    gefilterteBuchungen.filter((b) =>
-      journalFilter === "alle"
-        ? true
-        : journalFilter === "einnahmen"
-          ? b.betragCent > 0 && !b.storniert
-          : journalFilter === "ausgaben"
-            ? b.betragCent < 0 && !b.storniert
-            : b.storniert || b.offenerStornoantrag !== null,
+  const zeigeKlientJournal = sortiereJournal(
+    gefilterteBuchungen.filter(
+      (b) =>
+        (journalFilter === "alle"
+          ? true
+          : journalFilter === "einnahmen"
+            ? b.betragCent > 0 && !b.storniert
+            : journalFilter === "ausgaben"
+              ? b.betragCent < 0 && !b.storniert
+              : b.storniert || b.offenerStornoantrag !== null) &&
+        journalZeitraum.enthaelt(b.datum) &&
+        (!typFilter || b.typId === typFilter) &&
+        (!gebuchtVonFilter || b.gebuchtVonName === gebuchtVonFilter) &&
+        trifftSuche(journalSuche, [
+          b.verwendungszweck,
+          b.klientName,
+          b.typBezeichnung,
+          b.gebuchtVonName,
+          formatBelegnummer(b.belegnummer),
+        ]),
     ),
+    journalSortierung,
   );
+  const typOptionen = [...new Map(klientBuchungen.map((b) => [b.typId, b.typBezeichnung])).entries()]
+    .map(([wert, label]) => ({ wert, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  const gebuchtVonOptionen = [...new Set(klientBuchungen.map((b) => b.gebuchtVonName).filter((n): n is string => Boolean(n)))]
+    .sort((a, b) => a.localeCompare(b, "de"))
+    .map((n) => ({ wert: n, label: n }));
+  const journalFilterAktiv = Boolean(
+    filterKlientId || journalFilter !== "alle" || journalZeitraum.aktiv || typFilter || gebuchtVonFilter || journalSuche.trim(),
+  );
+  function journalZuruecksetzen() {
+    setFilterKlientId("");
+    setJournalFilter("alle");
+    journalZeitraum.waehlen("alle");
+    setTypFilter("");
+    setGebuchtVonFilter("");
+    setJournalSuche("");
+  }
 
   function unterschriftBild(b: KassenbuchungDto) {
     return offeneUnterschrift?.buchungId === b.id ? (
@@ -870,30 +934,65 @@ export function Kassenbuch({
         </div>
       </section>
 
-      <div className="zv-journal-werkzeug">
-        <div className="zv-segmented" role="group" aria-label="Art der Buchung">
-          {(Object.keys(JOURNAL_FILTER_LABEL) as JournalFilter[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              className={journalFilter === f ? "active" : ""}
-              aria-pressed={journalFilter === f}
-              onClick={() => setJournalFilter(f)}
-            >
-              {JOURNAL_FILTER_LABEL[f]}
-            </button>
-          ))}
+      <Filterleiste
+        ariaLabel="Buchungen filtern und sortieren"
+        suche={{ wert: journalSuche, onChange: setJournalSuche, placeholder: "Zweck, Beleg, Klient:in…", ariaLabel: "Buchungen durchsuchen" }}
+        zusatz={[
+          {
+            id: "typ",
+            label: "Buchungsart",
+            icon: <ITag />,
+            wert: typOptionen.find((o) => o.wert === typFilter)?.label ?? null,
+            optionen: typOptionen,
+            gewaehlt: typFilter || null,
+            onWaehlen: setTypFilter,
+            onEntfernen: () => setTypFilter(""),
+          },
+          {
+            id: "gebucht-von",
+            label: "Gebucht von",
+            icon: <IPerson />,
+            wert: gebuchtVonFilter || null,
+            optionen: gebuchtVonOptionen,
+            gewaehlt: gebuchtVonFilter || null,
+            onWaehlen: setGebuchtVonFilter,
+            onEntfernen: () => setGebuchtVonFilter(""),
+          },
+        ]}
+        sortierung={{
+          optionen: (Object.keys(JOURNAL_SORTIERUNG_LABEL) as JournalSortierung[]).map((o) => ({ wert: o, label: JOURNAL_SORTIERUNG_LABEL[o] })),
+          wert: journalSortierung,
+          onWaehlen: (o) => setJournalSortierung(o as JournalSortierung),
+        }}
+        aktiv={journalFilterAktiv}
+        onZuruecksetzen={journalZuruecksetzen}
+      >
+        <OptionenFilter
+          icon={<IAnpassen />}
+          label="Art"
+          optionen={(Object.keys(JOURNAL_FILTER_LABEL) as JournalFilter[])
+            .filter((f) => f !== "alle")
+            .map((f) => ({ wert: f, label: JOURNAL_FILTER_LABEL[f] }))}
+          wert={journalFilter === "alle" ? "" : journalFilter}
+          onWaehlen={(w) => setJournalFilter((w || "alle") as JournalFilter)}
+        />
+        <ZeitraumFilter zeitraum={journalZeitraum} idPrefix="kb" />
+        <OptionenFilter
+          icon={<IKlienten />}
+          label="Klient:in"
+          optionen={klienten.map((k) => ({ wert: k.id, label: `${k.vorname} ${k.nachname}` }))}
+          wert={filterKlientId}
+          onWaehlen={setFilterKlientId}
+        />
+      </Filterleiste>
+      {journalZeitraum.ungueltig && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          „Von“ liegt nach „Bis“ – bitte den Zeitraum korrigieren.
         </div>
-        <div className="zv-field" style={{ maxWidth: 260, margin: 0 }}>
-          <select aria-label="Nach Klient:in filtern" value={filterKlientId} onChange={(e) => setFilterKlientId(e.target.value)}>
-            <option value="">Alle Klient:innen</option>
-            {klienten.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.vorname} {k.nachname}
-              </option>
-            ))}
-          </select>
-        </div>
+      )}
+      <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+        {zeigeKlientJournal.length} {zeigeKlientJournal.length === 1 ? "Buchung" : "Buchungen"} · {JOURNAL_SORTIERUNG_LABEL[journalSortierung]}
       </div>
 
       {zeigeKlientJournal.length === 0 ? (

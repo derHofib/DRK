@@ -1,10 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { AufgabeDto, AufgabePrioritaet, BenutzerListEintragDto } from "@zimmerakte/shared";
+import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
 import { AufgabeZeile } from "../components/AufgabeZeile";
+import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { IFehler, ILeerAufgaben, INeu, ISpeichern } from "../components/icons";
+import { IFehler, ILeerAufgaben, INeu, IPerson, IPrioritaetHoch, ISpeichern } from "../components/icons";
 
 /**
  * Sonntag der laufenden Woche (ISO-Woche startet Montag) -- alles bis
@@ -49,6 +51,14 @@ const GRUPPEN_LABEL = {
   spaeter: "Später",
   ohneTermin: "Ohne Termin",
 } as const;
+
+type AufgabenSortierung = "faellig" | "prioritaet" | "titel";
+const AUFGABEN_SORTIERUNG_LABEL: Record<AufgabenSortierung, string> = {
+  faellig: "Fälligkeit",
+  prioritaet: "Priorität",
+  titel: "Titel A–Z",
+};
+const PRIO_RANG: Record<AufgabePrioritaet, number> = { hoch: 0, normal: 1, niedrig: 2 };
 
 export function Aufgaben() {
   const benutzerId = tokenBenutzerId();
@@ -126,7 +136,39 @@ export function Aufgaben() {
     }
   }
 
-  const gruppen = gruppiere(aufgaben);
+  const [suche, setSuche] = useState("");
+  const [prioFilter, setPrioFilter] = useState("");
+  const [zugewiesenFilter, setZugewiesenFilter] = useState("");
+  const [sortierung, setSortierung] = useState<AufgabenSortierung>("faellig");
+  const sichtbar = useMemo(() => {
+    const nachFaellig = (a: AufgabeDto, b: AufgabeDto) => (a.faelligAm ?? "9999").localeCompare(b.faelligAm ?? "9999");
+    return aufgaben
+      .filter(
+        (a) =>
+          (!prioFilter || a.prioritaet === prioFilter) &&
+          (!zugewiesenFilter || a.zugewiesenAn === zugewiesenFilter) &&
+          trifftSuche(suche, [a.titel, a.beschreibung, a.zimmerNummer, a.standortName, a.zugewiesenAnName, a.erstelltVonName]),
+      )
+      .sort((a, b) => {
+        switch (sortierung) {
+          case "faellig":
+            return nachFaellig(a, b) || PRIO_RANG[a.prioritaet] - PRIO_RANG[b.prioritaet];
+          case "prioritaet":
+            return PRIO_RANG[a.prioritaet] - PRIO_RANG[b.prioritaet] || nachFaellig(a, b);
+          case "titel":
+            return a.titel.localeCompare(b.titel, "de") || nachFaellig(a, b);
+        }
+      });
+  }, [aufgaben, prioFilter, zugewiesenFilter, suche, sortierung]);
+  const zugewiesenOptionen = useMemo(
+    () =>
+      [...new Map(aufgaben.filter((a) => a.zugewiesenAn).map((a) => [a.zugewiesenAn as string, a.zugewiesenAnName ?? "?"])).entries()]
+        .map(([wert, label]) => ({ wert, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, "de")),
+    [aufgaben],
+  );
+  const aufgabenFilterAktiv = Boolean(prioFilter || zugewiesenFilter || suche.trim());
+  const gruppen = gruppiere(sichtbar);
   const reihenfolge = ["ueberfaellig", "heute", "dieseWoche", "spaeter", "ohneTermin"] as const;
 
   return (
@@ -151,6 +193,39 @@ export function Aufgaben() {
           Neue Aufgabe
         </button>
       </div>
+
+      {aufgaben.length > 0 && (
+        <>
+          <Filterleiste
+            ariaLabel="Aufgaben filtern und sortieren"
+            suche={{ wert: suche, onChange: setSuche, placeholder: "Titel, Zimmer, Person…", ariaLabel: "Aufgaben durchsuchen" }}
+            sortierung={{
+              optionen: (Object.keys(AUFGABEN_SORTIERUNG_LABEL) as AufgabenSortierung[]).map((o) => ({ wert: o, label: AUFGABEN_SORTIERUNG_LABEL[o] })),
+              wert: sortierung,
+              onWaehlen: (o) => setSortierung(o as AufgabenSortierung),
+            }}
+            aktiv={aufgabenFilterAktiv}
+            onZuruecksetzen={() => {
+              setPrioFilter("");
+              setZugewiesenFilter("");
+              setSuche("");
+            }}
+          >
+            <OptionenFilter
+              icon={<IPrioritaetHoch />}
+              label="Priorität"
+              optionen={(Object.keys(AUFGABE_PRIORITAET_LABEL) as AufgabePrioritaet[]).map((p) => ({ wert: p, label: AUFGABE_PRIORITAET_LABEL[p] }))}
+              wert={prioFilter}
+              onWaehlen={setPrioFilter}
+            />
+            <OptionenFilter icon={<IPerson />} label="Zugewiesen an" optionen={zugewiesenOptionen} wert={zugewiesenFilter} onWaehlen={setZugewiesenFilter} />
+          </Filterleiste>
+          <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+            {sichtbar.length} {sichtbar.length === 1 ? "Aufgabe" : "Aufgaben"} · Sortiert nach {AUFGABEN_SORTIERUNG_LABEL[sortierung]}
+          </div>
+          {sichtbar.length === 0 && <Leerzustand icon={ILeerAufgaben}>Keine Aufgaben für diese Auswahl.</Leerzustand>}
+        </>
+      )}
 
       {aufgaben.length === 0 && !fehler && (
         <Leerzustand icon={ILeerAufgaben}>Keine offenen Aufgaben -- weder zugewiesen noch persönlich angelegt.</Leerzustand>

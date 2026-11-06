@@ -1,15 +1,17 @@
-import { CSSProperties, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { formatDatum } from "../format";
 import type { KlientenAnsicht } from "../navigation";
 import { GrundAbfrage } from "../components/GrundAbfrage";
+import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { Seitenpanel } from "../components/Seitenpanel";
 import {
   IAblehnen,
+  IAuszahlen,
   IBearbeiten,
   IFehler,
   IGenehmigen,
@@ -20,6 +22,9 @@ import {
   ILoeschen,
   INeu,
   ISpeichern,
+  IStandort,
+  ITraeger,
+  IZimmer,
 } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 
@@ -33,6 +38,15 @@ const ANSICHT_TITEL: Record<KlientenAnsicht, string> = {
   archiv: "Archiv",
   anwaerter: "Anwärter",
 };
+
+type KlientSortierung = "name-az" | "name-za" | "aktenzeichen" | "zimmer";
+const KLIENT_SORTIERUNG_LABEL: Record<KlientSortierung, string> = {
+  "name-az": "Name A–Z",
+  "name-za": "Name Z–A",
+  aktenzeichen: "Aktenzeichen",
+  zimmer: "Zimmer",
+};
+const KEIN_ZIMMER = "__kein__";
 
 export function Klienten({
   ansicht,
@@ -67,6 +81,13 @@ export function Klienten({
   const [anwaerterFormFehler, setAnwaerterFormFehler] = useState<string | null>(null);
 
 
+  const [suche, setSuche] = useState("");
+  const [sortierung, setSortierung] = useState<KlientSortierung>("name-az");
+  const [amtFilter, setAmtFilter] = useState("");
+  const [hzlFilter, setHzlFilter] = useState("");
+  const [standortFilter, setStandortFilter] = useState("");
+  const [zimmerFilter, setZimmerFilter] = useState("");
+
   function laden() {
     api
       .klientenListe(ansicht === "archiv")
@@ -85,6 +106,48 @@ export function Klienten({
     if (ansicht === "anwaerter") ladeAnwaerter();
     else laden();
   }, [ansicht, anwaerterStatus]);
+
+  const amtOptionen = useMemo(
+    () => [...new Set(klienten.map((k) => k.amt).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de")).map((a) => ({ wert: a, label: a })),
+    [klienten],
+  );
+  const standortOptionen = useMemo(
+    () =>
+      [...new Set(klienten.map((k) => k.aktuellesZimmer?.standortName).filter((n): n is string => Boolean(n)))]
+        .sort((a, b) => a.localeCompare(b, "de"))
+        .map((n) => ({ wert: n, label: n })),
+    [klienten],
+  );
+  const sichtbareKlienten = useMemo(() => {
+    const gefiltert = klienten.filter(
+      (k) =>
+        (!amtFilter || k.amt === amtFilter) &&
+        (!hzlFilter || k.hzlRhythmus === hzlFilter) &&
+        (!standortFilter || k.aktuellesZimmer?.standortName === standortFilter) &&
+        (!zimmerFilter || (zimmerFilter === KEIN_ZIMMER ? k.aktuellesZimmer === null : k.aktuellesZimmer !== null)) &&
+        trifftSuche(suche, [k.vorname, k.nachname, `${k.vorname} ${k.nachname}`, k.aktenzeichen, k.amt, k.aktuellesZimmer?.nummer]),
+    );
+    const nachName = (a: KlientListEintragDto, b: KlientListEintragDto) =>
+      a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de") || a.id.localeCompare(b.id);
+    return gefiltert.sort((a, b) => {
+      switch (sortierung) {
+        case "name-az":
+          return nachName(a, b);
+        case "name-za":
+          return nachName(b, a);
+        case "aktenzeichen":
+          return a.aktenzeichen.localeCompare(b.aktenzeichen, "de", { numeric: true }) || nachName(a, b);
+        case "zimmer": {
+          // Ohne Zimmer ans Ende: wer ein Zimmer sucht, will die Belegten oben.
+          const za = a.aktuellesZimmer?.nummer;
+          const zb = b.aktuellesZimmer?.nummer;
+          if (!za !== !zb) return za ? -1 : 1;
+          return (za ?? "").localeCompare(zb ?? "", "de", { numeric: true }) || nachName(a, b);
+        }
+      }
+    });
+  }, [klienten, amtFilter, hzlFilter, standortFilter, zimmerFilter, suche, sortierung]);
+  const klientFilterAktiv = Boolean(amtFilter || hzlFilter || standortFilter || zimmerFilter || suche.trim());
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -281,12 +344,76 @@ export function Klienten({
 
       {ansicht !== "anwaerter" ? (
         <>
+          {klienten.length > 0 && (
+            <Filterleiste
+              ariaLabel="Klient:innen filtern und sortieren"
+              suche={{ wert: suche, onChange: setSuche, placeholder: "Name, Aktenzeichen, Amt…", ariaLabel: "Klient:innen durchsuchen" }}
+              zusatz={[
+                {
+                  id: "standort",
+                  label: "Standort",
+                  icon: <IStandort />,
+                  wert: standortFilter || null,
+                  optionen: standortOptionen,
+                  gewaehlt: standortFilter || null,
+                  onWaehlen: setStandortFilter,
+                  onEntfernen: () => setStandortFilter(""),
+                },
+                ...(ansicht === "archiv"
+                  ? []
+                  : [
+                      {
+                        id: "zimmer",
+                        label: "Zimmer",
+                        icon: <IZimmer />,
+                        wert: zimmerFilter ? (zimmerFilter === KEIN_ZIMMER ? "Ohne Zimmer" : "Mit Zimmer") : null,
+                        optionen: [
+                          { wert: "mit", label: "Mit Zimmer" },
+                          { wert: KEIN_ZIMMER, label: "Ohne Zimmer" },
+                        ],
+                        gewaehlt: zimmerFilter || null,
+                        onWaehlen: setZimmerFilter,
+                        onEntfernen: () => setZimmerFilter(""),
+                      },
+                    ]),
+              ]}
+              sortierung={{
+                optionen: (Object.keys(KLIENT_SORTIERUNG_LABEL) as KlientSortierung[]).map((o) => ({ wert: o, label: KLIENT_SORTIERUNG_LABEL[o] })),
+                wert: sortierung,
+                onWaehlen: (o) => setSortierung(o as KlientSortierung),
+              }}
+              aktiv={klientFilterAktiv}
+              onZuruecksetzen={() => {
+                setAmtFilter("");
+                setHzlFilter("");
+                setStandortFilter("");
+                setZimmerFilter("");
+                setSuche("");
+              }}
+            >
+              <OptionenFilter icon={<ITraeger />} label="Amt" optionen={amtOptionen} wert={amtFilter} onWaehlen={setAmtFilter} />
+              <OptionenFilter
+                icon={<IAuszahlen />}
+                label="HZL"
+                optionen={(Object.keys(HZL_RHYTHMUS_LABEL) as HzlRhythmus[]).map((r) => ({ wert: r, label: HZL_RHYTHMUS_LABEL[r] }))}
+                wert={hzlFilter}
+                onWaehlen={setHzlFilter}
+              />
+            </Filterleiste>
+          )}
+          {klienten.length > 0 && (
+            <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+              {sichtbareKlienten.length} {sichtbareKlienten.length === 1 ? "Klient:in" : "Klient:innen"} · {KLIENT_SORTIERUNG_LABEL[sortierung]}
+            </div>
+          )}
           {klienten.length === 0 ? (
             ansicht === "archiv" ? (
               <Leerzustand icon={ILeerArchiv}>Keine archivierten Klient:innen.</Leerzustand>
             ) : (
               <Leerzustand icon={ILeerKlienten}>Keine Klient:innen erfasst.</Leerzustand>
             )
+          ) : sichtbareKlienten.length === 0 ? (
+            <Leerzustand icon={ILeerKlienten}>Keine Klient:innen für diese Auswahl.</Leerzustand>
           ) : (
             <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "2fr 1fr 1fr 1fr 1.3fr" } as CSSProperties}>
               <div className="zv-liste-kopf">
@@ -296,7 +423,7 @@ export function Klienten({
                 <span>HZL</span>
                 <span>{ansicht === "archiv" ? "Archiviert am" : "Zimmer"}</span>
               </div>
-              {klienten.map((k) => (
+              {sichtbareKlienten.map((k) => (
                 <div
                   key={k.id}
                   className={`zv-info-karte zv-info-karte-klickbar${ausgewaehlterKlientId === k.id ? " zv-info-karte-aktiv" : ""}`}

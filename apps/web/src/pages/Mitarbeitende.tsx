@@ -1,11 +1,19 @@
-import { CSSProperties, FormEvent, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import type { AccountTypDto, BenutzerListEintragDto, OrgUnitDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { AktionsMenue } from "../components/AktionsMenue";
+import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
 import { Modal } from "../components/Modal";
-import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IResetLink, ISpeichern, IStandort } from "../components/icons";
+import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IPosition, IResetLink, ISpeichern, IStandort } from "../components/icons";
+
+type MitarbeitendeSortierung = "name-az" | "name-za" | "status";
+const MITARBEITENDE_SORTIERUNG_LABEL: Record<MitarbeitendeSortierung, string> = {
+  "name-az": "Name A–Z",
+  "name-za": "Name Z–A",
+  status: "Aktive zuerst",
+};
 
 export function Mitarbeitende() {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
@@ -82,6 +90,38 @@ export function Mitarbeitende() {
 
   useEffect(laden, []);
 
+  const [suche, setSuche] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [standortFilter, setStandortFilter] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [sortierung, setSortierung] = useState<MitarbeitendeSortierung>("name-az");
+  const sichtbareBenutzer = useMemo(() => {
+    const nachName = (a: BenutzerListEintragDto, b: BenutzerListEintragDto) => a.name.localeCompare(b.name, "de") || a.id.localeCompare(b.id);
+    return benutzer
+      .filter(
+        (b) =>
+          (!statusFilter || (statusFilter === "aktiv") === b.aktiv) &&
+          // Leere standortIds heisst "keine Einschraenkung" und gilt fuer jeden Standort.
+          (!standortFilter || b.standortIds.length === 0 || b.standortIds.includes(standortFilter)) &&
+          (!positionFilter || b.positionen.some((p) => p.titel === positionFilter)) &&
+          trifftSuche(suche, [b.name, b.email, ...b.positionen.map((p) => p.titel)]),
+      )
+      .sort((a, b) => {
+        switch (sortierung) {
+          case "name-az":
+            return nachName(a, b);
+          case "name-za":
+            return nachName(b, a);
+          case "status":
+            return Number(b.aktiv) - Number(a.aktiv) || nachName(a, b);
+        }
+      });
+  }, [benutzer, statusFilter, standortFilter, positionFilter, suche, sortierung]);
+  const positionOptionen = useMemo(
+    () => [...new Set(benutzer.flatMap((b) => b.positionen.map((p) => p.titel)))].sort((a, b) => a.localeCompare(b, "de")).map((t) => ({ wert: t, label: t })),
+    [benutzer],
+  );
+  const benutzerFilterAktiv = Boolean(statusFilter || standortFilter || positionFilter || suche.trim());
   const standortName = (id: string) => standorte.find((s) => s.id === id)?.name ?? "?";
 
   async function standorteSpeichern(e: FormEvent<HTMLFormElement>) {
@@ -252,8 +292,64 @@ export function Mitarbeitende() {
         </Modal>
       )}
 
+      {benutzer.length > 0 && (
+        <>
+          <Filterleiste
+            ariaLabel="Mitarbeitende filtern und sortieren"
+            suche={{ wert: suche, onChange: setSuche, placeholder: "Name, E-Mail, Position…", ariaLabel: "Mitarbeitende durchsuchen" }}
+            zusatz={[
+              {
+                id: "position",
+                label: "Position",
+                icon: <IPosition />,
+                wert: positionFilter || null,
+                optionen: positionOptionen,
+                gewaehlt: positionFilter || null,
+                onWaehlen: setPositionFilter,
+                onEntfernen: () => setPositionFilter(""),
+              },
+            ]}
+            sortierung={{
+              optionen: (Object.keys(MITARBEITENDE_SORTIERUNG_LABEL) as MitarbeitendeSortierung[]).map((o) => ({ wert: o, label: MITARBEITENDE_SORTIERUNG_LABEL[o] })),
+              wert: sortierung,
+              onWaehlen: (o) => setSortierung(o as MitarbeitendeSortierung),
+            }}
+            aktiv={benutzerFilterAktiv}
+            onZuruecksetzen={() => {
+              setStatusFilter("");
+              setStandortFilter("");
+              setPositionFilter("");
+              setSuche("");
+            }}
+          >
+            <OptionenFilter
+              icon={<IAktivieren />}
+              label="Status"
+              optionen={[
+                { wert: "aktiv", label: "Aktiv" },
+                { wert: "inaktiv", label: "Inaktiv" },
+              ]}
+              wert={statusFilter}
+              onWaehlen={setStatusFilter}
+            />
+            <OptionenFilter
+              icon={<IStandort />}
+              label="Standort"
+              optionen={standorte.map((st) => ({ wert: st.id, label: st.name }))}
+              wert={standortFilter}
+              onWaehlen={setStandortFilter}
+            />
+          </Filterleiste>
+          <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+            {sichtbareBenutzer.length} {sichtbareBenutzer.length === 1 ? "Person" : "Personen"} · {MITARBEITENDE_SORTIERUNG_LABEL[sortierung]}
+          </div>
+        </>
+      )}
+
       {benutzer.length === 0 ? (
         <Leerzustand icon={ILeerMitarbeitende}>Keine Mitarbeitenden gefunden.</Leerzustand>
+      ) : sichtbareBenutzer.length === 0 ? (
+        <Leerzustand icon={ILeerMitarbeitende}>Keine Mitarbeitenden für diese Auswahl.</Leerzustand>
       ) : (
         <div
           className="zv-karten-liste"
@@ -267,7 +363,7 @@ export function Mitarbeitende() {
             <span>Standorte</span>
             <span></span>
           </div>
-          {benutzer.map((b) => (
+          {sichtbareBenutzer.map((b) => (
             <div key={b.id} className="zv-info-karte">
               <span className="zv-liste-zelle-titel">{b.name}</span>
               <span className="zv-liste-zelle" data-label="E-Mail">
