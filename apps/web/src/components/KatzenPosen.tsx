@@ -1,3 +1,5 @@
+import type { MutableRefObject } from "react";
+
 /**
  * Zeichnung der Katze (Vorlage: Fotos von Dennis' Katze -- rot getigert mit
  * Weiss: Blesse, weisse Schnauze, Brust, Bauch und Pfoten, geringelter
@@ -67,13 +69,32 @@ function Bein({ x, y = 60, h = 34, dunkel = false, className }: { x: number; y?:
   );
 }
 
-export function PoseGehen() {
+/** Ein Bein der gehenden Katze; die Stellung schreibt katzen-rig.ts jeden Frame (hier nur die Huellen). */
+function GangBein({ i, fern }: { i: number; fern: boolean }) {
   return (
-    <>
-      <Schwanz className="k-schwanz-g" d="M32 52 C14 52 8 38 14 26" />
-      <Bein x={34} y={58} h={37} dunkel className="k-bein-a" />
-      <Bein x={92} y={60} h={35} dunkel className="k-bein-b" />
-      <g className="k-koerper">
+    <g className={`k-g-b${i} ${fern ? "k-g-fern" : "k-g-nah"}`}>
+      <path className="k-g-oben" d="" />
+      <path className="k-g-unten" d="" />
+      <path className="k-g-socke" d="" />
+      <ellipse className="k-g-pfote" cx="0" cy="0" rx="5.2" ry="2.6" />
+    </g>
+  );
+}
+
+/**
+ * Gehen/Laufen/Patschen. Anders als die anderen Posen ist diese nicht fest
+ * gezeichnet: Beine, Koerperwippen, Kopf und Schwanz setzt die Schleife je
+ * Frame (katzen-rig.ts), damit die Pfoten am Boden haften.
+ */
+export function PoseGehen({ rigRef }: { rigRef: MutableRefObject<SVGGElement | null> }) {
+  return (
+    <g ref={rigRef}>
+      <g className="k-g-schwanz">
+        <Schwanz d="M32 52 C14 52 8 38 14 26" />
+      </g>
+      <GangBein i={2} fern />
+      <GangBein i={3} fern />
+      <g className="k-g-koerper">
         <path
           className="k-fell"
           d="M26 54 C26 44 42 39 62 40 C82 41 98 43 108 48 C113 54 110 63 100 65 C84 67 50 67 38 65 C30 63 26 60 26 54Z"
@@ -85,20 +106,20 @@ export function PoseGehen() {
         <ellipse className="k-fell" cx="42" cy="56" rx="15" ry="11" />
         <path className="k-streifen k-duenn" d="M30 54 C34 46 48 46 54 56" />
         <ellipse className="k-fell" cx="110" cy="50" rx="9" ry="9" />
-        <g transform="translate(124 45) rotate(8) scale(.95)">
+        <g className="k-g-kopf">
           <Kopf />
         </g>
       </g>
-      <Bein x={50} y={60} h={35} className="k-bein-b" />
-      <Bein x={104} y={60} h={35} className="k-bein-a k-bein-vn" />
-    </>
+      <GangBein i={0} fern={false} />
+      <GangBein i={1} fern={false} />
+    </g>
   );
 }
 
 function SitzKoerper({ vorderbein }: { vorderbein: boolean }) {
   return (
     <>
-      <Schwanz d="M36 93 C58 100 104 100 118 94 C124 92 124 86 120 84" />
+      <Schwanz className="k-schwanz-ruhe" d="M36 93 C58 100 104 100 118 94 C124 92 124 86 120 84" />
       <path className="k-fell" d="M38 94 C32 70 44 46 70 38 C86 33 98 40 98 58 L96 94 Z" />
       <ellipse className="k-fell" cx="50" cy="78" rx="20" ry="17" />
       <path className="k-streifen k-duenn" d="M35 74 C40 62 58 62 66 76" />

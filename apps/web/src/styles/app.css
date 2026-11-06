@@ -5528,21 +5528,22 @@ button[class],
 .zv-katze .k-bein-linie.k-weiss-strich { stroke: var(--zv-katze-weiss); }
 .zv-katze .k-zzz { fill: var(--zv-text-muted); font-size: 11px; font-weight: 600; opacity: 0; }
 
-/* Gehen: Diagonalpaare schwingen gegenphasig; Koerper hebt und senkt sich. */
-.zv-katze .k-bein { transform-box: fill-box; transform-origin: 50% 0; }
-.zv-katze.pose-gehen .k-bein { animation: zv-katze-bein 0.62s ease-in-out infinite alternate; }
-.zv-katze.pose-laufen .k-bein { animation: zv-katze-bein 0.3s ease-in-out infinite alternate; }
-.zv-katze.pose-gehen .k-bein-b, .zv-katze.pose-laufen .k-bein-b { animation-direction: alternate-reverse; }
-.zv-katze.pose-gehen .k-koerper { animation: zv-katze-wippen 0.62s ease-in-out infinite alternate; }
-.zv-katze.pose-laufen .k-koerper { animation: zv-katze-wippen 0.3s ease-in-out infinite alternate; }
-.zv-katze.pose-gehen .k-schwanz-g, .zv-katze.pose-laufen .k-schwanz-g { transform-box: fill-box; transform-origin: 90% 90%; animation: zv-katze-schwanz 1.4s ease-in-out infinite alternate; }
-@keyframes zv-katze-bein { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
-@keyframes zv-katze-wippen { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
-@keyframes zv-katze-schwanz { from { transform: rotate(-7deg); } to { transform: rotate(11deg); } }
-/* Patschen: das vordere Bein holt aus, der Rest steht. */
-.zv-katze.pose-patschen .k-bein-vn { animation: zv-katze-patsch 0.4s ease-in-out; }
-@keyframes zv-katze-patsch { 0% { transform: rotate(0); } 40%, 70% { transform: rotate(-75deg); } 100% { transform: rotate(0); } }
-
+/* Gehen: Beine, Wippen, Kopf und Schwanz setzt die Schleife je Frame (katzen-rig.ts) -- hier nur das Aussehen. */
+.zv-katze .k-g-oben, .zv-katze .k-g-unten { fill: none; stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; }
+.zv-katze .k-g-socke { fill: none; stroke: var(--zv-katze-weiss); stroke-width: 6.9; stroke-linecap: round; }
+.zv-katze .k-g-pfote { fill: var(--zv-katze-weiss); }
+.zv-katze .k-g-nah .k-g-oben, .zv-katze .k-g-nah .k-g-unten { stroke: var(--zv-katze-fell); }
+.zv-katze .k-g-fern .k-g-oben, .zv-katze .k-g-fern .k-g-unten { stroke: var(--zv-katze-fell-dunkel); }
+.zv-katze .k-g-fern .k-g-socke { stroke: var(--zv-katze-weiss); opacity: 0.8; }
+.zv-katze .k-g-fern .k-g-pfote { opacity: 0.8; }
+/* Ueberblendung zwischen Posen */
+.zv-katze .k-aus { animation: zv-katze-aus 0.18s linear forwards; }
+.zv-katze .k-ein { animation: zv-katze-ein 0.1s linear; }
+@keyframes zv-katze-aus { from { opacity: 1; } to { opacity: 0; } }
+@keyframes zv-katze-ein { from { opacity: 0; } to { opacity: 1; } }
+/* Sitzen: Schwanzspitze pendelt langsam. */
+.zv-katze.pose-sitzen .k-schwanz-ruhe { transform-origin: 36px 93px; animation: zv-katze-ruhe 3.6s ease-in-out infinite alternate; }
+@keyframes zv-katze-ruhe { from { transform: rotate(-2deg); } to { transform: rotate(3deg); } }
 /* Hocke: Schwanzspitze zuckt, Anspannen. */
 .zv-katze .k-schwanz-zucken { transform-box: fill-box; transform-origin: 100% 0; animation: zv-katze-zucken 0.3s ease-in-out infinite alternate; }
 @keyframes zv-katze-zucken { from { transform: rotate(-4deg); } to { transform: rotate(5deg); } }

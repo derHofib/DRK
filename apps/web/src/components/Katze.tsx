@@ -11,7 +11,10 @@ import {
   sprungZiele,
   zeigerAbstand,
 } from "./katzen-logik";
+import { SCHRITT, TRAB, feder } from "./katzen-gang";
+import { rigAktualisieren } from "./katzen-rig";
 import { bodenY, plattformGueltig, plattformenSammeln } from "./katzen-umwelt";
+import { type MutableRefObject } from "react";
 import { PoseBrotlaib, PoseGehen, PoseHocke, PosePutzen, PoseRuecken, PoseSchlafen, PoseSitzen, PoseSprung, Wollknaeuel } from "./KatzenPosen";
 
 /**
@@ -95,6 +98,16 @@ interface KatzenZustand {
   spielzeit: number;
   uninteressiert: number;
   neigung: number;
+  phase: number; // Gangphase, waechst mit dem Weg (siehe katzen-gang.ts)
+  blend: number; // 0 steht .. 1 voller Gang
+  bewegt: boolean;
+  zeit: number;
+  sicht: number; // sichtbare Blickrichtung, dreht weich von -1 nach 1
+  sx: number;
+  sy: number;
+  vsx: number;
+  vsy: number;
+  tailKick: number;
 }
 
 function inEingabefeld(ziel: EventTarget | null): boolean {
@@ -131,6 +144,34 @@ function begrenzt(v: number, a: number, b: number): number {
   return Math.min(Math.max(v, a), Math.max(a, b));
 }
 
+/** Posen, die ineinander nicht ueberblendet werden muessen (gleiche Zeichnung). */
+function familie(p: Pose): string {
+  return p === "gehen" || p === "laufen" || p === "patschen" ? "gang" : p;
+}
+
+function PoseBild({ pose, rigRef }: { pose: Pose; rigRef: MutableRefObject<SVGGElement | null> }) {
+  switch (pose) {
+    case "gehen":
+    case "laufen":
+    case "patschen":
+      return <PoseGehen rigRef={rigRef} />;
+    case "sitzen":
+      return <PoseSitzen />;
+    case "putzen":
+      return <PosePutzen />;
+    case "brotlaib":
+      return <PoseBrotlaib />;
+    case "schlafen":
+      return <PoseSchlafen />;
+    case "ruecken":
+      return <PoseRuecken />;
+    case "hocke":
+      return <PoseHocke />;
+    case "sprung":
+      return <PoseSprung />;
+  }
+}
+
 export function KatzenEasterEgg() {
   const [katze, setKatze] = useState(() => lesen("zv-katze"));
   const [spielzeug, setSpielzeug] = useState(() => lesen("zv-spielzeug"));
@@ -165,7 +206,21 @@ export function KatzenEasterEgg() {
     spielzeit: 0,
     uninteressiert: 0,
     neigung: 0,
+    phase: 0,
+    blend: 0,
+    bewegt: false,
+    zeit: 0,
+    sicht: 1,
+    sx: 1,
+    sy: 1,
+    vsx: 0,
+    vsy: 0,
+    tailKick: 0,
   });
+  const rigRef = useRef<SVGGElement | null>(null);
+  const ungenutzt = useRef<SVGGElement | null>(null); // die ausblendende Vorgaengerpose braucht kein Rig
+  const vorigePose = useRef<Pose>("sitzen");
+  const [vorige, setVorige] = useState<Pose | null>(null);
   const ball = useRef<Ball & { lastX: number; lastY: number; lastT: number; offX: number; offY: number }>({
     x: 0,
     y: 0,
@@ -216,6 +271,16 @@ export function KatzenEasterEgg() {
     return () => window.clearTimeout(t);
   }, [blase]);
 
+  // Posenwechsel kurz ueberblenden statt hart zu schneiden (Sitzen -> Gehen, Liegen -> Sitzen ...).
+  useEffect(() => {
+    const alt = vorigePose.current;
+    vorigePose.current = pose;
+    if (familie(alt) === familie(pose)) return;
+    setVorige(alt);
+    const t = window.setTimeout(() => setVorige(null), 200);
+    return () => window.clearTimeout(t);
+  }, [pose]);
+
   // Zeigerposition nur von der Maus: ein Finger auf dem Wollknaeuel soll die Katze nicht verscheuchen.
   useEffect(() => {
     if (!katze) return;
@@ -258,6 +323,12 @@ export function KatzenEasterEgg() {
     k.plan = null;
     k.v = 0;
     k.neigung = 0;
+    k.phase = 0;
+    k.blend = 0;
+    k.sx = k.sy = 1;
+    k.vsx = k.vsy = 0;
+    k.tailKick = 0;
+    k.sicht = 1;
     if (reduziert()) {
       k.fx = vw - KW / 2 - 16;
       k.modus = "idle";
@@ -308,7 +379,17 @@ export function KatzenEasterEgg() {
       setzePose("sitzen");
       k.timer = sekunden;
     }
-    /** Auf der Plattform gehen: weich anfahren, vor dem Ziel abbremsen, nie ueber den Rand. */
+    /** Eine Bewegung um dx px: die Gangphase folgt dem Weg, nicht der Uhr. */
+    function bewege(dx: number) {
+      k.fx += dx;
+      k.bewegt = true;
+      const art = k.pose === "laufen" ? TRAB : SCHRITT;
+      k.phase += Math.abs(dx) / (art.schritt * 0.8); // 0,8 = Anzeigemassstab (128 px / 160 Einheiten)
+    }
+    /**
+     * Auf der Plattform gehen: weich anfahren, vor dem Ziel abbremsen, nie ueber den Rand.
+     * Wechselt die Richtung, bremst sie ab und dreht sich erst, dann geht sie los.
+     */
     function gehe(dt: number, tempo: number, fertig: () => void) {
       const p = k.plat;
       const ziel = begrenzt(k.ziel, p.x1 + RAND, p.x2 - RAND);
@@ -317,10 +398,15 @@ export function KatzenEasterEgg() {
         fertig();
         return;
       }
+      const wunsch = dx > 0 ? 1 : -1;
+      if (wunsch !== k.richtung) {
+        k.richtung = wunsch;
+        k.v = 0;
+      }
+      if (Math.abs(k.sicht - k.richtung) > 0.3) return; // dreht sich noch
       const soll = Math.min(tempo, 25 + Math.abs(dx) * 3);
       k.v += (soll - k.v) * Math.min(1, dt * 5);
-      k.richtung = dx > 0 ? 1 : -1;
-      k.fx += k.richtung * Math.min(Math.abs(dx), k.v * dt);
+      bewege(k.richtung * Math.min(Math.abs(dx), k.v * dt));
     }
     function ruhen() {
       const r = Math.random();
@@ -362,6 +448,12 @@ export function KatzenEasterEgg() {
       k.modus = "landen";
       k.timer = 0.28;
       k.neigung = 0;
+      // Aufprall: einfedern und mit gedaempfter Feder zurueckschwingen; der Schwanz schlaegt nach.
+      k.sx = 1.1;
+      k.sy = 0.86;
+      k.vsx = 0;
+      k.vsy = 0;
+      k.tailKick = 22;
       setzePose("hocke");
     }
     function bodenPlattform(vw: number, vh: number): Plattform {
@@ -493,6 +585,11 @@ export function KatzenEasterEgg() {
           k.vy = bahn.vy;
           if (Math.abs(bahn.vx) > 20) k.richtung = bahn.vx > 0 ? 1 : -1;
           k.modus = "flug";
+          // Abdruck: der Koerper streckt sich entlang der Flugrichtung, die Feder zieht ihn dann zurueck.
+          k.sx = 0.92;
+          k.sy = 1.14;
+          k.vsx = 0;
+          k.vsy = 0;
           setzePose("sprung");
           break;
         }
@@ -572,7 +669,7 @@ export function KatzenEasterEgg() {
           if (abstand > 85) {
             setzePose(abstand > 220 ? "laufen" : "gehen");
             k.v += ((abstand > 220 ? 190 : 120) - k.v) * Math.min(1, dt * 5);
-            k.fx += k.richtung * Math.min(abstand - 85, k.v * dt);
+            bewege(k.richtung * Math.min(abstand - 85, k.v * dt));
           } else {
             k.v = 0;
             const hoch = b.y < boden - 70;
@@ -697,9 +794,49 @@ export function KatzenEasterEgg() {
         if (el) el.style.transform = `translate3d(${b.x - BALL_R}px, ${b.y - BALL_R}px, 0) rotate(${b.drehung}deg)`;
       }
       if (katze) {
+        k.bewegt = false;
+        k.zeit += dt;
         katzeSchritt(dt, vw, vh);
+        // Gangblende: die Fuesse gehen in die Standposition, wenn sie nicht laeuft.
+        // Beim Losgehen schnell (sonst rutschen die ersten Schritte), beim Anhalten weicher.
+        k.blend += ((k.bewegt ? 1 : 0) - k.blend) * Math.min(1, dt * (k.bewegt ? 20 : 8));
+        // Blickrichtung dreht weich (ca. 0,2 s), nicht per Spiegeln.
+        const dR = k.richtung - k.sicht;
+        k.sicht += Math.max(-dt * 10, Math.min(dt * 10, dR));
+        // Stauchen/Strecken als gedaempfte Feder; Ziel hangt von der Phase des Sprungs ab.
+        let zx = 1;
+        let zy = 1;
+        if (k.modus === "hocke") {
+          zx = 1.06;
+          zy = 0.9;
+        } else if (k.modus === "flug") {
+          zx = k.vy < 0 ? 0.95 : 0.97;
+          zy = k.vy < 0 ? 1.07 : 1.04;
+        }
+        [k.sx, k.vsx] = feder(k.sx, k.vsx, zx, dt);
+        [k.sy, k.vsy] = feder(k.sy, k.vsy, zy, dt);
+        k.tailKick *= Math.exp(-dt * 5);
+        const gang = k.pose === "gehen" || k.pose === "laufen" || k.pose === "patschen";
+        if (gang && rigRef.current) {
+          const art = k.pose === "laufen" ? TRAB : SCHRITT;
+          const amp = k.pose === "laufen" ? 4 : 9;
+          const schwanz =
+            -4 * k.blend + amp * Math.sin(Math.PI * k.phase - 0.8) * k.blend + 5 * Math.sin(k.zeit * 1.7) + k.tailKick;
+          rigAktualisieren(rigRef.current, {
+            phase: k.phase,
+            blend: k.blend,
+            art,
+            kopf: 0,
+            schwanz,
+            patsch: k.modus === "patschen" ? Math.min(1, Math.max(0, 1 - k.timer / 0.4)) : null,
+          });
+        }
         if (katzeRef.current) katzeRef.current.style.transform = `translate3d(${k.fx - KW / 2}px, ${k.fy - FUSS}px, 0)`;
-        if (dreherRef.current) dreherRef.current.style.transform = `scaleX(${k.richtung}) rotate(${k.neigung}deg)`;
+        // Beim Drehen nie ganz flach: eine Katze im Profil hat keine Vorderansicht, also bleibt sie schmal sichtbar.
+        const breite = 0.4 + 0.6 * Math.abs(k.sicht);
+        const sx = (k.sicht >= 0 ? 1 : -1) * breite;
+        if (dreherRef.current)
+          dreherRef.current.style.transform = `scaleX(${sx.toFixed(3)}) rotate(${k.neigung.toFixed(1)}deg) scale(${k.sx.toFixed(3)}, ${k.sy.toFixed(3)})`;
       }
     }
 
@@ -763,14 +900,14 @@ export function KatzenEasterEgg() {
           )}
           <div className="zv-katze__dreher" ref={dreherRef}>
             <svg viewBox="0 0 160 100" width={KW} height={80} className="zv-katze__svg">
-              {(pose === "gehen" || pose === "laufen" || pose === "patschen") && <PoseGehen />}
-              {pose === "sitzen" && <PoseSitzen />}
-              {pose === "putzen" && <PosePutzen />}
-              {pose === "brotlaib" && <PoseBrotlaib />}
-              {pose === "schlafen" && <PoseSchlafen />}
-              {pose === "ruecken" && <PoseRuecken />}
-              {pose === "hocke" && <PoseHocke />}
-              {pose === "sprung" && <PoseSprung />}
+              {vorige && (
+                <g className="k-aus" key={`v-${familie(vorige)}`}>
+                  <PoseBild pose={vorige} rigRef={ungenutzt} />
+                </g>
+              )}
+              <g className={vorige ? "k-ein" : undefined} key={familie(pose)}>
+                <PoseBild pose={pose} rigRef={rigRef} />
+              </g>
             </svg>
           </div>
         </div>
