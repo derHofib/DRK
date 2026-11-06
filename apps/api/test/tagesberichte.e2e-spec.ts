@@ -274,6 +274,20 @@ describe("Tagesberichte", () => {
     expect(res.status).toBe(400);
   });
 
+  it("lehnt einen Tagesbericht mit Datum in der Zukunft mit 400 ab, erlaubt heute", async () => {
+    const heute = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(new Date());
+    const morgen = new Date(`${heute}T12:00:00Z`);
+    morgen.setUTCDate(morgen.getUTCDate() + 1);
+    const zukunft = await als(tokenBereichsleitung).post("/tagesberichte", {
+      klientId: klient1,
+      datum: morgen.toISOString().slice(0, 10),
+      text: "Noch nicht passiert.",
+    });
+    expect(zukunft.status).toBe(400);
+    const ok = await als(tokenBereichsleitung).post("/tagesberichte", { klientId: klient1, datum: heute, text: "Heute." });
+    expect(ok.status).toBe(201);
+  });
+
   /**
    * Dokumente an Tagesberichten: bewusst mehrere pro Bericht moeglich
    * (anders als bei rechnung_dokument), gleiche Sicherheitsvorkehrungen wie

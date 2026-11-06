@@ -2,7 +2,7 @@ import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } f
 import type { KlientListEintragDto, TagDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
-import { formatDatum } from "../format";
+import { formatDatum, heuteBerlin } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import {
@@ -283,6 +283,10 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
     const tagsText = String(form.get("tags") ?? "");
     const datei = form.get("dokument") as File | null;
     setFormFehler(null);
+    if (String(form.get("datum")) > heuteBerlin()) {
+      setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
+      return;
+    }
     try {
       let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
       if (datei && datei.size > 0) {
@@ -335,7 +339,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
     }
   }
 
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = heuteBerlin();
 
   return (
     <div>
@@ -385,7 +389,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
               </div>
               <div className="zv-field">
                 <label>Datum</label>
-                <input name="datum" type="date" required defaultValue={heute} />
+                <input name="datum" type="date" required max={heute} defaultValue={heute} />
               </div>
             </div>
             <div className="zv-field">

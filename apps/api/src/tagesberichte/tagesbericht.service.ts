@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { heuteBerlin } from "../common/heute";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
@@ -111,6 +112,11 @@ export class TagesberichtService {
     dokumente?: { base64: string; dateiname: string; mimeType: string }[];
   }): Promise<TagesberichtDto> {
     const { mandantId, benutzerId } = requireTenantContext();
+    // ISO-Daten sind lexikographisch vergleichbar. Hier im Service, weil jeder
+    // Weg zum INSERT daran vorbei muss, nicht nur der Controller.
+    if (input.datum > heuteBerlin()) {
+      throw new BadRequestException("Ein Tagesbericht darf nicht in der Zukunft liegen.");
+    }
     return this.db.withTenant(async (client) => {
       if (!(await klientIstErlaubt(client, benutzerId, input.klientId))) {
         throw new NotFoundException("Klient nicht gefunden.");

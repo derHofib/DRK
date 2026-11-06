@@ -53,7 +53,7 @@ import {
   IZurueck,
 } from "../components/icons";
 import { dateiZuBase64 } from "../datei";
-import { formatBetrag, formatDatum } from "../format";
+import { formatBetrag, formatDatum, heuteBerlin } from "../format";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
 type Tab = "ueberblick" | "tagesberichte" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
@@ -857,7 +857,7 @@ function UeberblickTab({
     setWirdGespeichert(true);
     setFehler(null);
     try {
-      await api.tagesberichtAnlegen({ klientId: klient.id, datum: new Date().toISOString().slice(0, 10), text: text.trim() });
+      await api.tagesberichtAnlegen({ klientId: klient.id, datum: heuteBerlin(), text: text.trim() });
       setText("");
       onBerichtAngelegt();
     } catch (err) {
@@ -1824,6 +1824,10 @@ function TagesberichteTab({
     const tagsText = String(form.get("tags") ?? "");
     const datei = form.get("dokument") as File | null;
     setFormFehler(null);
+    if (String(form.get("datum")) > heuteBerlin()) {
+      setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
+      return;
+    }
     try {
       let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
       if (datei && datei.size > 0) {
@@ -1876,7 +1880,7 @@ function TagesberichteTab({
     }
   }
 
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = heuteBerlin();
 
   return (
     <div>
@@ -1912,7 +1916,7 @@ function TagesberichteTab({
             )}
             <div className="zv-field">
               <label>Datum</label>
-              <input name="datum" type="date" required autoFocus defaultValue={heute} />
+              <input name="datum" type="date" required autoFocus max={heute} defaultValue={heute} />
             </div>
             <div className="zv-field">
               <label>Bericht</label>

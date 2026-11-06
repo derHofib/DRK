@@ -105,3 +105,8 @@ export function kontextzeile(jetzt: Date = new Date(), dienst?: string): string 
   if (dienst) teile.push(dienst);
   return teile.join(" \u00b7 ");
 }
+
+/** Heutiges Datum (YYYY-MM-DD) in Europe/Berlin -- nicht UTC, siehe api/src/common/heute.ts. */
+export function heuteBerlin(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(new Date());
+}
