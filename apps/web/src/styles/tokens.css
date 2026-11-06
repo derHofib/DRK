@@ -504,3 +504,19 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Fellfarben der Begleit-Katze (components/Katze.tsx). Eigene Tokens statt
+ * Literalwerten im SVG, damit sie im Dunkelmodus automatisch mitwechseln.
+ * Das Fell ist bewusst Tabby-Braun und nicht Akzent- oder Achtungsfarbe:
+ * die Katze soll nicht wie eine Statusmeldung aussehen.
+ */
+:root {
+  --zv-katze-fell: light-dark(oklch(0.64 0.09 62), oklch(0.72 0.08 62));
+  --zv-katze-fell-dunkel: light-dark(oklch(0.52 0.08 58), oklch(0.59 0.07 58));
+  --zv-katze-streifen: light-dark(oklch(0.4 0.06 52), oklch(0.46 0.06 52));
+  --zv-katze-hell: light-dark(oklch(0.94 0.03 80), oklch(0.9 0.03 80));
+  --zv-katze-ohr: oklch(0.8 0.08 20);
+  --zv-katze-auge: oklch(0.82 0.16 125);
+  --zv-katze-linie: light-dark(oklch(0.27 0.03 50), oklch(0.2 0.02 50));
+}

@@ -5491,36 +5491,73 @@ button[class],
   .zv-raster-inhalt { overflow: visible; }
 }
 
+
 /* ==========================================================================
-   Katzen-Easter-Egg (components/Katze.tsx)
+   Begleit-Katze und Wollknaeuel (components/Katze.tsx)
+   Position und Blickrichtung setzt die Schleife im JS per transform; hier
+   steht nur Aussehen und Bewegung der einzelnen Posen.
    ========================================================================== */
 .zv-katze {
   position: fixed;
-  bottom: var(--zv-space-2, 8px);
   left: 0;
+  bottom: 6px;
+  width: 128px;
+  height: 80px;
   z-index: 70;
   pointer-events: none;
-  color: var(--zv-text-muted);
-  animation: zv-katze-laufen linear forwards;
   will-change: transform;
 }
-@keyframes zv-katze-laufen {
-  from { transform: translateX(-120px); }
-  to { transform: translateX(100vw); }
-}
-.zv-katze__bein { transform-box: fill-box; transform-origin: 50% 0; animation: zv-katze-bein 0.45s ease-in-out infinite alternate; }
-.zv-katze__bein--vorn, .zv-katze__bein--hinten2 { animation-direction: alternate-reverse; }
-@keyframes zv-katze-bein { from { transform: rotate(-28deg); } to { transform: rotate(28deg); } }
-.zv-katze__schwanz { transform-box: fill-box; transform-origin: 90% 90%; animation: zv-katze-schwanz 0.9s ease-in-out infinite alternate; }
-@keyframes zv-katze-schwanz { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }
+.zv-katze__dreher { width: 100%; height: 100%; }
+.zv-katze__svg { display: block; overflow: visible; }
 
-/* Reduzierte Bewegung: kein Laufen, nur kurzes Ein- und Ausblenden. */
-.zv-katze--ruhig { left: auto; right: var(--zv-space-4, 16px); animation: zv-katze-ruhig 3s ease-in-out forwards; }
-.zv-katze--ruhig * { animation: none !important; }
-@keyframes zv-katze-ruhig { 0%, 100% { opacity: 0; } 20%, 80% { opacity: 1; } }
-.zv-katze { display: flex; flex-direction: column; align-items: flex-end; }
+.zv-katze .k-fell { fill: var(--zv-katze-fell); }
+.zv-katze .k-fell-dunkel { fill: var(--zv-katze-fell-dunkel); }
+.zv-katze .k-hell { fill: var(--zv-katze-hell); }
+.zv-katze .k-ohr { fill: var(--zv-katze-ohr); }
+.zv-katze .k-auge { fill: var(--zv-katze-auge); }
+.zv-katze .k-pupille { fill: var(--zv-katze-linie); }
+.zv-katze .k-streifen { fill: none; stroke: var(--zv-katze-streifen); stroke-width: 3; stroke-linecap: round; }
+.zv-katze .k-streifen.k-duenn { stroke-width: 1.6; opacity: 0.8; }
+.zv-katze .k-linie { fill: none; stroke: var(--zv-katze-linie); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.zv-katze .k-schnurr { stroke-width: 0.8; opacity: 0.5; }
+.zv-katze .k-schwanz { fill: none; stroke: var(--zv-katze-fell); stroke-width: 7; stroke-linecap: round; }
+.zv-katze .k-bein-linie { fill: none; stroke: var(--zv-katze-fell); stroke-width: 9; stroke-linecap: round; }
+.zv-katze .k-zzz { fill: var(--zv-text-muted); font-size: 11px; font-weight: 600; opacity: 0; }
+
+/* Gehen: Beinpaare schwingen gegenphasig um die Huefte/Schulter. */
+.zv-katze .k-bein { transform-box: fill-box; transform-origin: 50% 0; }
+.zv-katze.pose-gehen .k-bein { animation: zv-katze-bein 0.42s ease-in-out infinite alternate; }
+.zv-katze.pose-gehen .k-bein-b { animation-direction: alternate-reverse; }
+.zv-katze.pose-gehen .k-schwanz-g { transform-box: fill-box; transform-origin: 90% 90%; animation: zv-katze-schwanz 1s ease-in-out infinite alternate; }
+@keyframes zv-katze-bein { from { transform: rotate(-26deg); } to { transform: rotate(26deg); } }
+@keyframes zv-katze-schwanz { from { transform: rotate(-8deg); } to { transform: rotate(12deg); } }
+/* Patschen: das vordere Bein holt aus, der Rest steht. */
+.zv-katze.pose-patschen .k-bein-vn { animation: zv-katze-patsch 0.4s ease-in-out; }
+@keyframes zv-katze-patsch { 0% { transform: rotate(0); } 40% { transform: rotate(-75deg); } 70% { transform: rotate(-75deg); } 100% { transform: rotate(0); } }
+
+/* Blinzeln: seltener, kurzer Lidschlag. */
+.zv-katze .k-augen { transform-box: fill-box; transform-origin: 50% 50%; animation: zv-katze-blinzeln 5s infinite; }
+@keyframes zv-katze-blinzeln { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+
+/* Putzen: die Pfote faehrt immer wieder zum Maul. */
+.zv-katze .k-pfote { transform-origin: 97px 64px; animation: zv-katze-lecken 0.7s ease-in-out infinite alternate; }
+@keyframes zv-katze-lecken { from { transform: rotate(-8deg); } to { transform: rotate(10deg); } }
+
+/* Schlafen: langsames Atmen, aufsteigende "z". */
+.zv-katze .k-atmen { transform-origin: 70px 95px; animation: zv-katze-atmen 3.2s ease-in-out infinite; }
+@keyframes zv-katze-atmen { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.035); } }
+.zv-katze .k-zzz { animation: zv-katze-zzz 3.2s ease-in infinite; }
+.zv-katze .k-zzz-2 { animation-delay: 0.5s; }
+.zv-katze .k-zzz-3 { animation-delay: 1s; }
+@keyframes zv-katze-zzz { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-8px); } }
+
+/* Sprechblase steht ausserhalb des gespiegelten Teils, damit der Text nie spiegelverkehrt ist. */
 .zv-katze__blase {
-  margin-bottom: var(--zv-space-1);
+  position: absolute;
+  bottom: calc(100% + var(--zv-space-1));
+  left: 50%;
+  translate: -50% 0;
+  white-space: nowrap;
   padding: var(--zv-space-1) var(--zv-space-3);
   border: 1px solid var(--zv-border-strong);
   border-radius: var(--zv-radius-m);
@@ -5528,8 +5565,34 @@ button[class],
   color: var(--zv-text);
   font-size: var(--zv-text-meta);
   box-shadow: var(--zv-shadow-2);
-  /* Erscheint erst, wenn die Katze ein Stueck gelaufen ist, und verschwindet wieder. */
-  animation: zv-katze-blase 7s ease-in-out forwards;
+  animation: zv-katze-blase 1.8s ease-in-out forwards;
 }
-@keyframes zv-katze-blase { 0%, 10% { opacity: 0; } 15%, 40% { opacity: 1; } 50%, 55% { opacity: 0; } 60%, 85% { opacity: 1; } 95%, 100% { opacity: 0; } }
-.zv-katze--ruhig .zv-katze__blase { animation: none !important; opacity: 1; }
+@keyframes zv-katze-blase { 0% { opacity: 0; } 10%, 85% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Das Spielzeug ist das Einzige, das Klicks annimmt. */
+.zv-wolle {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  z-index: 71;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  will-change: transform;
+}
+.zv-wolle:active { cursor: grabbing; }
+.zv-wolle__svg { display: block; overflow: visible; }
+.zv-wolle .w-kugel { fill: var(--zv-achtung); }
+.zv-wolle .w-linie { fill: none; stroke: var(--zv-achtung-soft); stroke-width: 1.6; stroke-linecap: round; opacity: 0.85; }
+.zv-wolle .w-faden { fill: none; stroke: var(--zv-achtung); stroke-width: 2; stroke-linecap: round; }
+
+/* Reduzierte Bewegung: keine Dauerschleifen (der globale Reset oben liesse
+   sie sonst im Endzustand einfrieren, z. B. mit verdrehten Beinen). */
+@media (prefers-reduced-motion: reduce) {
+  .zv-katze *, .zv-katze__blase { animation: none !important; }
+  .zv-katze__blase { opacity: 1; }
+  .zv-katze .k-zzz { opacity: 0.7; }
+}
