@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useMemo, useState } from "react";
 import type { StandortDto, StandortUebersichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { Leerzustand } from "../components/Leerzustand";
-import { IFehler, IKassenbuch, IKlienten, ILeerStandorte, IStandort, IZimmer } from "../components/icons";
+import { IFehler, IKassenbuch, IKlienten, ILeerStandorte, ISuche, IStandort, IZimmer } from "../components/icons";
 import { FilterMehrfachAuswahl, FilterPille } from "../components/Filterleiste";
 import { KachelRaster, KachelDef } from "../components/KachelRaster";
 import { formatBetrag, formatDatum } from "../format";
@@ -84,6 +84,19 @@ function zusammenfuehren(teile: StandortUebersichtDto[]): Zusammen {
   return z;
 }
 
+/** Freitextsuche ueber die Listenzeilen; Kennzahlen bleiben davon unberuehrt. */
+function filtere(z: Zusammen, q: string): Zusammen {
+  const t = q.trim().toLocaleLowerCase("de");
+  if (!t) return z;
+  const passt = (...teile: (string | null | undefined)[]) => teile.some((x) => x?.toLocaleLowerCase("de").includes(t));
+  return {
+    ...z,
+    zimmer: z.zimmer.filter((r) => passt(r.nummer, r.etage, r.standort, ...r.bewohner.map((b) => b.name))),
+    klienten: z.klienten.filter((r) => passt(r.name, r.aktenzeichen, r.zimmerNummer, r.standort, r.amt)),
+    buchungen: z.buchungen.filter((r) => passt(r.klientName, r.typBezeichnung, r.verwendungszweck, r.standort)),
+  };
+}
+
 /**
  * Standort-Uebersicht (Menuepunkt "Standorte"): Zimmer, Klient:innen,
  * Kassenbuch. Statt Reitern gibt es die Filterleiste wie bei den
@@ -98,7 +111,8 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
   const [standorte, setStandorte] = useState<StandortDto[] | null>(null);
   const [auswahl, setAuswahl] = useState<string[]>(() => ladeListe(AUSWAHL_SPEICHER));
   const [infos, setInfos] = useState<Info[]>(() => ladeListe(INFO_SPEICHER).filter((i): i is Info => i in INFO_LABEL));
-  const [daten, setDaten] = useState<Zusammen | null>(null);
+  const [teile, setTeile] = useState<StandortUebersichtDto[] | null>(null);
+  const [suche, setSuche] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
   const [wirdGeladen, setWirdGeladen] = useState(false);
 
@@ -116,14 +130,14 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
 
   useEffect(() => {
     if (!abfrageSchluessel) {
-      setDaten(null);
+      setTeile(null);
       return;
     }
     let abgebrochen = false;
     setWirdGeladen(true);
     setFehler(null);
     Promise.all(abfrageSchluessel.split(",").map((id) => api.standortUebersicht(id)))
-      .then((teile) => !abgebrochen && setDaten(zusammenfuehren(teile)))
+      .then((t) => !abgebrochen && setTeile(t))
       .catch((err) => !abgebrochen && setFehler(err.message))
       .finally(() => !abgebrochen && setWirdGeladen(false));
     return () => {
@@ -133,21 +147,21 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
 
   const sichtbar = (i: Info) => infos.length === 0 || infos.includes(i);
   const einzelStandort = abfrageIds.length === 1 ? abfrageIds[0] : null;
-  const filterAktiv = gueltig.length > 0 || infos.length > 0;
+  const filterAktiv = gueltig.length > 0 || infos.length > 0 || suche !== "";
   const standortName = (id: string) => standorte?.find((s) => s.id === id)?.name ?? id;
 
-  const kacheln: KachelDef[] | null = daten ? [
+  const baue = (daten: Zusammen, suffix: string, zusatz: string, zeile: number): KachelDef[] => [
     {
-      id: "stat-plaetze",
-      titel: "Plätze frei",
-      standard: { x: 0, y: 0, w: 3, h: 3 },
+      id: "stat-plaetze" + suffix,
+      titel: "Plätze frei" + zusatz,
+      standard: { x: 0, y: 0 + zeile, w: 3, h: 3 },
       minW: 3,
       minH: 3,
       inhalt: (
         <div className="zv-kachel-stat">
               <p className="zv-stat-label">
                 <IZimmer style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                Plätze frei
+                Plätze frei{zusatz}
               </p>
               <p className="zv-stat-wert">
                 {daten.plaetzeFrei} / {daten.plaetzeGesamt}
@@ -157,16 +171,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "stat-klienten",
-      titel: "Klient:innen (Anzahl)",
-      standard: { x: 3, y: 0, w: 3, h: 3 },
+      id: "stat-klienten" + suffix,
+      titel: "Klient:innen (Anzahl)" + zusatz,
+      standard: { x: 3, y: 0 + zeile, w: 3, h: 3 },
       minW: 3,
       minH: 3,
       inhalt: (
         <div className="zv-kachel-stat">
               <p className="zv-stat-label">
                 <IKlienten style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                Klient:innen
+                Klient:innen{zusatz}
               </p>
               <p className="zv-stat-wert">{daten.klienten.length}</p>
               <p className="zv-stat-sub">wohnen aktuell hier</p>
@@ -174,16 +188,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "stat-kasse",
-      titel: "Haus-Kasse",
-      standard: { x: 6, y: 0, w: 3, h: 3 },
+      id: "stat-kasse" + suffix,
+      titel: "Haus-Kasse" + zusatz,
+      standard: { x: 6, y: 0 + zeile, w: 3, h: 3 },
       minW: 3,
       minH: 3,
       inhalt: (
         <div className="zv-kachel-stat">
               <p className="zv-stat-label">
                 <IKassenbuch style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                Haus-Kasse
+                Haus-Kasse{zusatz}
               </p>
               <p className="zv-stat-wert">{formatBetrag(daten.hausSaldoCent)}</p>
               <p className="zv-stat-sub">Klientengelder: {formatBetrag(daten.klientenSaldoCent)}</p>
@@ -191,16 +205,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "stat-hzl",
-      titel: "HZL diese Woche",
-      standard: { x: 9, y: 0, w: 3, h: 3 },
+      id: "stat-hzl" + suffix,
+      titel: "HZL diese Woche" + zusatz,
+      standard: { x: 9, y: 0 + zeile, w: 3, h: 3 },
       minW: 3,
       minH: 3,
       inhalt: (
         <div className="zv-kachel-stat">
               <p className="zv-stat-label">
                 <IKassenbuch style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                HZL diese Woche
+                HZL diese Woche{zusatz}
               </p>
               <p className="zv-stat-wert">
                 {daten.hzl.bezahlt} / {daten.hzl.gesamt}
@@ -214,16 +228,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "zimmer",
-      titel: "Zimmer",
-      standard: { x: 0, y: 3, w: 6, h: 8 },
+      id: "zimmer" + suffix,
+      titel: "Zimmer" + zusatz,
+      standard: { x: 0, y: 3 + zeile, w: 6, h: 8 },
       minW: 6,
       minH: 6,
       inhalt: (
         <div className="zv-kachel-karte">
               <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
                 <IZimmer />
-                Zimmer
+                Zimmer{zusatz}
               </h3>
               {daten.zimmer.length === 0 ? (
                 <p className="zv-sub">Noch keine Zimmer an diesem Standort.</p>
@@ -267,16 +281,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "klienten",
-      titel: "Klient:innen",
-      standard: { x: 6, y: 3, w: 6, h: 8 },
+      id: "klienten" + suffix,
+      titel: "Klient:innen" + zusatz,
+      standard: { x: 6, y: 3 + zeile, w: 6, h: 8 },
       minW: 6,
       minH: 6,
       inhalt: (
         <div className="zv-kachel-karte">
               <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
                 <IKlienten />
-                Klient:innen
+                Klient:innen{zusatz}
               </h3>
               {daten.klienten.length === 0 ? (
                 <p className="zv-sub">Zurzeit wohnt niemand an diesem Standort.</p>
@@ -314,16 +328,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
       ),
     },
     {
-      id: "buchungen",
-      titel: "Letzte Buchungen",
-      standard: { x: 0, y: 11, w: 12, h: 8 },
+      id: "buchungen" + suffix,
+      titel: "Letzte Buchungen" + zusatz,
+      standard: { x: 0, y: 11 + zeile, w: 12, h: 8 },
       minW: 7,
       minH: 6,
       inhalt: (
         <div className="zv-kachel-karte">
             <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, margin: "0 0 12px" }}>
               <IKassenbuch />
-              Letzte Buchungen
+              Letzte Buchungen{zusatz}
             </h3>
             {daten.buchungen.length === 0 ? (
               <p className="zv-sub">Noch keine Buchungen.</p>
@@ -361,7 +375,17 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
 </div>
       ),
     },
-  ].filter((k) => sichtbar(k.id.startsWith("stat-") ? "kennzahlen" : (k.id === "buchungen" ? "buchungen" : (k.id as Info)))) : null;
+  ];
+
+  // Mit Informationsfilter ueber mehrere Standorte: je Standort eigene Kacheln (Gruppierung),
+  // sonst eine zusammengefasste Sicht ueber alles Gewaehlte.
+  const kacheln: KachelDef[] | null = teile
+    ? (infos.length > 0 && teile.length > 1
+        ? teile.flatMap((t, i) => baue(filtere(zusammenfuehren([t]), suche), `@${t.standort.id}`, ` · ${t.standort.name}`, i * 40))
+        : baue(filtere(zusammenfuehren(teile), suche), "", "", 0)
+      ).filter((k) => sichtbar(k.id.startsWith("stat-") ? "kennzahlen" : (k.id.split("@")[0] as Info)))
+    : null;
+  const daten = teile ? zusammenfuehren(teile) : null;
 
   return (
     <div>
@@ -400,6 +424,16 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
 
       {standorte && standorte.length > 0 && (
         <div className="zv-filterleiste" role="search" aria-label="Standorte und Informationen filtern">
+          <label className="zv-filter-suche">
+            <ISuche />
+            <input
+              type="search"
+              value={suche}
+              onChange={(e) => setSuche(e.target.value)}
+              placeholder="Suchen (Name, Zimmer, Aktenzeichen, Buchung …)"
+              aria-label="Standortdaten durchsuchen"
+            />
+          </label>
           <FilterPille
             icon={<IStandort />}
             label="Standort"
@@ -411,6 +445,7 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
           >
             {() => (
               <FilterMehrfachAuswahl
+                durchsuchbar
                 optionen={standorte.map((s) => ({ wert: s.id, label: s.name }))}
                 gewaehlt={gueltig}
                 onAendern={(neu) => {
@@ -431,6 +466,7 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
           >
             {() => (
               <FilterMehrfachAuswahl
+                durchsuchbar
                 optionen={ALLE_INFOS.map((i) => ({ wert: i, label: INFO_LABEL[i] }))}
                 gewaehlt={infos}
                 onAendern={(neu) => {
@@ -446,6 +482,7 @@ export function StandortUebersicht({ onBelegungOeffnen, nutzerId }: { onBelegung
               onClick={() => {
                 setAuswahl([]);
                 setInfos([]);
+                setSuche("");
                 speichereListe(AUSWAHL_SPEICHER, []);
                 speichereListe(INFO_SPEICHER, []);
               }}
