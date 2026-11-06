@@ -23,6 +23,9 @@ fi
 
 echo "-> Hole neuesten Stand aus git..."
 git pull
+# Sichtbar machen, welcher Branch/Stand gebaut wird -- ein Server auf dem
+# falschen Branch holt per "git pull" still nichts Neues.
+echo "   Branch: $(git rev-parse --abbrev-ref HEAD) @ $(git log -1 --format='%h %s')"
 
 echo "-> Baue und starte den Stack neu (db, migrate, api, web, caddy)..."
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build

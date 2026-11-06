@@ -201,9 +201,12 @@ describe("Chat-Ereignisse (SSE)", () => {
 
     // Loeschen meldet ebenfalls
     const nachrichtId = (await als(tokenLeitung).post(`/chat/${chat}/nachrichten`, { art: "text", text: "zwei" })).body.id;
-    const vorher = art(b, chat).length;
     await als(tokenLeitung).del(`/chat/nachrichten/${nachrichtId}`);
-    await b.warteAuf(() => art(b, chat).length >= vorher + 2);
+    // Insgesamt drei Ereignisse: erste Nachricht, zweite Nachricht, Loeschung. Absolut statt
+    // "Stand nach dem Senden + 2" zu zaehlen: das Ereignis der zweiten Nachricht kann beim
+    // Lesen des Standes schon da sein oder noch unterwegs -- relativ gezaehlt wartete der
+    // Test dann auf ein viertes Ereignis, das nie kommt (in der CI beobachtet).
+    await b.warteAuf(() => art(b, chat).length >= 3);
     b.schliesse();
   });
 
