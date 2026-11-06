@@ -5490,3 +5490,46 @@ button[class],
   .zv-raster-griff, .zv-raster-ecke, .zv-raster-leiste { display: none; }
   .zv-raster-inhalt { overflow: visible; }
 }
+
+/* ==========================================================================
+   Katzen-Easter-Egg (components/Katze.tsx)
+   ========================================================================== */
+.zv-katze {
+  position: fixed;
+  bottom: var(--zv-space-2, 8px);
+  left: 0;
+  z-index: 70;
+  pointer-events: none;
+  color: var(--zv-text-muted);
+  animation: zv-katze-laufen linear forwards;
+  will-change: transform;
+}
+@keyframes zv-katze-laufen {
+  from { transform: translateX(-120px); }
+  to { transform: translateX(100vw); }
+}
+.zv-katze__bein { transform-box: fill-box; transform-origin: 50% 0; animation: zv-katze-bein 0.45s ease-in-out infinite alternate; }
+.zv-katze__bein--vorn, .zv-katze__bein--hinten2 { animation-direction: alternate-reverse; }
+@keyframes zv-katze-bein { from { transform: rotate(-28deg); } to { transform: rotate(28deg); } }
+.zv-katze__schwanz { transform-box: fill-box; transform-origin: 90% 90%; animation: zv-katze-schwanz 0.9s ease-in-out infinite alternate; }
+@keyframes zv-katze-schwanz { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }
+
+/* Reduzierte Bewegung: kein Laufen, nur kurzes Ein- und Ausblenden. */
+.zv-katze--ruhig { left: auto; right: var(--zv-space-4, 16px); animation: zv-katze-ruhig 3s ease-in-out forwards; }
+.zv-katze--ruhig * { animation: none !important; }
+@keyframes zv-katze-ruhig { 0%, 100% { opacity: 0; } 20%, 80% { opacity: 1; } }
+.zv-katze { display: flex; flex-direction: column; align-items: flex-end; }
+.zv-katze__blase {
+  margin-bottom: var(--zv-space-1);
+  padding: var(--zv-space-1) var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  box-shadow: var(--zv-shadow-2);
+  /* Erscheint erst, wenn die Katze ein Stueck gelaufen ist, und verschwindet wieder. */
+  animation: zv-katze-blase 7s ease-in-out forwards;
+}
+@keyframes zv-katze-blase { 0%, 10% { opacity: 0; } 15%, 40% { opacity: 1; } 50%, 55% { opacity: 0; } 60%, 85% { opacity: 1; } 95%, 100% { opacity: 0; } }
+.zv-katze--ruhig .zv-katze__blase { animation: none !important; opacity: 1; }
