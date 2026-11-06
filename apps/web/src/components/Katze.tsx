@@ -1,52 +1,100 @@
 import { useEffect, useRef, useState } from "react";
-import { type Ball, FLUCHT_RADIUS, ballSchritt, fluchtziel, spazierziel, zeigerAbstand } from "./katzen-logik";
+import {
+  type Ball,
+  type Plattform,
+  type Sprung,
+  FLUCHT_RADIUS,
+  GRAVITATION,
+  aufsetzer,
+  ballSchritt,
+  sprungBahn,
+  sprungZiele,
+  zeigerAbstand,
+} from "./katzen-logik";
+import { bodenY, plattformGueltig, plattformenSammeln } from "./katzen-umwelt";
+import { PoseBrotlaib, PoseGehen, PoseHocke, PosePutzen, PoseRuecken, PoseSchlafen, PoseSitzen, PoseSprung, Wollknaeuel } from "./KatzenPosen";
 
 /**
- * Easter Eggs: eine kleine Begleit-Katze und ein Wollknaeuel.
+ * Easter Eggs: eine Begleit-Katze, die auf der Seite herumklettert, und ein Wollknaeuel.
  *
  *   Alt+Umschalt+K   Katze erscheint / geht wieder
  *   Alt+Umschalt+S   Wollknaeuel (Spielzeug) erscheint / verschwindet
  *
+ * Spezifikation: /mnt/project-files/katze/spezifikation-katze.md (Dennis, Fotos seiner Katze).
+ *
  * Bewusste Entscheidungen:
+ *  - Die Seite ist ihr Kletterbaum: Oberkanten echter Elemente (Karten,
+ *    Kacheln, Filterleiste, Tabbar ...) sind Plattformen (katzen-umwelt.ts).
+ *    Zwischen Plattformen laeuft sie nie, sie springt -- Gehen gibt es nur
+ *    auf einer Plattform. Verschwindet oder scrollt die Plattform weg, faellt
+ *    sie auf die naechste darunter; beim Scrollen faehrt sie auf ihrer
+ *    Kachel mit (die Kante wird jeden Frame neu gelesen).
  *  - Tasten ueber `event.code`: auf dem Mac erzeugt Option ein Sonderzeichen,
- *    `event.key` waere dort nicht "k". Weder Browser noch App belegen die
- *    Kombinationen. In Eingabefeldern passiert nie etwas.
- *  - Die Katze sitzt am unteren Rand, laeuft, putzt sich und schlaeft. Kommt
- *    der Mauszeiger in ihre Naehe, steht sie auf und geht auf die andere
- *    Seite -- sie soll nie etwas verdecken, das man gerade bedienen will.
- *    Eine Ausnahme: Haelt man das Spielzeug in der Hand, bleibt sie, denn
- *    dann will man ja mit ihr spielen.
+ *    `event.key` waere dort nicht "k". In Eingabefeldern passiert nie etwas.
+ *  - Kommt der Mauszeiger in ihre Naehe, steht sie auf und weicht auf eine
+ *    entfernte Plattform aus -- sie soll nie etwas verdecken, das man gerade
+ *    bedienen will. Haelt man das Spielzeug in der Hand, bleibt sie.
  *  - Die Schleife schreibt Positionen direkt ins DOM; React rendert nur bei
- *    Wechsel der Pose. 60 Renderdurchgaenge pro Sekunde waeren Verschwendung.
- *  - Kein Fremd-Asset, kein Ton: Inline-SVG und CSS, also auch offline da.
- *  - `pointer-events: none` ueberall ausser auf dem Wollknaeuel; `aria-hidden`.
- *  - prefers-reduced-motion: die Katze sitzt still und weicht dem Zeiger per
- *    Sprung aus, das Spielzeug folgt nur der Hand (keine Physik, kein Spiel).
+ *    Wechsel der Pose.
+ *  - Kein Fremd-Asset, kein Ton. `pointer-events: none` ausser auf dem
+ *    Wollknaeuel; `aria-hidden`.
+ *  - prefers-reduced-motion: die Katze sitzt still am Boden und weicht dem
+ *    Zeiger per Sprung-Schnitt aus; das Spielzeug folgt nur der Hand.
  *  - Der Zustand lebt in sessionStorage: ein Neuladen im selben Tab behaelt
  *    die Katze, ein neuer Tab beginnt ohne sie.
  */
 
 const KW = 128; // Anzeigebreite der Katze (px)
-const KH = 80;
-const RAND_UNTEN = 6;
+const FUSS = 77; // Abstand Oberkante Katze -> Fusslinie (96 % von 80 px)
 const BALL_R = 16;
-const BALL_RAND_UNTEN = 8;
+const RAND = 14;
 
-type Pose = "gehen" | "sitzen" | "schlafen" | "putzen" | "patschen";
-type Modus = "idle" | "gehen" | "aufstehen" | "flucht" | "jagen" | "patschen";
+type Pose =
+  | "gehen"
+  | "laufen"
+  | "sitzen"
+  | "putzen"
+  | "brotlaib"
+  | "schlafen"
+  | "ruecken"
+  | "hocke"
+  | "sprung"
+  | "patschen";
+type Modus =
+  | "idle"
+  | "gehen"
+  | "anlauf"
+  | "hocke"
+  | "flug"
+  | "landen"
+  | "aufstehen"
+  | "flucht"
+  | "ruhen"
+  | "jagen"
+  | "patschen";
 
 interface KatzenZustand {
-  x: number;
+  fx: number; // Fussmitte (Viewport-x)
+  fy: number; // Fusslinie (Viewport-y)
   richtung: 1 | -1;
   pose: Pose;
   modus: Modus;
   timer: number;
+  plat: Plattform;
   ziel: number;
+  v: number; // aktuelle Gehgeschwindigkeit (weich anfahren und abbremsen)
+  vx: number;
+  vy: number;
+  plan: Sprung | null;
+  hockeZeit: number;
+  anlaufTempo: number;
+  liegenGeplant: boolean;
   abkuehlung: number;
   patschPause: number;
   gekickt: boolean;
   spielzeit: number;
   uninteressiert: number;
+  neigung: number;
 }
 
 function inEingabefeld(ziel: EventTarget | null): boolean {
@@ -79,148 +127,8 @@ function zufall(von: number, bis: number): number {
   return von + Math.random() * (bis - von);
 }
 
-function Kopf({ zu = false }: { zu?: boolean }) {
-  return (
-    <g>
-      <path className="k-fell" d="M-12 -7 L-13 -23 L-1 -13 Z" />
-      <path className="k-ohr" d="M-10.5 -10 L-11 -19 L-4 -13 Z" />
-      <path className="k-fell" d="M3 -13 L13 -23 L14 -6 Z" />
-      <path className="k-ohr" d="M5.5 -13 L12 -19.5 L12.5 -9 Z" />
-      <ellipse className="k-fell" cx="0" cy="0" rx="16" ry="14.5" />
-      <path className="k-streifen k-duenn" d="M-3 -13.5 L-3 -8 M2 -14 L2 -7.5 M-8 -12 L-7 -7.5 M-13 3 L-7 4 M-13 8 L-7 7" />
-      <ellipse className="k-hell" cx="8" cy="6" rx="8.5" ry="6.2" />
-      <path className="k-ohr" d="M11.5 2.4 L16.5 2.4 L14 5.8 Z" />
-      <path className="k-linie" d="M14 5.8 L14 8 M14 8 Q11.5 11 8 9.5 M14 8 Q16 10.5 18 9" />
-      <g className="k-augen">
-        {zu ? (
-          <path className="k-linie" d="M-0.5 -2.5 Q2.5 0.5 5.5 -2.5 M7.5 -2.5 Q10.5 0.5 13.5 -2.5" />
-        ) : (
-          <>
-            <ellipse className="k-auge" cx="2.5" cy="-2.5" rx="3.4" ry="3.7" />
-            <ellipse className="k-pupille" cx="3" cy="-2.5" rx="1.1" ry="3.1" />
-            <ellipse className="k-auge" cx="10.5" cy="-2.5" rx="3" ry="3.4" />
-            <ellipse className="k-pupille" cx="11" cy="-2.5" rx="1" ry="2.9" />
-          </>
-        )}
-      </g>
-      <path className="k-linie k-schnurr" d="M17 5 L30 2 M17 7 L30 8 M16 6 L29 5" />
-    </g>
-  );
-}
-
-function PoseGehen() {
-  return (
-    <>
-      <g className="k-schwanz-g">
-        <path className="k-schwanz" d="M34 56 C14 56 8 34 20 22" />
-      </g>
-      <g className="k-bein k-bein-a">
-        <rect className="k-fell-dunkel" x="36" y="62" width="9" height="30" rx="4.5" />
-        <ellipse className="k-hell" cx="41.5" cy="93" rx="6" ry="3.4" />
-      </g>
-      <g className="k-bein k-bein-b">
-        <rect className="k-fell-dunkel" x="92" y="62" width="9" height="30" rx="4.5" />
-        <ellipse className="k-hell" cx="97.5" cy="93" rx="6" ry="3.4" />
-      </g>
-      <path
-        className="k-fell"
-        d="M26 58 C24 44 40 38 62 38 C84 38 102 40 112 48 C118 56 112 70 96 72 C78 74 50 74 38 70 C30 67 27 63 26 58Z"
-      />
-      <path className="k-hell" d="M44 70 C60 76 90 76 102 70 C94 74 56 74 44 70Z" />
-      <path className="k-streifen" d="M48 40 Q50 48 46 54 M62 38.5 Q65 47 60 55 M77 39 Q80 47 76 54 M92 41 Q94 47 91 52" />
-      <g className="k-bein k-bein-b">
-        <rect className="k-fell" x="50" y="62" width="10" height="30" rx="5" />
-        <ellipse className="k-hell" cx="55" cy="93" rx="6.5" ry="3.6" />
-      </g>
-      <g className="k-bein k-bein-a k-bein-vn">
-        <rect className="k-fell" x="104" y="62" width="10" height="30" rx="5" />
-        <ellipse className="k-hell" cx="109" cy="93" rx="6.5" ry="3.6" />
-      </g>
-      <g transform="translate(126 45) rotate(6)">
-        <Kopf />
-      </g>
-    </>
-  );
-}
-
-function SitzKoerper({ vorderbein }: { vorderbein: boolean }) {
-  return (
-    <>
-      <path className="k-schwanz" d="M40 93 C60 100 112 100 126 93 C131 91 132 86 129 83" />
-      <path className="k-fell" d="M36 94 C30 66 46 40 76 34 C96 31 110 42 108 64 L106 94 Z" />
-      <ellipse className="k-fell" cx="50" cy="76" rx="22" ry="19" />
-      <path className="k-streifen k-duenn" d="M34 72 C40 60 60 60 68 74" />
-      <path className="k-streifen" d="M54 44 Q60 54 56 62 M66 38 Q73 50 68 60 M78 36 Q84 46 80 54" />
-      <ellipse className="k-hell" cx="62" cy="94.5" rx="11" ry="3.8" />
-      <ellipse className="k-hell" cx="100" cy="72" rx="7" ry="20" />
-      <rect className="k-fell-dunkel" x="103" y="62" width="9" height="32" rx="4.5" />
-      <ellipse className="k-hell" cx="107.5" cy="94.5" rx="6.5" ry="3.4" />
-      {vorderbein && (
-        <>
-          <rect className="k-fell" x="92" y="62" width="10" height="32" rx="5" />
-          <ellipse className="k-hell" cx="97" cy="94.5" rx="6.5" ry="3.6" />
-        </>
-      )}
-    </>
-  );
-}
-
-function PoseSitzen() {
-  return (
-    <>
-      <SitzKoerper vorderbein />
-      <g transform="translate(96 32)">
-        <Kopf />
-      </g>
-    </>
-  );
-}
-
-function PosePutzen() {
-  return (
-    <>
-      <SitzKoerper vorderbein={false} />
-      <g transform="translate(101 36) rotate(20)">
-        <Kopf zu />
-      </g>
-      <g className="k-pfote">
-        <path className="k-bein-linie" d="M97 64 L110 48" />
-        <ellipse className="k-hell" cx="111.5" cy="46.5" rx="5.5" ry="4.2" />
-      </g>
-    </>
-  );
-}
-
-function PoseSchlafen() {
-  return (
-    <g className="k-atmen">
-      <path
-        className="k-fell"
-        d="M20 92 C14 72 32 54 64 52 C96 50 118 62 120 84 C121 92 118 95 110 95 L30 95 C24 95 21 94 20 92Z"
-      />
-      <path className="k-streifen" d="M44 56 Q48 68 42 80 M60 53 Q64 66 58 80 M76 52 Q80 65 74 78 M92 55 Q96 65 92 75" />
-      <ellipse className="k-fell" cx="40" cy="82" rx="16" ry="12" />
-      <path className="k-streifen k-duenn" d="M26 80 C30 70 48 70 54 82" />
-      <path className="k-schwanz" d="M24 92 C40 100 110 100 128 93 C136 91 138 85 134 81" />
-      <ellipse className="k-hell" cx="124" cy="92" rx="9" ry="4" />
-      <g transform="translate(116 80) rotate(10)">
-        <Kopf zu />
-      </g>
-      <text className="k-zzz k-zzz-1" x="132" y="62">z</text>
-      <text className="k-zzz k-zzz-2" x="140" y="52">z</text>
-      <text className="k-zzz k-zzz-3" x="147" y="40">z</text>
-    </g>
-  );
-}
-
-function Wollknaeuel() {
-  return (
-    <svg viewBox="0 0 40 40" width="40" height="40" className="zv-wolle__svg">
-      <path className="w-faden" d="M30 28 C38 30 40 36 34 38" />
-      <circle className="w-kugel" cx="20" cy="20" r="16" />
-      <path className="w-linie" d="M6 16 C14 10 26 12 34 20 M5 22 C14 16 28 18 34 26 M10 31 C16 24 26 24 31 30 M14 6 C12 16 16 28 24 35" />
-    </svg>
-  );
+function begrenzt(v: number, a: number, b: number): number {
+  return Math.min(Math.max(v, a), Math.max(a, b));
 }
 
 export function KatzenEasterEgg() {
@@ -233,18 +141,30 @@ export function KatzenEasterEgg() {
   const dreherRef = useRef<HTMLDivElement>(null);
   const ballRef = useRef<HTMLDivElement>(null);
   const zeiger = useRef<{ x: number; y: number } | null>(null);
+  const plattformen = useRef<Plattform[]>([]);
+  const schmutzig = useRef(true);
   const z = useRef<KatzenZustand>({
-    x: -KW,
+    fx: -KW,
+    fy: 0,
     richtung: 1,
     pose: "sitzen",
     modus: "idle",
     timer: 0,
+    plat: { x1: 0, x2: 0, y: 0, el: null },
     ziel: 0,
+    v: 0,
+    vx: 0,
+    vy: 0,
+    plan: null,
+    hockeZeit: 0.35,
+    anlaufTempo: 70,
+    liegenGeplant: false,
     abkuehlung: 0,
     patschPause: 0,
     gekickt: false,
     spielzeit: 0,
     uninteressiert: 0,
+    neigung: 0,
   });
   const ball = useRef<Ball & { lastX: number; lastY: number; lastT: number; offX: number; offY: number }>({
     x: 0,
@@ -259,7 +179,7 @@ export function KatzenEasterEgg() {
     offX: 0,
     offY: 0,
   });
-  // Die Tastenbehandlung braucht den aktuellen Wert, ohne bei jeder Aenderung neu zu registrieren.
+  // Die Tastenbehandlung braucht die aktuellen Werte, ohne bei jeder Aenderung neu zu registrieren.
   const katzeAn = useRef(katze);
   katzeAn.current = katze;
   const spielzeugAn = useRef(spielzeug);
@@ -272,10 +192,9 @@ export function KatzenEasterEgg() {
       if (inEingabefeld(e.target)) return;
       e.preventDefault();
       if (e.code === "KeyK") {
-        setKatze((an) => {
-          merken("zv-katze", !an);
-          return !an;
-        });
+        const wirdAn = !katzeAn.current;
+        merken("zv-katze", wirdAn);
+        setKatze(wirdAn);
       } else {
         const wirdAn = !spielzeugAn.current;
         merken("zv-spielzeug", wirdAn);
@@ -306,11 +225,19 @@ export function KatzenEasterEgg() {
     const raus = (e: MouseEvent) => {
       if (!e.relatedTarget) zeiger.current = null;
     };
+    // Layout hat sich geaendert: Plattformen beim naechsten Frame neu lesen (capture: auch innere Scrollcontainer).
+    const neu = () => {
+      schmutzig.current = true;
+    };
     document.addEventListener("pointermove", bewegt);
     document.addEventListener("mouseout", raus);
+    document.addEventListener("scroll", neu, true);
+    window.addEventListener("resize", neu);
     return () => {
       document.removeEventListener("pointermove", bewegt);
       document.removeEventListener("mouseout", raus);
+      document.removeEventListener("scroll", neu, true);
+      window.removeEventListener("resize", neu);
       zeiger.current = null;
     };
   }, [katze]);
@@ -320,17 +247,25 @@ export function KatzenEasterEgg() {
     if (!katze) return;
     const k = z.current;
     const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const boden = bodenY(vh);
+    k.plat = { x1: 0, x2: vw, y: boden, el: null };
+    k.fy = boden;
     k.abkuehlung = 0;
     k.uninteressiert = 0;
     k.spielzeit = 0;
+    k.liegenGeplant = false;
+    k.plan = null;
+    k.v = 0;
+    k.neigung = 0;
     if (reduziert()) {
-      k.x = vw - KW - 16;
+      k.fx = vw - KW / 2 - 16;
       k.modus = "idle";
       k.richtung = -1;
       k.pose = "sitzen";
       setPoseState("sitzen");
     } else {
-      k.x = -KW;
+      k.fx = -KW / 2;
       k.richtung = 1;
       k.modus = "gehen";
       k.ziel = vw * zufall(0.2, 0.4);
@@ -350,7 +285,7 @@ export function KatzenEasterEgg() {
     b.vx = 0;
     b.vy = 0;
     b.x = vw * zufall(0.4, 0.7);
-    b.y = reduziert() ? vh - BALL_RAND_UNTEN - BALL_R : -BALL_R;
+    b.y = reduziert() ? bodenY(vh) - 2 - BALL_R : -BALL_R;
   }, [spielzeug]);
 
   useEffect(() => {
@@ -359,6 +294,7 @@ export function KatzenEasterEgg() {
     const b = ball.current;
     let raf = 0;
     let zuletzt = performance.now();
+    let platZeit = 0;
 
     function setzePose(p: Pose) {
       if (k.pose !== p) {
@@ -368,58 +304,231 @@ export function KatzenEasterEgg() {
     }
     function sitzen(sekunden: number) {
       k.modus = "idle";
+      k.v = 0;
       setzePose("sitzen");
       k.timer = sekunden;
     }
+    /** Auf der Plattform gehen: weich anfahren, vor dem Ziel abbremsen, nie ueber den Rand. */
     function gehe(dt: number, tempo: number, fertig: () => void) {
-      const dx = k.ziel - (k.x + KW / 2);
-      if (Math.abs(dx) < 3) {
+      const p = k.plat;
+      const ziel = begrenzt(k.ziel, p.x1 + RAND, p.x2 - RAND);
+      const dx = ziel - k.fx;
+      if (Math.abs(dx) < 2) {
         fertig();
         return;
       }
+      const soll = Math.min(tempo, 25 + Math.abs(dx) * 3);
+      k.v += (soll - k.v) * Math.min(1, dt * 5);
       k.richtung = dx > 0 ? 1 : -1;
-      k.x += k.richtung * Math.min(Math.abs(dx), tempo * dt);
+      k.fx += k.richtung * Math.min(Math.abs(dx), k.v * dt);
+    }
+    function ruhen() {
+      const r = Math.random();
+      k.modus = "ruhen";
+      k.v = 0;
+      if (r < 0.5) {
+        setzePose("brotlaib");
+        k.timer = zufall(8, 16);
+      } else if (r < 0.9) {
+        setzePose("schlafen");
+        k.timer = zufall(20, 50);
+      } else {
+        setzePose("ruecken");
+        k.timer = zufall(6, 10);
+      }
+    }
+    function planeSprung(s: Sprung, tempo: number, hocke: number) {
+      k.plan = s;
+      k.ziel = s.start;
+      k.hockeZeit = hocke;
+      k.modus = "anlauf";
+      setzePose(tempo > 120 ? "laufen" : "gehen");
+      k.anlaufTempo = tempo;
+    }
+    function starteFall() {
+      k.modus = "flug";
+      k.plan = null;
+      k.vx = 0;
+      k.vy = 0;
+      k.v = 0;
+      setzePose("sprung");
+    }
+    function lande(p: Plattform) {
+      k.plat = p;
+      k.fy = p.y;
+      k.vx = 0;
+      k.vy = 0;
+      k.plan = null;
+      k.modus = "landen";
+      k.timer = 0.28;
+      k.neigung = 0;
+      setzePose("hocke");
+    }
+    function bodenPlattform(vw: number, vh: number): Plattform {
+      return { x1: 0, x2: vw, y: bodenY(vh), el: null };
     }
 
-    function katzeSchritt(dt: number, vw: number, vh: number, boden: number) {
+    function katzeSchritt(dt: number, vw: number, vh: number) {
       k.timer -= dt;
       k.abkuehlung -= dt;
       k.patschPause -= dt;
       k.uninteressiert -= dt;
       const zg = zeiger.current;
-      const nah =
-        zg !== null && !b.gezogen && zeigerAbstand(zg, k.x, KW, KH + RAND_UNTEN, vh) < FLUCHT_RADIUS;
+      const boden = bodenY(vh);
 
       if (reduziert()) {
+        k.fy = boden;
         // Kein Laufen: bei Annaeherung springt sie auf die andere Seite.
-        if (nah) k.x = zg!.x < vw / 2 ? vw - KW - 16 : 16;
+        const naeher = zg !== null && !b.gezogen && zeigerAbstand(zg, k.fx - KW / 2, KW, 80, k.fy + 3) < FLUCHT_RADIUS;
+        if (naeher) k.fx = zg!.x < vw / 2 ? vw - KW / 2 - 16 : KW / 2 + 16;
         return;
       }
 
-      const mitte = k.x + KW / 2;
-      if (nah && k.modus !== "flucht" && k.modus !== "aufstehen" && k.abkuehlung <= 0) {
+      // Plattformen auffrischen (halbsekuendlich und nach Scroll/Resize)
+      platZeit -= dt;
+      if (platZeit <= 0 || schmutzig.current) {
+        plattformen.current = plattformenSammeln(vw, vh);
+        platZeit = 0.5;
+        schmutzig.current = false;
+      }
+      const alle = plattformen.current;
+
+      // Der Boden unter ihr: Live-Kante lesen; Plattform weg -> fallen.
+      if (k.modus !== "flug") {
+        const p = k.plat;
+        if (p.el) {
+          const r = p.el.getBoundingClientRect();
+          if (!p.el.isConnected || !plattformGueltig(r, vh, boden) || k.fx < r.left - 4 || k.fx > r.right + 4) {
+            if (k.fy > vh) {
+              // Plattform nach unten aus dem Bild gescrollt: nicht aus dem Nichts fallen, sondern am Boden weitermachen.
+              k.plat = bodenPlattform(vw, vh);
+              k.fy = k.plat.y;
+              sitzen(1);
+            } else {
+              starteFall();
+            }
+          } else {
+            p.x1 = r.left;
+            p.x2 = r.right;
+            p.y = r.top;
+            k.fy = r.top;
+          }
+        } else {
+          p.x2 = vw;
+          p.y = boden;
+          k.fy = boden;
+        }
+      }
+
+      const mitte = k.fx;
+      const nah =
+        zg !== null && !b.gezogen && zeigerAbstand(zg, k.fx - KW / 2, KW, 80, k.fy + 3) < FLUCHT_RADIUS;
+      const amBoden = k.modus !== "flug" && k.modus !== "landen" && k.modus !== "hocke" && k.modus !== "anlauf";
+      if (nah && amBoden && k.modus !== "flucht" && k.modus !== "aufstehen" && k.abkuehlung <= 0) {
         k.modus = "aufstehen";
-        k.timer = k.pose === "schlafen" ? 0.55 : 0.15;
+        k.timer = k.pose === "schlafen" || k.pose === "ruecken" ? 0.6 : 0.15;
+        k.v = 0;
         setzePose("sitzen");
       }
 
       switch (k.modus) {
         case "aufstehen":
           if (k.timer <= 0) {
-            k.ziel = fluchtziel(zg?.x ?? mitte, vw, KW);
-            k.modus = "flucht";
-            setzePose("gehen");
             setBlase({ t: "Hmpf!", n: Date.now() });
+            weiche(zg, alle, vw);
           }
           break;
         case "flucht":
-          gehe(dt, 190, () => {
+          gehe(dt, 150, () => {
             sitzen(zufall(1.5, 3));
             k.abkuehlung = 0.8;
           });
           break;
         case "gehen":
-          gehe(dt, 70, () => sitzen(zufall(3, 6)));
+          gehe(dt, 48, () => {
+            if (k.liegenGeplant) {
+              k.liegenGeplant = false;
+              ruhen();
+            } else {
+              sitzen(zufall(3, 6));
+            }
+          });
+          break;
+        case "anlauf":
+          gehe(dt, k.anlaufTempo, () => {
+            // Ziel anvisieren, dann Hocke: erst gucken, dann springen.
+            const s = k.plan;
+            if (!s) {
+              sitzen(1);
+              return;
+            }
+            if (Math.abs(s.landung - k.fx) > 10) k.richtung = s.landung > k.fx ? 1 : -1;
+            k.modus = "hocke";
+            k.timer = k.hockeZeit;
+            k.v = 0;
+            setzePose("hocke");
+          });
+          break;
+        case "hocke": {
+          const s = k.plan;
+          if (!s) {
+            sitzen(1);
+            break;
+          }
+          if (k.timer > 0) break;
+          // Zielkante live lesen: seit dem Planen kann gescrollt worden sein.
+          let ly = s.ziel.y;
+          if (s.ziel.el) {
+            const r = s.ziel.el.getBoundingClientRect();
+            if (!s.ziel.el.isConnected || !plattformGueltig(r, vh, boden)) {
+              sitzen(1);
+              break;
+            }
+            ly = r.top;
+          } else {
+            ly = boden;
+          }
+          const bahn = sprungBahn(k.fx, k.fy, s.landung, ly);
+          k.vx = bahn.vx;
+          k.vy = bahn.vy;
+          if (Math.abs(bahn.vx) > 20) k.richtung = bahn.vx > 0 ? 1 : -1;
+          k.modus = "flug";
+          setzePose("sprung");
+          break;
+        }
+        case "flug": {
+          const vorher = k.fy;
+          k.vy += GRAVITATION * dt;
+          k.fx = begrenzt(k.fx + k.vx * dt, 20, vw - 20);
+          k.fy += k.vy * dt;
+          k.neigung = Math.max(-40, Math.min(40, Math.atan2(k.vy, Math.max(Math.abs(k.vx), 80)) * (180 / Math.PI) * 0.55));
+          if (k.vy > 0) {
+            const p = aufsetzer(k.fx, vorher, k.fy, alle.concat(bodenPlattform(vw, vh)));
+            if (p) {
+              // Live-Kante der Zielplattform nehmen, falls sie sich bewegt hat; ist sie inzwischen weg, weiterfallen.
+              let gueltig = true;
+              if (p.el) {
+                const r = p.el.getBoundingClientRect();
+                gueltig = p.el.isConnected && plattformGueltig(r, vh, bodenY(vh));
+                p.y = r.top;
+              }
+              if (gueltig) lande(p);
+            }
+          }
+          break;
+        }
+        case "landen":
+          if (k.timer <= 0) sitzen(zufall(0.6, 1.2));
+          break;
+        case "ruhen":
+          if (k.timer <= 0) {
+            if (k.pose === "brotlaib" && Math.random() < 0.6) {
+              setzePose("schlafen");
+              k.timer = zufall(20, 50);
+            } else {
+              sitzen(zufall(1.5, 3));
+            }
+          }
           break;
         case "idle":
           if (spielzeug && k.uninteressiert <= 0) {
@@ -429,22 +538,8 @@ export function KatzenEasterEgg() {
             break;
           }
           if (k.timer > 0) break;
-          if (k.pose === "sitzen") {
-            const r = Math.random();
-            if (r < 0.3) {
-              setzePose("putzen");
-              k.timer = zufall(3.5, 5.5);
-            } else if (r < 0.6) {
-              setzePose("schlafen");
-              k.timer = zufall(9, 18);
-            } else {
-              k.ziel = spazierziel(mitte, vw, KW);
-              k.modus = "gehen";
-              setzePose("gehen");
-            }
-          } else {
-            sitzen(zufall(3, 6));
-          }
+          if (k.pose === "sitzen") naechsteAktivitaet(alle, vw);
+          else sitzen(zufall(3, 6));
           break;
         case "jagen": {
           if (!spielzeug || k.uninteressiert > 0) {
@@ -458,13 +553,28 @@ export function KatzenEasterEgg() {
             sitzen(1);
             break;
           }
+          const bodenPl = bodenPlattform(vw, vh);
+          if (k.plat.el !== null) {
+            // Das Knaeuel liegt unten: erst von der Seite herunterspringen, auf der es naeher liegt.
+            const wege = sprungZiele(k.plat, [bodenPl], Infinity);
+            if (wege.length === 0) {
+              k.uninteressiert = 15;
+              sitzen(1);
+              break;
+            }
+            wege.sort((u, w) => Math.abs(u.landung - b.x) - Math.abs(w.landung - b.x));
+            planeSprung(wege[0], 110, 0.3);
+            break;
+          }
           const dx = b.x - mitte;
           const abstand = Math.abs(dx);
           if (abstand > 8) k.richtung = dx > 0 ? 1 : -1;
           if (abstand > 85) {
-            setzePose("gehen");
-            k.x += k.richtung * Math.min(abstand - 85, 150 * dt);
+            setzePose(abstand > 220 ? "laufen" : "gehen");
+            k.v += ((abstand > 220 ? 190 : 120) - k.v) * Math.min(1, dt * 5);
+            k.fx += k.richtung * Math.min(abstand - 85, k.v * dt);
           } else {
+            k.v = 0;
             const hoch = b.y < boden - 70;
             if (hoch || b.gezogen) {
               setzePose("sitzen");
@@ -495,20 +605,101 @@ export function KatzenEasterEgg() {
       }
     }
 
+    /** Vor dem Zeiger ausweichen: weit weg springen, sonst ans andere Ende der Plattform, sonst bleiben. */
+    function weiche(zg: { x: number; y: number } | null, alle: Plattform[], vw: number) {
+      const px = zg?.x ?? k.fx;
+      const py = zg?.y ?? k.fy;
+      const abst = (x: number, y: number) => Math.hypot(x - px, y - py);
+      const ziele = sprungZiele(k.plat, alle);
+      let bester: Sprung | null = null;
+      let besteWeite = 0;
+      for (const s of ziele) {
+        const w = abst(s.landung, s.ziel.y);
+        if (w > besteWeite) {
+          besteWeite = w;
+          bester = s;
+        }
+      }
+      const endeX = px < (k.plat.x1 + k.plat.x2) / 2 ? k.plat.x2 - RAND : k.plat.x1 + RAND;
+      const endeWeite = abst(endeX, k.fy);
+      if (bester && besteWeite >= 260) {
+        planeSprung(bester, 170, 0.18);
+      } else if (endeWeite > abst(k.fx, k.fy) + 120) {
+        k.ziel = endeX;
+        k.modus = "flucht";
+        setzePose("laufen");
+      } else if (bester) {
+        planeSprung(bester, 170, 0.18);
+      } else {
+        sitzen(1.5);
+        k.abkuehlung = 1.5;
+      }
+      void vw;
+    }
+
+    function naechsteAktivitaet(alle: Plattform[], vw: number) {
+      const r = Math.random();
+      const p = k.plat;
+      const breit = p.x2 - p.x1 >= 150;
+      if (r < 0.2) {
+        setzePose("putzen");
+        k.modus = "idle";
+        k.timer = zufall(3.5, 5.5);
+        return;
+      }
+      const ziele = sprungZiele(p, alle);
+      if (r < 0.55) {
+        // Liegeplatz suchen: breite, flache Flaechen bevorzugt; bleibt sie, laeuft sie erst ein paar Schritte.
+        if (ziele.length > 0 && (!breit || Math.random() < 0.55)) {
+          let best: Sprung | null = null;
+          let punkte = -1;
+          for (const s of ziele) {
+            const w = Math.min(s.ziel.x2 - s.ziel.x1, 500) / 100 + Math.random() * 2.5;
+            if (w > punkte) {
+              punkte = w;
+              best = s;
+            }
+          }
+          if (best) {
+            k.liegenGeplant = true;
+            planeSprung(best, 70, 0.4);
+            return;
+          }
+        }
+        if (breit) {
+          k.liegenGeplant = true;
+          k.ziel = zufall(p.x1 + RAND + 20, p.x2 - RAND - 20);
+          k.modus = "gehen";
+          setzePose("gehen");
+          return;
+        }
+      }
+      // Ortswechsel: bevorzugt springen, wenn etwas erreichbar ist.
+      if (ziele.length > 0 && Math.random() < 0.75) {
+        planeSprung(ziele[Math.floor(Math.random() * ziele.length)], 70, 0.4);
+      } else {
+        k.ziel = zufall(p.x1 + RAND, p.x2 - RAND);
+        if (Math.abs(k.ziel - k.fx) < 60) k.ziel = k.fx < (p.x1 + p.x2) / 2 ? p.x2 - RAND : p.x1 + RAND;
+        k.modus = "gehen";
+        setzePose("gehen");
+      }
+      void vw;
+    }
+
     function schritt(dt: number) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const boden = vh - BALL_RAND_UNTEN - BALL_R;
+      const ballBoden = bodenY(vh) - 2 - BALL_R;
       if (spielzeug) {
-        if (!b.gezogen && !reduziert()) ballSchritt(b, dt, vw, boden, BALL_R);
-        if (!b.gezogen && b.y > boden) b.y = boden;
+        if (!b.gezogen && !reduziert()) ballSchritt(b, dt, vw, ballBoden, BALL_R);
+        if (!b.gezogen && b.y > ballBoden) b.y = ballBoden;
         const el = ballRef.current;
         if (el) el.style.transform = `translate3d(${b.x - BALL_R}px, ${b.y - BALL_R}px, 0) rotate(${b.drehung}deg)`;
       }
       if (katze) {
-        katzeSchritt(dt, vw, vh, boden);
-        if (katzeRef.current) katzeRef.current.style.transform = `translate3d(${k.x}px, 0, 0)`;
-        if (dreherRef.current) dreherRef.current.style.transform = `scaleX(${k.richtung})`;
+        katzeSchritt(dt, vw, vh);
+        if (katzeRef.current) katzeRef.current.style.transform = `translate3d(${k.fx - KW / 2}px, ${k.fy - FUSS}px, 0)`;
+        if (dreherRef.current) dreherRef.current.style.transform = `scaleX(${k.richtung}) rotate(${k.neigung}deg)`;
       }
     }
 
@@ -546,7 +737,7 @@ export function KatzenEasterEgg() {
     b.lastY = e.clientY;
     b.lastT = jetzt;
     b.x = Math.min(Math.max(e.clientX + b.offX, BALL_R), window.innerWidth - BALL_R);
-    b.y = Math.min(Math.max(e.clientY + b.offY, BALL_R), window.innerHeight - BALL_RAND_UNTEN - BALL_R);
+    b.y = Math.min(Math.max(e.clientY + b.offY, BALL_R), bodenY(window.innerHeight) - 2 - BALL_R);
   }
   function ballLoslassen() {
     const b = ball.current;
@@ -571,11 +762,15 @@ export function KatzenEasterEgg() {
             </span>
           )}
           <div className="zv-katze__dreher" ref={dreherRef}>
-            <svg viewBox="0 0 160 100" width={KW} height={KH} className="zv-katze__svg">
-              {(pose === "gehen" || pose === "patschen") && <PoseGehen />}
+            <svg viewBox="0 0 160 100" width={KW} height={80} className="zv-katze__svg">
+              {(pose === "gehen" || pose === "laufen" || pose === "patschen") && <PoseGehen />}
               {pose === "sitzen" && <PoseSitzen />}
               {pose === "putzen" && <PosePutzen />}
+              {pose === "brotlaib" && <PoseBrotlaib />}
               {pose === "schlafen" && <PoseSchlafen />}
+              {pose === "ruecken" && <PoseRuecken />}
+              {pose === "hocke" && <PoseHocke />}
+              {pose === "sprung" && <PoseSprung />}
             </svg>
           </div>
         </div>
