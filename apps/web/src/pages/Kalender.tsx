@@ -6,12 +6,17 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { TerminFormular } from "../components/TerminFormular";
 import { IBearbeiten, IFehler, IHerunterladen, ILeerKalender, INeu, IStornieren, IVor, IZurueckPfeil } from "../components/icons";
-import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, lokalesDatum, terminTag } from "../format";
+import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MAX_TAGE_JE_TERMIN = 62;
 
-type Ansicht = "tag" | "woche" | "monat";
+type Ansicht = "woche" | "monat" | "jahr";
+const ANSICHTEN: { wert: Ansicht; label: string }[] = [
+  { wert: "woche", label: "Woche" },
+  { wert: "monat", label: "Monat" },
+  { wert: "jahr", label: "Jahr" },
+];
 
 function datumAusKey(key: string): Date {
   const [j, m, t] = key.split("-").map(Number);
@@ -24,10 +29,50 @@ function addTage(key: string, tage: number): string {
   return lokalesDatum(d);
 }
 
+/**
+ * Verschiebt um ganze Monate und haelt den Tag im Zielmonat: der 31.1. plus
+ * ein Monat ist der 28./29.2. -- nicht der 3.3., wie es setMonth() taete.
+ */
+function addMonate(key: string, monate: number): string {
+  const [j, m, t] = key.split("-").map(Number);
+  const ziel = new Date(j, m - 1 + monate, 1);
+  const letzter = new Date(ziel.getFullYear(), ziel.getMonth() + 1, 0).getDate();
+  ziel.setDate(Math.min(t, letzter));
+  return lokalesDatum(ziel);
+}
+
 /** Montag der Woche, in der `key` liegt. */
 function wochenStart(key: string): string {
   const d = datumAusKey(key);
   return addTage(key, -((d.getDay() + 6) % 7));
+}
+
+/** Die 42 Tage (6 Wochen) des Monatsrasters, in dem `key` liegt. */
+function monatsRaster(key: string): string[] {
+  const start = wochenStart(`${key.slice(0, 7)}-01`);
+  return Array.from({ length: 42 }, (_, i) => addTage(start, i));
+}
+
+/** Alle Tage eines Monats ("YYYY-MM") ohne Auffuellung, mit Leerfeldern vorne, damit der erste unter dem richtigen Wochentag steht. */
+function miniMonat(monat: string): (string | null)[] {
+  const erster = `${monat}-01`;
+  const vorn = (datumAusKey(erster).getDay() + 6) % 7;
+  const anzahl = new Date(Number(monat.slice(0, 4)), Number(monat.slice(5, 7)), 0).getDate();
+  return [...Array<null>(vorn).fill(null), ...Array.from({ length: anzahl }, (_, i) => `${monat}-${String(i + 1).padStart(2, "0")}`)];
+}
+
+/** Abgefragter Zeitraum je Ansicht; je einen Tag Puffer, weil Zeitpunkt-Termine UTC gespeichert sind, die Grenzen aber lokal. */
+function ladeZeitraum(ansicht: Ansicht, tag: string): [string, string] {
+  if (ansicht === "woche") {
+    const start = wochenStart(tag);
+    return [addTage(start, -1), addTage(start, 8)];
+  }
+  if (ansicht === "monat") {
+    const start = monatsRaster(tag)[0];
+    return [addTage(start, -1), addTage(start, 43)];
+  }
+  const jahr = tag.slice(0, 4);
+  return [addTage(`${jahr}-01-01`, -1), addTage(`${jahr}-12-31`, 2)];
 }
 
 /** Alle lokalen Kalendertage, die ein Termin beruehrt (gedeckelt, damit ein Termin ueber Jahre nichts aufblaeht). */
@@ -46,6 +91,10 @@ function sortiere(a: TerminDto, b: TerminDto): number {
   return a.beginn.localeCompare(b.beginn);
 }
 
+function terminWort(anzahl: number): string {
+  return `${anzahl} Termin${anzahl === 1 ? "" : "e"}`;
+}
+
 /**
  * `kontakteLaden`: woher die waehlbaren Teilnehmenden kommen. Mitarbeitende
  * nutzen die Voreinstellung (/chat/kontakte); fuer Klient:innen liefert
@@ -54,27 +103,38 @@ function sortiere(a: TerminDto, b: TerminDto): number {
  */
 export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKontakte() }: { titel?: string; kontakteLaden?: () => Promise<ChatKontaktDto[]> }) {
   const heute = lokalesDatum(new Date());
+  // `gewaehlt` ist der einzige Zeitanker: Woche, Monat und Jahr leiten sich daraus ab.
+  // So landet man beim Umschalten immer im Zeitraum, den man gerade ansieht.
   const [gewaehlt, setGewaehlt] = useState(heute);
-  const [monat, setMonat] = useState(() => heute.slice(0, 7));
   const [ansicht, setAnsicht] = useState<Ansicht>("woche");
   const [termine, setTermine] = useState<TerminDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const rasterStart = useMemo(() => wochenStart(`${monat}-01`), [monat]);
-  const rasterTage = useMemo(() => Array.from({ length: 42 }, (_, i) => addTage(rasterStart, i)), [rasterStart]);
+  const monat = gewaehlt.slice(0, 7);
+  const jahr = gewaehlt.slice(0, 4);
+  const wochenTage = useMemo(() => Array.from({ length: 7 }, (_, i) => addTage(wochenStart(gewaehlt), i)), [gewaehlt]);
+  const rasterTage = useMemo(() => monatsRaster(gewaehlt), [gewaehlt]);
+  const [ladeVon, ladeBis] = useMemo(() => ladeZeitraum(ansicht, gewaehlt), [ansicht, gewaehlt]);
 
   const laden = useCallback(() => {
-    // Einen Tag Puffer: Zeitpunkt-Termine sind UTC gespeichert, die Raster-Grenzen lokal.
+    let verworfen = false;
     api
-      .termine(addTage(rasterStart, -1), addTage(rasterStart, 43))
+      .termine(ladeVon, ladeBis)
       .then((t) => {
+        // Schnelles Durchblaettern: eine spaete Antwort fuer einen laengst verlassenen Zeitraum darf die aktuelle nicht ueberschreiben.
+        if (verworfen) return;
         setTermine(t);
         setFehler(null);
       })
-      .catch((err) => setFehler(err instanceof Error ? err.message : "Termine konnten nicht geladen werden."));
-  }, [rasterStart]);
+      .catch((err) => {
+        if (!verworfen) setFehler(err instanceof Error ? err.message : "Termine konnten nicht geladen werden.");
+      });
+    return () => {
+      verworfen = true;
+    };
+  }, [ladeVon, ladeBis]);
 
   useEffect(laden, [laden]);
 
@@ -85,30 +145,53 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
     return karte;
   }, [termine]);
 
-  const listenTage = useMemo(() => {
-    if (ansicht === "tag") return [gewaehlt];
-    if (ansicht === "woche") return Array.from({ length: 7 }, (_, i) => addTage(wochenStart(gewaehlt), i));
-    return rasterTage.filter((t) => t.startsWith(monat));
-  }, [ansicht, gewaehlt, rasterTage, monat]);
-
+  const listenTage = ansicht === "woche" ? wochenTage : ansicht === "monat" ? rasterTage.filter((t) => t.startsWith(monat)) : [];
   const listeMitTerminen = listenTage.filter((t) => (nachTag.get(t) ?? []).length > 0);
 
-  function monatWechseln(delta: number) {
-    const d = datumAusKey(`${monat}-01`);
-    d.setMonth(d.getMonth() + delta);
-    setMonat(lokalesDatum(d).slice(0, 7));
-  }
-
-  function waehleTag(tag: string) {
-    setGewaehlt(tag);
-    if (!tag.startsWith(monat)) setMonat(tag.slice(0, 7));
+  function schritt(richtung: 1 | -1) {
+    setGewaehlt((alt) => (ansicht === "woche" ? addTage(alt, 7 * richtung) : addMonate(alt, (ansicht === "monat" ? 1 : 12) * richtung)));
   }
 
   const monatsName = datumAusKey(`${monat}-01`).toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+  const zeitraumName =
+    ansicht === "jahr"
+      ? jahr
+      : ansicht === "monat"
+        ? monatsName
+        : `KW ${kalenderwoche(datumAusKey(wochenTage[0]))} · ${formatDatum(wochenTage[0])} – ${formatDatum(wochenTage[6])}`;
+  // Grammatik der Knopfbeschriftung: die Woche, der Monat, das Jahr.
+  const endung = ansicht === "monat" ? "r" : ansicht === "jahr" ? "s" : "";
+  const einheit = ansicht === "woche" ? "Woche" : ansicht === "monat" ? "Monat" : "Jahr";
   const detail = termine.find((t) => t.id === detailId) ?? null;
 
   function ersetzen(t: TerminDto) {
     setTermine((alt) => alt.map((x) => (x.id === t.id ? t : x)));
+  }
+
+  function tagKnopf(tag: string, fremd: boolean) {
+    const liste = nachTag.get(tag) ?? [];
+    const aktiv = liste.filter((t) => !t.abgesagtAm).length;
+    return (
+      <button
+        type="button"
+        key={tag}
+        role="gridcell"
+        className={`zv-kal-tag${tag === gewaehlt ? " gewaehlt" : ""}${tag === heute ? " heute" : ""}${fremd ? " fremd" : ""}`}
+        onClick={() => setGewaehlt(tag)}
+        aria-label={`${formatDatum(tag)}${liste.length ? `, ${terminWort(liste.length)}` : ""}`}
+        aria-pressed={tag === gewaehlt}
+      >
+        <span className="zv-kal-tag-zahl">{Number(tag.slice(8))}</span>
+        {liste.length > 0 && (
+          <span className="zv-kal-punkte" aria-hidden="true">
+            {aktiv > 0 && <span className="zv-kal-punkt" />}
+            {aktiv > 1 && <span className="zv-kal-punkt" />}
+            {aktiv > 2 && <span className="zv-kal-punkt" />}
+            {aktiv === 0 && <span className="zv-kal-punkt abgesagt" />}
+          </span>
+        )}
+      </button>
+    );
   }
 
   return (
@@ -127,101 +210,111 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         </button>
       </div>
 
-      <div className="zv-kal-navigation">
-        <button type="button" className="zv-icon-btn" onClick={() => monatWechseln(-1)} aria-label="Vorheriger Monat">
-          <IZurueckPfeil />
-        </button>
-        <strong className="zv-kal-monat" aria-live="polite">
-          {monatsName}
-        </strong>
-        <button type="button" className="zv-icon-btn" onClick={() => monatWechseln(1)} aria-label="Nächster Monat">
-          <IVor />
-        </button>
-        <button
-          type="button"
-          className="zv-btn zv-btn-sekundaer zv-btn-klein"
-          onClick={() => {
-            setGewaehlt(heute);
-            setMonat(heute.slice(0, 7));
-          }}
-        >
-          Heute
-        </button>
-      </div>
-
-      <div className="zv-kal-raster" role="grid" aria-label={`Monatsübersicht ${monatsName}`}>
-        {WOCHENTAGE.map((w) => (
-          <div key={w} className="zv-kal-wochentag" role="columnheader">
-            {w}
-          </div>
-        ))}
-        {rasterTage.map((tag) => {
-          const liste = nachTag.get(tag) ?? [];
-          const aktiv = liste.filter((t) => !t.abgesagtAm).length;
-          return (
-            <button
-              type="button"
-              key={tag}
-              role="gridcell"
-              className={`zv-kal-tag${tag === gewaehlt ? " gewaehlt" : ""}${tag === heute ? " heute" : ""}${tag.startsWith(monat) ? "" : " fremd"}`}
-              onClick={() => waehleTag(tag)}
-              aria-label={`${formatDatum(tag)}${liste.length ? `, ${liste.length} Termin${liste.length === 1 ? "" : "e"}` : ""}`}
-              aria-pressed={tag === gewaehlt}
-            >
-              <span className="zv-kal-tag-zahl">{Number(tag.slice(8))}</span>
-              {liste.length > 0 && (
-                <span className="zv-kal-punkte" aria-hidden="true">
-                  {aktiv > 0 && <span className="zv-kal-punkt" />}
-                  {aktiv > 1 && <span className="zv-kal-punkt" />}
-                  {aktiv > 2 && <span className="zv-kal-punkt" />}
-                  {aktiv === 0 && <span className="zv-kal-punkt abgesagt" />}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="zv-kal-listenkopf">
-        <h3>{ansicht === "tag" ? formatTagTrenner(`${gewaehlt}T12:00:00`) : ansicht === "woche" ? "Woche" : monatsName}</h3>
-        <div className="zv-segmented" role="tablist" aria-label="Zeitraum der Liste">
-          {(["tag", "woche", "monat"] as const).map((a) => (
-            <button key={a} type="button" role="tab" aria-selected={ansicht === a} className={ansicht === a ? "active" : ""} onClick={() => setAnsicht(a)}>
-              {a === "tag" ? "Tag" : a === "woche" ? "Woche" : "Monat"}
+      <div className="zv-kal-umschalter">
+        <div className="zv-segmented" role="tablist" aria-label="Ansicht">
+          {ANSICHTEN.map((a) => (
+            <button key={a.wert} type="button" role="tab" aria-selected={ansicht === a.wert} className={ansicht === a.wert ? "active" : ""} onClick={() => setAnsicht(a.wert)}>
+              {a.label}
             </button>
           ))}
         </div>
       </div>
 
-      {listeMitTerminen.length === 0 ? (
-        <Leerzustand icon={ILeerKalender} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setNeuOffen(true)}>Termin anlegen</button>}>
-          Keine Termine in diesem Zeitraum.
-        </Leerzustand>
-      ) : (
-        listeMitTerminen.map((tag) => (
-          <div key={tag} className="zv-kal-gruppe">
-            <h4 className="zv-etagen-kopf">{formatTagTrenner(`${tag}T12:00:00`)}</h4>
-            <ul className="zv-kal-liste">
-              {(nachTag.get(tag) ?? []).map((t) => (
-                <li key={t.id}>
-                  <button type="button" className="zv-kal-termin" onClick={() => setDetailId(t.id)}>
-                    <span className="zv-kal-zeit">{formatTerminUhrzeit(t)}</span>
-                    <span className="zv-kal-termin-text">
-                      <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
-                      {t.ort && <span>{t.ort}</span>}
+      <div className="zv-kal-navigation">
+        <button type="button" className="zv-icon-btn" onClick={() => schritt(-1)} aria-label={`Vorherige${endung} ${einheit}`}>
+          <IZurueckPfeil />
+        </button>
+        <strong className="zv-kal-monat" aria-live="polite">
+          {zeitraumName}
+        </strong>
+        <button type="button" className="zv-icon-btn" onClick={() => schritt(1)} aria-label={`Nächste${endung} ${einheit}`}>
+          <IVor />
+        </button>
+        <button type="button" className="zv-btn zv-btn-sekundaer zv-btn-klein" onClick={() => setGewaehlt(heute)}>
+          Heute
+        </button>
+      </div>
+
+      {ansicht === "jahr" ? (
+        <div className="zv-kal-jahr" data-testid="kalender-jahr">
+          {Array.from({ length: 12 }, (_, i) => `${jahr}-${String(i + 1).padStart(2, "0")}`).map((m) => {
+            const zellen = miniMonat(m);
+            const anzahl = zellen.reduce((n, tag) => n + (tag && (nachTag.get(tag) ?? []).length > 0 ? 1 : 0), 0);
+            const name = datumAusKey(`${m}-01`).toLocaleDateString("de-DE", { month: "long" });
+            return (
+              <section key={m} className={`zv-kal-mini${m === heute.slice(0, 7) ? " heute" : ""}`}>
+                <button
+                  type="button"
+                  className="zv-kal-mini-titel"
+                  onClick={() => {
+                    setGewaehlt(m === heute.slice(0, 7) ? heute : `${m}-01`);
+                    setAnsicht("monat");
+                  }}
+                  aria-label={`${name} ${jahr} öffnen${anzahl ? `, ${anzahl} Tag${anzahl === 1 ? "" : "e"} mit Terminen` : ""}`}
+                >
+                  {name}
+                </button>
+                <div className="zv-kal-mini-raster" aria-hidden="true">
+                  {WOCHENTAGE.map((w) => (
+                    <span key={w} className="zv-kal-mini-kopf">
+                      {w.slice(0, 1)}
                     </span>
-                    {t.abgesagtAm ? (
-                      <span className="zv-pill zv-pill-danger">Abgesagt</span>
-                    ) : t.meineAntwort && t.meineAntwort !== "zugesagt" ? (
-                      <span className={`zv-pill ${t.meineAntwort === "abgelehnt" ? "zv-pill-danger" : "zv-pill-offen"}`}>{TERMIN_ANTWORT_LABEL[t.meineAntwort]}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))
+                  ))}
+                  {zellen.map((tag, i) => {
+                    if (!tag) return <span key={`leer-${i}`} />;
+                    const liste = nachTag.get(tag) ?? [];
+                    return (
+                      <span key={tag} className={`zv-kal-mini-tag${tag === heute ? " heute" : ""}${liste.length ? (liste.some((t) => !t.abgesagtAm) ? " belegt" : " abgesagt") : ""}`}>
+                        {Number(tag.slice(8))}
+                      </span>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="zv-kal-raster" role="grid" aria-label={ansicht === "woche" ? `Wochenübersicht ${zeitraumName}` : `Monatsübersicht ${monatsName}`}>
+          {WOCHENTAGE.map((w) => (
+            <div key={w} className="zv-kal-wochentag" role="columnheader">
+              {w}
+            </div>
+          ))}
+          {ansicht === "woche" ? wochenTage.map((tag) => tagKnopf(tag, false)) : rasterTage.map((tag) => tagKnopf(tag, !tag.startsWith(monat)))}
+        </div>
       )}
+
+      {ansicht !== "jahr" &&
+        (listeMitTerminen.length === 0 ? (
+          <Leerzustand icon={ILeerKalender} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setNeuOffen(true)}>Termin anlegen</button>}>
+            Keine Termine in diesem Zeitraum.
+          </Leerzustand>
+        ) : (
+          listeMitTerminen.map((tag) => (
+            <div key={tag} className="zv-kal-gruppe">
+              <h4 className="zv-etagen-kopf">{formatTagTrenner(`${tag}T12:00:00`)}</h4>
+              <ul className="zv-kal-liste">
+                {(nachTag.get(tag) ?? []).map((t) => (
+                  <li key={t.id}>
+                    <button type="button" className="zv-kal-termin" onClick={() => setDetailId(t.id)}>
+                      <span className="zv-kal-zeit">{formatTerminUhrzeit(t)}</span>
+                      <span className="zv-kal-termin-text">
+                        <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
+                        {t.ort && <span>{t.ort}</span>}
+                      </span>
+                      {t.abgesagtAm ? (
+                        <span className="zv-pill zv-pill-danger">Abgesagt</span>
+                      ) : t.meineAntwort && t.meineAntwort !== "zugesagt" ? (
+                        <span className={`zv-pill ${t.meineAntwort === "abgelehnt" ? "zv-pill-danger" : "zv-pill-offen"}`}>{TERMIN_ANTWORT_LABEL[t.meineAntwort]}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        ))}
 
       {neuOffen && (
         <NeuerTermin
@@ -230,7 +323,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           onClose={() => setNeuOffen(false)}
           onAngelegt={(t) => {
             setNeuOffen(false);
-            waehleTag(terminTag(t.beginn, t.ganztaegig));
+            setGewaehlt(terminTag(t.beginn, t.ganztaegig));
             laden();
           }}
         />
