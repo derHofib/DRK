@@ -8,6 +8,8 @@ export interface JwtPayload {
   typ: "access";
   sub: string;
   mandantId: string;
+  /** Nur bei Sitzungen einer gekoppelten App (Migration 0070). */
+  geraetId?: string;
 }
 
 declare module "express" {
@@ -65,9 +67,34 @@ export class AuthGuard implements CanActivate {
     if (rows.length === 0 || !rows[0].aktiv) {
       throw new UnauthorizedException("Konto ist deaktiviert.");
     }
+    await this.geraetPruefen(payload);
 
     request.benutzer = payload;
     return true;
+  }
+
+  private geraetPruefen(payload: JwtPayload) {
+    return geraetNichtGesperrt(this.db, payload);
+  }
+}
+
+/**
+ * Ein gesperrtes Geraet verliert seine Sitzung sofort, nicht erst nach den 30
+ * Tagen des Tokens -- sonst waere "Handy verloren" kein Notausgang. Sitzungen
+ * ohne geraetId (Web) kosten keine zusaetzliche Abfrage.
+ */
+export async function geraetNichtGesperrt(db: DatabaseService, payload: JwtPayload): Promise<void> {
+  if (!payload.geraetId) return;
+  const { rows } = await tenantContextStorage.run({ mandantId: payload.mandantId, benutzerId: payload.sub }, () =>
+    db.withTenant((client) =>
+      client.query("SELECT 1 FROM geraet WHERE id = $1 AND benutzer_id = $2 AND gesperrt_am IS NULL", [
+        payload.geraetId,
+        payload.sub,
+      ])
+    )
+  );
+  if (rows.length === 0) {
+    throw new UnauthorizedException("Dieses Gerät wurde gesperrt.");
   }
 }
 
@@ -133,6 +160,7 @@ export class TeilnehmerGuard implements CanActivate {
       if (rows.length === 0 || !rows[0].aktiv) {
         throw new UnauthorizedException("Konto ist deaktiviert.");
       }
+      await geraetNichtGesperrt(this.db, payload);
       request.teilnehmer = { art: "benutzer", id: payload.sub, mandantId: payload.mandantId };
       request.benutzer = payload;
       return true;

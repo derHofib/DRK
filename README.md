@@ -3245,3 +3245,21 @@ manuellen Nachbau des Deploy-Mechanismus außerhalb von Docker verifiziert.
   Postgres-Container, Web dahinter) und prüft per `curl` einen echten
   HTTP-Status -- dieselbe Faustregel wie überall sonst in diesem Projekt:
   laufen lassen und messen, nicht nur beschreiben.
+
+### Nachtrag: Gekoppelte Geräte für die iPhone-App (Migration 0070)
+
+Die App kennt keine feste Server-Adresse (jeder Träger hostet selbst). Eine
+angemeldete Person erzeugt in der Weboberfläche per `POST /geraete/kopplung`
+einen einmaligen, 5 Minuten gültigen Token; die App löst ihn ohne Sitzung per
+`POST /auth/geraet/einloesen` gegen ein 30 Tage gültiges Geräte-Token ein.
+Geplanter QR-Inhalt: `{v:1, server, mandantSlug, token}`.
+
+- **Sperre je Gerät statt Passwortwechsel:** das Geräte-Token trägt eine
+  `geraetId`, der Guard prüft bei jeder Anfrage, dass das Gerät nicht gesperrt
+  ist. „Handy verloren" wirkt damit sofort, nicht erst nach 30 Tagen.
+- **Token nur als SHA-256 gespeichert, Einlösen atomar** in der
+  `SECURITY DEFINER`-Funktion `geraet_koppeln()` (wie `passwort_reset_einloesen`).
+  Für deaktivierte Konten wird der Token nicht verbraucht.
+- **Push-Token am Gerät** (`POST /geraete/push-token`), nicht an der Person;
+  die Sperre löscht es. Der Versand selbst ist noch nicht gebaut. Er darf
+  über Apples Dienst nie Nachrichtentext oder Namen transportieren.
