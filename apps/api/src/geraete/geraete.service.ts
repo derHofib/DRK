@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import * as QRCode from "qrcode";
 import { DatabaseService } from "../database/database.service";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { requireTenantContext } from "../common/tenant-context";
@@ -29,7 +30,7 @@ export class GeraeteService {
     private readonly jwt: JwtService
   ) {}
 
-  async kopplungErstellen(): Promise<{ token: string; mandantSlug: string; laeuftAbAm: string }> {
+  async kopplungErstellen(server: string): Promise<{ token: string; mandantSlug: string; laeuftAbAm: string; qrCodeDataUrl: string }> {
     const ctx = requireTenantContext();
     const token = neuerResetToken();
     return this.db.withTenant(async (client) => {
@@ -42,7 +43,11 @@ export class GeraeteService {
       // Der Slug gehoert in den QR-Code: die App braucht ihn fuer spaetere
       // Anmeldungen und kennt vorher nichts ausser dem Code.
       const { rows: mandant } = await client.query<{ slug: string }>("SELECT slug FROM mandant WHERE id = $1", [ctx.mandantId]);
-      return { token, mandantSlug: mandant[0].slug, laeuftAbAm: new Date(rows[0].laeuft_ab_am).toISOString() };
+      const mandantSlug = mandant[0].slug;
+      // Das Bild entsteht hier, nicht im Browser: der Server hat die qrcode-
+      // Bibliothek schon (2FA), das Web-Bundle bliebe so klein.
+      const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify({ v: 1, server, mandantSlug, token }), { margin: 1, width: 280 });
+      return { token, mandantSlug, laeuftAbAm: new Date(rows[0].laeuft_ab_am).toISOString(), qrCodeDataUrl };
     });
   }
 

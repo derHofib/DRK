@@ -28,6 +28,7 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
   const mandantIds: string[] = [];
   const slugs = { a: `test-geraet-a-${suffix}`, b: `test-geraet-b-${suffix}` };
   const email = (m: string, n: string) => `${n}-${m}-${suffix}@beispiel.test`;
+  const SERVER = { server: "https://zimmerakte.beispiel.test" };
   let tokenA: string;
   let tokenA2: string; // zweite Person im selben Mandanten
   let tokenB: string;
@@ -43,7 +44,7 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
       request(app.getHttpServer()).post(p).set("Authorization", `Bearer ${token}`).send(body),
   });
   async function koppeln(sitzung: string, name = "iPhone von Test") {
-    const kopplung = await mit(sitzung).post("/geraete/kopplung");
+    const kopplung = await mit(sitzung).post("/geraete/kopplung", SERVER);
     const res = await request(app.getHttpServer())
       .post("/auth/geraet/einloesen")
       .send({ token: kopplung.body.token, geraeteName: name, plattform: "ios" });
@@ -96,6 +97,7 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
     const { kopplung, res, geraeteToken } = await koppeln(tokenA);
     expect(kopplung.status).toBe(201);
     expect(kopplung.body.mandantSlug).toBe(slugs.a);
+    expect(kopplung.body.qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
     expect(res.status).toBe(200);
     const liste = await mit(geraeteToken).get("/geraete");
     expect(liste.status).toBe(200);
@@ -104,7 +106,7 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
   });
 
   it("der Token ist einmalig", async () => {
-    const kopplung = await mit(tokenA).post("/geraete/kopplung");
+    const kopplung = await mit(tokenA).post("/geraete/kopplung", SERVER);
     const einloesen = () =>
       request(app.getHttpServer())
         .post("/auth/geraet/einloesen")
@@ -113,14 +115,22 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
     expect((await einloesen()).status).toBe(401);
   });
 
+  it("die Kopplung verlangt eine https-Adresse (oder localhost) ohne Pfad", async () => {
+    for (const server of ["http://zimmerakte.beispiel.test", "https://zimmerakte.beispiel.test/pfad", "javascript:alert(1)", ""]) {
+      expect((await mit(tokenA).post("/geraete/kopplung", { server })).status).toBe(400);
+    }
+    expect((await mit(tokenA).post("/geraete/kopplung")).status).toBe(400);
+    expect((await mit(tokenA).post("/geraete/kopplung", { server: "http://localhost:5173" })).status).toBe(201);
+  });
+
   it("der Token steht nicht im Klartext in der Datenbank", async () => {
-    const kopplung = await mit(tokenA).post("/geraete/kopplung");
+    const kopplung = await mit(tokenA).post("/geraete/kopplung", SERVER);
     const { rows } = await admin.query("SELECT 1 FROM geraet_kopplung WHERE token_hash = $1", [kopplung.body.token]);
     expect(rows).toHaveLength(0);
   });
 
   it("ein abgelaufener Token wird abgelehnt", async () => {
-    const kopplung = await mit(tokenA).post("/geraete/kopplung");
+    const kopplung = await mit(tokenA).post("/geraete/kopplung", SERVER);
     await admin.query("UPDATE geraet_kopplung SET laeuft_ab_am = now() - interval '1 second' WHERE mandant_id = $1", [mandantIds[0]]);
     const res = await request(app.getHttpServer())
       .post("/auth/geraet/einloesen")
@@ -135,7 +145,7 @@ describe("Geraete-Kopplung (iPhone-App)", () => {
   });
 
   it("fuer eine deaktivierte Person wird nichts gekoppelt und der Token nicht verbraucht", async () => {
-    const kopplung = await mit(tokenA2).post("/geraete/kopplung");
+    const kopplung = await mit(tokenA2).post("/geraete/kopplung", SERVER);
     await admin.query("UPDATE benutzer SET aktiv = false WHERE id = $1", [benutzerA2Id]);
     const res = await request(app.getHttpServer())
       .post("/auth/geraet/einloesen")

@@ -7,12 +7,104 @@ import {
   IBestaetigen,
   IErfolg,
   IFehler,
+  IGeraet,
   IPasswort,
   ISErledigt,
   ISOffen,
   ISicherheit,
   ISpeichern,
 } from "../components/icons";
+
+type GeraetEintrag = Awaited<ReturnType<typeof api.geraete>>[number];
+
+/**
+ * Kopplung der iPhone-App. Der QR-Code enthaelt ein Einmal-Token, das nach 5
+ * Minuten verfaellt -- deshalb wird er nur auf Knopfdruck erzeugt und nach
+ * Ablauf ausgeblendet, statt dauerhaft auf einem Bildschirm zu stehen, den
+ * andere sehen koennten.
+ */
+function GeraeteKoppeln() {
+  const [geraete, setGeraete] = useState<GeraetEintrag[]>([]);
+  const [kopplung, setKopplung] = useState<{ qrCodeDataUrl: string; laeuftAbAm: string } | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  function laden() {
+    api.geraete().then(setGeraete).catch(() => setFehler("Geräte konnten nicht geladen werden."));
+  }
+  useEffect(laden, []);
+
+  useEffect(() => {
+    if (!kopplung) return;
+    const rest = new Date(kopplung.laeuftAbAm).getTime() - Date.now();
+    const timer = setTimeout(() => {
+      setKopplung(null);
+      laden();
+    }, Math.max(rest, 0));
+    return () => clearTimeout(timer);
+  }, [kopplung]);
+
+  async function erzeugen() {
+    setFehler(null);
+    try {
+      setKopplung(await api.geraeteKopplungErstellen());
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Kopplungscode konnte nicht erzeugt werden.");
+    }
+  }
+
+  async function sperren(id: string) {
+    setFehler(null);
+    try {
+      await api.geraetSperren(id);
+      laden();
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Gerät konnte nicht gesperrt werden.");
+    }
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>
+        <IGeraet />
+        App koppeln
+      </h3>
+      <p className="zv-sub">
+        Öffne die Zimmerakte-App auf dem iPhone und scanne den Code. Er gilt 5 Minuten und nur einmal.
+      </p>
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      {kopplung ? (
+        <img src={kopplung.qrCodeDataUrl} alt="QR-Code zum Koppeln der App" style={{ width: 200, height: 200 }} />
+      ) : (
+        <button className="zv-btn" onClick={erzeugen}>
+          <IGeraet />
+          Code erzeugen
+        </button>
+      )}
+      {geraete.length > 0 && (
+        <ul style={{ listStyle: "none", padding: 0 }}>
+          {geraete.map((g) => (
+            <li key={g.id}>
+              <strong>{g.name}</strong>{" "}
+              <span className="zv-sub">
+                {g.gesperrtAm ? "gesperrt" : `zuletzt aktiv ${new Date(g.zuletztGesehenAm).toLocaleDateString("de-DE")}`}
+              </span>{" "}
+              {!g.gesperrtAm && (
+                <button className="zv-link-btn" onClick={() => sperren(g.id)}>
+                  Sperren
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 function PasswortAendern() {
   const [fehler, setFehler] = useState<string | null>(null);
@@ -221,6 +313,8 @@ export function Sicherheit() {
         </div>
       )}
       </section>
+
+      <GeraeteKoppeln />
     </div>
   );
 }

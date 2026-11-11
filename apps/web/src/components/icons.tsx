@@ -109,6 +109,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  Smartphone,
   Shuffle,
   SignalHigh,
   SignalLow,
@@ -350,3 +351,4 @@ export const IBaumAnsicht = baue(ListTree);
 export const IGrundrissAnsicht = baue(KartenSymbol);
 export const IHochladen = baue(Upload);
 export const ISperre = baue(Lock);
+export const IGeraet = baue(Smartphone);

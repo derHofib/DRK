@@ -12,6 +12,23 @@ const einloesenSchema = z.object({
 });
 
 // Apple-Tokens sind hexadezimal, 32 Byte; Spielraum, weil Apple die Laenge ausdruecklich nicht zusichert.
+// Die Adresse kommt vom Browser (window.location.origin): nur der Browser weiss,
+// unter welcher Adresse der Traeger erreichbar ist. Nur Ursprung, kein Pfad;
+// http nur fuer lokale Entwicklung, sonst wuerde das Token im Klartext scannen.
+const kopplungSchema = z.object({
+  server: z
+    .string()
+    .max(200)
+    .refine((v) => {
+      try {
+        const u = new URL(v);
+        return u.origin === v && (u.protocol === "https:" || u.hostname === "localhost");
+      } catch {
+        return false;
+      }
+    }),
+});
+
 const pushTokenSchema = z.object({ apnsToken: z.string().regex(/^[0-9a-fA-F]{32,200}$/) });
 
 function lesen<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -36,8 +53,8 @@ export class GeraeteController {
 
   @Post("geraete/kopplung")
   @Authenticated()
-  async kopplungErstellen() {
-    return this.geraete.kopplungErstellen();
+  async kopplungErstellen(@Body() body: unknown) {
+    return this.geraete.kopplungErstellen(lesen(kopplungSchema, body).server);
   }
 
   @Get("geraete")
