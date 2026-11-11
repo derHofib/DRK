@@ -354,6 +354,16 @@ export const api = {
       body: JSON.stringify({ pendingToken, code }),
     }),
 
+  geraeteKopplungErstellen: () =>
+    request<{ token: string; mandantSlug: string; laeuftAbAm: string; qrCodeDataUrl: string }>("/geraete/kopplung", {
+      method: "POST",
+      body: JSON.stringify({ server: window.location.origin }),
+    }),
+  geraete: () =>
+    request<
+      { id: string; name: string; plattform: string; erstelltAm: string; zuletztGesehenAm: string; gesperrtAm: string | null; pushAktiv: boolean }[]
+    >("/geraete"),
+  geraetSperren: (id: string) => request<void>(`/geraete/${id}/sperren`, { method: "POST" }),
   totpStatus: () => request<{ aktiviert: boolean }>("/auth/totp/status"),
   totpEinrichten: () => request<TotpEinrichtenResponse>("/auth/totp/einrichten", { method: "POST" }),
   totpAktivieren: (code: string) =>
