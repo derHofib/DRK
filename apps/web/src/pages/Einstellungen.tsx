@@ -4,6 +4,8 @@ import {
   CHAT_LOESCHFRIST_MAX_TAGE,
   CHAT_LOESCHFRIST_MIN_TAGE,
   DUNKEL_GRUNDFARBEN,
+  KLIENT_LOESCHFRIST_MAX_TAGE,
+  KLIENT_LOESCHFRIST_MIN_TAGE,
   PASTELL_PALETTEN,
   type MandantDto,
 } from "@zimmerakte/shared";
@@ -116,6 +118,7 @@ export function Einstellungen({
         <>
           <Sicherheit />
           {mandant && <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
+          {mandant && <KlientLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
         </>
       )}
     </div>
@@ -750,6 +753,131 @@ function ChatLoeschfrist({
 
       <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
         <button className="zv-btn" onClick={speichern} disabled={!geaendert || speichert}>
+          <ISpeichern />
+          {speichert ? "Speichert…" : "Speichern"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Automatische Anonymisierung archivierter Klient:innen (migrations/0070).
+ * Leeres Feld = aus. Anders als bei der Chat-Frist braucht jedes Speichern
+ * eine ausdrückliche Bestätigung: die Wirkung trifft Personen, nicht
+ * Nachrichten, und lässt sich nicht zurückholen.
+ */
+function KlientLoeschfrist({
+  mandant,
+  onMandantAktualisiert,
+}: {
+  mandant: MandantDto;
+  onMandantAktualisiert: (m: MandantDto) => void;
+}) {
+  const aktuell = mandant.klientLoeschfristTage;
+  const text = (t: number | null) => (t === null ? "" : String(t));
+  const [feld, setFeld] = useState(text(aktuell));
+  const [bestaetigt, setBestaetigt] = useState(false);
+  const [speichert, setSpeichert] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [erfolg, setErfolg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFeld(text(aktuell));
+    setBestaetigt(false);
+  }, [aktuell]);
+
+  const aus = feld.trim() === "";
+  const tage = aus ? null : Number(feld);
+  const gueltig =
+    aus || (Number.isInteger(tage) && tage! >= KLIENT_LOESCHFRIST_MIN_TAGE && tage! <= KLIENT_LOESCHFRIST_MAX_TAGE);
+  const geaendert = gueltig && tage !== aktuell;
+  // Aus-Schalten und Verlängern verlieren nichts; nur eine neue oder kürzere Frist löscht.
+  const loescht = geaendert && tage !== null && (aktuell === null || tage < aktuell);
+
+  async function speichern() {
+    if (speichert || !geaendert || (loescht && !bestaetigt)) return;
+    setSpeichert(true);
+    setFehler(null);
+    setErfolg(null);
+    try {
+      const aktualisiert = await api.mandantKlientLoeschfristSetzen(tage);
+      onMandantAktualisiert(aktualisiert);
+      setBestaetigt(false);
+      setErfolg(
+        aktualisiert.klientLoeschfristTage === null
+          ? "Automatische Löschung ist aus."
+          : `Löschfrist gespeichert: ${aktualisiert.klientLoeschfristTage} Tage nach Archivierung.`
+      );
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setSpeichert(false);
+    }
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>Löschfrist für Klientendaten</h3>
+      <p className="zv-sub">
+        Archivierte Klient:innen von {mandant.name} werden nach dieser Frist automatisch anonymisiert: Name,
+        Geburtsdatum, Stammdaten, Kontakte, Aktenauszüge und Chatverläufe werden endgültig gelöscht. Aktenzeichen,
+        Kassenbuch, Rechnungen und Tagesberichte bleiben. Wer wieder entarchiviert wird, beginnt von vorn. Ohne Eintrag
+        ist die automatische Löschung aus.
+      </p>
+
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      {erfolg && (
+        <div className="zv-hinweis zv-hinweis-erfolg">
+          <IErfolg />
+          {erfolg}
+        </div>
+      )}
+
+      <div className="zv-field">
+        <label htmlFor="klient-loeschfrist">Frist in Tagen nach Archivierung (leer = aus)</label>
+        <input
+          id="klient-loeschfrist"
+          type="number"
+          inputMode="numeric"
+          min={KLIENT_LOESCHFRIST_MIN_TAGE}
+          max={KLIENT_LOESCHFRIST_MAX_TAGE}
+          step={1}
+          value={feld}
+          onChange={(e) => {
+            setFeld(e.target.value);
+            setBestaetigt(false);
+            setErfolg(null);
+          }}
+        />
+        {!gueltig && (
+          <span className="zv-sub-inline">
+            Bitte zwischen {KLIENT_LOESCHFRIST_MIN_TAGE} und {KLIENT_LOESCHFRIST_MAX_TAGE} Tagen oder leer lassen.
+          </span>
+        )}
+      </div>
+
+      {loescht && (
+        <>
+          <div className="zv-hinweis zv-hinweis-fehler">
+            <IFehler />
+            Alle Klient:innen, die vor mehr als {tage} Tagen archiviert wurden, werden innerhalb der nächsten Stunde
+            anonymisiert. Das lässt sich nicht rückgängig machen.
+          </div>
+          <label className="zv-checkbox-zeile">
+            <input type="checkbox" checked={bestaetigt} onChange={(e) => setBestaetigt(e.target.checked)} />
+            Ich habe die Frist mit der Datenschutzbeauftragten oder dem Datenschutzbeauftragten abgestimmt.
+          </label>
+        </>
+      )}
+
+      <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
+        <button className="zv-btn" onClick={speichern} disabled={!geaendert || speichert || (loescht && !bestaetigt)}>
           <ISpeichern />
           {speichert ? "Speichert…" : "Speichern"}
         </button>

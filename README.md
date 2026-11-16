@@ -2891,6 +2891,40 @@ Betreuer:in mit Fehlermeldung, Warnung beim Verkürzen, Speichern und Neuladen,
 kein Überlauf bei 320/768/1280 px in Hell und Dunkel); `design-pruefung.mjs`
 46 Paare (neu: Hinweis Löschfrist), alle über der Schwelle.
 
+### Nachtrag: Löschfrist für Klientendaten nach der Archivierung
+
+Bis hierher gab es für Klientendaten nur die manuelle Anonymisierung; wer sie
+vergaß, ließ Namen und Diagnosen ausgezogener Menschen unbegrenzt liegen.
+
+- **Migration 0070, Frist je Träger:** `mandant.klient_loeschfrist_tage`,
+  gerechnet **ab Archivierung**. **Standard ist NULL = aus**: es gibt keine
+  einheitliche gesetzliche Frist, und eine geratene Voreinstellung würde bei
+  der Auslieferung still Daten vernichten. `CHECK` 30 bis 7300 Tage.
+  Entarchivieren setzt `archiviert_am` zurück, die Frist beginnt neu.
+- **Parameterlose `SECURITY DEFINER`-Funktion** `klient_loeschfrist_anwenden()`
+  (wie 0061), stündlicher Lauf in `klienten/klient-loeschfrist.service.ts`,
+  abschaltbar mit `KLIENT_LOESCHFRIST_AUTOMATISCH=aus`, in Tests aus. Wer
+  aktuell oder künftig belegt ist, wird nie angefasst.
+- **Was entfernt wird** (Trigger `klient_daten_bei_anonymisierung`, gilt damit
+  auch für die manuelle Anonymisierung): Name, Geburtsdatum, `klient_stammdaten`,
+  `klient_kontakt`, `klient_archiv_pdf` (die Aktenauszüge enthalten alles im
+  Klartext), dazu Chat (0061). **Es bleiben** Aktenzeichen, Amt, Kassenbuch,
+  Rechnungen und Tagesberichte -- deren Aufbewahrung ist eine offene
+  Entscheidung des Trägers.
+- **Automatik-Markierung:** `klient.anonymisiert_automatisch` statt eines
+  Systembenutzers in `anonymisiert_von`; die App-Rolle kann sie nicht setzen.
+- **Einstellung** unter Einstellungen → Sicherheit, Recht
+  `mandanten.datenschutz-bearbeiten`; Neusetzen oder Verkürzen verlangt eine
+  Bestätigung der Abstimmung mit der Datenschutzbeauftragten.
+
+Geprüft: `klient-loeschfrist.e2e-spec.ts` (15 Tests). Gegenproben: Fristbedingung
+in der Funktion entfernt → 2 rot (vor Ablauf, Entarchivieren); Belegungsprüfung
+entfernt → 1 rot; Trigger deaktiviert → 2 rot; Rechteprüfung entfernt → 1 rot;
+jeweils danach grün. Die Bedingung `archiviert_am IS NOT NULL` ist durch die
+Fristbedingung doppelt abgesichert, ihr Entfernen färbt deshalb keinen Test.
+Gesamtsuite 686/686. Nicht per Browser gemessen (Kontrast/Überlauf der neuen
+Einstellung).
+
 ### Nachtrag: Offlinebetrieb für Kassenbuchungen (Bauplan Phase 4)
 
 Im Treppenhaus gibt es keinen Empfang, das Bargeld wird trotzdem ausgegeben
