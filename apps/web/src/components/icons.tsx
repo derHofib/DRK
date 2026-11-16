@@ -56,6 +56,7 @@ import {
   Eye,
   EyeOff,
   FileClock,
+  Target,
   FileText,
   Glasses,
   GripVertical,
@@ -188,6 +189,7 @@ export const IGruppe = baue(Users);
 /* Unterreiter */
 export const IUebersicht = baue(LayoutList);
 export const IKostenuebernahme = baue(FileClock);
+export const IHilfeplan = baue(Target);
 export const IRechnung = baue(Receipt);
 export const IDarstellung = baue(Palette);
 export const ISicherheit = baue(ShieldCheck);
@@ -305,6 +307,7 @@ export const ILeerKassenbuch = baueLeer(ReceiptText);
 export const ILeerWoche = baueLeer(CalendarX2);
 export const ILeerRechnungen = baueLeer(Receipt);
 export const ILeerKostenuebernahmen = baueLeer(FileClock);
+export const ILeerHilfeplan = baueLeer(Target);
 export const ILeerVerlauf = baueLeer(History);
 export const ILeerStandorte = baueLeer(MapPinOff);
 export const ILeerTagesberichte = baueLeer(BookX);
