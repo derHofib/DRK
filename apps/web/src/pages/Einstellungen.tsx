@@ -12,6 +12,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { MeinProfil } from "../components/MeinProfil";
 import { Sicherheit } from "./Sicherheit";
+import { AktenZugriffe } from "../components/AktenZugriffe";
 import { Standorte } from "./Standorte";
 import { KassenbuchTypen } from "./KassenbuchTypen";
 import {
@@ -116,6 +117,7 @@ export function Einstellungen({
         <>
           <Sicherheit />
           {mandant && <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
+          <AktenZugriffe />
         </>
       )}
     </div>

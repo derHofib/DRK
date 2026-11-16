@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientStandortBedingung } from "../common/standort-restriction";
@@ -6,6 +7,11 @@ import { RechteService } from "../rechte/rechte.service";
 import type { KlientArchivPdfEintrag } from "./klient-archiv.service";
 
 const ANONYM_PLATZHALTER = "Anonymisiert";
+
+// Siehe AuditService.protokollierenEinmalJeFenster(): 15 Minuten, damit das
+// Nachladen einer offenen Akte nicht jedes Mal einen Eintrag erzeugt, eine
+// spaetere erneute Einsicht aber sichtbar bleibt.
+const AKTE_OEFFNEN_FENSTER_MINUTEN = 15;
 
 export interface KlientListEintrag {
   id: string;
@@ -95,7 +101,8 @@ export interface KlientDetail extends KlientListEintrag {
 export class KlientService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly rechte: RechteService
+    private readonly rechte: RechteService,
+    private readonly audit: AuditService
   ) {}
 
   /**
@@ -176,6 +183,31 @@ export class KlientService {
     return this.db.withTenant(async (client) => {
       const detail = await this.holeDetail(client, ctx.benutzerId, id);
       if (!detail) throw new NotFoundException("Klient nicht gefunden.");
+      return detail;
+    });
+  }
+
+  /**
+   * Das Oeffnen einer Akte durch Mitarbeitende (GET /klienten/:id). Eigene
+   * Methode statt Logik in findeEinen(): das wird auch nach Archivieren und
+   * von anderen Modulen aufgerufen, ohne dass jemand eine Akte "geoeffnet"
+   * haette. Protokolliert wird erst, NACHDEM die Akte tatsaechlich
+   * ausgeliefert wird -- ein 404 (auch durch die Standortpruefung) zeigt
+   * nichts an und gehoert deshalb nicht ins Protokoll. Klient-Sitzungen
+   * (die eigene Akte) werden nicht protokolliert: es gibt keinen benutzer_id.
+   */
+  async oeffnen(id: string): Promise<KlientDetail> {
+    const ctx = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const detail = await this.holeDetail(client, ctx.benutzerId, id);
+      if (!detail) throw new NotFoundException("Klient nicht gefunden.");
+      if (!ctx.klientId) {
+        await this.audit.protokollierenEinmalJeFenster(
+          client,
+          { modul: "klienten", aktion: "akte_geoeffnet", objektTyp: "klient", objektId: id },
+          AKTE_OEFFNEN_FENSTER_MINUTEN
+        );
+      }
       return detail;
     });
   }

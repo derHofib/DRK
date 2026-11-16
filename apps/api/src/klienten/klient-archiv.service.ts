@@ -1,3 +1,4 @@
+import { AuditService } from "../audit/audit.service";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
@@ -18,7 +19,8 @@ export interface KlientArchivPdfEintrag {
 export class KlientArchivService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly rechte: RechteService
+    private readonly rechte: RechteService,
+    private readonly audit: AuditService
   ) {}
 
   /**
@@ -107,6 +109,15 @@ export class KlientArchivService {
       );
       if (rows.length === 0) return null;
       if (!(await klientIstErlaubt(client, benutzerId, klientId))) return null;
+      // Der Aktenauszug enthaelt die komplette Akte -- jeder Abruf zaehlt als
+      // Einsicht, ohne Zeitfenster (ein Download ist eine bewusste Handlung).
+      await this.audit.protokollieren(client, {
+        modul: "klienten",
+        aktion: "archiv_pdf_geladen",
+        objektTyp: "klient",
+        objektId: klientId,
+        nachher: { archivId },
+      });
       const dateiname = `Aktenauszug_${rows[0].nachname}_${rows[0].vorname}.pdf`.replace(/\s+/g, "_");
       return { pdf: rows[0].pdf, hash: rows[0].pdf_hash, dateiname };
     });

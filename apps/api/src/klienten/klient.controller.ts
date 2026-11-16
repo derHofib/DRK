@@ -106,7 +106,7 @@ export class KlientController {
 
   @Get(":id")
   async eines(@Param("id") id: string) {
-    return this.klienten.findeEinen(id);
+    return this.klienten.oeffnen(id);
   }
 
   @Patch(":id/anonymisieren")

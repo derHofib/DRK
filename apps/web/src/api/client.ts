@@ -1,4 +1,5 @@
 import type {
+  AktenZugriffAuswertungDto,
   AnwaerterDto,
   ChatAnfrageAnnahmeDto,
   ChatAnfrageDto,
@@ -379,6 +380,11 @@ export const api = {
     request<MandantDto>("/mandant/me", { method: "PATCH", body: JSON.stringify({ dunkelGrundfarbe }) }),
   mandantChatLoeschfristSetzen: (tage: number) =>
     request<MandantDto>("/mandant/me/chat-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
+  aktenZugriffe: (filter: { von?: string; bis?: string; benutzerId?: string; offset?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v !== undefined && v !== "") q.set(k, String(v));
+    return request<AktenZugriffAuswertungDto>(`/audit-log/akten-zugriffe?${q}`);
+  },
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   // Das eigene Konto (Name, Positionen) -- fuer den Benutzerblock der Seitenleiste.
   benutzerIch: () => request<BenutzerListEintragDto>("/benutzer/ich"),

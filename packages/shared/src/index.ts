@@ -1185,3 +1185,37 @@ export function dienstNachUhrzeit(uhr: Date = new Date()): Dienst {
   if (h >= 13 && h < 21) return "spaet";
   return "nacht";
 }
+
+// Lesezugriffe auf Klientenakten (GET /audit-log/akten-zugriffe,
+// Recht klienten.zugriffsprotokoll).
+export type AktenZugriffAktion = "akte_geoeffnet" | "archiv_pdf_geladen";
+
+export const AKTEN_ZUGRIFF_AKTION_LABEL: Record<AktenZugriffAktion, string> = {
+  akte_geoeffnet: "Akte geöffnet",
+  archiv_pdf_geladen: "Aktenauszug (PDF) abgerufen",
+};
+
+export interface AktenZugriffEintragDto {
+  id: string;
+  erstelltAm: string;
+  benutzerId: string;
+  benutzerName: string;
+  klientId: string;
+  klientName: string;
+  aktion: AktenZugriffAktion;
+}
+
+export interface AktenZugriffJeBenutzerDto {
+  benutzerId: string;
+  benutzerName: string;
+  anzahl: number;
+  anzahlKlienten: number;
+  letzterZugriff: string;
+}
+
+export interface AktenZugriffAuswertungDto {
+  eintraege: AktenZugriffEintragDto[];
+  /** Alle Treffer des Filters, nicht nur die geladene Seite. */
+  gesamt: number;
+  jeBenutzer: AktenZugriffJeBenutzerDto[];
+}

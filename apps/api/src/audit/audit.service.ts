@@ -135,4 +135,29 @@ export class AuditService {
       ]
     );
   }
+
+  /**
+   * Wie protokollieren(), aber nur, wenn dieselbe Person dasselbe Objekt mit
+   * derselben Aktion nicht schon innerhalb des Fensters protokolliert hat.
+   * Gedacht fuer Lesezugriffe: die Oberflaeche laedt eine offene Akte nach
+   * jedem Speichern neu, ohne Fenster stuende ein Oeffnen dutzendfach im
+   * Protokoll und die Auswertung waere unlesbar. Das Fenster ist kurz genug,
+   * dass jede neue Sitzung am Objekt sichtbar bleibt.
+   */
+  async protokollierenEinmalJeFenster(
+    client: PoolClient,
+    eintrag: { modul: string; aktion: string; objektTyp: string; objektId: string },
+    fensterMinuten: number
+  ): Promise<void> {
+    const { benutzerId } = requireTenantContext();
+    const { rows } = await client.query(
+      `SELECT 1 FROM audit_log
+       WHERE benutzer_id = $1 AND modul = $2 AND aktion = $3 AND objekt_typ = $4 AND objekt_id = $5
+         AND erstellt_am > now() - make_interval(mins => $6)
+       LIMIT 1`,
+      [benutzerId, eintrag.modul, eintrag.aktion, eintrag.objektTyp, eintrag.objektId, fensterMinuten]
+    );
+    if (rows.length > 0) return;
+    await this.protokollieren(client, eintrag);
+  }
 }
