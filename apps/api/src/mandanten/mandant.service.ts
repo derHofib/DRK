@@ -9,10 +9,11 @@ interface MandantZeile {
   akzentfarbe: string;
   dunkelGrundfarbe: string;
   chatLoeschfristTage: number;
+  klientLoeschfristTage: number | null;
 }
 
 const MANDANT_SPALTEN =
-  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage"';
+  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage", klient_loeschfrist_tage AS "klientLoeschfristTage"';
 
 /** Partielles Update -- mindestens ein Feld ist gesetzt, siehe Controller. */
 interface ErscheinungsbildPatch {
@@ -114,6 +115,24 @@ export class MandantService {
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<MandantZeile>(
         `UPDATE mandant SET chat_loeschfrist_tage = $1 RETURNING ${MANDANT_SPALTEN}`,
+        [tage]
+      );
+      return rows[0] ?? null;
+    });
+  }
+
+  /**
+   * Gleiches Recht wie die Chat-Frist: es entscheidet, wann Sozialdaten
+   * unwiderruflich verschwinden. null schaltet die Automatik ab. Grenzen
+   * pruefen zod und der CHECK in Migration 0070.
+   */
+  async setzeKlientLoeschfrist(tage: number | null) {
+    if (!(await this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"))) {
+      throw new ForbiddenException("Nur die Leitung darf die Löschfrist für Klientendaten ändern.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<MandantZeile>(
+        `UPDATE mandant SET klient_loeschfrist_tage = $1 RETURNING ${MANDANT_SPALTEN}`,
         [tage]
       );
       return rows[0] ?? null;

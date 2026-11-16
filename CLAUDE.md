@@ -59,6 +59,8 @@ einer Stelle in `auth/auth.service.ts` und ist dort kommentiert. Dazu kommt
 der stündliche Lauf der Chat-Löschfrist (`chat/chat-loeschfrist.service.ts`):
 er hat keine anfragende Person, ruft aber nur die parameterlose
 `SECURITY DEFINER`-Funktion `chat_loeschfrist_anwenden()` auf (Migration 0061).
+Gleiches gilt für den Lauf der Klienten-Löschfrist (`klienten/klient-loeschfrist.service.ts`,
+`klient_loeschfrist_anwenden()`, Migration 0070).
 
 **Jede neue fachliche Tabelle** braucht:
 ```sql

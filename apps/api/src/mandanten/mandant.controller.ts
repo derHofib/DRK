@@ -43,6 +43,20 @@ const chatLoeschfristSchema = z.object({
     .max(CHAT_LOESCHFRIST_MAX_TAGE, `Höchstens ${CHAT_LOESCHFRIST_MAX_TAGE} Tage.`),
 });
 
+// Wie oben: Zahlen statt Import aus shared, gleiche Grenzen wie der CHECK in 0070.
+// null schaltet die automatische Loeschung aus.
+const KLIENT_LOESCHFRIST_MIN_TAGE = 30;
+const KLIENT_LOESCHFRIST_MAX_TAGE = 7300;
+
+const klientLoeschfristSchema = z.object({
+  tage: z
+    .number()
+    .int("Bitte ganze Tage angeben.")
+    .min(KLIENT_LOESCHFRIST_MIN_TAGE, `Mindestens ${KLIENT_LOESCHFRIST_MIN_TAGE} Tage.`)
+    .max(KLIENT_LOESCHFRIST_MAX_TAGE, `Höchstens ${KLIENT_LOESCHFRIST_MAX_TAGE} Tage.`)
+    .nullable(),
+});
+
 @Controller("mandant")
 @Authenticated()
 export class MandantController {
@@ -73,5 +87,10 @@ export class MandantController {
   @Patch("me/chat-loeschfrist")
   async chatLoeschfristSetzen(@Body() body: unknown) {
     return this.mandant.setzeChatLoeschfrist(chatLoeschfristSchema.parse(body).tage);
+  }
+
+  @Patch("me/klient-loeschfrist")
+  async klientLoeschfristSetzen(@Body() body: unknown) {
+    return this.mandant.setzeKlientLoeschfrist(klientLoeschfristSchema.parse(body).tage);
   }
 }
