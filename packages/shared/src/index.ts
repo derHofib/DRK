@@ -33,7 +33,16 @@ export interface MandantDto {
   dunkelGrundfarbe: string;
   /** Nach so vielen Tagen werden Chatinhalte endgültig gelöscht (migrations/0061). */
   chatLoeschfristTage: number;
+  /**
+   * Nach so vielen Tagen ab Archivierung werden Klient:innen automatisch
+   * anonymisiert (migrations/0070). null = keine automatische Löschung.
+   */
+  klientLoeschfristTage: number | null;
 }
+
+/** Grenzen der Klienten-Löschfrist -- dieselben wie der CHECK in Migration 0070. */
+export const KLIENT_LOESCHFRIST_MIN_TAGE = 30;
+export const KLIENT_LOESCHFRIST_MAX_TAGE = 7300;
 
 /**
  * Grenzen der Chat-Löschfrist -- dieselben wie der CHECK in Migration 0061.
@@ -525,6 +534,8 @@ export interface DashboardDto {
     amt: string;
     bis: string;
     tageVerbleibend: number;
+    /** Erinnerungsstufe: 30, 60 oder 90 Tage (kleinste Schwelle, die noch >= Restzeit ist). */
+    stufeTage: 30 | 60 | 90;
   }[];
   klientenOhneTagesbericht: {
     klientId: string;

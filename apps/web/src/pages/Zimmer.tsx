@@ -13,6 +13,7 @@ import type {
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
 import { formatDatum } from "../format";
+import { filterTextAus, type ListenExport } from "../export/listenExport";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
@@ -472,6 +473,36 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
     // imBereich ist von zimmer/standortId abgeleitet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zimmer, standortId, statusFilter, standortFilter, etageFilter, suche, sortierung]);
+  function zimmerExport(): ListenExport {
+    return {
+      titel: "Zimmer und Belegung",
+      dateiname: "zimmer-belegung",
+      filterText: filterTextAus([
+        ["Status", statusFilter ? ZIMMERSTATUS_LABEL[statusFilter as keyof typeof ZIMMERSTATUS_LABEL] : ""],
+        ["Standort", standortOptionen.find((o) => o.wert === standortFilter)?.label],
+        ["Etage", etageFilter],
+        ["Suche", suche.trim()],
+      ]),
+      spalten: [
+        { titel: "Standort", breite: 14 },
+        { titel: "Zimmer", breite: 8 },
+        { titel: "Etage", breite: 8 },
+        { titel: "Status", breite: 12 },
+        { titel: "Belegt / Plätze", breite: 10 },
+        { titel: "Bewohner:innen", breite: 40 },
+      ],
+      zeilen: sichtbareZimmer.map((z) => [
+        z.standortName,
+        z.nummer,
+        z.etage,
+        ZIMMERSTATUS_LABEL[z.status],
+        `${z.bewohner.length} / ${z.kapazitaet}`,
+        z.bewohner
+          .map((b) => `${b.name} (seit ${formatDatum(b.einzug)}${b.auszug ? `, Auszug ${formatDatum(b.auszug)}` : ""})`)
+          .join("; "),
+      ]),
+    };
+  }
   const zimmerFilterAktiv = Boolean(statusFilter || standortFilter || etageFilter || suche.trim());
   const standortOptionen = [...new Map(imBereich.map((z) => [z.standortId, z.standortName])).entries()]
     .map(([wert, label]) => ({ wert, label }))
@@ -573,6 +604,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
               onWaehlen: (o) => setSortierung(o as ZimmerSortierung),
             }}
             aktiv={zimmerFilterAktiv}
+            exportListe={zimmerExport}
             onZuruecksetzen={() => {
               setStatusFilter("");
               setStandortFilter("");

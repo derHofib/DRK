@@ -315,7 +315,7 @@ export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
           schluessel: `ku:${k.klientId}:${k.bis}`,
           art: "Kostenübernahme",
           titel: `Kostenübernahme endet: ${k.klientName}`,
-          meta: `${k.amt} · bis ${formatDatum(k.bis)}`,
+          meta: `${k.amt} · bis ${formatDatum(k.bis)} · noch ${k.tageVerbleibend} ${k.tageVerbleibend === 1 ? "Tag" : "Tage"}`,
           frist: k.bis.slice(0, 10),
           fristText: "",
           zustaendigkeit: "ohne",
