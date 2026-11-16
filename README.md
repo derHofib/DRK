@@ -3172,6 +3172,35 @@ wurde nicht in der Entwicklungsumgebung selbst gebaut (kein Docker-Daemon
 verfügbar), sondern nur über die CI (`.github/workflows/ci.yml`) und einen
 manuellen Nachbau des Deploy-Mechanismus außerhalb von Docker verifiziert.
 
+### Nachtrag: Stundenbuchung für Betreuungsleistungen (Bauplan Phase 4)
+
+Geleistete Betreuungszeit je Klient:in steht in `stundenbuchung`
+(Migration 0072), eine Bewegungstabelle wie das Kassenbuch: der Stundensaldo
+ist eine Summe (`GET /stundenbuchungen/summen`, je Klient:in und Monat, ohne
+stornierte Buchungen), nie ein Feld.
+
+- **Append-only.** Für die App-Rolle ist nur das Storno (vier Spalten)
+  änderbar; ein Storno ist per Trigger endgültig und braucht Grund, Urheber
+  und Zeitpunkt. Ein Tippfehler heißt stornieren und neu buchen.
+- **Minuten, ganze Zahl**, höchstens 1440 je Buchung und 1440 je Person und
+  Tag (Summe der nicht stornierten Buchungen).
+- **Leistung erbracht von** (`mitarbeiter_id`) und **eingetragen von**
+  (`gebucht_von`) sind getrennt. Für andere buchen braucht
+  `stunden.fuer-andere-buchen`; die eigene Buchung stornieren darf immer die
+  buchende bzw. leistende Person, fremde nur mit `stunden.stornieren`.
+- **Rechte.** Migration 0072 kopiert für bestehende Account-Typen
+  `tagesberichte.ansehen/anlegen` nach `stunden.ansehen/buchen` und
+  `kassenbuch.storno-entscheiden` nach `stunden.stornieren` und
+  `stunden.fuer-andere-buchen` (gleicher Scope). Danach ist es Sache der
+  Matrix.
+- **Idempotenz** wie beim Kassenbuch (Header `Idempotency-Key`, je Mandant
+  eindeutig). Die Oberfläche sendet ihn, die Offline-Warteschlange für
+  Stunden ist noch nicht angebunden.
+- Die Leistungsart ist eine feste Liste (CHECK), keine Mandantentabelle,
+  bis klar ist, wie die Ämter ihre Leistungsnachweise gliedern.
+- Browserprüfung: `node scripts/stunden-pruefung.mjs` (24 Messungen bei 1440
+  und 390 px).
+
 ## Architekturentscheidungen, die man beim Weiterbauen kennen sollte
 
 - **Zustände werden nie gespeichert, nur abgeleitet.** Kein
