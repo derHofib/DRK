@@ -51,6 +51,9 @@ import type {
   RaumplanDto,
   TagDto,
   TagesberichtAenderungDto,
+  StundenbuchungDto,
+  StundenSummeDto,
+  Leistungsart,
   TagesberichtDto,
   TotpEinrichtenResponse,
   WochenuebersichtEintragDto,
@@ -214,6 +217,13 @@ async function request<T>(path: string, init?: RequestInit, ohneToken = false): 
 // Fuer Binaerdateien (Bilder, PDFs) statt JSON -- deshalb nicht ueber
 // request<T>(), das braucht ausserdem den Auth-Header, den ein rohes
 // <img src="..."> nicht mitschickt.
+function stundenFilterText(filter: Record<string, string | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(filter)) if (v) q.set(k, v);
+  const text = q.toString();
+  return text ? `?${text}` : "";
+}
+
 async function blobUrl(path: string): Promise<string> {
   const token = getToken();
   const res = await fetch(`/api${path}`, {
@@ -621,6 +631,27 @@ export const api = {
   rechnungStatusAendern: (id: string, status: RechnungStatus, grund?: string) =>
     request<RechnungDto>(`/rechnungen/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, grund }) }),
   rechnungDokumentUrl: (rechnungId: string) => blobUrl(`/rechnungen/${rechnungId}/dokument`),
+
+  stundenRechte: () => request<{ ansehen: boolean; buchen: boolean; fuerAndereBuchen: boolean }>("/stundenbuchungen/rechte"),
+  stundenListe: (filter: { klientId?: string; mitarbeiterId?: string; von?: string; bis?: string } = {}) =>
+    request<StundenbuchungDto[]>(`/stundenbuchungen${stundenFilterText(filter)}`),
+  stundenSummen: (filter: { klientId?: string; mitarbeiterId?: string; von?: string; bis?: string } = {}) =>
+    request<StundenSummeDto[]>(`/stundenbuchungen/summen${stundenFilterText(filter)}`),
+  // idempotenzSchluessel: das Formular erzeugt ihn beim Oeffnen und schickt ihn
+  // bei jedem Versuch gleich -- ein zweimal getipptes "Buchen" oder ein
+  // wiederholter Versuch nach verlorener Antwort ergibt hoechstens eine
+  // Buchung (Migration 0072).
+  stundenBuchen: (
+    payload: { klientId: string; mitarbeiterId?: string; datum: string; minuten: number; leistungsart: Leistungsart; notiz?: string },
+    idempotenzSchluessel: string
+  ) =>
+    request<StundenbuchungDto>("/stundenbuchungen", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Idempotency-Key": idempotenzSchluessel },
+    }),
+  stundenStornieren: (id: string, grund: string) =>
+    request<StundenbuchungDto>(`/stundenbuchungen/${id}/storno`, { method: "POST", body: JSON.stringify({ grund }) }),
 
   tagesberichteListe: (filter: { klientId?: string; von?: string; bis?: string } = {}) => {
     const q = new URLSearchParams();

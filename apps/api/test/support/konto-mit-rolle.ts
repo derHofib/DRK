@@ -47,6 +47,9 @@ const MITARBEITER_RECHTE: readonly RechtEintrag[] = [
   { modul: "anwaerter", aktion: "ansehen", scope: "einrichtung" },
   { modul: "tagesberichte", aktion: "ansehen", scope: "einrichtung" },
   { modul: "tagesberichte", aktion: "anlegen", scope: "einrichtung" },
+  // Spiegel dessen, was Migration 0072 bestehenden Account-Typen mitgibt.
+  { modul: "stunden", aktion: "ansehen", scope: "einrichtung" },
+  { modul: "stunden", aktion: "buchen", scope: "einrichtung" },
   { modul: "standorte", aktion: "ansehen", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "ansehen", scope: "einrichtung" },
 ];
@@ -54,6 +57,8 @@ const MITARBEITER_RECHTE: readonly RechtEintrag[] = [
 const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "aufgaben", aktion: "koordinieren", scope: "einrichtung" },
   { modul: "kassenbuch", aktion: "storno-entscheiden", scope: "einrichtung" },
+  { modul: "stunden", aktion: "stornieren", scope: "einrichtung" },
+  { modul: "stunden", aktion: "fuer-andere-buchen", scope: "einrichtung" },
   { modul: "kassenbuch", aktion: "typen-verwalten", scope: "einrichtung" },
   { modul: "standorte", aktion: "bearbeiten", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "status-wechseln", scope: "einrichtung" },

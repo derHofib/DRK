@@ -26,6 +26,7 @@ import { KalenderModule } from "./kalender/kalender.module";
 import { ChatModule } from "./chat/chat.module";
 import { ProfilModule } from "./profil/profil.module";
 import { SucheModule } from "./suche/suche.module";
+import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { SucheModule } from "./suche/suche.module";
     ChatModule,
     ProfilModule,
     SucheModule,
+    StundenbuchungModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

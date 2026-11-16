@@ -17,6 +17,7 @@ import {
   INachrichten,
   IOrganigramm,
   IStandort,
+  IStunden,
   ITagesberichte,
   IVertretung,
   type IconKomponente,
@@ -32,6 +33,7 @@ export type HauptReiter =
   | "kalender"
   | "kassenbuch"
   | "tagesberichte"
+  | "stunden"
   | "einstellungen";
 
 /**
@@ -96,7 +98,7 @@ export type MenueGruppeId = "arbeit" | "menschen" | "haus";
 export const MENUE_GRUPPEN: { id: MenueGruppeId; label: string; reiter: HauptReiter[] }[] = [
   { id: "arbeit", label: "Arbeit", reiter: ["dashboard", "nachrichten", "kalender", "aufgaben"] },
   { id: "menschen", label: "Menschen", reiter: ["klienten", "mitarbeitende"] },
-  { id: "haus", label: "Haus", reiter: ["standorte", "tagesberichte", "kassenbuch"] },
+  { id: "haus", label: "Haus", reiter: ["standorte", "tagesberichte", "stunden", "kassenbuch"] },
 ];
 
 /** In welcher Gruppe ein Hauptpunkt steht; Einstellungen: keine. */
@@ -121,6 +123,7 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "standorte", label: "Standorte", icon: IStandort },
   { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
+  { wert: "stunden", label: "Stunden", icon: IStunden },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },
 ];
