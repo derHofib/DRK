@@ -57,6 +57,8 @@ const klientLoeschfristSchema = z.object({
     .nullable(),
 });
 
+const rueckmeldungWeitergabeSchema = z.object({ aktiv: z.boolean() });
+
 @Controller("mandant")
 @Authenticated()
 export class MandantController {
@@ -92,5 +94,10 @@ export class MandantController {
   @Patch("me/klient-loeschfrist")
   async klientLoeschfristSetzen(@Body() body: unknown) {
     return this.mandant.setzeKlientLoeschfrist(klientLoeschfristSchema.parse(body).tage);
+  }
+
+  @Patch("me/rueckmeldung-weitergabe")
+  async rueckmeldungWeitergabeSetzen(@Body() body: unknown) {
+    return this.mandant.setzeRueckmeldungWeitergabe(rueckmeldungWeitergabeSchema.parse(body).aktiv);
   }
 }

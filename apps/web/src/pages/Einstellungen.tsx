@@ -119,6 +119,7 @@ export function Einstellungen({
           <Sicherheit />
           {mandant && <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
           {mandant && <KlientLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
+          {mandant && <RueckmeldungWeitergabe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
         </>
       )}
     </div>
@@ -882,6 +883,57 @@ function KlientLoeschfrist({
           {speichert ? "Speichert…" : "Speichern"}
         </button>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Darf der Hersteller freigegebene Rückmeldungen lesen (migrations/0073)?
+ * Standard aus: Rückmeldungen können Freitext und Screenshots enthalten, und
+ * ohne ausdrückliche Entscheidung des Trägers verlässt davon nichts das Haus.
+ */
+function RueckmeldungWeitergabe({
+  mandant,
+  onMandantAktualisiert,
+}: {
+  mandant: MandantDto;
+  onMandantAktualisiert: (m: MandantDto) => void;
+}) {
+  const [speichert, setSpeichert] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  async function umschalten(aktiv: boolean) {
+    if (speichert) return;
+    setSpeichert(true);
+    setFehler(null);
+    try {
+      onMandantAktualisiert(await api.mandantRueckmeldungWeitergabeSetzen(aktiv));
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setSpeichert(false);
+    }
+  }
+
+  return (
+    <section className="zv-einstellungen-abschnitt">
+      <h3>Rückmeldungen an den Hersteller</h3>
+      <p className="zv-sub">
+        Mitarbeitende können Ideen und Fehler direkt aus der Anwendung melden, mit einem Screenshot, in dem alle Texte
+        unkenntlich gemacht sind. Die Geschäftsführung entscheidet über die Freigabe. Nur wenn Sie die Weitergabe
+        einschalten, darf der Hersteller freigegebene Rückmeldungen lesen und umsetzen; nicht freigegebene sieht er nie.
+        Bilder werden 30 Tage, Einträge 365 Tage nach Abschluss gelöscht.
+      </p>
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
+      <label className="zv-checkbox-zeile">
+        <input type="checkbox" checked={mandant.rueckmeldungWeitergabe} disabled={speichert} onChange={(e) => umschalten(e.target.checked)} />
+        Freigegebene Rückmeldungen an den Hersteller weitergeben
+      </label>
     </section>
   );
 }

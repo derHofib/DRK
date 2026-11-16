@@ -44,6 +44,10 @@ export type UnterReiter =
   | "vertretung"
   | "organigramm"
   | "hzl"
+  // Eingang der Rueckmeldungen (Idee/Fehler): kein sortierbarer Hauptpunkt,
+  // sondern nur mit dem Recht rueckmeldungen.verwalten in der Fusszeile der
+  // Seitenleiste sichtbar (Shell.tsx).
+  | "rueckmeldungen"
   // Raumplan/Zeitleiste EINES Standorts unter "Standorte". Welcher Standort,
   // wird ueber die Standort-Reiter unter dem Seitenkopf gewaehlt
   // (StandortReiter.tsx) und steht als Zustand in Shell.tsx, nicht im
