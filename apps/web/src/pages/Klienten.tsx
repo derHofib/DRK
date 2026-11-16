@@ -3,6 +3,7 @@ import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto }
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { formatDatum } from "../format";
+import { filterTextAus, type ListenExport } from "../export/listenExport";
 import type { KlientenAnsicht } from "../navigation";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
@@ -147,6 +148,45 @@ export function Klienten({
       }
     });
   }, [klienten, amtFilter, hzlFilter, standortFilter, zimmerFilter, suche, sortierung]);
+  // Exportiert wird die sichtbare Liste (nach Filter und Sortierung), nicht
+  // der volle Bestand: was die Person nicht sieht, soll sie auch nicht
+  // versehentlich in einer Datei weitergeben.
+  function klientenExport(): ListenExport {
+    const archiv = ansicht === "archiv";
+    return {
+      titel: archiv ? "Klient:innen (Archiv)" : "Klient:innen",
+      dateiname: archiv ? "klientinnen-archiv" : "klientinnen",
+      filterText: filterTextAus([
+        ["Amt", amtFilter],
+        ["HZL", hzlFilter ? HZL_RHYTHMUS_LABEL[hzlFilter as HzlRhythmus] : ""],
+        ["Standort", standortFilter],
+        ["Zimmer", zimmerFilter ? (zimmerFilter === KEIN_ZIMMER ? "Ohne Zimmer" : "Mit Zimmer") : ""],
+        ["Suche", suche.trim()],
+      ]),
+      spalten: [
+        { titel: "Nachname", breite: 14 },
+        { titel: "Vorname", breite: 14 },
+        { titel: "Aktenzeichen", breite: 14 },
+        { titel: "Amt", breite: 18 },
+        { titel: "HZL", breite: 12 },
+        { titel: archiv ? "Archiviert am" : "Zimmer", breite: 18 },
+      ],
+      zeilen: sichtbareKlienten.map((k) => [
+        k.nachname,
+        k.vorname,
+        k.aktenzeichen,
+        k.amt,
+        HZL_RHYTHMUS_LABEL[k.hzlRhythmus],
+        archiv
+          ? k.archiviertAm
+            ? formatDatum(k.archiviertAm.slice(0, 10))
+            : ""
+          : k.aktuellesZimmer
+            ? `${k.aktuellesZimmer.nummer} · ${k.aktuellesZimmer.standortName}`
+            : "Kein Zimmer",
+      ]),
+    };
+  }
   const klientFilterAktiv = Boolean(amtFilter || hzlFilter || standortFilter || zimmerFilter || suche.trim());
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
@@ -383,6 +423,7 @@ export function Klienten({
                 onWaehlen: (o) => setSortierung(o as KlientSortierung),
               }}
               aktiv={klientFilterAktiv}
+              exportListe={klientenExport}
               onZuruecksetzen={() => {
                 setAmtFilter("");
                 setHzlFilter("");

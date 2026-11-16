@@ -37,6 +37,7 @@ pnpm build                        # Typecheck + Build aller Pakete
 cd apps/web && pnpm build && pnpm exec vite preview --port 4173 &
 node scripts/design-pruefung.mjs      # Kontrastmatrix, braucht keine DB
 node scripts/funktions-pruefung.mjs   # Ende-zu-Ende, braucht API + Dev-Server
+(cd ../api && pnpm exec tsx ../web/scripts/export-pruefung.mjs)  # CSV/PDF-Listenexport, braucht nichts
 ```
 
 ---

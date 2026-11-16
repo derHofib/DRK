@@ -31,6 +31,8 @@ import {
 } from "../components/icons";
 import { FilterAuswahl, FilterPille } from "../components/Filterleiste";
 import { AktionsMenue } from "../components/AktionsMenue";
+import { ExportMenue } from "../components/ExportMenue";
+import { filterTextAus, type ListenExport } from "../export/listenExport";
 
 /**
  * Zeile eines Tagesberichts -- wird sowohl vom allgemeinen Menuepunkt hier
@@ -403,6 +405,28 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   }
   const nachKlientSortiert = sortierung === "klient-az" || sortierung === "klient-za";
   const gruppen = useMemo(() => (nachKlientSortiert ? gruppiereNachKlient(sichtbar) : []), [sichtbar, nachKlientSortiert]);
+  // Exportiert wird die gerade sichtbare Auswahl in der angezeigten Sortierung.
+  function berichteExport(): ListenExport {
+    return {
+      titel: "Tagesberichte",
+      dateiname: "tagesberichte",
+      filterText: filterTextAus([
+        ["Zeitraum", zeitraumText],
+        ["Klient:in", klientText ? `${klientText.vorname} ${klientText.nachname}` : ""],
+        ["Tag", tagFilter],
+        ["Verfasst von", autorFilter],
+        ["Suche", suche.trim()],
+      ]),
+      spalten: [
+        { titel: "Datum", breite: 9 },
+        { titel: "Klient:in", breite: 15 },
+        { titel: "Verfasst von", breite: 14 },
+        { titel: "Tags", breite: 12 },
+        { titel: "Bericht", breite: 50 },
+      ],
+      zeilen: sichtbar.map((b) => [formatDatum(b.datum), b.klientName, b.autorName ?? "", b.tags.map((t) => t.name).join(", "), b.text]),
+    };
+  }
   const filterAktiv = Boolean(von || bis || klientFilter || tagFilter || autorFilter || suche.trim());
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
@@ -684,6 +708,9 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
             />
           )}
         </FilterPille>
+
+        <span className="zv-filter-trenner" aria-hidden="true" />
+        <ExportMenue erzeuge={berichteExport} />
 
         <button
           type="button"

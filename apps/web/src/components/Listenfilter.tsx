@@ -1,7 +1,9 @@
 import { ReactNode, useState } from "react";
 import { formatDatum } from "../format";
 import { SCHNELLWAHL_LABEL, type Schnellwahl, zeitraumFuer } from "../pages/tagesberichte-filter";
+import type { ListenExport } from "../export/listenExport";
 import { AktionsMenue } from "./AktionsMenue";
+import { ExportMenue } from "./ExportMenue";
 import { FilterAuswahl, FilterPille } from "./Filterleiste";
 import { IFilterLoeschen, IKalender, INeu, ISortierung, ISuche } from "./icons";
 
@@ -34,6 +36,7 @@ export function Filterleiste({
   sortierung,
   aktiv,
   onZuruecksetzen,
+  exportListe,
 }: {
   ariaLabel: string;
   suche?: { wert: string; onChange: (wert: string) => void; placeholder?: string; ariaLabel?: string };
@@ -45,6 +48,8 @@ export function Filterleiste({
   /** Schraenkt irgendein Filter die Liste gerade ein? Steuert den Zuruecksetzen-Knopf. */
   aktiv: boolean;
   onZuruecksetzen: () => void;
+  /** Baut die gerade sichtbare (gefilterte, sortierte) Liste fuer CSV/PDF; ohne diese Angabe gibt es keinen Export-Knopf. */
+  exportListe?: () => ListenExport;
 }) {
   // Welche Zusatzfilter der Mensch aktiv eingeblendet hat. Ein gesetzter Wert
   // blendet seinen Filter unabhaengig davon ein (z. B. Startfilter per Link).
@@ -121,6 +126,13 @@ export function Filterleiste({
               />
             )}
           </FilterPille>
+        </>
+      )}
+
+      {exportListe && (
+        <>
+          <span className="zv-filter-trenner" aria-hidden="true" />
+          <ExportMenue erzeuge={exportListe} />
         </>
       )}
 
