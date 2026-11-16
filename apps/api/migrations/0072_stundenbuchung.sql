@@ -23,6 +23,15 @@
 -- pflegbare Liste Vorratshaltung. Erweitern ist eine Migration (CHECK
 -- austauschen), kein Umbau.
 --
+-- Loeschfrist: die automatische Anonymisierung einer archivierten Person (0070)
+-- raeumt stundenbuchung NICHT ab, wie sie auch Kassenbuch, Rechnungen und
+-- Tagesberichte stehen laesst -- die Aufbewahrung abrechnungsrelevanter
+-- Nachweise ist eine offene fachliche Entscheidung des Traegers. Zu beachten
+-- ist dabei das Freitextfeld "notiz": es kann Angaben ueber die Person
+-- enthalten und bleibt nach der Anonymisierung der Klient:in stehen. Soll es
+-- mit verschwinden, gehoert eine eigene Bereinigung in den Trigger
+-- klient_daten_bei_anonymisierung() -- als neue Migration, nicht hier.
+--
 -- mitarbeiter_id (wer hat die Leistung erbracht) und gebucht_von (wer hat sie
 -- eingetragen) sind getrennt, weil beides auseinanderfallen kann: die
 -- Teamleitung traegt nachtraeglich fuer eine Kollegin ein. Ohne
