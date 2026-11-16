@@ -1729,6 +1729,26 @@ function RechnungenTab({ klientId }: { klientId: string }) {
 function KlientKassenbuchTab({ klientId }: { klientId: string }) {
   const [buchungen, setBuchungen] = useState<KassenbuchungDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
+  // Vormonat als Vorgabe: ein Monatsabschluss wird nach Monatsende gemacht.
+  const [abschlussMonat, setAbschlussMonat] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [abschlussLaeuft, setAbschlussLaeuft] = useState(false);
+
+  async function monatsabschlussHerunterladen() {
+    setAbschlussLaeuft(true);
+    setFehler(null);
+    try {
+      await api.kassenbuchMonatsabschlussHerunterladen(klientId, abschlussMonat);
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Monatsabschluss konnte nicht erstellt werden.");
+    } finally {
+      setAbschlussLaeuft(false);
+    }
+  }
 
   useEffect(() => {
     api.kassenbuchungenListe({ klientId }).then(setBuchungen).catch((err) => setFehler(err.message));
@@ -1736,6 +1756,16 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
 
   return (
     <div>
+      <div className="zv-feld-zeile" style={{ display: "flex", gap: "var(--zv-space-3)", alignItems: "end", flexWrap: "wrap" }}>
+        <label className="zv-feld">
+          <span>Monatsabschluss für</span>
+          <input type="month" value={abschlussMonat} onChange={(e) => setAbschlussMonat(e.target.value)} />
+        </label>
+        <button type="button" className="zv-btn zv-btn-sekundaer" onClick={monatsabschlussHerunterladen} disabled={abschlussLaeuft || !abschlussMonat}>
+          <IHerunterladen />
+          {abschlussLaeuft ? "Wird erstellt …" : "Als PDF"}
+        </button>
+      </div>
       {fehler && (
         <div className="zv-hinweis zv-hinweis-fehler">
           <IFehler />
