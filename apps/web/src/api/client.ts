@@ -498,6 +498,8 @@ export const api = {
   klientArchivieren: (id: string) => request<KlientDetailDto>(`/klienten/${id}/archivieren`, { method: "PATCH" }),
   klientEntarchivieren: (id: string) =>
     request<KlientDetailDto>(`/klienten/${id}/entarchivieren`, { method: "PATCH" }),
+  kassenbuchMonatsabschlussHerunterladen: (klientId: string, monat: string) =>
+    dateiHerunterladen(`/kassenbuchungen/monatsabschluss?klientId=${klientId}&monat=${monat}`, `kassenbuch-${monat}.pdf`),
   klientArchivPdfHerunterladen: (klientId: string, archivId: string, dateiname: string) =>
     dateiHerunterladen(`/klienten/${klientId}/archiv/${archivId}/pdf`, dateiname),
 

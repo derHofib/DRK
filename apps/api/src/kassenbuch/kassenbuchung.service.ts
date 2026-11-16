@@ -16,6 +16,7 @@ import {
 import { isPgError } from "../common/pg-error";
 import { RechteService } from "../rechte/rechte.service";
 import { AuditService } from "../audit/audit.service";
+import { erzeugeMonatsabschlussPdf } from "./kassenbuch-monatsabschluss-pdf";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -644,6 +645,62 @@ export class KassenbuchungService {
       return richtig;
     });
     if (!ok) throw new ForbiddenException("Das Passwort ist falsch.");
+  }
+
+  /**
+   * Monatsabschluss als PDF fuer EINE Klient:in und EINEN Monat ("YYYY-MM"):
+   * Anfangssaldo, alle Buchungen, Summen, Endsaldo, Unterschriftenfelder.
+   * Der Anfangssaldo ist die Summe aller nicht stornierten Buchungen VOR dem
+   * Monat -- abgeleitet, nicht gespeichert (CLAUDE.md Regel 4), damit ein
+   * spaeteres Storno den Abschluss nicht stillschweigend widerspricht, sondern
+   * beim naechsten Erzeugen sichtbar wird. Sichtbarkeit wie findeAlle():
+   * fremde Klient:in = 404.
+   */
+  async monatsabschluss(klientId: string, monat: string): Promise<{ pdf: Buffer; dateiname: string }> {
+    const { benutzerId } = requireTenantContext();
+    const monatsbeginn = `${monat}-01`;
+    return this.db.withTenant(async (client) => {
+      const { rows: klientRows } = await client.query(
+        "SELECT vorname, nachname, aktenzeichen FROM klient WHERE id = $1",
+        [klientId]
+      );
+      if (klientRows.length === 0 || !(await klientIstErlaubt(client, benutzerId, klientId))) {
+        throw new NotFoundException("Klient:in nicht gefunden.");
+      }
+      const { rows: saldoRows } = await client.query(
+        "SELECT COALESCE(SUM(betrag_cent), 0) AS saldo FROM kassenbuchung WHERE klient_id = $1 AND NOT storniert AND datum < $2::date",
+        [klientId, monatsbeginn]
+      );
+      const { rows } = await client.query(
+        `SELECT b.belegnummer, b.datum, t.bezeichnung AS typ_bezeichnung, b.verwendungszweck,
+                b.betrag_cent, b.storniert, EXISTS (SELECT 1 FROM unterschrift u WHERE u.kassenbuchung_id = b.id) AS hat_unterschrift
+         FROM kassenbuchung b
+         JOIN kassenbuchung_typ t ON t.id = b.typ_id
+         WHERE b.klient_id = $1 AND b.datum >= $2::date AND b.datum < ($2::date + interval '1 month')
+         ORDER BY b.datum, b.belegnummer`,
+        [klientId, monatsbeginn]
+      );
+      const { rows: ich } = await client.query("SELECT name, CURRENT_DATE::text AS heute FROM benutzer WHERE id = $1", [benutzerId]);
+      const k = klientRows[0];
+      const pdf = await erzeugeMonatsabschlussPdf({
+        klient: { vorname: k.vorname, nachname: k.nachname, aktenzeichen: k.aktenzeichen },
+        monat,
+        anfangssaldoCent: Number(saldoRows[0].saldo),
+        buchungen: rows.map((r) => ({
+          belegnummer: r.belegnummer,
+          datum: r.datum,
+          typBezeichnung: r.typ_bezeichnung,
+          verwendungszweck: r.verwendungszweck,
+          betragCent: r.betrag_cent,
+          storniert: r.storniert,
+          hatUnterschrift: r.hat_unterschrift,
+        })),
+        erstelltAm: ich[0]?.heute ?? monatsbeginn,
+        erstelltVonName: ich[0]?.name ?? null,
+      });
+      const aktenzeichen = String(k.aktenzeichen).replace(/[^A-Za-z0-9_-]+/g, "_");
+      return { pdf, dateiname: `kassenbuch-${aktenzeichen}-${monat}.pdf` };
+    });
   }
 
   async unterschriftBild(kassenbuchungId: string): Promise<{ bild: Buffer; hash: string } | null> {

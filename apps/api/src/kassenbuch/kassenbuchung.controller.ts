@@ -63,6 +63,11 @@ const wochenuebersichtSchema = z.object({
 // Wie beim Login: 10/min laesst Vertippen zu, macht Durchprobieren unwirtschaftlich.
 const RATEN_SCHRANKE = { default: { limit: 10, ttl: 60_000 } };
 
+const monatsabschlussSchema = z.object({
+  klientId: z.string().uuid(),
+  monat: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "monat muss das Format JJJJ-MM haben."),
+});
+
 const entsperrenSchema = z.object({ passwort: z.string().min(1) });
 
 @Controller("kassenbuchungen")
@@ -83,6 +88,17 @@ export class KassenbuchungController {
   async wochenuebersicht(@Query() query: unknown) {
     const { jahr, kw, standortId } = wochenuebersichtSchema.parse(query);
     return this.kassenbuch.wochenuebersicht(jahr, kw, standortId);
+  }
+
+  @Get("monatsabschluss")
+  async monatsabschluss(@Query() query: unknown, @Res({ passthrough: false }) res: Response) {
+    // safeParse statt parse: kein globaler ZodError-Filter, ein ZodError waere ein 500.
+    const eingabe = monatsabschlussSchema.safeParse(query);
+    if (!eingabe.success) throw new BadRequestException(eingabe.error.issues.map((i) => i.message).join(" "));
+    const { pdf, dateiname } = await this.kassenbuch.monatsabschluss(eingabe.data.klientId, eingabe.data.monat);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${dateiname}"`);
+    res.send(pdf);
   }
 
   @Get("darf-buchen")
