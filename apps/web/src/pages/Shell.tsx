@@ -46,6 +46,7 @@ import { Kassenbuch } from "./Kassenbuch";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { Befehl, Befehlspalette, zuletztLoeschen, zuletztMerken } from "../components/Befehlspalette";
 import { Tagesberichte } from "./Tagesberichte";
+import { Stunden } from "./Stunden";
 import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
 import { Organigramm } from "./Organigramm";
@@ -125,6 +126,7 @@ const BREITE_REITER = new Set<Tab>([
   "kalender",
   "mitarbeitende",
   "tagesberichte",
+  "stunden",
   "aufgaben",
   "vertretung",
   "organigramm",
@@ -864,6 +866,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}
+          {tab === "stunden" && <Stunden key={navZiel.nonce} />}
           {tab === "tagesberichte" && <Tagesberichte key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />}
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}

@@ -1302,3 +1302,57 @@ export function dienstNachUhrzeit(uhr: Date = new Date()): Dienst {
   if (h >= 13 && h < 21) return "spaet";
   return "nacht";
 }
+
+// --- Stundenbuchung (Migration 0072) ---
+
+export type Leistungsart = "einzelbetreuung" | "gruppenangebot" | "begleitung" | "beratung" | "sonstiges";
+
+export const LEISTUNGSARTEN: readonly Leistungsart[] = ["einzelbetreuung", "gruppenangebot", "begleitung", "beratung", "sonstiges"];
+
+export const LEISTUNGSART_LABEL: Record<Leistungsart, string> = {
+  einzelbetreuung: "Einzelbetreuung",
+  gruppenangebot: "Gruppenangebot",
+  begleitung: "Begleitung",
+  beratung: "Beratung",
+  sonstiges: "Sonstiges",
+};
+
+/** Grenzen der Spalte stundenbuchung.minuten (CHECK in Migration 0072). */
+export const STUNDENBUCHUNG_MINUTEN_MAX = 1440;
+
+export interface StundenbuchungDto {
+  id: string;
+  klientId: string;
+  klientName: string;
+  /** Wer die Leistung erbracht hat. */
+  mitarbeiterId: string;
+  mitarbeiterName: string | null;
+  datum: string;
+  minuten: number;
+  leistungsart: Leistungsart;
+  notiz: string | null;
+  gebuchtVonName: string | null;
+  erstelltAm: string;
+  storniert: boolean;
+  stornoGrund: string | null;
+  stornoVonName: string | null;
+  stornoAm: string | null;
+  /** Darf die angemeldete Person diese Buchung stornieren? */
+  stornierbar: boolean;
+}
+
+export interface StundenSummeDto {
+  klientId: string;
+  klientName: string;
+  /** "JJJJ-MM" */
+  monat: string;
+  minuten: number;
+  anzahl: number;
+}
+
+/** 90 -> "1:30 h" -- Minuten als Stunden:Minuten, wie auf einem Leistungsnachweis. */
+export function formatMinutenAlsStunden(minuten: number): string {
+  const vorzeichen = minuten < 0 ? "-" : "";
+  const m = Math.abs(minuten);
+  return `${vorzeichen}${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+}

@@ -86,6 +86,17 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "tagesberichte", aktion: "ansehen" },
   { modul: "tagesberichte", aktion: "anlegen" },
 
+  // Stundenbuchung (migrations/0072). "buchen" gilt fuer die eigene Leistung;
+  // fuer eine andere Person buchen darf nur, wer "fuer-andere-buchen" hat.
+  // "stornieren" betrifft FREMDE Buchungen -- die eigene darf die buchende
+  // Person immer stornieren. Sensibel: Stunden sind die Grundlage der
+  // Abrechnung gegenueber dem Amt, ein Storno gehoert nicht in eine
+  // stillschweigende Vertretung.
+  { modul: "stunden", aktion: "ansehen" },
+  { modul: "stunden", aktion: "buchen" },
+  { modul: "stunden", aktion: "fuer-andere-buchen" },
+  { modul: "stunden", aktion: "stornieren", sensibel: true },
+
 
   // Heutiges ROLLEN_MIT_STANDORT_ANLEGEN/-BEARBEITEN (standort.service.ts).
   { modul: "standorte", aktion: "ansehen" },

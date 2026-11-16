@@ -28,6 +28,7 @@ import { ChatModule } from "./chat/chat.module";
 import { ProfilModule } from "./profil/profil.module";
 import { SucheModule } from "./suche/suche.module";
 import { RueckmeldungModule } from "./rueckmeldung/rueckmeldung.module";
+import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { RueckmeldungModule } from "./rueckmeldung/rueckmeldung.module";
     ProfilModule,
     SucheModule,
     RueckmeldungModule,
+    StundenbuchungModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
