@@ -209,9 +209,9 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       [mandantId, r2[0].id]
     );
 
-    // Kostenuebernahmen: klient1 endet in 10 Tagen (im 30-Tage-Fenster),
+    // Kostenuebernahmen: klient1 endet in 10 Tagen (im 90-Tage-Fenster),
     // klient2 in 5 Tagen (Standort 2 -- fuer S1-Leitung unsichtbar),
-    // klient3 in 40 Tagen (ausserhalb des Fensters).
+    // klient3 in 100 Tagen (ausserhalb des Fensters).
     await admin.query(
       "INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis) VALUES ($1, $2, 'Amt Eins', '2025-01-01', CURRENT_DATE + 10)",
       [mandantId, klient1]
@@ -221,7 +221,7 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       [mandantId, klient2]
     );
     await admin.query(
-      "INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis) VALUES ($1, $2, 'Amt Drei', '2025-01-01', CURRENT_DATE + 40)",
+      "INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis) VALUES ($1, $2, 'Amt Drei', '2025-01-01', CURRENT_DATE + 100)",
       [mandantId, klient3]
     );
 
@@ -345,7 +345,7 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       expect(res.body.mitarbeitende.ausstehendeResets).toBeGreaterThanOrEqual(1);
     });
 
-    it("zeigt Kostenuebernahmen beider Standorte, aber nicht die ausserhalb des 30-Tage-Fensters", async () => {
+    it("zeigt Kostenuebernahmen beider Standorte, aber nicht die ausserhalb des 90-Tage-Fensters", async () => {
       const res = await get(tokenBereichsleitung);
       const ids = res.body.kostenuebernahmenBaldEndend.map((k: { klientId: string }) => k.klientId);
       expect(ids).toContain(klient1);
@@ -353,6 +353,7 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
       expect(ids).not.toContain(klient3);
       const eintragKlient1 = res.body.kostenuebernahmenBaldEndend.find((k: { klientId: string }) => k.klientId === klient1);
       expect(eintragKlient1.tageVerbleibend).toBe(10);
+      expect(eintragKlient1.stufeTage).toBe(30);
     });
 
     it("zeigt beide Klienten ohne aktuellen Tagesbericht (aelter als 7 Tage oder nie), nicht den mit heutigem Bericht", async () => {
