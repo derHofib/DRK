@@ -52,6 +52,10 @@ jobs:
       - name: API-Testsuite (gegen echte PostgreSQL, kein Mock)
         run: pnpm --filter @zimmerakte/api test
 
+      # Hersteller-MCP-Server der Rueckmeldungen: keine Abhaengigkeiten, nur Node.
+      - name: Rueckmeldungs-MCP-Server
+        run: node --test tools/rueckmeldung-mcp/index.test.mjs
+
   web-build:
     runs-on: ubuntu-latest
     steps:

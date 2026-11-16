@@ -61,7 +61,13 @@ der stündliche Lauf der Chat-Löschfrist (`chat/chat-loeschfrist.service.ts`):
 er hat keine anfragende Person, ruft aber nur die parameterlose
 `SECURITY DEFINER`-Funktion `chat_loeschfrist_anwenden()` auf (Migration 0061).
 Gleiches gilt für den Lauf der Klienten-Löschfrist (`klienten/klient-loeschfrist.service.ts`,
-`klient_loeschfrist_anwenden()`, Migration 0070).
+`klient_loeschfrist_anwenden()`, Migration 0070) und der Rückmeldungs-Löschfrist
+(`rueckmeldung/rueckmeldung-loeschfrist.service.ts`, Migration 0073).
+Dazu kommt die Hersteller-Schnittstelle `/service/rueckmeldungen`
+(`rueckmeldung/rueckmeldung-service.controller.ts`): Token statt Benutzer, daher
+kein Tenant-Kontext — aber ausschließlich über vier enge `SECURITY DEFINER`-
+Funktionen (nur freigegeben, nur bei eingeschalteter Weitergabe, jeder Zugriff
+protokolliert), nie über freies SQL. Siehe `docs/RUECKMELDUNGEN.md`.
 
 **Jede neue fachliche Tabelle** braucht:
 ```sql
@@ -72,6 +78,12 @@ ALTER TABLE x FORCE ROW LEVEL SECURITY;   -- ohne FORCE gilt sie für den Eigent
 CREATE POLICY x_isolation ON x
   USING (mandant_id = current_setting('app.mandant_id', true)::uuid);
 ```
+
+**Zusammengesetzte Fremdschlüssel:** Ein FK nur auf `x(id)` lässt eine Zeile zu,
+deren `mandant_id` und Bezug zu verschiedenen Trägern gehören — RLS prüft nur die
+eigene Spalte. Fachtabellen, die auf mandantengebundene Zeilen zeigen, referenzieren
+deshalb `(bezug_id, mandant_id)` auf ein `UNIQUE (id, mandant_id)` (Vorbild
+`rueckmeldung`, `hilfeplan`).
 
 ### 2. Kein `WHERE mandant_id = ...` im Anwendungscode
 

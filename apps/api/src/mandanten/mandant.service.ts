@@ -10,10 +10,11 @@ interface MandantZeile {
   dunkelGrundfarbe: string;
   chatLoeschfristTage: number;
   klientLoeschfristTage: number | null;
+  rueckmeldungWeitergabe: boolean;
 }
 
 const MANDANT_SPALTEN =
-  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage", klient_loeschfrist_tage AS "klientLoeschfristTage"';
+  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage", klient_loeschfrist_tage AS "klientLoeschfristTage", rueckmeldung_weitergabe AS "rueckmeldungWeitergabe"';
 
 /** Partielles Update -- mindestens ein Feld ist gesetzt, siehe Controller. */
 interface ErscheinungsbildPatch {
@@ -134,6 +135,23 @@ export class MandantService {
       const { rows } = await client.query<MandantZeile>(
         `UPDATE mandant SET klient_loeschfrist_tage = $1 RETURNING ${MANDANT_SPALTEN}`,
         [tage]
+      );
+      return rows[0] ?? null;
+    });
+  }
+
+  /**
+   * Gleiches Recht wie die Loeschfristen: der Schalter entscheidet, ob Texte
+   * und Bilder aus der Anwendung den Traeger verlassen duerfen (migrations/0073).
+   */
+  async setzeRueckmeldungWeitergabe(aktiv: boolean) {
+    if (!(await this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"))) {
+      throw new ForbiddenException("Nur die Leitung darf die Weitergabe von Rückmeldungen an den Hersteller ändern.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<MandantZeile>(
+        `UPDATE mandant SET rueckmeldung_weitergabe = $1 RETURNING ${MANDANT_SPALTEN}`,
+        [aktiv]
       );
       return rows[0] ?? null;
     });

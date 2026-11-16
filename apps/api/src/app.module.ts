@@ -27,6 +27,7 @@ import { KalenderModule } from "./kalender/kalender.module";
 import { ChatModule } from "./chat/chat.module";
 import { ProfilModule } from "./profil/profil.module";
 import { SucheModule } from "./suche/suche.module";
+import { RueckmeldungModule } from "./rueckmeldung/rueckmeldung.module";
 import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
 
 @Module({
@@ -74,6 +75,7 @@ import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
     ChatModule,
     ProfilModule,
     SucheModule,
+    RueckmeldungModule,
     StundenbuchungModule,
   ],
   providers: [

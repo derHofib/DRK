@@ -180,6 +180,9 @@ export const IMehr = baue(Menu);
 export const INachrichten = baue(MessageCircle);
 export const IKalender = baue(CalendarDays);
 export const INeuerChat = baue(MessageSquarePlus);
+/* Rueckmeldung (Idee/Fehler) geben und die Rueckmeldungs-Eingaenge der Leitung */
+export const IRueckmeldung = baue(MessageSquarePlus);
+export const IRueckmeldungen = baue(Inbox);
 export const ISenden = baue(Send);
 export const IBildAnhaengen = baue(ImagePlus);
 export const IAnhang = baue(Paperclip);

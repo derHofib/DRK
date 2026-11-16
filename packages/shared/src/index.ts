@@ -38,6 +38,78 @@ export interface MandantDto {
    * anonymisiert (migrations/0070). null = keine automatische Löschung.
    */
   klientLoeschfristTage: number | null;
+  /**
+   * Dürfen freigegebene Rückmeldungen an den Hersteller weitergegeben werden
+   * (migrations/0073)? Standard false.
+   */
+  rueckmeldungWeitergabe: boolean;
+}
+
+export type RueckmeldungArt = "idee" | "fehler";
+export type RueckmeldungPrioritaet = "niedrig" | "mittel" | "hoch" | "blockierend";
+export type RueckmeldungStatus = "neu" | "freigegeben" | "rueckfrage" | "abgelehnt" | "duplikat" | "in_arbeit" | "umgesetzt";
+
+/** Was die Geschäftsführung setzen darf; in_arbeit/umgesetzt gehören dem Hersteller-Zugang. */
+export const RUECKMELDUNG_ENTSCHEIDUNGEN = ["neu", "freigegeben", "rueckfrage", "abgelehnt", "duplikat"] as const;
+export type RueckmeldungEntscheidung = (typeof RUECKMELDUNG_ENTSCHEIDUNGEN)[number];
+
+export const RUECKMELDUNG_STATUS_LABEL: Record<RueckmeldungStatus, string> = {
+  neu: "Eingegangen",
+  freigegeben: "Freigegeben",
+  rueckfrage: "Rückfrage",
+  abgelehnt: "Abgelehnt",
+  duplikat: "Duplikat",
+  in_arbeit: "In Umsetzung",
+  umgesetzt: "Umgesetzt",
+};
+
+/** Rahmenbedingungen, die das Frontend automatisch mitschickt (Whitelist, siehe rueckmeldung.service.ts). */
+export interface RueckmeldungKontext {
+  seite?: string;
+  appVersion?: string;
+  browser?: string;
+  betriebssystem?: string;
+  viewport?: string;
+  theme?: string;
+  rolle?: string;
+  zeitpunkt?: string;
+}
+
+export interface RueckmeldungListeDto {
+  id: string;
+  art: RueckmeldungArt;
+  titel: string;
+  prioritaet: RueckmeldungPrioritaet;
+  status: RueckmeldungStatus;
+  erstelltAm: string;
+  erstelltVonName: string;
+  hatBild: boolean;
+}
+
+export interface RueckmeldungDetailDto extends RueckmeldungListeDto {
+  beschreibung: string;
+  erwartet: string | null;
+  kontext: RueckmeldungKontext;
+  freigegebenAm: string | null;
+  freigegebenVonName: string | null;
+  entscheidungsnotiz: string | null;
+  bearbeitungsnotiz: string | null;
+  prUrl: string | null;
+}
+
+/** Eigene Meldungen der angemeldeten Person: Status ja, Bild und Kontext nein. */
+export interface RueckmeldungMeineDto {
+  id: string;
+  art: RueckmeldungArt;
+  titel: string;
+  status: RueckmeldungStatus;
+  erstelltAm: string;
+  entscheidungsnotiz: string | null;
+}
+
+export interface RueckmeldungBerechtigungDto {
+  verwalten: boolean;
+  anzahlNeu: number;
 }
 
 /** Grenzen der Klienten-Löschfrist -- dieselben wie der CHECK in Migration 0070. */

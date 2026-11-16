@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BenutzerListEintragDto, MandantDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MandantDto, RueckmeldungBerechtigungDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
@@ -17,6 +17,8 @@ import {
   IKlienten,
   IMehr,
   INeu,
+  IRueckmeldung,
+  IRueckmeldungen,
   IStandort,
   ITagesberichte,
   ITraeger,
@@ -51,6 +53,10 @@ import { Organigramm } from "./Organigramm";
 import { Einstellungen } from "./Einstellungen";
 import { Nachrichten } from "./Nachrichten";
 import { Kalender } from "./Kalender";
+import { Rueckmeldungen } from "./Rueckmeldungen";
+import { RueckmeldungDialog } from "../components/RueckmeldungDialog";
+import { SICHTBAR_ATTRIBUT } from "../rueckmeldung/maskierung";
+import { nimmMaskiertenScreenshot, type MaskierterScreenshot } from "../rueckmeldung/screenshot";
 
 /**
  * Die vier Punkte, die auf dem Handy immer direkt in der unteren Leiste
@@ -347,6 +353,36 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       .catch(() => {});
   }, []);
 
+  // --- Rueckmeldungen ---------------------------------------------------
+  // Ohne Recht liefert die API verwalten=false (keine Fehlermeldung): der
+  // Menuepunkt erscheint nur fuer die Geschaeftsfuehrung. Die Pruefung, die
+  // zaehlt, sitzt im Service -- das hier blendet nur aus.
+  const [rmRecht, setRmRecht] = useState<RueckmeldungBerechtigungDto>({ verwalten: false, anzahlNeu: 0 });
+  const rmRechtLaden = useCallback(() => {
+    api
+      .rueckmeldungBerechtigung()
+      .then(setRmRecht)
+      .catch(() => {});
+  }, []);
+  useEffect(rmRechtLaden, [rmRechtLaden]);
+
+  // Der Screenshot entsteht VOR dem Oeffnen des Dialogs, damit dieser nicht
+  // selbst im Bild landet; er ist beim Entstehen schon maskiert.
+  const [rmDialog, setRmDialog] = useState<{ screenshot: MaskierterScreenshot | null; seite: string } | null>(null);
+  const [rmAufnahme, setRmAufnahme] = useState(false);
+  async function rueckmeldungStarten() {
+    if (rmAufnahme) return;
+    setRmAufnahme(true);
+    const seite = tab;
+    try {
+      // Scheitert die Aufnahme, geht die Rueckmeldung ohne Bild -- nie mit einem unmaskierten.
+      const screenshot = await nimmMaskiertenScreenshot().catch(() => null);
+      setRmDialog({ screenshot, seite });
+    } finally {
+      setRmAufnahme(false);
+    }
+  }
+
   useEffect(() => {
     api
       .eigenerMandant()
@@ -599,7 +635,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             </div>
           )}
 
-          <nav className="zv-sidebar-nav zv-sidebar-nav-haupt" aria-label="Hauptmenü">
+          <nav className="zv-sidebar-nav zv-sidebar-nav-haupt" aria-label="Hauptmenü" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
             {MENUE_GRUPPEN.map((g) => (
               <div key={g.id} role="group" aria-labelledby={`zv-gruppe-${g.id}`} className="zv-sidebar-gruppenblock">
                 <div className="zv-gruppenlabel" id={`zv-gruppe-${g.id}`}>
@@ -611,7 +647,19 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           </nav>
 
           <div className="zv-sidebar-foot">
-            <nav className="zv-sidebar-nav" aria-label="Einstellungen">
+            <nav className="zv-sidebar-nav" aria-label="Einstellungen" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
+              {rmRecht.verwalten && (
+                <button
+                  className={tab === "rueckmeldungen" ? "active" : ""}
+                  onClick={() => tabWaehlen("rueckmeldungen")}
+                  aria-current={tab === "rueckmeldungen" ? "page" : undefined}
+                  title="Rückmeldungen"
+                >
+                  <IRueckmeldungen />
+                  <span className="zv-sidebar-label">Rückmeldungen</span>
+                  <NavBadge anzahl={rmRecht.anzahlNeu} />
+                </button>
+              )}
               {STANDARD_REITER.filter((r) => r.wert === "einstellungen").map(renderReiter)}
             </nav>
             <div className="zv-benutzerblock" title={ich ? `${ich.name}` : undefined}>
@@ -625,6 +673,16 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             </div>
             <div className="zv-sidebar-foot-icons">
               <ThemeToggle />
+              <button
+                type="button"
+                className="zv-icon-btn"
+                onClick={rueckmeldungStarten}
+                disabled={rmAufnahme}
+                aria-label="Rückmeldung geben: Idee oder Fehler melden"
+                title="Rückmeldung geben"
+              >
+                <IRueckmeldung />
+              </button>
               <button
                 type="button"
                 className="zv-icon-btn"
@@ -662,6 +720,21 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           </div>
           <div className="zv-topbar-aktionen">
             <ThemeToggle />
+            {rmRecht.verwalten && (
+              <button type="button" className="zv-icon-btn" onClick={() => tabWaehlen("rueckmeldungen")} aria-label="Rückmeldungen ansehen" title="Rückmeldungen">
+                <IRueckmeldungen />
+              </button>
+            )}
+            <button
+              type="button"
+              className="zv-icon-btn"
+              onClick={rueckmeldungStarten}
+              disabled={rmAufnahme}
+              aria-label="Rückmeldung geben: Idee oder Fehler melden"
+              title="Rückmeldung geben"
+            >
+              <IRueckmeldung />
+            </button>
             <button className="zv-btn zv-btn-still zv-btn-klein" onClick={logout}>
               <IAbmelden />
               Abmelden
@@ -673,6 +746,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           <div
             id="zv-sammelmenue-panel"
             className="zv-sammelmenue"
+            {...{ [SICHTBAR_ATTRIBUT]: "" }}
             ref={mehrPanelRef}
             role="menu"
             aria-label="Weitere Bereiche"
@@ -702,6 +776,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           <div
             id="zv-klienten-panel"
             className="zv-sammelmenue"
+            {...{ [SICHTBAR_ATTRIBUT]: "" }}
             ref={klientenPanelRef}
             role="menu"
             aria-label="Klienten-Ansichten"
@@ -727,6 +802,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         {offenesPanel && offenesPanel !== "mehr" && offenesPanel !== "klienten" && unterpunkteVon(offenesPanel) && (
           <div
             className="zv-sammelmenue"
+            {...{ [SICHTBAR_ATTRIBUT]: "" }}
             ref={gruppenPanelRef}
             role="menu"
             aria-label={`${REITER.find((r) => r.wert === offenesPanel)?.label ?? ""}: Bereiche`}
@@ -749,7 +825,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           </div>
         )}
 
-        <div className="zv-tabbar zv-tabbar-app">
+        <div className="zv-tabbar zv-tabbar-app" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
           {REITER_MOBIL_SICHTBAR.map(({ wert, label, icon: Icon }) => (
             <button
               key={wert}
@@ -798,6 +874,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}
+          {tab === "rueckmeldungen" && <Rueckmeldungen mandant={mandant} onGeaendert={rmRechtLaden} />}
           {tab === "einstellungen" && (
             <Einstellungen
               mandant={mandant}
@@ -810,6 +887,17 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           )}
         </div>
       </div>
+      {rmDialog && (
+        <RueckmeldungDialog
+          screenshot={rmDialog.screenshot}
+          seite={rmDialog.seite}
+          rolle={ich?.positionen[0]?.titel}
+          onClose={() => {
+            setRmDialog(null);
+            rmRechtLaden();
+          }}
+        />
+      )}
       <Befehlspalette
         offen={paletteOffen}
         oeffnungNr={paletteNr}

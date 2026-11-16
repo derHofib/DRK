@@ -123,6 +123,13 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   // zeigt das Organigramm nur Titel/Status, keine Namen.
   { modul: "organigramm", aktion: "personendaten-sehen" },
 
+  // Rueckmeldungen (Ideen/Fehler aus der App, migrations/0073): Melden darf
+  // jede angemeldete Person und braucht deshalb kein Recht. Sichten und
+  // Freigeben ist sensibel -- die Rueckmeldung kann Sozialdaten enthalten, und
+  // die Freigabe entscheidet, ob der Hersteller sie lesen darf. Standard nur
+  // ueber ist_vollzugriff (Geschaeftsfuehrung, Entwickler).
+  { modul: "rueckmeldungen", aktion: "verwalten", sensibel: true },
+
   // Chat steuert bewusst nur den Kanalzugriff, nie Nachrichteninhalte --
   // es gibt deshalb hier absichtlich KEINE Aktion "nachrichten-lesen".
   // Damit fehlt dafuer strukturell jeder Pfad, auch fuer

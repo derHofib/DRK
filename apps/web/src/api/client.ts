@@ -1,5 +1,14 @@
 import type {
   AnwaerterDto,
+  RueckmeldungBerechtigungDto,
+  RueckmeldungDetailDto,
+  RueckmeldungEntscheidung,
+  RueckmeldungListeDto,
+  RueckmeldungMeineDto,
+  RueckmeldungStatus,
+  RueckmeldungArt,
+  RueckmeldungKontext,
+  RueckmeldungPrioritaet,
   ChatAnfrageAnnahmeDto,
   ChatAnfrageDto,
   ChatAnfrageEingabe,
@@ -392,6 +401,38 @@ export const api = {
     request<MandantDto>("/mandant/me/chat-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
   mandantKlientLoeschfristSetzen: (tage: number | null) =>
     request<MandantDto>("/mandant/me/klient-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
+  mandantRueckmeldungWeitergabeSetzen: (aktiv: boolean) =>
+    request<MandantDto>("/mandant/me/rueckmeldung-weitergabe", { method: "PATCH", body: JSON.stringify({ aktiv }) }),
+
+  // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)
+  rueckmeldungMelden: (eingabe: {
+    art: RueckmeldungArt;
+    titel: string;
+    beschreibung: string;
+    erwartet?: string;
+    prioritaet: RueckmeldungPrioritaet;
+    kontext: RueckmeldungKontext;
+  }) => request<{ id: string }>("/rueckmeldungen", { method: "POST", body: JSON.stringify(eingabe) }),
+  // Roher PNG-Body (siehe api/src/common/roh-koerper.ts), deshalb kein request().
+  rueckmeldungScreenshot: async (id: string, png: Blob): Promise<void> => {
+    const token = getToken();
+    const res = await fetch(`/api/rueckmeldungen/${id}/screenshot`, {
+      method: "PUT",
+      headers: { "Content-Type": "image/png", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: png,
+    });
+    if (!res.ok) throw new Error(`Screenshot konnte nicht gesendet werden (${res.status})`);
+  },
+  rueckmeldungMeine: () => request<RueckmeldungMeineDto[]>("/rueckmeldungen/meine"),
+  rueckmeldungBerechtigung: () => request<RueckmeldungBerechtigungDto>("/rueckmeldungen/berechtigung"),
+  rueckmeldungListe: (status?: RueckmeldungStatus) =>
+    request<RueckmeldungListeDto[]>(`/rueckmeldungen${status ? `?status=${status}` : ""}`),
+  rueckmeldungDetail: (id: string) => request<RueckmeldungDetailDto>(`/rueckmeldungen/${id}`),
+  rueckmeldungBildUrl: (id: string) => blobUrl(`/rueckmeldungen/${id}/screenshot`),
+  rueckmeldungBildVerwerfen: (id: string) => request<void>(`/rueckmeldungen/${id}/screenshot`, { method: "DELETE" }),
+  rueckmeldungEntscheiden: (id: string, status: RueckmeldungEntscheidung, notiz?: string) =>
+    request<RueckmeldungDetailDto>(`/rueckmeldungen/${id}`, { method: "PATCH", body: JSON.stringify({ status, notiz }) }),
+
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   // Das eigene Konto (Name, Positionen) -- fuer den Benutzerblock der Seitenleiste.
   benutzerIch: () => request<BenutzerListEintragDto>("/benutzer/ich"),
