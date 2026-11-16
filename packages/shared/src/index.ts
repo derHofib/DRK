@@ -525,6 +525,8 @@ export interface DashboardDto {
     amt: string;
     bis: string;
     tageVerbleibend: number;
+    /** Erinnerungsstufe: 30, 60 oder 90 Tage (kleinste Schwelle, die noch >= Restzeit ist). */
+    stufeTage: 30 | 60 | 90;
   }[];
   klientenOhneTagesbericht: {
     klientId: string;

@@ -18,11 +18,12 @@ import { AufgabePrioritaet } from "../aufgaben/aufgabe.service";
  * laesst sich jederzeit nachruesten, sobald sich in der Praxis zeigt, dass
  * er variieren muss.
  *
- * 30 Tage: genug Vorlauf, um vor Ablauf einer Kostenuebernahme noch beim
- * Amt nachzufragen, ohne die Liste mit laengst nicht dringenden
- * Zeitraeumen zu fuellen.
+ * 90 Tage: ein Amt braucht fuer eine Verlaengerung oft Wochen; 30 Tage
+ * Vorlauf waren zu knapp. Gleiche Stufen (90/60/30) wie die Aufgaben aus
+ * migrations/0071 -- das Dashboard zeigt die Stufe, damit die Dringlichkeit
+ * ohne Rechnen erkennbar ist.
  */
-const KOSTENUEBERNAHME_BALD_ENDEND_TAGE = 30;
+const KOSTENUEBERNAHME_BALD_ENDEND_TAGE = 90;
 /**
  * 7 Tage: aus dem woechentlichen HZL-Rhythmus abgeleitet -- ein Klient
  * ohne Tagesbericht seit einer vollen Woche ist ein Fuersorge-Hinweis,
@@ -30,6 +31,10 @@ const KOSTENUEBERNAHME_BALD_ENDEND_TAGE = 30;
  */
 const TAGESBERICHT_SCHWELLE_TAGE = 7;
 const LISTEN_LIMIT = 10;
+
+function stufeFuer(tage: number): 30 | 60 | 90 {
+  return tage <= 30 ? 30 : tage <= 60 ? 60 : 90;
+}
 
 export interface DashboardDto {
   zimmer: { frei: number; gesamt: number; standorte: number };
@@ -43,6 +48,7 @@ export interface DashboardDto {
     amt: string;
     bis: string;
     tageVerbleibend: number;
+    stufeTage: 30 | 60 | 90;
   }[];
   klientenOhneTagesbericht: {
     klientId: string;
@@ -314,6 +320,7 @@ export class DashboardService {
       amt: r.amt,
       bis: r.bis,
       tageVerbleibend: Number(r.tage_verbleibend),
+      stufeTage: stufeFuer(Number(r.tage_verbleibend)),
     }));
   }
 
