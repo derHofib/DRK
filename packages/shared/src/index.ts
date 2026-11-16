@@ -471,6 +471,40 @@ export interface KostenuebernahmeDto {
   bis: string | null;
 }
 
+export interface HilfeplanVerlaufDto {
+  id: string;
+  fortschritt: number;
+  notiz: string | null;
+  erstelltAm: string;
+  erstelltVonName: string | null;
+  tagesbericht: { id: string; datum: string } | null;
+}
+
+export interface HilfeplanZielDto {
+  id: string;
+  hilfeplanId: string;
+  titel: string;
+  beschreibung: string | null;
+  faelligAm: string | null;
+  verworfen: boolean;
+  /** Abgeleitet aus dem juengsten Verlaufseintrag (0 ohne Eintrag). */
+  fortschritt: number;
+  erreicht: boolean;
+  ueberfaellig: boolean;
+  /** Neueste zuerst. */
+  verlauf: HilfeplanVerlaufDto[];
+}
+
+export interface HilfeplanDto {
+  id: string;
+  klientId: string;
+  von: string;
+  bis: string | null;
+  naechstesGespraech: string | null;
+  bemerkung: string | null;
+  ziele: HilfeplanZielDto[];
+}
+
 export type RechnungStatus = "beantragt" | "genehmigt" | "ausgezahlt" | "abgelehnt";
 
 export interface RechnungDto {

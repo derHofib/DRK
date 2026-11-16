@@ -28,6 +28,7 @@ import type {
   BenutzerListEintragDto,
   DashboardDto,
   DelegationDto,
+  HilfeplanDto,
   HzlRhythmus,
   KassenbuchungDto,
   KassenbuchungTypDto,
@@ -597,6 +598,26 @@ export const api = {
 
   unterschriftBildUrl: (kassenbuchungId: string) => blobUrl(`/kassenbuchungen/${kassenbuchungId}/unterschrift`),
 
+  hilfeplaeneListe: (klientId: string) => request<HilfeplanDto[]>(`/hilfeplaene?klientId=${klientId}`),
+  hilfeplanAnlegen: (payload: {
+    klientId: string;
+    von: string;
+    bis?: string;
+    naechstesGespraech?: string;
+    bemerkung?: string;
+  }) => request<HilfeplanDto>("/hilfeplaene", { method: "POST", body: JSON.stringify(payload) }),
+  hilfeplanAendern: (
+    id: string,
+    payload: { bis?: string | null; naechstesGespraech?: string | null; bemerkung?: string | null }
+  ) => request<HilfeplanDto>(`/hilfeplaene/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  hilfeplanZielAnlegen: (planId: string, payload: { titel: string; beschreibung?: string; faelligAm?: string }) =>
+    request<HilfeplanDto>(`/hilfeplaene/${planId}/ziele`, { method: "POST", body: JSON.stringify(payload) }),
+  hilfeplanZielAendern: (
+    zielId: string,
+    payload: { titel?: string; beschreibung?: string | null; faelligAm?: string | null; verworfen?: boolean }
+  ) => request<HilfeplanDto>(`/hilfeplaene/ziele/${zielId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  hilfeplanVerlaufErfassen: (zielId: string, payload: { fortschritt: number; notiz?: string; tagesberichtId?: string }) =>
+    request<HilfeplanDto>(`/hilfeplaene/ziele/${zielId}/verlauf`, { method: "POST", body: JSON.stringify(payload) }),
   kostenuebernahmenListe: (klientId: string) =>
     request<KostenuebernahmeDto[]>(`/kostenuebernahmen?klientId=${klientId}`),
   kostenuebernahmeAnlegen: (payload: { klientId: string; amt: string; von: string; bis?: string }) =>

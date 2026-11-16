@@ -12,6 +12,7 @@ import { ZimmerModule } from "./zimmer/zimmer.module";
 import { KlientModule } from "./klienten/klient.module";
 import { BelegungModule } from "./belegungen/belegung.module";
 import { KassenbuchungModule } from "./kassenbuch/kassenbuchung.module";
+import { HilfeplanModule } from "./hilfeplaene/hilfeplan.module";
 import { KostenuebernahmeModule } from "./kostenuebernahmen/kostenuebernahme.module";
 import { RechnungModule } from "./rechnungen/rechnung.module";
 import { TagesberichtModule } from "./tagesberichte/tagesbericht.module";
@@ -57,6 +58,7 @@ import { SucheModule } from "./suche/suche.module";
     KlientModule,
     BelegungModule,
     KassenbuchungModule,
+    HilfeplanModule,
     KostenuebernahmeModule,
     RechnungModule,
     TagesberichtModule,

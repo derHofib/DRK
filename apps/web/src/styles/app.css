@@ -5618,3 +5618,89 @@ button[class],
   .zv-katze__blase { opacity: 1; }
   .zv-katze .k-zzz { opacity: 0.7; }
 }
+
+/* ==================================================================
+   Hilfeplan und Ziele (Klientenakte)
+   ================================================================== */
+.zv-hilfeplan {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-hilfeplan-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-hilfeplan-meta,
+.zv-ziel-faellig {
+  color: var(--zv-text-muted);
+  font-size: 13px;
+}
+
+.zv-hilfeplan-bemerkung {
+  margin: 0 0 var(--zv-space-3);
+  white-space: pre-wrap;
+}
+
+.zv-hilfeplan-verworfen {
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-ziel {
+  background: var(--zv-surface-2);
+  border-radius: var(--zv-radius-s);
+  padding: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-ziel-verworfen {
+  opacity: 0.7;
+}
+
+.zv-ziel-kopf {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-ziel-titel {
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-ziel-beschreibung {
+  margin: var(--zv-space-2) 0 0;
+  white-space: pre-wrap;
+}
+
+.zv-ziel-fortschritt {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin: var(--zv-space-2) 0;
+}
+
+.zv-ziel-fortschritt progress {
+  flex: 1;
+  height: 8px;
+  accent-color: var(--zv-accent);
+}
+
+.zv-ziel-aktionen {
+  display: flex;
+  gap: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+.zv-ziel-verlauf ul {
+  margin: var(--zv-space-2) 0 0;
+  padding-left: var(--zv-space-4);
+}

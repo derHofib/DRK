@@ -54,9 +54,10 @@ import {
 } from "../components/icons";
 import { dateiZuBase64 } from "../datei";
 import { formatBetrag, formatDatum, heuteBerlin } from "../format";
+import { HilfeplanTab } from "./klient/HilfeplanTab";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
-type Tab = "ueberblick" | "tagesberichte" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
+type Tab = "ueberblick" | "tagesberichte" | "hilfeplan" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
 
 const eingabeFeldStil = {
   padding: "6px 8px",
@@ -313,6 +314,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           [
             ["ueberblick", "Überblick", undefined],
             ["tagesberichte", "Tagesberichte", berichte.length],
+            ["hilfeplan", "Hilfeplan", undefined],
             ["kassenbuch", "Kassenbuch", undefined],
             ["kostenuebernahmen", "Kostenübernahmen", undefined],
             ["rechnungen", "Rechnungen", undefined],
@@ -369,6 +371,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
             onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
           />
         )}
+        {tab === "hilfeplan" && <HilfeplanTab klientId={klientId} onBerichtOeffnen={() => setTab("tagesberichte")} />}
         {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
         {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
         {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
