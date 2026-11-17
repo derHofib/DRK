@@ -858,7 +858,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           className={`zv-content${BREITE_REITER.has(tab) || tab === "belegung" ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
           <WarteschlangeLeiste />
-          {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} />}
+          {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} nutzerId={ich?.id ?? "unbekannt"} />}
           {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={belegungOeffnen} nutzerId={ich?.id ?? "unbekannt"} />}
           {tab === "belegung" && (belegungStandortId ?? standorte[0]?.id) && (
             <StandortRaeume key={belegungStandortId ?? standorte[0].id} standortId={(belegungStandortId ?? standorte[0].id)} onStandortWaehlen={belegungOeffnen} />
