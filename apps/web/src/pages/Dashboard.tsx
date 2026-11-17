@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DashboardDto, StandortDto, TerminDto } from "@zimmerakte/shared";
+import type { DashboardDto, StandortDto, StandortUebersichtDto, TerminDto } from "@zimmerakte/shared";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { KachelRaster, type KachelDef } from "../components/KachelRaster";
@@ -31,6 +31,7 @@ import {
   WIDGET_REIHENFOLGE,
   type WidgetId,
 } from "../dashboard/sichtbarkeit";
+import { filtere, standortKacheln, zusammenfuehren } from "../dashboard/standortKacheln";
 import type { Tab } from "../navigation";
 
 /**
@@ -65,6 +66,8 @@ export interface DashboardNavigation {
     extra?: { klientId?: string; neueBuchung?: boolean; tagesberichtKlientId?: string },
   ) => void;
   suche: () => void;
+  /** Belegung eines Standorts oeffnen; null = zuletzt gewaehlter/erster. */
+  belegung: (standortId: string | null) => void;
 }
 
 type Zustaendigkeit = "meine" | "ohne";
@@ -146,6 +149,11 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
   const [neuOffen, setNeuOffen] = useState(false);
   const neuRef = useRef<HTMLDivElement>(null);
   const [jetzt, setJetzt] = useState(() => new Date());
+  // Listen der frueheren Standort-Uebersicht (Zimmer, Klient:innen,
+  // Buchungen, Haus-Kasse). null = (noch) nicht geladen oder kein Recht --
+  // dann fehlen nur diese Kacheln, der Rest von Heute bleibt.
+  const [standortTeile, setStandortTeile] = useState<StandortUebersichtDto[] | null>(null);
+  const [suche, setSuche] = useState("");
 
   useEffect(() => {
     api
@@ -174,7 +182,15 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
       })
       .catch((err) => setFehler(err.message))
       .finally(() => setWirdGeladen(false));
-  }, [standortAuswahl]);
+    const ids = standortAuswahl ? [standortAuswahl] : standorte.map((s) => s.id);
+    if (ids.length === 0) {
+      setStandortTeile(null);
+    } else {
+      Promise.all(ids.map((id) => api.standortUebersicht(id)))
+        .then(setStandortTeile)
+        .catch(() => setStandortTeile(null));
+    }
+  }, [standortAuswahl, standorte]);
 
   useEffect(() => {
     // Erst laden, wenn die Standortliste die gespeicherte Auswahl geprueft
@@ -552,7 +568,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
                 minH: 3,
                 inhalt: (
                   <section className="zv-kachel-karte" aria-label="Freie Zimmer">
-                    {kachelKopf("Freie Zimmer", { label: "Belegung", ziel: () => navigation.zu("standorte") })}
+                    {kachelKopf("Freie Zimmer", { label: "Belegung", ziel: () => navigation.belegung(standortAuswahl) })}
                     {daten.freieZimmer.length === 0 ? (
                       <p className="zv-rand-leer">Kein Platz frei.</p>
                     ) : (
@@ -595,6 +611,23 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
                 ),
               } satisfies KachelDef,
             ]
+          : []),
+        ...(standortTeile
+          ? standortKacheln(
+              filtere(zusammenfuehren(standortTeile), suche),
+              {
+                hauskasse: sichtbarkeit.hauskasse,
+                zimmerliste: sichtbarkeit.zimmerliste,
+                klientenliste: sichtbarkeit.klientenliste,
+                buchungen: sichtbarkeit.buchungen,
+              },
+              kachelKopf,
+              {
+                belegung: () => navigation.belegung(standortAuswahl),
+                klienten: () => navigation.zu("klienten"),
+                kassenbuch: () => navigation.zu("kassenbuch"),
+              },
+            )
           : []),
       ]
     : null;
@@ -662,11 +695,17 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
         </div>
       </div>
 
-      {standorte.length > 1 && (
-        <Filterleiste ariaLabel="Heute filtern" aktiv={standortAuswahl !== null} onZuruecksetzen={() => standortWaehlen(null)}>
-          <StandortFilter standorte={standorte} gewaehlt={standortAuswahl} onWaehlen={standortWaehlen} />
-        </Filterleiste>
-      )}
+      <Filterleiste
+        ariaLabel="Heute filtern"
+        suche={{ wert: suche, onChange: setSuche, placeholder: "Zimmer, Klient:in, Buchung…", ariaLabel: "Listen auf Heute durchsuchen" }}
+        aktiv={standortAuswahl !== null || suche.trim() !== ""}
+        onZuruecksetzen={() => {
+          standortWaehlen(null);
+          setSuche("");
+        }}
+      >
+        <StandortFilter standorte={standorte} gewaehlt={standortAuswahl} onWaehlen={standortWaehlen} />
+      </Filterleiste>
 
       {daten && kacheln && (
         <div className="zv-heute" style={{ opacity: wirdGeladen ? 0.6 : 1 }}>

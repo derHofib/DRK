@@ -6,7 +6,6 @@
  */
 import {
   IAuszahlen,
-  IKapazitaet,
   IAufgaben,
   IDashboard,
   IEinstellungen,
@@ -49,12 +48,7 @@ export type UnterReiter =
   // Eingang der Rueckmeldungen (Idee/Fehler): kein sortierbarer Hauptpunkt,
   // sondern nur mit dem Recht rueckmeldungen.verwalten in der Fusszeile der
   // Seitenleiste sichtbar (Shell.tsx).
-  | "rueckmeldungen"
-  // Raumplan/Zeitleiste EINES Standorts unter "Standorte". Welcher Standort,
-  // wird ueber die Standort-Reiter unter dem Seitenkopf gewaehlt
-  // (StandortReiter.tsx) und steht als Zustand in Shell.tsx, nicht im
-  // Tab-Wert -- so bleibt der Unterpunkt in der Seitenleiste EIN Eintrag.
-  | "belegung";
+  | "rueckmeldungen";
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -65,7 +59,6 @@ export interface UnterpunktEintrag {
 }
 
 export const UNTERPUNKTE: Partial<Record<HauptReiter, UnterpunktEintrag[]>> = {
-  standorte: [{ wert: "belegung", label: "Belegung", icon: IKapazitaet }],
   kassenbuch: [{ wert: "hzl", label: "HZL", icon: IAuszahlen }],
   mitarbeitende: [
     { wert: "vertretung", label: "Vertretung", icon: IVertretung },

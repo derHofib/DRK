@@ -19,7 +19,12 @@ export type WidgetId =
   | "kostenuebernahmen"
   | "tagesberichte"
   | "termine"
-  | "freieZimmer";
+  | "freieZimmer"
+  // Aus der frueheren Standort-Uebersicht uebernommen (dashboard/standortKacheln.tsx).
+  | "hauskasse"
+  | "zimmerliste"
+  | "klientenliste"
+  | "buchungen";
 
 export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "zimmer",
@@ -33,6 +38,10 @@ export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "tagesberichte",
   "termine",
   "freieZimmer",
+  "hauskasse",
+  "zimmerliste",
+  "klientenliste",
+  "buchungen",
 ];
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -47,6 +56,10 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   tagesberichte: "Klienten ohne aktuellen Tagesbericht",
   termine: "Termine heute",
   freieZimmer: "Freie Zimmer",
+  hauskasse: "Haus-Kasse",
+  zimmerliste: "Zimmerliste",
+  klientenliste: "Klient:innen-Liste",
+  buchungen: "Letzte Buchungen",
 };
 
 /**
