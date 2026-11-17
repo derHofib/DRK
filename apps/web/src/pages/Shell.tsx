@@ -15,6 +15,7 @@ import {
   IAusklappen,
   IEinklappen,
   IKlienten,
+  ILeerStandorte,
   IMehr,
   INeu,
   IRueckmeldung,
@@ -38,7 +39,7 @@ import {
   type UnterpunktEintrag,
 } from "../navigation";
 import { Dashboard } from "./Dashboard";
-import { StandortUebersicht } from "./StandortUebersicht";
+import { Leerzustand } from "../components/Leerzustand";
 import { StandortRaeume } from "./StandortRaeume";
 import { Klienten } from "./Klienten";
 import { Mitarbeitende } from "./Mitarbeitende";
@@ -214,6 +215,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // "Standorte". Serverseitig schon auf die erlaubten gefiltert
   // (StandortService.findeAlle), hier kommt nichts dazu.
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
+  const [standorteGeladen, setStandorteGeladen] = useState(false);
   // Welcher Standort unter "Standorte > Belegung" offen ist; null = noch keiner
   // gewaehlt, dann der erste. Hier statt im Tab-Wert, damit "Belegung" in der
   // Seitenleiste ein einziger Eintrag bleibt.
@@ -343,7 +345,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     api
       .standorteListe()
       .then((liste) => setStandorte(liste.filter((s) => s.aktiv)))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setStandorteGeladen(true));
   }, [inEinstellungen]);
 
   useEffect(() => {
@@ -429,13 +432,19 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
 
   const belegungOeffnen = useCallback(
     (standortId: string | null) => {
+      // "Standorte" ist seit der Zusammenlegung mit Heute (siehe
+      // dashboard/standortKacheln.tsx) direkt die Belegung EINES Standorts;
+      // ohne Angabe bleibt der zuletzt gewaehlte bzw. der erste.
       if (standortId) setBelegungStandortId(standortId);
-      geheZu(standortId ? "belegung" : "standorte");
+      geheZu("standorte");
     },
     [geheZu],
   );
 
-  const dashboardNavigation = useMemo(() => ({ zu: geheZu, suche: paletteOeffnen }), [geheZu, paletteOeffnen]);
+  const dashboardNavigation = useMemo(
+    () => ({ zu: geheZu, suche: paletteOeffnen, belegung: belegungOeffnen }),
+    [geheZu, paletteOeffnen, belegungOeffnen],
+  );
 
   useEffect(() => {
     function taste(e: globalThis.KeyboardEvent) {
@@ -855,12 +864,14 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         </div>
 
         <div
-          className={`zv-content${BREITE_REITER.has(tab) || tab === "belegung" ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
+          className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
           <WarteschlangeLeiste />
           {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} nutzerId={ich?.id ?? "unbekannt"} />}
-          {tab === "standorte" && <StandortUebersicht onBelegungOeffnen={belegungOeffnen} nutzerId={ich?.id ?? "unbekannt"} />}
-          {tab === "belegung" && (belegungStandortId ?? standorte[0]?.id) && (
+          {tab === "standorte" && standorteGeladen && standorte.length === 0 && (
+            <Leerzustand icon={ILeerStandorte}>Ihnen ist kein Standort zugeordnet.</Leerzustand>
+          )}
+          {tab === "standorte" && (belegungStandortId ?? standorte[0]?.id) && (
             <StandortRaeume key={belegungStandortId ?? standorte[0].id} standortId={(belegungStandortId ?? standorte[0].id)} onStandortWaehlen={belegungOeffnen} />
           )}
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}

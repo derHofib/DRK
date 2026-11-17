@@ -72,7 +72,6 @@ export function StandortRaeume({
   onStandortWaehlen,
 }: {
   standortId: string;
-  /** null = "Alle Standorte" (Uebersicht). */
   onStandortWaehlen: (id: string | null) => void;
 }) {
   const [standorte, setStandorte] = useState<StandortDto[]>([]);

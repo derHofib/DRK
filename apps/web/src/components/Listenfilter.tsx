@@ -284,8 +284,8 @@ export function trifftSuche(suche: string, felder: (string | null | undefined)[]
  * Einschraenkungen stehen, und die Liste der Standorte ist durchsuchbar.
  *
  * `pflicht`: Seiten, die immer genau einen Standort zeigen (Belegung),
- * bekommen kein Entfernen-Kreuz; dort fuehrt "Alle Standorte" als eigener
- * Eintrag zur Uebersicht. Ohne `pflicht` heisst "kein Wert" = alle.
+ * bekommen weder Entfernen-Kreuz noch "Alle Standorte". Ohne `pflicht`
+ * heisst "kein Wert" = alle.
  * Unter zwei Standorten gibt es nichts zu waehlen -- dann keine Pille.
  */
 const ALLE_STANDORTE = "__alle__";
@@ -305,7 +305,7 @@ export function StandortFilter({
   if (standorte.length < 2) return null;
   const aktuell = gewaehlt ? standorte.find((s) => s.id === gewaehlt) : undefined;
   const optionen = [
-    { wert: ALLE_STANDORTE, label: "Alle Standorte" },
+    ...(pflicht ? [] : [{ wert: ALLE_STANDORTE, label: "Alle Standorte" }]),
     ...standorte.map((s) => ({ wert: s.id, label: s.zaehler ? `${s.name} · ${s.zaehler}` : s.name })),
   ];
   return (
