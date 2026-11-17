@@ -34,7 +34,10 @@ export default defineConfig({
         // diese Zeile faellt die Schrift offline aus, die App zeigt dann still
         // die Systemschrift. Nachpruefbar an der Zeile "precache N entries"
         // in der Bauausgabe: die woff2 muss mitgezaehlt werden.
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // ttf aus demselben Grund fuer den PDF-Listenexport (Nunito Sans,
+        // 2 x ~107 kB): mit Helvetica ging der Export offline, ohne die
+        // ttf im Precache wuerde er offline scheitern.
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,ttf}"],
       },
       manifest: {
         name: "hecaso",

@@ -15,6 +15,7 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { berechneSummen } from "../src/kassenbuch/kassenbuch-monatsabschluss-pdf";
 import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
+import { pdfSchriften } from "./support/pdf-schriften";
 
 describe("Kassenbuch: Monatsabschluss als PDF", () => {
   let app: INestApplication;
@@ -114,6 +115,19 @@ describe("Kassenbuch: Monatsabschluss als PDF", () => {
     expect(res.headers["content-disposition"]).toContain("2026-08.pdf");
     const doc = await PDFDocument.load(res.body as Buffer);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("setzt in Nunito Sans und kommt mit Ł, Ş, ř im Namen zurecht", async () => {
+    // Mit der frueheren Helvetica (WinAnsi) warf pdf-lib bei diesen Zeichen
+    // -- der Abschluss war fuer solche Namen ein 500.
+    await admin.query("UPDATE klient SET vorname = 'Łukasz Şahin-Dvořák' WHERE id = $1", [klientS1]);
+    try {
+      const res = await abschluss(tokenLeitung, `?klientId=${klientS1}&monat=2026-08`);
+      expect(res.status).toBe(200);
+      expect(await pdfSchriften(res.body as Buffer)).toEqual(["NunitoSans-Bold", "NunitoSans-Regular"]);
+    } finally {
+      await admin.query("UPDATE klient SET vorname = 'Test' WHERE id = $1", [klientS1]);
+    }
   });
 
   it("berechneSummen: Storno zaehlt in keiner Summe", () => {

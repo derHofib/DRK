@@ -2,8 +2,16 @@
 //   cd apps/web && node --import tsx scripts/export-pruefung.mjs
 // Die Funktionen sind reine Funktionen von Zeilen zu Bytes; nur der
 // Download-Anker braucht ein DOM und wird hier nicht beruehrt.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { PDFDocument } from "pdf-lib";
-import { erzeugeCsv, erzeugePdf, filterTextAus } from "../src/export/listenExport.ts";
+import { druckbarerText, erzeugeCsv, erzeugePdf, filterTextAus } from "../src/export/listenExport.ts";
+
+// Im Browser holt erzeugePdf die Schriften per fetch von Vite-URLs; hier
+// dieselben Dateien direkt von der Platte.
+const require = createRequire(import.meta.url);
+const schrift = (n) => new Uint8Array(readFileSync(require.resolve(`@zimmerakte/shared/schriften/${n}`)));
+const ladeSchriften = async () => ({ normal: schrift("NunitoSans-Regular.ttf"), fett: schrift("NunitoSans-Bold.ttf") });
 
 let geprueft = 0;
 const fehler = [];
@@ -43,7 +51,7 @@ pruefe("CSV lässt normalen Text unverändert", csv.includes(";ganz normal\r\n")
 
 // --- PDF
 async function seiten(liste) {
-  const bytes = await erzeugePdf(liste, new Date(2026, 10, 16, 21, 30));
+  const bytes = await erzeugePdf(liste, new Date(2026, 10, 16, 21, 30), ladeSchriften);
   const dok = await PDFDocument.load(bytes);
   return { bytes, n: dok.getPageCount() };
 }
@@ -56,9 +64,27 @@ pruefe("PDF beginnt mit %PDF", Buffer.from(a.bytes.slice(0, 4)).toString() === "
 const lang = await seiten({ titel: "x", dateiname: "x", spalten, zeilen: [["1.1.2026", "A", "Wort ".repeat(6000)]] });
 pruefe("Einzelner Riesenbericht bricht auf mehrere Seiten um", lang.n >= 2, `(${lang.n} Seiten)`);
 
-// Zeichen außerhalb WinAnsi (Emoji, kyrillisch) dürfen den Export nicht kippen.
+// Zeichen, die die Schrift nicht hat (Emoji, Schneemann), dürfen den Export nicht kippen.
 const exotisch = await seiten({ titel: "x", dateiname: "x", spalten, zeilen: [["1.1.2026", "Иван 😀", "Text ☃ mit Sonderzeichen ä ö ü ß – „“"]] });
 pruefe("Unbekannte Zeichen werden ersetzt statt zu werfen", exotisch.n === 1);
+
+// Schrift ist Nunito Sans (Rückmeldung "schriftart": auch Ausdrucke) und
+// nur als Teilmenge eingebettet. BaseFont strukturell auslesen -- pdf-lib
+// legt Objekte komprimiert in Objektströme, eine Textsuche in den Bytes
+// fände dort nichts (auch kein "Helvetica") und bewiese nichts.
+const { PDFName } = await import("pdf-lib");
+const schriftNamen = (await PDFDocument.load(exotisch.bytes)).context
+  .enumerateIndirectObjects()
+  .map(([, o]) => o)
+  .filter((o) => o?.get?.(PDFName.of("Type")) === PDFName.of("Font") && o.get(PDFName.of("BaseFont")))
+  .map((o) => o.get(PDFName.of("BaseFont")).decodeText());
+pruefe("PDF bettet Nunito Sans Regular und Bold ein", schriftNamen.some((n) => n.includes("NunitoSans-Regular")) && schriftNamen.some((n) => n.includes("NunitoSans-Bold")), `(${schriftNamen.join(", ")})`);
+pruefe("PDF nutzt keine andere Schrift", schriftNamen.length > 0 && schriftNamen.every((n) => n.includes("NunitoSans")), `(${schriftNamen.join(", ")})`);
+pruefe("Teilmenge statt ganzer Schrift (< 60 kB)", exotisch.bytes.length < 60_000, `(${exotisch.bytes.length} Bytes)`);
+const fontkit = require("@pdf-lib/fontkit");
+const vorrat = new Set(fontkit.create(Buffer.from(schrift("NunitoSans-Regular.ttf"))).characterSet);
+pruefe("Namen mit Ł, Ş, Ć, ř bleiben im PDF unverändert", druckbarerText("Łukasz Şahin, Ćwik, Dvořák, Иван", vorrat) === "Łukasz Şahin, Ćwik, Dvořák, Иван");
+pruefe("Emoji und Zeilenumbruch werden ersetzt", druckbarerText("a😀\nb", vorrat) === "a? b");
 
 // Wort ohne Leerzeichen, breiter als die Spalte
 const wort = await seiten({ titel: "x", dateiname: "x", spalten, zeilen: [["1.1.2026", "A", "x".repeat(900)]] });
@@ -68,8 +94,8 @@ pruefe("filterTextAus lässt leere Filter weg", filterTextAus([["A", ""], ["B", 
 pruefe("filterTextAus ohne Filter ist undefined", filterTextAus([["A", ""]]) === undefined);
 
 // Ein Prüfskript, das nichts misst, muss scheitern (CLAUDE.md).
-if (geprueft < 12) {
-  console.error(`Nur ${geprueft} Prüfungen gelaufen, erwartet >= 12.`);
+if (geprueft < 18) {
+  console.error(`Nur ${geprueft} Prüfungen gelaufen, erwartet >= 18.`);
   process.exit(2);
 }
 if (fehler.length) {

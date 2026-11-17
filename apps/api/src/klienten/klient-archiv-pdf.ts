@@ -1,4 +1,5 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
+import { bettePdfSchriftEin } from "../common/pdf-schrift";
 import { KlientKontakt, KlientStammdaten } from "./klient.service";
 
 // A4 in PDF-Punkten (1pt = 1/72 Zoll).
@@ -82,8 +83,7 @@ class ContentBuilder {
 
   static async erstellen(): Promise<ContentBuilder> {
     const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    const fett = await doc.embedFont(StandardFonts.HelveticaBold);
+    const { normal: font, fett } = await bettePdfSchriftEin(doc);
     const b = new ContentBuilder(doc, font, fett);
     b.neueSeite();
     return b;
@@ -553,8 +553,7 @@ export async function erzeugeArchivPdf(input: ArchivPdfInput): Promise<Buffer> {
   const inhalt = await baueInhalt(input);
 
   const finalDoc = await PDFDocument.create();
-  const font = await finalDoc.embedFont(StandardFonts.Helvetica);
-  const fett = await finalDoc.embedFont(StandardFonts.HelveticaBold);
+  const { normal: font, fett } = await bettePdfSchriftEin(finalDoc);
 
   const deckblatt = finalDoc.addPage([SEITE_BREITE, SEITE_HOEHE]);
   deckblattZeichnen(deckblatt, font, fett, input);

@@ -1,4 +1,5 @@
-import { PDFFont, PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFFont, PDFDocument, PDFPage, rgb } from "pdf-lib";
+import { bettePdfSchriftEin } from "../common/pdf-schrift";
 import { AccountTypDto, OrgUnitDto, PositionDto } from "./organigramm.service";
 
 // A4 in PDF-Punkten (1pt = 1/72 Zoll) -- dieselben Masse wie
@@ -100,8 +101,7 @@ export async function erzeugeOrganigrammPdf(input: OrganigrammPdfInput): Promise
   const positionen = [...input.positionen].sort((a, b) => a.titel.localeCompare(b.titel, "de"));
 
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fett = await doc.embedFont(StandardFonts.HelveticaBold);
+  const { normal: font, fett } = await bettePdfSchriftEin(doc);
 
   let seite: PDFPage = doc.addPage([SEITE_BREITE, SEITE_HOEHE]);
   let y = SEITE_HOEHE - RAND;

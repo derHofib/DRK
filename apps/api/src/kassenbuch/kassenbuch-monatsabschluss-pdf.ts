@@ -1,4 +1,5 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
+import { bettePdfSchriftEin } from "../common/pdf-schrift";
 
 // A4 in PDF-Punkten (1pt = 1/72 Zoll).
 const SEITE_BREITE = 595.28;
@@ -81,8 +82,7 @@ function kuerzen(text: string, font: PDFFont, groesse: number, maxBreite: number
 
 export async function erzeugeMonatsabschlussPdf(input: MonatsabschlussInput): Promise<Buffer> {
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fett = await doc.embedFont(StandardFonts.HelveticaBold);
+  const { normal: font, fett } = await bettePdfSchriftEin(doc);
   const summen = berechneSummen(input.anfangssaldoCent, input.buchungen);
 
   let seite!: PDFPage;
