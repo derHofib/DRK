@@ -3670,6 +3670,281 @@ button.zv-kal-mini-tag:focus-visible {
   }
 }
 
+/* ------------------------------------------------------------------
+   Wochenansicht als Zeitraster (kalender/WochenZeitraster.tsx)
+   Kopf und Ganztagszeile stehen ausserhalb des scrollenden Stundenteils,
+   damit sie beim Scrollen stehen bleiben -- ohne position: sticky.
+   scrollbar-gutter auf allen drei Teilen haelt die Spalten buendig, auch
+   wo der Browser eine echte (nicht ueberlagernde) Scrollleiste zeichnet.
+   ------------------------------------------------------------------ */
+.zv-kal-woche {
+  /* Hoehe einer Stunde: die EINZIGE Pixelangabe des Rasters. Die Bloecke
+     rechnen ihre Lage daraus (Minuten aus dem JavaScript mal das hier). */
+  --zv-kal-stunde: 48px;
+  --zv-kal-zeitspalte: 60px;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  overflow: hidden;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-woche-kopf,
+.zv-kal-ganztag,
+.zv-kal-woche-koerper {
+  display: grid;
+  grid-template-columns: var(--zv-kal-zeitspalte) repeat(7, minmax(0, 1fr));
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+
+.zv-kal-woche-kopf {
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-kal-woche-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--zv-space-2) var(--zv-space-1);
+  border: 0;
+  border-left: 1px solid var(--zv-border);
+  background: transparent;
+  color: var(--zv-text-muted);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  cursor: pointer;
+}
+
+.zv-kal-woche-tag strong {
+  font-size: var(--zv-text-xl);
+  color: var(--zv-text);
+}
+
+.zv-kal-woche-tag:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-woche-tag.gewaehlt {
+  background: var(--zv-accent-soft);
+  box-shadow: inset 0 -2px 0 var(--zv-accent);
+}
+
+.zv-kal-woche-tag.heute strong {
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-woche-tag:focus-visible,
+.zv-kal-balken:focus-visible,
+.zv-kal-block:focus-visible {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+.zv-kal-ganztag {
+  grid-template-rows: repeat(var(--spuren), auto);
+  min-height: 32px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-ganztag-label {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: center;
+  padding-right: var(--zv-space-1);
+  text-align: right;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-balken {
+  min-width: 0;
+  margin: 1px 2px;
+  padding: 2px var(--zv-space-2);
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text-auf-personflaeche);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Laeuft ueber den Wochenrand hinaus: die Kante bleibt offen. */
+.zv-kal-balken.vorher {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.zv-kal-balken.nachher {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.zv-kal-woche-koerper {
+  /* Bezugspunkt fuer offsetTop der Stundenzeilen (Anfangs-Scrollposition). */
+  position: relative;
+  overflow-y: auto;
+  /* So hoch, dass die Seite selbst nicht scrollen muss, aber nie so
+     niedrig, dass weniger als ein halber Arbeitstag zu sehen ist. */
+  max-height: max(320px, calc(100dvh - 330px));
+}
+
+.zv-kal-stunde {
+  display: block;
+  height: var(--zv-kal-stunde);
+  padding-right: var(--zv-space-1);
+  text-align: right;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  font-variant-numeric: tabular-nums;
+  /* Beschriftung mittig auf der Stundenlinie statt darunter. */
+  transform: translateY(-0.6em);
+}
+
+.zv-kal-spalte {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--zv-border);
+}
+
+/* Heute nur leicht abgesetzt: eine Akzentflaeche ueber die ganze Hoehe
+   konkurrierte im dunklen Theme mit den Terminen selbst. */
+.zv-kal-spalte.heute {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-slot {
+  flex: none;
+  height: var(--zv-kal-stunde);
+  border: 0;
+  border-top: 1px solid var(--zv-border);
+  background: transparent;
+  cursor: pointer;
+}
+
+.zv-kal-slot:first-child {
+  border-top: 0;
+}
+
+.zv-kal-slot:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-block {
+  position: absolute;
+  top: calc(var(--anfang) * var(--zv-kal-stunde) / 60);
+  height: calc(max(var(--dauer), 30) * var(--zv-kal-stunde) / 60 - 2px);
+  left: calc(var(--spalte) * 100% / var(--spalten) + 2px);
+  width: calc(100% / var(--spalten) - 4px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 2px var(--zv-space-1) 2px var(--zv-space-2);
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  /* Trennt nebeneinanderliegende Bloecke derselben Farbe sichtbar. */
+  box-shadow: 0 0 0 1px var(--zv-surface);
+  color: var(--zv-text-auf-personflaeche);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  line-height: 1.3;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.zv-kal-block > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-kal-block strong {
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Halbe Stunde: Titel und Uhrzeit in einer Zeile, sonst passt nur der Titel. */
+.zv-kal-block.kurz {
+  flex-direction: row;
+  gap: var(--zv-space-1);
+}
+
+.zv-kal-block.kurz > :nth-child(n + 3) {
+  display: none;
+}
+
+/* Von Klient:innen angelegt (keine Personenfarbe) bzw. abgesagt -- in
+   Flaechen, auf denen der normale Text seinen Kontrast schon hat. */
+.zv-kal-block.neutral,
+.zv-kal-balken.neutral {
+  background: var(--zv-accent-soft-strong);
+  color: var(--zv-text);
+}
+
+.zv-kal-block.abgesagt,
+.zv-kal-balken.abgesagt {
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+  outline: 1px dashed var(--zv-border-strong);
+  outline-offset: -1px;
+}
+
+.zv-kal-jetzt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--anfang) * var(--zv-kal-stunde) / 60);
+  height: 2px;
+  background: var(--zv-status-danger);
+  pointer-events: none;
+}
+
+.zv-kal-jetzt::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-status-danger);
+}
+
+/* Unter ~640 px Inhaltsbreite (Handy, schmales Fenster neben der
+   Seitenleiste) sind sieben Stundenspalten zu schmal fuer lesbare Titel:
+   dort bleibt die Wochenansicht Tageskacheln plus Terminliste. Gemessen an
+   der Breite des Kalenders, nicht des Fensters -- die Seitenleiste nimmt
+   je nach Zustand unterschiedlich viel weg. */
+.zv-kal-inhalt {
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
+  .zv-kal-woche {
+    display: none;
+  }
+}
+
+@container (min-width: 641px) {
+  .zv-kal-raster.zv-kal-nur-schmal,
+  .zv-kal-nur-schmal {
+    display: none;
+  }
+}
+
 .zv-zugang-link .zv-field-inline {
   font-family: var(--zv-font-mono);
   font-size: var(--zv-text-s);

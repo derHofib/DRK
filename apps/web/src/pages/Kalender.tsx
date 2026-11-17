@@ -6,6 +6,7 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { TerminFormular } from "../components/TerminFormular";
 import { IBearbeiten, IFehler, IHerunterladen, ILeerKalender, INeu, IStornieren, IVor, IZurueckPfeil } from "../components/icons";
+import { WochenZeitraster } from "../kalender/WochenZeitraster";
 import { personFarbStil, useFarbIndizes } from "../personFarbe";
 import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
 
@@ -120,6 +121,8 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
   const [termine, setTermine] = useState<TerminDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
+  // Beginn fuer "Neuer Termin", wenn er per Klick in eine Stunde des Zeitrasters geoeffnet wurde.
+  const [neuUhrzeit, setNeuUhrzeit] = useState<string | undefined>(undefined);
   const [detailId, setDetailId] = useState<string | null>(null);
   // Tagesvorschau im Jahresueberblick: welcher Tag, und wie weit unter der
   // Kastenoberkante sie haengt (Unterkante der Tageszelle).
@@ -279,7 +282,13 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
       )}
       <div className="zv-seiten-kopf">
         <h2>{titel}</h2>
-        <button className="zv-btn" onClick={() => setNeuOffen(true)}>
+        <button
+          className="zv-btn"
+          onClick={() => {
+            setNeuUhrzeit(undefined);
+            setNeuOffen(true);
+          }}
+        >
           <INeu />
           Neuer Termin
         </button>
@@ -310,6 +319,10 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         </button>
       </div>
 
+      {/* Container fuer die Breitenabfrage Zeitraster/Kacheln (app.css). Bewusst nicht
+          .zv-kalender selbst: Containment macht das Element zum Bezugsrahmen fuer
+          position: fixed, und die Dialoge unten wuerden darin eingesperrt. */}
+      <div className="zv-kal-inhalt">
       {ansicht === "jahr" ? (
         <div className="zv-kal-jahr" data-testid="kalender-jahr">
           {Array.from({ length: 12 }, (_, i) => `${jahr}-${String(i + 1).padStart(2, "0")}`).map((m) => {
@@ -403,7 +416,24 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           })}
         </div>
       ) : (
-        <div className="zv-kal-raster" role="grid" aria-label={ansicht === "woche" ? `Wochenübersicht ${zeitraumName}` : `Monatsübersicht ${monatsName}`}>
+        <>
+          {ansicht === "woche" && (
+            <WochenZeitraster
+              wochenTage={wochenTage}
+              heute={heute}
+              gewaehlt={gewaehlt}
+              termine={termine}
+              farbIndexVon={farbIndexVon}
+              onTagWaehlen={setGewaehlt}
+              onTerminOeffnen={setDetailId}
+              onNeu={(tag, uhrzeit) => {
+                setGewaehlt(tag);
+                setNeuUhrzeit(uhrzeit);
+                setNeuOffen(true);
+              }}
+            />
+          )}
+        <div className={`zv-kal-raster${ansicht === "woche" ? " zv-kal-nur-schmal" : ""}`} role="grid" aria-label={ansicht === "woche" ? `Wochenübersicht ${zeitraumName}` : `Monatsübersicht ${monatsName}`}>
           {WOCHENTAGE.map((w) => (
             <div key={w} className="zv-kal-wochentag" role="columnheader">
               {w}
@@ -411,11 +441,13 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           ))}
           {ansicht === "woche" ? wochenTage.map((tag) => tagKnopf(tag, false)) : rasterTage.map((tag) => tagKnopf(tag, !tag.startsWith(monat)))}
         </div>
+        </>
       )}
 
-      {ansicht !== "jahr" &&
-        (listeMitTerminen.length === 0 ? (
-          <Leerzustand icon={ILeerKalender} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setNeuOffen(true)}>Termin anlegen</button>}>
+      {ansicht !== "jahr" && (
+        <div className={ansicht === "woche" ? "zv-kal-nur-schmal" : undefined}>
+        {listeMitTerminen.length === 0 ? (
+          <Leerzustand icon={ILeerKalender} aktion={<button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => (setNeuUhrzeit(undefined), setNeuOffen(true))}>Termin anlegen</button>}>
             Keine Termine in diesem Zeitraum.
           </Leerzustand>
         ) : (
@@ -448,7 +480,10 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
               </ul>
             </div>
           ))
-        ))}
+        )}
+        </div>
+      )}
+      </div>
 
       {(legende.length > 0 || sammelImJahr) && (
         <div className="zv-kal-legende" role="list" aria-label="Farben je Mitarbeiter:in">
@@ -471,6 +506,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
       {neuOffen && (
         <NeuerTermin
           standardDatum={gewaehlt}
+          standardUhrzeit={neuUhrzeit}
           kontakteLaden={kontakteLaden}
           onClose={() => setNeuOffen(false)}
           onAngelegt={(t) => {
@@ -537,11 +573,13 @@ function TagesVorschau({
 
 function NeuerTermin({
   standardDatum,
+  standardUhrzeit,
   kontakteLaden,
   onClose,
   onAngelegt,
 }: {
   standardDatum: string;
+  standardUhrzeit?: string;
   kontakteLaden: () => Promise<ChatKontaktDto[]>;
   onClose: () => void;
   onAngelegt: (t: TerminDto) => void;
@@ -571,7 +609,7 @@ function NeuerTermin({
       {kontakte === null ? (
         <p className="zv-sub">Wird geladen…</p>
       ) : (
-        <TerminFormular standardDatum={standardDatum} kontakte={kontakte} mitBeschreibung absendenLabel="Termin anlegen" wirdGesendet={laeuft} fehler={fehler} onAbsenden={absenden} />
+        <TerminFormular standardDatum={standardDatum} standardUhrzeit={standardUhrzeit} kontakte={kontakte} mitBeschreibung absendenLabel="Termin anlegen" wirdGesendet={laeuft} fehler={fehler} onAbsenden={absenden} />
       )}
     </Modal>
   );

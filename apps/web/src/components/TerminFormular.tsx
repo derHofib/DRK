@@ -9,6 +9,12 @@ function uhrzeitVon(iso: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** "23:00" endet um 23:59 statt am Folgetag: das Formular kennt fuer Termine mit Uhrzeit nur einen Tag. */
+function eineStundeSpaeter(uhrzeit: string): string {
+  const [h, m] = uhrzeit.split(":").map(Number);
+  return h >= 23 ? "23:59" : `${String(h + 1).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 /**
  * Gemeinsames Formular fuer "Termin im Chat teilen" und den Kalender. Das
  * Wire-Format haengt an `ganztaegig` (reine Daten vs. UTC-Zeitpunkte, siehe
@@ -18,6 +24,7 @@ function uhrzeitVon(iso: string): string {
 export function TerminFormular({
   initial,
   standardDatum,
+  standardUhrzeit,
   kontakte,
   mitBeschreibung = false,
   absendenLabel,
@@ -27,6 +34,8 @@ export function TerminFormular({
 }: {
   initial?: TerminDto;
   standardDatum?: string;
+  /** Beginn "HH:MM" fuer neue Termine (Klick in eine Stunde der Wochenansicht); Ende eine Stunde spaeter. */
+  standardUhrzeit?: string;
   /** Wenn gesetzt, kann der Termin gleich Teilnehmenden zugewiesen werden (nur beim Anlegen). */
   kontakte?: ChatKontaktDto[];
   mitBeschreibung?: boolean;
@@ -41,8 +50,8 @@ export function TerminFormular({
   const [ganztaegig, setGanztaegig] = useState(initial?.ganztaegig ?? false);
   const [datum, setDatum] = useState(initial ? terminTag(initial.beginn, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [endDatum, setEndDatum] = useState(initial ? terminTag(initial.ende, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
-  const [von, setVon] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.beginn) : "09:00");
-  const [bis, setBis] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.ende) : "10:00");
+  const [von, setVon] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.beginn) : (standardUhrzeit ?? "09:00"));
+  const [bis, setBis] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.ende) : standardUhrzeit ? eineStundeSpaeter(standardUhrzeit) : "10:00");
   const [auswahl, setAuswahl] = useState<Map<string, ChatKontaktDto>>(new Map());
   const [eingabeFehler, setEingabeFehler] = useState<string | null>(null);
 
