@@ -4,11 +4,9 @@
  * (siehe theme/theme.ts, Shell.tsx). Deshalb im localStorage, nicht in
  * der Datenbank.
  *
- * Bewusst KEINE eigene Reihenfolge (kein Drag&Drop): die Reihenfolge ist
- * fest (WIDGET_REIHENFOLGE), nur Ein-/Ausblenden ist einstellbar. Fuer den
- * Anfang ist das die einfachere, robustere Loesung -- Drag&Drop bringt
- * eigene Barrierefreiheits- und Zustandsfragen mit, deren Nutzen hier noch
- * unbewiesen ist.
+ * Ein-/Ausblenden steht hier; Position und Groesse der Kacheln liegen
+ * getrennt im KachelRaster (eigener Speicherschluessel). WIDGET_REIHENFOLGE
+ * ist nur noch die Reihenfolge der Liste in "Anpassen".
  */
 export type WidgetId =
   | "zimmer"
@@ -19,7 +17,9 @@ export type WidgetId =
   | "unzugewieseneAufgaben"
   | "meineAufgaben"
   | "kostenuebernahmen"
-  | "tagesberichte";
+  | "tagesberichte"
+  | "termine"
+  | "freieZimmer";
 
 export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "zimmer",
@@ -31,6 +31,8 @@ export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "meineAufgaben",
   "kostenuebernahmen",
   "tagesberichte",
+  "termine",
+  "freieZimmer",
 ];
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -43,6 +45,8 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   meineAufgaben: "Mir zugewiesene Aufgaben",
   kostenuebernahmen: "Kostenübernahmen laufen bald aus",
   tagesberichte: "Klienten ohne aktuellen Tagesbericht",
+  termine: "Termine heute",
+  freieZimmer: "Freie Zimmer",
 };
 
 /**

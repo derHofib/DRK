@@ -80,7 +80,7 @@ for (const theme of ["hell", "dunkel"]) {
   await aufnahme(page, `${theme}-01-anmeldung`);
   await page.click('button[type="submit"]');
   await page.waitForSelector(".zv-content");
-  await page.waitForSelector(".zv-lage");
+  await page.waitForSelector(".zv-raster");
   await aufnahme(page, `${theme}-02-heute`);
   await reiter(page, "Belegung");
   await page.waitForSelector(".zv-zl-zeile");
@@ -103,7 +103,7 @@ for (const theme of ["hell", "dunkel"]) {
   const page = await ctx.newPage();
   await anmelden(page);
   await page.click('button[type="submit"]');
-  await page.waitForSelector(".zv-lage");
+  await page.waitForSelector(".zv-raster");
   await aufnahme(page, "mobil-heute");
   await reiter(page, "Belegung", true);
   await page.waitForSelector(".zv-zl-zeile");

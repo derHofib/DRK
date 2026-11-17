@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardDto, StandortDto, TerminDto } from "@zimmerakte/shared";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { KachelRaster, type KachelDef } from "../components/KachelRaster";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
 import { StandortReiter } from "../components/StandortReiter";
@@ -125,7 +126,7 @@ function fristAnzeige(frist: string | null, heute: string, ohne: string): { text
   return { text: formatDatum(frist), ueberfaellig: false };
 }
 
-export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
+export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavigation; nutzerId: string }) {
   // Frueher ein Rollen-Hinweis (Bereichs-/Einrichtungsleitung sehen mehr
   // Widgets per Default) -- ohne feste Rollen gibt es dafuer keine Grundlage
   // mehr, also zeigt der Standard jetzt fuer alle den volleren Satz. Wer
@@ -407,6 +408,197 @@ export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
     }
   }
 
+  /**
+   * Eine Kachel pro Inhalt statt fester Spalten: Heute und die Standort-
+   * Uebersicht teilen sich dasselbe Raster (KachelRaster), damit beide Seiten
+   * gleich aussehen und gleich zu bedienen sind. Die Kopfzeile mit Titel und
+   * Link liegt IN der Kachel (mit Platz fuer den Anfasser rechts oben).
+   */
+  const kachelKopf = (titel: string, link?: { label: string; ziel: () => void }, extra?: ReactNode) => (
+    <div className="zv-kachel-kopf">
+      <h3>{titel}</h3>
+      {extra}
+      {link && (
+        <button type="button" className="zv-link-btn" onClick={link.ziel}>
+          {link.label}
+        </button>
+      )}
+    </div>
+  );
+
+  const kacheln: KachelDef[] | null = daten
+    ? [
+        ...lageSpalten.map((sp, i): KachelDef => ({
+          id: `lage-${sp.schluessel}`,
+          titel: sp.label,
+          standard: { x: i * 3, y: 0, w: 3, h: 3 },
+          minW: 2,
+          minH: 3,
+          inhalt: (
+            <div className="zv-kachel-stat">
+              <p className="zv-stat-label">{sp.label}</p>
+              <p className="zv-stat-wert zv-mono">{sp.wert}</p>
+              <p className={`zv-stat-sub${sp.achtung ? " zv-stat-achtung" : ""}`}>{sp.folge}</p>
+            </div>
+          ),
+        })),
+        {
+          id: "zu-erledigen",
+          titel: "Zu erledigen",
+          standard: { x: 0, y: 3, w: 8, h: 10 },
+          minW: 4,
+          minH: 4,
+          inhalt: (
+            <section className="zv-kachel-karte" aria-label="Zu erledigen">
+              {kachelKopf(
+                "Zu erledigen",
+                undefined,
+                <div className="zv-segmented" role="group" aria-label="Filter">
+                  {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+                    <button key={f} type="button" className={filter === f ? "active" : ""} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                      {FILTER_LABEL[f]}
+                    </button>
+                  ))}
+                </div>,
+              )}
+              {gruppen.length === 0 ? (
+                <Leerzustand
+                  icon={ILeerAufgaben}
+                  aktion={
+                    <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => navigation.zu("aufgaben")}>
+                      Aufgabe anlegen
+                    </button>
+                  }
+                >
+                  {filter === "alle" ? "Nichts offen." : "Für diesen Filter ist nichts offen."}
+                </Leerzustand>
+              ) : (
+                gruppen.map((g) => (
+                  <div key={g.gruppe} className="zv-todo-gruppe">
+                    <h4 className="zv-gruppenlabel-inline">
+                      {GRUPPE_LABEL[g.gruppe]} <span className="zv-mono">{g.eintraege.length}</span>
+                    </h4>
+                    <ul className="zv-todo-liste">
+                      {g.eintraege.map((e) => {
+                        const f = fristAnzeige(e.frist, heute, e.fristText);
+                        return (
+                          <li key={e.schluessel} className="zv-todo-zeile">
+                            <span className="zv-pill">{e.art}</span>
+                            <span className="zv-todo-text">
+                              <span className="zv-todo-titel">{e.titel}</span>
+                              <span className="zv-todo-meta">{e.meta}</span>
+                            </span>
+                            <span className={`zv-todo-frist zv-mono${f.ueberfaellig ? " zv-todo-frist-achtung" : ""}`}>{f.text}</span>
+                            <button
+                              type="button"
+                              className="zv-btn zv-btn-sekundaer zv-btn-klein"
+                              onClick={() => {
+                                void Promise.resolve(e.aktion.ausfuehren()).catch((err) => setFehler(err.message));
+                              }}
+                            >
+                              {e.aktion.label}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))
+              )}
+            </section>
+          ),
+        },
+        ...(sichtbarkeit.termine
+          ? [
+              {
+                id: "termine",
+                titel: "Termine heute",
+                standard: { x: 8, y: 3, w: 4, h: 5 },
+                minW: 3,
+                minH: 3,
+                inhalt: (
+                  <section className="zv-kachel-karte" aria-label="Termine heute">
+                    {kachelKopf("Termine heute", { label: "Kalender", ziel: () => navigation.zu("kalender") })}
+                    {heutigeTermine.length === 0 ? (
+                      <p className="zv-rand-leer">Heute keine Termine.</p>
+                    ) : (
+                      <ol className="zv-zeitleiste">
+                        {heutigeTermine.map((t) => {
+                          const vorbei = !t.ganztaegig && new Date(t.ende) <= jetzt;
+                          const naechster = naechsterTermin?.id === t.id;
+                          return (
+                            <li key={t.id} className={`${vorbei ? "zv-zeit-vorbei" : ""}${naechster ? " zv-zeit-naechster" : ""}`}>
+                              <span className="zv-zeit-punkt" aria-hidden="true" />
+                              <span className="zv-zeit-uhr zv-mono">{formatTerminUhrzeit(t)}</span>
+                              <span className="zv-zeit-titel">{t.titel}</span>
+                              {t.ort && <span className="zv-todo-meta">{t.ort}</span>}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+                  </section>
+                ),
+              } satisfies KachelDef,
+            ]
+          : []),
+        ...(sichtbarkeit.freieZimmer
+          ? [
+              {
+                id: "freie-zimmer",
+                titel: "Freie Zimmer",
+                standard: { x: 8, y: 8, w: 4, h: 5 },
+                minW: 3,
+                minH: 3,
+                inhalt: (
+                  <section className="zv-kachel-karte" aria-label="Freie Zimmer">
+                    {kachelKopf("Freie Zimmer", { label: "Belegung", ziel: () => navigation.zu("standorte") })}
+                    {daten.freieZimmer.length === 0 ? (
+                      <p className="zv-rand-leer">Kein Platz frei.</p>
+                    ) : (
+                      <ul className="zv-rand-liste">
+                        {daten.freieZimmer.map((z) => (
+                          <li key={z.zimmerId}>
+                            <span className="zv-mono zv-rand-nummer">{z.nummer}</span>
+                            <span className="zv-todo-text">
+                              <span className="zv-todo-titel">{z.standortName}</span>
+                              <span className="zv-todo-meta">
+                                {z.etage ? `${z.etage} · ` : ""}
+                                {z.freiePlaetze} {z.freiePlaetze === 1 ? "Platz" : "Plätze"} frei
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                ),
+              } satisfies KachelDef,
+            ]
+          : []),
+        ...(sichtbarkeit.mitarbeitende
+          ? [
+              {
+                id: "mitarbeitende",
+                titel: "Mitarbeitende",
+                standard: { x: 8, y: 13, w: 4, h: 3 },
+                minW: 3,
+                minH: 2,
+                inhalt: (
+                  <section className="zv-kachel-karte" aria-label="Mitarbeitende">
+                    {kachelKopf("Mitarbeitende", { label: "Öffnen", ziel: () => navigation.zu("mitarbeitende") })}
+                    <p className="zv-rand-leer">
+                      <span className="zv-mono">{daten.mitarbeitende.aktiv}</span> aktiv
+                      {daten.mitarbeitende.ausstehendeResets > 0 && ` · ${daten.mitarbeitende.ausstehendeResets} Passwort-Reset(s) ausstehend`}
+                    </p>
+                  </section>
+                ),
+              } satisfies KachelDef,
+            ]
+          : []),
+      ]
+    : null;
+
   const neuEintraege: { label: string; ausfuehren: () => void }[] = [
     { label: "Neue Buchung", ausfuehren: () => navigation.zu("kassenbuch", { neueBuchung: true }) },
     { label: "Tagesbericht schreiben", ausfuehren: () => navigation.zu("tagesberichte") },
@@ -476,162 +668,9 @@ export function Dashboard({ navigation }: { navigation: DashboardNavigation }) {
         onWaehle={standortWaehlen}
       />
 
-      {daten && (
+      {daten && kacheln && (
         <div className="zv-heute" style={{ opacity: wirdGeladen ? 0.6 : 1 }}>
-          {lageSpalten.length > 0 && (
-            <section className="zv-lage" aria-label="Lage">
-              {lageSpalten.map((sp) => (
-                <div key={sp.schluessel} className="zv-lage-spalte">
-                  <p className="zv-lage-label">{sp.label}</p>
-                  <p className="zv-lage-wert zv-mono">{sp.wert}</p>
-                  <p className={`zv-lage-folge${sp.achtung ? " zv-lage-folge-achtung" : ""}`}>{sp.folge}</p>
-                </div>
-              ))}
-            </section>
-          )}
-
-          <div className="zv-heute-spalten">
-            <section className="zv-heute-haupt" aria-label="Zu erledigen">
-              <div className="zv-abschnittskopf">
-                <h3>Zu erledigen</h3>
-                <div className="zv-segmented" role="group" aria-label="Filter">
-                  {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      className={filter === f ? "active" : ""}
-                      aria-pressed={filter === f}
-                      onClick={() => setFilter(f)}
-                    >
-                      {FILTER_LABEL[f]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {gruppen.length === 0 ? (
-                <Leerzustand
-                  icon={ILeerAufgaben}
-                  aktion={
-                    <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => navigation.zu("aufgaben")}>
-                      Aufgabe anlegen
-                    </button>
-                  }
-                >
-                  {filter === "alle" ? "Nichts offen." : "Für diesen Filter ist nichts offen."}
-                </Leerzustand>
-              ) : (
-                gruppen.map((g) => (
-                  <div key={g.gruppe} className="zv-todo-gruppe">
-                    <h4 className="zv-gruppenlabel-inline">
-                      {GRUPPE_LABEL[g.gruppe]} <span className="zv-mono">{g.eintraege.length}</span>
-                    </h4>
-                    <ul className="zv-todo-liste">
-                      {g.eintraege.map((e) => {
-                        const f = fristAnzeige(e.frist, heute, e.fristText);
-                        return (
-                          <li key={e.schluessel} className="zv-todo-zeile">
-                            <span className="zv-pill">{e.art}</span>
-                            <span className="zv-todo-text">
-                              <span className="zv-todo-titel">{e.titel}</span>
-                              <span className="zv-todo-meta">{e.meta}</span>
-                            </span>
-                            <span className={`zv-todo-frist zv-mono${f.ueberfaellig ? " zv-todo-frist-achtung" : ""}`}>
-                              {f.text}
-                            </span>
-                            <button
-                              type="button"
-                              className="zv-btn zv-btn-sekundaer zv-btn-klein"
-                              onClick={() => {
-                                void Promise.resolve(e.aktion.ausfuehren()).catch((err) => setFehler(err.message));
-                              }}
-                            >
-                              {e.aktion.label}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </section>
-
-            <aside className="zv-heute-rand">
-              <section aria-label="Termine heute">
-                <div className="zv-abschnittskopf">
-                  <h3>Termine heute</h3>
-                  <button type="button" className="zv-link-btn" onClick={() => navigation.zu("kalender")}>
-                    Kalender
-                  </button>
-                </div>
-                {heutigeTermine.length === 0 ? (
-                  <p className="zv-rand-leer">Heute keine Termine.</p>
-                ) : (
-                  <ol className="zv-zeitleiste">
-                    {heutigeTermine.map((t) => {
-                      const vorbei = !t.ganztaegig && new Date(t.ende) <= jetzt;
-                      const naechster = naechsterTermin?.id === t.id;
-                      return (
-                        <li
-                          key={t.id}
-                          className={`${vorbei ? "zv-zeit-vorbei" : ""}${naechster ? " zv-zeit-naechster" : ""}`}
-                        >
-                          <span className="zv-zeit-punkt" aria-hidden="true" />
-                          <span className="zv-zeit-uhr zv-mono">{formatTerminUhrzeit(t)}</span>
-                          <span className="zv-zeit-titel">{t.titel}</span>
-                          {t.ort && <span className="zv-todo-meta">{t.ort}</span>}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </section>
-
-              <section aria-label="Freie Zimmer">
-                <div className="zv-abschnittskopf">
-                  <h3>Freie Zimmer</h3>
-                  <button type="button" className="zv-link-btn" onClick={() => navigation.zu("standorte")}>
-                    Belegung
-                  </button>
-                </div>
-                {daten.freieZimmer.length === 0 ? (
-                  <p className="zv-rand-leer">Kein Platz frei.</p>
-                ) : (
-                  <ul className="zv-rand-liste">
-                    {daten.freieZimmer.map((z) => (
-                      <li key={z.zimmerId}>
-                        <span className="zv-mono zv-rand-nummer">{z.nummer}</span>
-                        <span className="zv-todo-text">
-                          <span className="zv-todo-titel">{z.standortName}</span>
-                          <span className="zv-todo-meta">
-                            {z.etage ? `${z.etage} · ` : ""}
-                            {z.freiePlaetze} {z.freiePlaetze === 1 ? "Platz" : "Plätze"} frei
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              {sichtbarkeit.mitarbeitende && (
-                <section aria-label="Mitarbeitende">
-                  <div className="zv-abschnittskopf">
-                    <h3>Mitarbeitende</h3>
-                    <button type="button" className="zv-link-btn" onClick={() => navigation.zu("mitarbeitende")}>
-                      Öffnen
-                    </button>
-                  </div>
-                  <p className="zv-rand-leer">
-                    <span className="zv-mono">{daten.mitarbeitende.aktiv}</span> aktiv
-                    {daten.mitarbeitende.ausstehendeResets > 0 &&
-                      ` · ${daten.mitarbeitende.ausstehendeResets} Passwort-Reset(s) ausstehend`}
-                  </p>
-                </section>
-              )}
-            </aside>
-          </div>
+          <KachelRaster speicherSchluessel={`zimmerakte_heute_layout_${nutzerId}`} kacheln={kacheln} />
         </div>
       )}
 

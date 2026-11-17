@@ -4360,36 +4360,6 @@ button[class],
   min-width: 0;
 }
 
-/* Lage: vier Spalten auf einer Flaeche, durch Haarlinien getrennt. */
-.zv-lage {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  background: var(--zv-surface);
-  border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-m);
-  margin-bottom: var(--zv-space-5);
-}
-.zv-lage-spalte {
-  padding: var(--zv-space-4);
-  min-width: 0;
-  border-left: 1px solid var(--zv-border);
-}
-.zv-lage-spalte:first-child {
-  border-left: 0;
-}
-@media (max-width: 640px) {
-  .zv-lage {
-    grid-template-columns: 1fr 1fr;
-  }
-  /* Nach dem Umbruch trennt eine obere Linie die zweite Reihe; die linke
-     Linie gilt nur noch fuer die rechte Spalte. */
-  .zv-lage-spalte:nth-child(odd) {
-    border-left: 0;
-  }
-  .zv-lage-spalte:nth-child(n + 3) {
-    border-top: 1px solid var(--zv-border);
-  }
-}
 .zv-lage-label {
   margin: 0;
   font-size: var(--zv-text-label);
@@ -4412,18 +4382,6 @@ button[class],
 }
 .zv-lage-folge-achtung {
   color: var(--zv-achtung-text);
-}
-
-.zv-heute-spalten {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--zv-space-6);
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .zv-heute-spalten {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .zv-abschnittskopf {
@@ -4537,12 +4495,6 @@ button[class],
   }
 }
 
-.zv-heute-rand {
-  display: flex;
-  flex-direction: column;
-  gap: var(--zv-space-6);
-  min-width: 0;
-}
 .zv-rand-leer {
   margin: 0;
   font-size: var(--zv-text-meta);
@@ -5413,7 +5365,7 @@ button[class],
   min-height: 0;
   background: var(--zv-surface);
   border: 1px solid var(--zv-border);
-  border-radius: var(--zv-radius-m);
+  border-radius: var(--zv-radius-l);
   box-shadow: var(--zv-shadow-1);
   /* Breite der Kachel, nicht des Fensters, entscheidet ueber die Zellenanordnung. */
   container-type: inline-size;
@@ -5449,7 +5401,7 @@ button[class],
   cursor: nwse-resize;
   touch-action: none;
   background: linear-gradient(135deg, transparent 50%, var(--zv-border-strong, var(--zv-border)) 50% 58%, transparent 58% 70%, var(--zv-border-strong, var(--zv-border)) 70% 78%, transparent 78%);
-  border-bottom-right-radius: var(--zv-radius-m);
+  border-bottom-right-radius: var(--zv-radius-l);
 }
 
 /* Der Inhalt scrollt, falls die Kachel kleiner gezogen wird, als er braucht,
@@ -5482,6 +5434,47 @@ button[class],
   .zv-kachel-karte .zv-karten-liste { background: none; border: none; overflow: visible; display: flex; flex-direction: column; gap: var(--zv-space-2); }
   .zv-kachel-karte .zv-info-karte { grid-template-columns: 1fr; gap: var(--zv-space-1); border: 1px solid var(--zv-border); border-radius: var(--zv-radius-m); }
   .zv-kachel-karte .zv-liste-zelle[data-label]::before { content: attr(data-label) ": "; color: var(--zv-text-faint); }
+}
+
+/* Kopfzeile einer Kachel (Heute): Titel links, Link/Filter rechts. Rechts
+   bleibt Platz fuer den Anfasser, sonst verdeckt er den Link. */
+.zv-kachel-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2) var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+  padding-right: var(--zv-space-6);
+}
+.zv-kachel-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-abschnitt);
+  font-weight: var(--zv-weight-bold);
+}
+.zv-kachel-kopf .zv-segmented { max-width: 100%; overflow-x: auto; }
+.zv-kachel-kopf .zv-segmented button { white-space: nowrap; }
+
+/* Kennzahl-Kachel: gleiche Schrift wie die frueheren Lage-Spalten. */
+.zv-kachel-stat .zv-stat-wert {
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+  line-height: 1.1;
+}
+.zv-kachel-stat .zv-stat-achtung { color: var(--zv-achtung-text); }
+
+/* Zu-erledigen-Zeilen richten sich nach der Breite der KACHEL, nicht des
+   Fensters: auf dem Desktop kann die Kachel schmal gezogen sein. */
+@container (max-width: 520px) {
+  .zv-kachel-karte .zv-todo-zeile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "tag frist" "text text" "aktion aktion";
+    row-gap: var(--zv-space-2);
+  }
+  .zv-kachel-karte .zv-todo-zeile .zv-pill { grid-area: tag; }
+  .zv-kachel-karte .zv-todo-zeile .zv-todo-frist { grid-area: frist; }
+  .zv-kachel-karte .zv-todo-zeile .zv-todo-text { grid-area: text; }
+  .zv-kachel-karte .zv-todo-zeile .zv-btn { grid-area: aktion; justify-self: start; }
 }
 
 @media (max-width: 640px) {
