@@ -8,7 +8,7 @@ import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Zimmer as ZimmerVerwaltung } from "./Zimmer";
 import { Seitenpanel } from "../components/Seitenpanel";
-import { StandortReiter } from "../components/StandortReiter";
+import { Filterleiste, OptionenFilter, StandortFilter, trifftSuche } from "../components/Listenfilter";
 import { PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
@@ -24,6 +24,7 @@ import {
   IGrundrissAnsicht,
   IHochladen,
   ILeerStandorte,
+  ILeerZimmer,
   ILoeschen,
   INeu,
   ISpeichern,
@@ -32,6 +33,8 @@ import {
 } from "../components/icons";
 
 type Ansicht = "zeit" | "grundriss" | "verwalten";
+type PlatzFilter = "frei" | "voll";
+const PLATZ_FILTER_LABEL: Record<PlatzFilter, string> = { frei: "Plätze frei", voll: "Voll belegt" };
 type Objektart = "zimmer" | "raum";
 
 const ANSICHT_SPEICHER = "zimmerakte_raumplan_ansicht";
@@ -105,6 +108,11 @@ export function StandortRaeume({
   const [panelOffen, setPanelOffen] = useState(false);
   const [zimmerNeuOffen, setZimmerNeuOffen] = useState(false);
   const [raumDialog, setRaumDialog] = useState<{ id: string; name: string; etage: string } | "neu" | null>(null);
+  // Filter der Zeitleiste. Bewusst nur dort: der Grundriss zeigt den Standort
+  // als Ganzes (ein ausgeblendetes Zimmer liesse eine Luecke im Plan), und
+  // "Verwalten" hat die volle Zimmerliste mit eigener Filterleiste.
+  const [suche, setSuche] = useState("");
+  const [platzFilter, setPlatzFilter] = useState<"" | PlatzFilter>("");
 
   const laden = useCallback(() => {
     api
@@ -130,6 +138,28 @@ export function StandortRaeume({
   }
 
   const etage = plan?.etagen.find((e) => e.etage === aktiveEtage) ?? null;
+
+  const zeitleistenEtagen = (plan?.etagen ?? [])
+    .map((e) => ({
+      ...e,
+      zimmer: e.zimmer.filter(
+        (z) =>
+          (!platzFilter || (platzFilter === "frei" ? z.bewohner.length < z.kapazitaet : z.bewohner.length >= z.kapazitaet)) &&
+          trifftSuche(suche, [z.nummer, e.etage, ...z.bewohner.map((b) => b.name), ...z.geplanteEinzuege.map((g) => g.name)]),
+      ),
+    }))
+    .filter((e) => e.zimmer.length > 0);
+  const zeitleistenZimmer = zeitleistenEtagen.reduce((n, e) => n + e.zimmer.length, 0);
+  const filterAktiv = Boolean(suche.trim() || platzFilter);
+
+  const standortPille = (
+    <StandortFilter
+      standorte={standorte.map((st) => ({ id: st.id, name: st.name, zaehler: plaetze[st.id] }))}
+      gewaehlt={standortId}
+      onWaehlen={onStandortWaehlen}
+      pflicht
+    />
+  );
 
   const oeffneDetail = useCallback((art: Objektart, id: string) => {
     setDetail({ art, id });
@@ -182,12 +212,6 @@ export function StandortRaeume({
           </div>
         )}
       </div>
-
-      <StandortReiter
-        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((st) => ({ id: st.id, label: st.name, zaehler: plaetze[st.id] }))]}
-        aktiv={standortId}
-        onWaehle={onStandortWaehlen}
-      />
 
       {plan && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-3)", marginBottom: "var(--zv-space-4)" }}>
@@ -245,10 +269,48 @@ export function StandortRaeume({
         </Leerzustand>
       )}
 
-      {ansicht === "verwalten" && <ZimmerVerwaltung standortId={standortId} />}
+      {plan && ansicht === "zeit" && plan.etagen.length > 0 && (
+        <>
+          <Filterleiste
+            ariaLabel="Belegung filtern"
+            suche={{ wert: suche, onChange: setSuche, placeholder: "Zimmer, Klient:in…", ariaLabel: "Belegung durchsuchen" }}
+            aktiv={filterAktiv}
+            onZuruecksetzen={() => {
+              setSuche("");
+              setPlatzFilter("");
+            }}
+          >
+            {standortPille}
+            <OptionenFilter
+              icon={<IZimmer />}
+              label="Plätze"
+              optionen={(Object.keys(PLATZ_FILTER_LABEL) as PlatzFilter[]).map((w) => ({ wert: w, label: PLATZ_FILTER_LABEL[w] }))}
+              wert={platzFilter}
+              onWaehlen={(w) => setPlatzFilter(w as "" | PlatzFilter)}
+            />
+          </Filterleiste>
+          <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
+            {zeitleistenZimmer} Zimmer
+          </div>
+        </>
+      )}
 
-      {plan && ansicht === "zeit" && (
-        <Belegungszeitleiste etagen={plan.etagen} onOeffnen={(id) => oeffneDetail("zimmer", id)} />
+      {/* Ohne Zeitleisten-Filter (Grundriss, leerer Standort, Laden/Fehler)
+          bleibt der Standortwechsel trotzdem erreichbar -- sonst saesse man
+          auf einem leeren Standort fest. */}
+      {ansicht !== "verwalten" && !(plan && ansicht === "zeit" && plan.etagen.length > 0) && standorte.length > 1 && (
+        <div className="zv-filterleiste" role="search" aria-label="Standort wählen">
+          {standortPille}
+        </div>
+      )}
+
+      {ansicht === "verwalten" && <ZimmerVerwaltung standortId={standortId} standortPille={standorte.length > 1 ? standortPille : undefined} />}
+
+      {plan && ansicht === "zeit" && zeitleistenEtagen.length > 0 && (
+        <Belegungszeitleiste etagen={zeitleistenEtagen} onOeffnen={(id) => oeffneDetail("zimmer", id)} />
+      )}
+      {plan && ansicht === "zeit" && plan.etagen.length > 0 && zeitleistenEtagen.length === 0 && (
+        <Leerzustand icon={ILeerZimmer}>Kein Zimmer passt zu den Filtern.</Leerzustand>
       )}
 
       {plan && ansicht === "grundriss" && etage && (

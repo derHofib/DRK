@@ -5,7 +5,7 @@ import type { ListenExport } from "../export/listenExport";
 import { AktionsMenue } from "./AktionsMenue";
 import { ExportMenue } from "./ExportMenue";
 import { FilterAuswahl, FilterPille } from "./Filterleiste";
-import { IFilterLoeschen, IKalender, INeu, ISortierung, ISuche } from "./icons";
+import { IFilterLoeschen, IKalender, INeu, ISortierung, IStandort, ISuche } from "./icons";
 
 /**
  * Die ganze Filterleiste einer Listenansicht: Suchfeld, feste Pillen
@@ -274,4 +274,57 @@ export function ZeitraumFilter({ zeitraum, idPrefix, label = "Zeitraum" }: { zei
 export function trifftSuche(suche: string, felder: (string | null | undefined)[]): boolean {
   const q = suche.trim().toLocaleLowerCase("de");
   return !q || felder.some((f) => (f ?? "").toLocaleLowerCase("de").includes(q));
+}
+
+/**
+ * Standortwahl als Pille der Filterleiste -- loest die frueheren
+ * Unterstrich-Reiter (StandortReiter) ab. Rueckmeldung aus dem Betrieb: die
+ * Reiterleiste wirkte bei vielen Standorten unruhig und sah anders aus als
+ * jede andere Liste. Als Pille steht der Standort dort, wo auch alle anderen
+ * Einschraenkungen stehen, und die Liste der Standorte ist durchsuchbar.
+ *
+ * `pflicht`: Seiten, die immer genau einen Standort zeigen (Belegung),
+ * bekommen kein Entfernen-Kreuz; dort fuehrt "Alle Standorte" als eigener
+ * Eintrag zur Uebersicht. Ohne `pflicht` heisst "kein Wert" = alle.
+ * Unter zwei Standorten gibt es nichts zu waehlen -- dann keine Pille.
+ */
+const ALLE_STANDORTE = "__alle__";
+
+export function StandortFilter({
+  standorte,
+  gewaehlt,
+  onWaehlen,
+  pflicht,
+}: {
+  /** zaehler: kurzer Zusatz wie "9/10" (belegte/vorhandene Plaetze). */
+  standorte: { id: string; name: string; zaehler?: string }[];
+  gewaehlt: string | null;
+  onWaehlen: (id: string | null) => void;
+  pflicht?: boolean;
+}) {
+  if (standorte.length < 2) return null;
+  const aktuell = gewaehlt ? standorte.find((s) => s.id === gewaehlt) : undefined;
+  const optionen = [
+    { wert: ALLE_STANDORTE, label: "Alle Standorte" },
+    ...standorte.map((s) => ({ wert: s.id, label: s.zaehler ? `${s.name} · ${s.zaehler}` : s.name })),
+  ];
+  return (
+    <FilterPille
+      icon={<IStandort />}
+      label="Standort"
+      wert={aktuell ? `: ${aktuell.name}` : null}
+      onEntfernen={pflicht ? undefined : () => onWaehlen(null)}
+    >
+      {(schliessen) => (
+        <FilterAuswahl
+          optionen={optionen}
+          gewaehlt={gewaehlt ?? ALLE_STANDORTE}
+          onWaehlen={(w) => {
+            onWaehlen(w === ALLE_STANDORTE ? null : w);
+            schliessen();
+          }}
+        />
+      )}
+    </FilterPille>
+  );
 }
