@@ -2,6 +2,7 @@ import { CSSProperties, ReactNode } from "react";
 import type { StandortUebersichtDto } from "@zimmerakte/shared";
 import type { KachelDef } from "../components/KachelRaster";
 import { formatBetrag, formatDatum } from "../format";
+import { standardPlatz } from "./anordnung";
 
 /**
  * Die Listen-Kacheln der frueheren Standort-Uebersicht (Menuepunkt
@@ -64,10 +65,9 @@ export interface StandortKachelSicht {
 }
 
 /**
- * Standardplaetze UNTER bzw. NEBEN den bisherigen Heute-Kacheln (Haus-Kasse
- * fuellt die Luecke unter "Zu erledigen" neben "Mitarbeitende", die Listen
- * kommen darunter): wer sein Heute schon angeordnet hat, findet die neuen
- * Kacheln angehaengt statt mitten in seinem Layout.
+ * Standardplaetze stehen zentral in dashboard/anordnung.ts. Wer sein Heute
+ * schon angeordnet hat, findet Kacheln ohne gespeicherten Platz unten
+ * angehaengt statt mitten in seinem Layout (KachelRaster, ladeLayout).
  */
 export function standortKacheln(
   daten: StandortZusammen,
@@ -80,7 +80,7 @@ export function standortKacheln(
     k.push({
       id: "hauskasse",
       titel: "Haus-Kasse",
-      standard: { x: 0, y: 13, w: 8, h: 3 },
+      standard: standardPlatz("hauskasse"),
       minW: 2,
       minH: 3,
       inhalt: (
@@ -96,7 +96,7 @@ export function standortKacheln(
     k.push({
       id: "zimmerliste",
       titel: "Zimmer",
-      standard: { x: 0, y: 19, w: 6, h: 8 },
+      standard: standardPlatz("zimmerliste"),
       minW: 5,
       minH: 5,
       inhalt: (
@@ -151,7 +151,7 @@ export function standortKacheln(
     k.push({
       id: "klientenliste",
       titel: "Klient:innen",
-      standard: { x: 6, y: 19, w: 6, h: 8 },
+      standard: standardPlatz("klientenliste"),
       minW: 5,
       minH: 5,
       inhalt: (
@@ -200,7 +200,7 @@ export function standortKacheln(
     k.push({
       id: "letzte-buchungen",
       titel: "Letzte Buchungen",
-      standard: { x: 0, y: 27, w: 12, h: 6 },
+      standard: standardPlatz("letzte-buchungen"),
       minW: 6,
       minH: 5,
       inhalt: (

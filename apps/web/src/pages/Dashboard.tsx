@@ -2,11 +2,12 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { DashboardDto, StandortDto, StandortUebersichtDto, TerminDto } from "@zimmerakte/shared";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { api } from "../api/client";
-import { KachelRaster, type KachelDef } from "../components/KachelRaster";
+import { KachelRaster, nurAltesLayout, type KachelDef } from "../components/KachelRaster";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
 import { Filterleiste, StandortFilter } from "../components/Listenfilter";
 import {
+  IAbbrechen,
   IAnpassen,
   IFehler,
   ILeerAufgaben,
@@ -33,6 +34,15 @@ import {
 } from "../dashboard/sichtbarkeit";
 import { filtere, standortKacheln, zusammenfuehren } from "../dashboard/standortKacheln";
 import { AuslastungTacho } from "../dashboard/AuslastungTacho";
+import {
+  ABSCHNITT_HOEHE,
+  abschnitteSpeichern,
+  ladeAbschnitte,
+  neueAbschnittId,
+  STANDARD_ABSCHNITTE,
+  standardPlatz,
+  type Abschnitt,
+} from "../dashboard/anordnung";
 import type { Tab } from "../navigation";
 
 /**
@@ -155,6 +165,14 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
   // dann fehlen nur diese Kacheln, der Rest von Heute bleibt.
   const [standortTeile, setStandortTeile] = useState<StandortUebersichtDto[] | null>(null);
   const [suche, setSuche] = useState("");
+  const layoutSchluessel = `zimmerakte_heute_layout_${nutzerId}`;
+  const [abschnitte, setAbschnitte] = useState<Abschnitt[]>(() => ladeAbschnitte(nutzerId, nurAltesLayout(layoutSchluessel)));
+  const [neuerAbschnitt, setNeuerAbschnitt] = useState<string | null>(null);
+
+  // nutzerId kommt beim ersten Rendern ggf. noch als Platzhalter.
+  useEffect(() => {
+    setAbschnitte(ladeAbschnitte(nutzerId, nurAltesLayout(layoutSchluessel)));
+  }, [nutzerId, layoutSchluessel]);
 
   useEffect(() => {
     api
@@ -245,6 +263,25 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
   function zuruecksetzen() {
     sichtbarkeitZuruecksetzen();
     setSichtbarkeit(standardSichtbarkeit(istLeitung));
+  }
+
+  function abschnitteAendern(naechste: Abschnitt[]) {
+    setAbschnitte(naechste);
+    abschnitteSpeichern(nutzerId, naechste);
+  }
+
+  function abschnittHinzufuegen() {
+    const id = neueAbschnittId();
+    abschnitteAendern([...abschnitte, { id, titel: "Neuer Abschnitt" }]);
+    setNeuerAbschnitt(id);
+  }
+
+  // Gehoert zur Anordnung: "Anordnung zurücksetzen" stellt auch die
+  // Standard-Abschnitte wieder her, weil die Standardanordnung mit ihnen
+  // gebaut ist -- ohne sie stuenden Luecken an ihrer Stelle.
+  function abschnitteZuruecksetzen() {
+    abschnitteSpeichern(nutzerId, null);
+    setAbschnitte(STANDARD_ABSCHNITTE);
   }
 
   const heute = lokalesDatum(jetzt);
@@ -445,10 +482,25 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
 
   const kacheln: KachelDef[] | null = daten
     ? [
+        // Abschnitte: Ueberschriften zum Gliedern, halb so hoch wie eine
+        // Kennzahl und in der Hoehe fest (minH = maxH) -- nur die Breite ist
+        // frei, damit ein Abschnitt auch eine einzelne Spalte ueberschreiben kann.
+        ...abschnitte.map(
+          (a): KachelDef => ({
+            id: a.id,
+            titel: `Abschnitt ${a.titel}`,
+            standard: standardPlatz(a.id, { w: 12, h: ABSCHNITT_HOEHE }),
+            minW: 2,
+            minH: ABSCHNITT_HOEHE,
+            maxH: ABSCHNITT_HOEHE,
+            art: "abschnitt",
+            inhalt: <h3 className="zv-abschnitt-titel">{a.titel.trim() || "Abschnitt"}</h3>,
+          }),
+        ),
         ...lageSpalten.map((sp, i): KachelDef => ({
           id: `lage-${sp.schluessel}`,
           titel: sp.label,
-          standard: { x: i * 3, y: 0, w: 3, h: 3 },
+          standard: standardPlatz(`lage-${sp.schluessel}`, { w: 3, h: 3 }),
           minW: 2,
           minH: 3,
           inhalt: (
@@ -464,9 +516,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
               {
                 id: "auslastung",
                 titel: "Auslastung",
-                // Vorlaeufiger Platz; die Standardanordnung von Heute wird
-                // gesondert festgelegt. Kollisionen loest KachelRaster.ordnen.
-                standard: { x: 0, y: 0, w: 4, h: 4 },
+                standard: standardPlatz("auslastung"),
                 minW: 3,
                 minH: 4,
                 inhalt: (
@@ -481,7 +531,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
         {
           id: "zu-erledigen",
           titel: "Zu erledigen",
-          standard: { x: 0, y: 3, w: 8, h: 10 },
+          standard: standardPlatz("zu-erledigen"),
           minW: 4,
           minH: 4,
           inhalt: (
@@ -549,7 +599,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
               {
                 id: "termine",
                 titel: "Termine heute",
-                standard: { x: 8, y: 3, w: 4, h: 5 },
+                standard: standardPlatz("termine"),
                 minW: 3,
                 minH: 3,
                 inhalt: (
@@ -583,7 +633,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
               {
                 id: "freie-zimmer",
                 titel: "Freie Zimmer",
-                standard: { x: 8, y: 8, w: 4, h: 5 },
+                standard: standardPlatz("freie-zimmer"),
                 minW: 3,
                 minH: 3,
                 inhalt: (
@@ -617,7 +667,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
               {
                 id: "mitarbeitende",
                 titel: "Mitarbeitende",
-                standard: { x: 8, y: 13, w: 4, h: 3 },
+                standard: standardPlatz("mitarbeitende"),
                 minW: 3,
                 minH: 2,
                 inhalt: (
@@ -729,7 +779,12 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
 
       {daten && kacheln && (
         <div className="zv-heute" style={{ opacity: wirdGeladen ? 0.6 : 1 }}>
-          <KachelRaster speicherSchluessel={`zimmerakte_heute_layout_${nutzerId}`} kacheln={kacheln} />
+          <KachelRaster
+            speicherSchluessel={layoutSchluessel}
+            kacheln={kacheln}
+            onZuruecksetzen={abschnitteZuruecksetzen}
+            weitereAnpassung={JSON.stringify(abschnitte) !== JSON.stringify(STANDARD_ABSCHNITTE)}
+          />
         </div>
       )}
 
@@ -747,6 +802,43 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
         <button className="zv-btn zv-btn-still" onClick={zuruecksetzen} style={{ marginTop: 20 }}>
           <IZuruecksetzen />
           Zurücksetzen
+        </button>
+
+        <h3 className="zv-anpassen-abschnitte-titel">Abschnitte</h3>
+        <p className="zv-sub">Überschriften, mit denen du Heute gliederst. Neue erscheinen unten und lassen sich wie Kacheln verschieben.</p>
+        <ul className="zv-abschnitt-liste">
+          {abschnitte.map((a) => (
+            <li key={a.id} className="zv-field zv-abschnitt-zeile">
+              <input
+                type="text"
+                value={a.titel}
+                maxLength={60}
+                aria-label="Name des Abschnitts"
+                placeholder="Abschnitt"
+                autoFocus={a.id === neuerAbschnitt}
+                onFocus={(e) => {
+                  if (a.id === neuerAbschnitt) {
+                    e.currentTarget.select();
+                    setNeuerAbschnitt(null);
+                  }
+                }}
+                onChange={(e) => abschnitteAendern(abschnitte.map((b) => (b.id === a.id ? { ...b, titel: e.target.value } : b)))}
+              />
+              <button
+                type="button"
+                className="zv-icon-btn"
+                aria-label={`Abschnitt ${a.titel || "ohne Namen"} entfernen`}
+                title="Abschnitt entfernen"
+                onClick={() => abschnitteAendern(abschnitte.filter((b) => b.id !== a.id))}
+              >
+                <IAbbrechen />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="zv-btn zv-btn-sekundaer" onClick={abschnittHinzufuegen}>
+          <INeu />
+          Abschnitt hinzufügen
         </button>
       </Seitenpanel>
     </div>
