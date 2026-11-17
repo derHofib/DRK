@@ -9,11 +9,13 @@
       "types": "./src/index.ts",
       "zimmerakte-laufzeit": "./dist/index.js",
       "default": "./src/index.ts"
-    }
+    },
+    "./schriften/*": "./schriften/*"
   },
   "files": [
     "src",
-    "dist"
+    "dist",
+    "schriften"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",

@@ -88,40 +88,74 @@ const KOPF_SCHRIFT = 8.5;
 const ZELLEN_RAND = 4;
 
 /**
+ * Ersetzt jedes Zeichen, das nicht im Zeichenvorrat der Schrift liegt, durch
+ * "?", und Steuerzeichen (Zeilenumbruch, Tab) durch ein Leerzeichen.
+ * Exportiert fuer scripts/export-pruefung.mjs.
+ */
+export function druckbarerText(text: string, vorrat: ReadonlySet<number>): string {
+  return Array.from(text.replace(/[\r\n\t]+/g, " "))
+    .map((z) => (vorrat.has(z.codePointAt(0)!) ? z : "?"))
+    .join("");
+}
+
+/** Die beiden Schnitte als TrueType-Bytes. */
+export interface PdfSchriften {
+  normal: Uint8Array;
+  fett: Uint8Array;
+}
+
+/**
+ * Nunito Sans wie in der Oberflaeche und in den Server-PDFs (dieselben
+ * Dateien aus packages/shared/schriften, Begruendung dort in
+ * apps/api/src/common/pdf-schrift.ts). Erst beim Klick geladen (~2 x 107 kB):
+ * die meisten Seitenaufrufe exportieren nie etwas.
+ */
+async function schriftenAusBundle(): Promise<PdfSchriften> {
+  const [{ default: normalUrl }, { default: fettUrl }] = await Promise.all([
+    import("@zimmerakte/shared/schriften/NunitoSans-Regular.ttf?url"),
+    import("@zimmerakte/shared/schriften/NunitoSans-Bold.ttf?url"),
+  ]);
+  const hole = async (url: string) => {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Schrift für den PDF-Export nicht ladbar (${r.status}).`);
+    return new Uint8Array(await r.arrayBuffer());
+  };
+  const [normal, fett] = await Promise.all([hole(normalUrl), hole(fettUrl)]);
+  return { normal, fett };
+}
+
+/**
  * pdf-lib wird erst beim Klick nachgeladen: es ist gross (~500 kB) und wird
  * von den allerwenigsten Seitenaufrufen gebraucht -- im Hauptbundle waere es
  * Ballast fuer jede Anmeldung, auch auf dem Mobilnetz.
+ *
+ * `ladeSchriften` ist austauschbar, damit scripts/export-pruefung.mjs ohne
+ * Browser (ohne fetch auf Vite-URLs) dieselbe Funktion pruefen kann.
  */
-export async function erzeugePdf(liste: ListenExport, jetzt: Date = new Date()): Promise<Uint8Array> {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+export async function erzeugePdf(
+  liste: ListenExport,
+  jetzt: Date = new Date(),
+  ladeSchriften: () => Promise<PdfSchriften> = schriftenAusBundle,
+): Promise<Uint8Array> {
+  const [{ PDFDocument, rgb }, { default: fontkit }, schriften] = await Promise.all([
+    import("pdf-lib"),
+    import("@pdf-lib/fontkit"),
+    ladeSchriften(),
+  ]);
   const dok = await PDFDocument.create();
-  const normal = await dok.embedFont(StandardFonts.Helvetica);
-  const fett = await dok.embedFont(StandardFonts.HelveticaBold);
+  dok.registerFontkit(fontkit);
+  const normal = await dok.embedFont(schriften.normal, { subset: true });
+  const fett = await dok.embedFont(schriften.fett, { subset: true });
   dok.setTitle(liste.titel);
   dok.setCreator("Zimmerakte");
 
-  // Die Standardschriften kennen nur WinAnsi (Umlaute, Anfuehrungszeichen,
-  // Gedankenstrich ja; Emoji, Sonderzeichen anderer Schriftsysteme nein).
-  // encodeText wirft bei einem unbekannten Zeichen -- statt das ganze PDF
-  // scheitern zu lassen, wird genau dieses Zeichen durch ein Fragezeichen
-  // ersetzt. Steuerzeichen (Zeilenumbruch, Tab) werden vorher zu Leerzeichen.
-  const zeichenCache = new Map<string, string>();
-  const bereinige = (text: string): string =>
-    Array.from(text.replace(/[\r\n\t]+/g, " "))
-      .map((z) => {
-        let r = zeichenCache.get(z);
-        if (r === undefined) {
-          try {
-            normal.encodeText(z);
-            r = z;
-          } catch {
-            r = "?";
-          }
-          zeichenCache.set(z, r);
-        }
-        return r;
-      })
-      .join("");
+  // Zeichen, die die Schrift nicht hat (Emoji, Symbole), wuerden als leeres
+  // Kaestchen gedruckt -- encodeText wirft bei eingebetteten Schriften
+  // nicht mehr wie frueher bei Helvetica, also wird gegen den Zeichenvorrat
+  // der Schrift geprueft und genau dieses Zeichen durch "?" ersetzt.
+  // Steuerzeichen (Zeilenumbruch, Tab) werden vorher zu Leerzeichen.
+  const vorrat = new Set(normal.getCharacterSet().filter((c) => fett.getCharacterSet().includes(c)));
+  const bereinige = (text: string) => druckbarerText(text, vorrat);
 
   const gesamt = liste.spalten.reduce((s, c) => s + c.breite, 0);
   const nutzbreite = SEITE_BREITE - 2 * RAND;

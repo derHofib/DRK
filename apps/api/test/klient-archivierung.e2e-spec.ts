@@ -23,6 +23,7 @@ import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
+import { pdfSchriften } from "./support/pdf-schriften";
 
 describe("Klient archivieren: Rollen-Gate, Schreibsperre, PDF-Snapshot, Reversibilitaet", () => {
   let app: INestApplication;
@@ -173,6 +174,8 @@ describe("Klient archivieren: Rollen-Gate, Schreibsperre, PDF-Snapshot, Reversib
     expect(download.headers["content-disposition"]).toContain("attachment");
     expect(download.headers["x-datei-hash"]).toBeDefined();
     expect(Buffer.from(download.body as Buffer).subarray(0, 5).toString()).toBe("%PDF-");
+    // Rueckmeldung "schriftart": auch die Archiv-Ablage in Nunito Sans.
+    expect(await pdfSchriften(Buffer.from(download.body as Buffer))).toEqual(["NunitoSans-Bold", "NunitoSans-Regular"]);
   });
 
   it("lehnt ein zweites Archivieren desselben Klienten mit 409 ab", async () => {

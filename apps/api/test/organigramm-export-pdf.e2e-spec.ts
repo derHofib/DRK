@@ -18,6 +18,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { pdfSchriften } from "./support/pdf-schriften";
 
 describe("Organigramm: GET /organigramm/export/pdf", () => {
   let app: INestApplication;
@@ -150,6 +151,8 @@ describe("Organigramm: GET /organigramm/export/pdf", () => {
     expect(body.length).toBeGreaterThan(0);
     // Magic-Bytes eines PDF-Dokuments ("%PDF-"), Muster: klient-archivierung.e2e-spec.ts.
     expect(body.subarray(0, 5).toString()).toBe("%PDF-");
+    // Rueckmeldung "schriftart": auch Ausdrucke in Nunito Sans.
+    expect(await pdfSchriften(body)).toEqual(["NunitoSans-Bold", "NunitoSans-Regular"]);
   });
 
   it("ohne organigramm.ansehen -> 403", async () => {
