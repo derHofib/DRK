@@ -5663,6 +5663,59 @@ button[class],
 }
 .zv-kachel-stat .zv-stat-achtung { color: var(--zv-achtung-text); }
 
+/* Auslastungs-Tacho (dashboard/AuslastungTacho.tsx). Der Farbton jedes
+   Segments kommt per --zv-tacho-h aus dem JavaScript, Helligkeit und
+   Buntheit stehen hier fest je Theme (CLAUDE.md, Regel 7). Die Werte halten
+   >= 3:1 gegen die Kachelflaeche (Nicht-Text-Kontrast) ueber die ganze
+   Skala -- die Zahl steht ohnehin auch als Text daneben. */
+.zv-tacho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2) var(--zv-space-4);
+}
+.zv-tacho-svg {
+  display: block;
+  flex: none;
+  width: 132px;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.zv-tacho-spur,
+.zv-tacho-segment,
+.zv-tacho-fuellung {
+  fill: none;
+  stroke-linecap: butt;
+}
+.zv-tacho-spur { stroke: var(--zv-border); }
+.zv-tacho-segment {
+  stroke: light-dark(oklch(0.62 0.16 var(--zv-tacho-h)), oklch(0.74 0.15 var(--zv-tacho-h)));
+}
+.zv-tacho-maske { mask-type: alpha; }
+.zv-tacho-fuellung {
+  stroke: var(--zv-text);
+  /* Faellt bei prefers-reduced-motion ueber die globale Regel in
+     tokens.css weg. */
+  transition: stroke-dasharray var(--zv-transition-base);
+}
+.zv-tacho-strich {
+  stroke: var(--zv-text);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.zv-tacho-wert {
+  fill: var(--zv-text);
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-semibold);
+}
+.zv-tacho-text { min-width: 0; flex: 1 1 8rem; }
+.zv-tacho-text p { margin: 0; }
+.zv-tacho-zeile {
+  font-size: var(--zv-text-basis);
+  overflow-wrap: break-word;
+}
+
 /* Zu-erledigen-Zeilen richten sich nach der Breite der KACHEL, nicht des
    Fensters: auf dem Desktop kann die Kachel schmal gezogen sein. */
 @container (max-width: 520px) {
