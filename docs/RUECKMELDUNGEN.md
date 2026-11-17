@@ -48,6 +48,9 @@ Status: `neu → freigegeben → in_arbeit → umgesetzt`; Seitenwege `rueckfrag
 1. `pnpm --filter @zimmerakte/api rueckmeldung-token` erzeugt Token und Hash.
 2. Hash als `RUECKMELDUNG_SERVICE_TOKEN_HASH` in die `.env` des Servers, API neu
    starten. Ohne Hash antwortet `/service/rueckmeldungen` mit 404.
+   Im Produktions-Stack ist das die `.env.prod`; `docker-compose.prod.yml` reicht
+   die Variable an den api-Container durch (Neustart:
+   `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d api`).
 3. Klartext-Token **nur** in die Secrets der Claude-Umgebung
    (`ZIMMERAKTE_RUECKMELDUNG_TOKEN`) plus `ZIMMERAKTE_API_URL` (ohne `/api`),
    die Domain in die Netzwerk-Allowlist. Nie ins Repo.
