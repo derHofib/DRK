@@ -1,4 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { personFarbStil } from "../personFarbe";
 import type { AccountTypDto, BenutzerListEintragDto, OrgUnitDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { AktionsMenue } from "../components/AktionsMenue";
@@ -365,7 +366,11 @@ export function Mitarbeitende() {
           </div>
           {sichtbareBenutzer.map((b) => (
             <div key={b.id} className="zv-info-karte">
-              <span className="zv-liste-zelle-titel">{b.name}</span>
+              <span className="zv-liste-zelle-titel">
+                {/* Dieselbe Farbe wie im Kalender (personFarbe.ts). */}
+                <span className="zv-person-punkt zv-person-farbe" style={personFarbStil(b.farbIndex)} title="Farbe im Kalender" aria-hidden="true" />
+                {b.name}
+              </span>
               <span className="zv-liste-zelle" data-label="E-Mail">
                 <strong>{b.email}</strong>
               </span>
