@@ -131,6 +131,7 @@ const BREITE_REITER = new Set<Tab>([
   "aufgaben",
   "vertretung",
   "organigramm",
+  "rueckmeldungen",
 ]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
