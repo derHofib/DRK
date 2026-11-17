@@ -220,7 +220,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // Welcher Standort unter "Standorte > Belegung" offen ist; null = noch keiner
   // gewaehlt, dann der erste. Hier statt im Tab-Wert, damit "Belegung" in der
   // Seitenleiste ein einziger Eintrag bleibt.
-  const [belegungStandortId, setBelegungStandortId] = useState<string | null>(null);
+  // Leere Liste = alle Standorte (gruppiert), siehe StandortMehrfachFilter.
+  const [belegungStandortIds, setBelegungStandortIds] = useState<string[]>([]);
   const unterpunkteVon = (haupt: HauptReiter): UnterpunktEintrag[] | undefined => UNTERPUNKTE[haupt];
   // Alle Hauptpunkte in Menuereihenfolge (Gruppen nacheinander, Einstellungen
   // zuletzt) -- Grundlage fuer "Mehr" auf dem Handy und fuer Panel-Titel.
@@ -434,9 +435,10 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   const belegungOeffnen = useCallback(
     (standortId: string | null) => {
       // "Standorte" ist seit der Zusammenlegung mit Heute (siehe
-      // dashboard/standortKacheln.tsx) direkt die Belegung EINES Standorts;
-      // ohne Angabe bleibt der zuletzt gewaehlte bzw. der erste.
-      if (standortId) setBelegungStandortId(standortId);
+      // dashboard/standortKacheln.tsx) direkt die Belegung. Ein Sprung von
+      // einem bestimmten Standort aus zeigt genau diesen; ohne Angabe bleibt
+      // die zuletzt gewaehlte Auswahl (anfangs: alle).
+      if (standortId) setBelegungStandortIds([standortId]);
       geheZu("standorte");
     },
     [geheZu],
@@ -872,8 +874,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "standorte" && standorteGeladen && standorte.length === 0 && (
             <Leerzustand icon={ILeerStandorte}>Ihnen ist kein Standort zugeordnet.</Leerzustand>
           )}
-          {tab === "standorte" && (belegungStandortId ?? standorte[0]?.id) && (
-            <StandortRaeume key={belegungStandortId ?? standorte[0].id} standortId={(belegungStandortId ?? standorte[0].id)} onStandortWaehlen={belegungOeffnen} />
+          {tab === "standorte" && standorte.length > 0 && (
+            <StandortRaeume standortIds={belegungStandortIds} onStandorteWaehlen={setBelegungStandortIds} />
           )}
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}

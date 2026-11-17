@@ -14,6 +14,7 @@ import { IAnpassen, IBaumAnsicht, IErfolg, IFehler, ILeerAnwaerter, IPerson, IPr
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
+import { STANDARD_REITER, UNTERPUNKTE } from "../navigation";
 
 const PILL: Record<RueckmeldungStatus, string> = {
   neu: "zv-pill zv-pill-info",
@@ -43,6 +44,42 @@ type Sortierung = "neueste" | "aelteste" | "prioritaet";
 const SORTIERUNG_LABEL: Record<Sortierung, string> = { neueste: "Neueste zuerst", aelteste: "Älteste zuerst", prioritaet: "Priorität" };
 
 const SPALTEN = { "--zv-liste-spalten": "minmax(0,2.4fr) minmax(64px,0.7fr) minmax(84px,0.8fr) minmax(0,1.2fr) minmax(120px,1fr) minmax(110px,0.9fr)" } as CSSProperties;
+
+/**
+ * Rahmenbedingungen lesbar statt als Rohschluessel ("viewport",
+ * "theme: dunkel", ISO-Zeitstempel): feste Reihenfolge, deutsche
+ * Bezeichnungen, formatierte Werte. "unbekannt" und leere Werte entfallen --
+ * sie sagen nichts und machten die Liste nur laenger. Unbekannte Schluessel
+ * (neuere App-Version) erscheinen trotzdem, mit ihrem Rohnamen.
+ */
+const KONTEXT_LABEL: Record<string, string> = {
+  seite: "Seite",
+  rolle: "Rolle",
+  zeitpunkt: "Zeitpunkt",
+  theme: "Darstellung",
+  viewport: "Fenstergröße",
+  browser: "Browser",
+  betriebssystem: "Betriebssystem",
+  appVersion: "App-Version",
+};
+const SEITEN_LABEL: Record<string, string> = Object.fromEntries([
+  ...STANDARD_REITER.map((r) => [r.wert, r.label] as const),
+  ...Object.values(UNTERPUNKTE).flatMap((l) => l!.map((u) => [u.wert, u.label] as const)),
+  ["rueckmeldungen", "Rückmeldungen"],
+]);
+function kontextZeilen(kontext: RueckmeldungDetailDto["kontext"]): [string, string][] {
+  const schluessel = [...Object.keys(KONTEXT_LABEL), ...Object.keys(kontext).filter((k) => !(k in KONTEXT_LABEL))];
+  return schluessel.flatMap((k): [string, string][] => {
+    const roh = (kontext as Record<string, unknown>)[k];
+    if (roh === undefined || roh === null || roh === "" || roh === "unbekannt") return [];
+    let wert = String(roh);
+    if (k === "seite") wert = SEITEN_LABEL[wert] ?? wert;
+    else if (k === "theme") wert = wert === "dunkel" ? "Dunkel" : wert === "hell" ? "Hell" : wert;
+    else if (k === "viewport") wert = wert.replace("x", " × ") + " px";
+    else if (k === "zeitpunkt" && !Number.isNaN(Date.parse(wert))) wert = datum(wert);
+    return [[KONTEXT_LABEL[k] ?? k, wert]];
+  });
+}
 
 const datum = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
@@ -307,6 +344,7 @@ export function Rueckmeldungen({ mandant, onGeaendert }: { mandant: MandantDto |
 function Detail({ id, weitergabe, onGeaendert }: { id: string; weitergabe: boolean; onGeaendert: () => void }) {
   const [r, setR] = useState<RueckmeldungDetailDto | null>(null);
   const [bildUrl, setBildUrl] = useState<string | null>(null);
+  const [bildFehler, setBildFehler] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [notiz, setNotiz] = useState("");
   const [arbeitet, setArbeitet] = useState(false);
@@ -322,7 +360,10 @@ function Detail({ id, weitergabe, onGeaendert }: { id: string; weitergabe: boole
         setNotiz(d.entscheidungsnotiz ?? "");
         if (d.hatBild) {
           url = await api.rueckmeldungBildUrl(id).catch(() => null);
-          if (!abgebrochen) setBildUrl(url);
+          if (!abgebrochen) {
+            setBildUrl(url);
+            setBildFehler(url === null);
+          }
         }
       })
       .catch((err) => !abgebrochen && setFehler(err instanceof Error ? err.message : "Laden fehlgeschlagen."));
@@ -373,15 +414,24 @@ function Detail({ id, weitergabe, onGeaendert }: { id: string; weitergabe: boole
   }
 
   const gesperrt = r.status === "umgesetzt";
+  const kontext = kontextZeilen(r.kontext);
   return (
-    <div>
-      <h3>{r.titel}</h3>
-      <p>
-        <span className={PILL[r.status]}>{RUECKMELDUNG_STATUS_LABEL[r.status]}</span>{" "}
-        <span className="zv-sub-inline">
-          {r.art === "idee" ? "Idee" : "Fehler"} · Priorität {r.prioritaet} · {r.erstelltVonName} · {datum(r.erstelltAm)}
-        </span>
-      </p>
+    <div className="zv-rm-detail">
+      <header className="zv-rm-detail-kopf">
+        <h3>{r.titel}</h3>
+        <div className="zv-rm-detail-pillen">
+          <span className={PILL[r.status]}>{RUECKMELDUNG_STATUS_LABEL[r.status]}</span>
+          <span className="zv-pill">{ART_LABEL[r.art]}</span>
+          <span className={`zv-pill${r.prioritaet === "blockierend" || r.prioritaet === "hoch" ? " zv-pill-achtung" : ""}`}>
+            Priorität {PRIO_LABEL[r.prioritaet]}
+          </span>
+        </div>
+        <p className="zv-sub-inline">
+          Gemeldet von {r.erstelltVonName} am {datum(r.erstelltAm)}
+          {r.freigegebenAm && ` · freigegeben ${r.freigegebenVonName ? `von ${r.freigegebenVonName} ` : ""}am ${datum(r.freigegebenAm)}`}
+        </p>
+      </header>
+
       {fehler && (
         <div className="zv-hinweis zv-hinweis-fehler">
           <IFehler />
@@ -389,89 +439,114 @@ function Detail({ id, weitergabe, onGeaendert }: { id: string; weitergabe: boole
         </div>
       )}
 
-      <h4>{r.art === "idee" ? "Was soll sich ändern?" : "Was ist passiert?"}</h4>
-      <p style={{ whiteSpace: "pre-wrap" }}>{r.beschreibung}</p>
-      {r.erwartet && (
-        <>
-          <h4>{r.art === "idee" ? "Warum?" : "Erwartet"}</h4>
-          <p style={{ whiteSpace: "pre-wrap" }}>{r.erwartet}</p>
-        </>
-      )}
+      <section className="zv-rm-detail-abschnitt">
+        <h4>{r.art === "idee" ? "Was soll sich ändern?" : "Was ist passiert?"}</h4>
+        <p className="zv-rm-detail-text">{r.beschreibung}</p>
+        {r.erwartet && (
+          <>
+            <h4>{r.art === "idee" ? "Warum?" : "Erwartet"}</h4>
+            <p className="zv-rm-detail-text">{r.erwartet}</p>
+          </>
+        )}
+      </section>
 
-      {r.hatBild && bildUrl && (
-        <>
+      {r.hatBild && (
+        <section className="zv-rm-detail-abschnitt">
           <h4>Screenshot</h4>
-          <img src={bildUrl} alt="Screenshot der Seite, Texte sind unkenntlich gemacht" style={{ maxWidth: "100%", borderRadius: "var(--zv-radius-s)", border: "1px solid var(--zv-border)" }} />
+          {bildUrl ? (
+            <a className="zv-rm-detail-bild" href={bildUrl} target="_blank" rel="noreferrer noopener" title="In voller Größe öffnen">
+              {/* Laesst sich das Bild nicht dekodieren, lieber ein Satz als das
+                  kaputte Bild-Symbol des Browsers. */}
+              <img
+                src={bildUrl}
+                alt="Screenshot der Seite, Texte sind unkenntlich gemacht"
+                onError={() => {
+                  setBildUrl(null);
+                  setBildFehler(true);
+                }}
+              />
+            </a>
+          ) : (
+            <p className="zv-sub-inline">{bildFehler ? "Der Screenshot konnte nicht geladen werden." : "Lädt…"}</p>
+          )}
           {!gesperrt && (
-            <p>
+            <p className="zv-rm-detail-hinweis">
               <button type="button" className="zv-btn zv-btn-still zv-btn-klein" onClick={bildVerwerfen} disabled={arbeitet}>
                 Screenshot verwerfen
               </button>
-              <span className="zv-sub-inline"> Falls doch etwas Personenbezogenes zu erkennen ist.</span>
+              <span className="zv-sub-inline">Falls doch etwas Personenbezogenes zu erkennen ist.</span>
             </p>
           )}
-        </>
+        </section>
       )}
 
-      <h4>Rahmenbedingungen</h4>
-      <dl className="zv-detail-liste">
-        {Object.entries(r.kontext).map(([k, v]) => (
-          <div key={k}>
-            <dt>{k}</dt>
-            <dd>{String(v)}</dd>
-          </div>
-        ))}
-      </dl>
-
-      {r.bearbeitungsnotiz && (
-        <div className="zv-hinweis zv-hinweis-info">
-          <strong>Notiz aus der Umsetzung:</strong> {r.bearbeitungsnotiz}
-        </div>
-      )}
-      {r.prUrl && (
-        <p>
-          <a href={r.prUrl} target="_blank" rel="noreferrer noopener">
-            Umsetzung ansehen
-          </a>
-        </p>
+      {kontext.length > 0 && (
+        <section className="zv-rm-detail-abschnitt">
+          <h4>Rahmenbedingungen</h4>
+          <dl className="zv-kontext-raster">
+            {kontext.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       )}
 
-      {gesperrt ? (
-        <div className="zv-hinweis zv-hinweis-erfolg">
-          <IErfolg />
-          Umgesetzt – abgeschlossen.
-        </div>
-      ) : (
-        <>
-          <div className="zv-field">
-            <label htmlFor="rueckmeldung-notiz">Notiz an die meldende Person bzw. den Hersteller (bei Rückfrage und Ablehnung Pflicht)</label>
-            <textarea id="rueckmeldung-notiz" rows={2} maxLength={2000} value={notiz} onChange={(e) => setNotiz(e.target.value)} />
-          </div>
-          {r.status !== "freigegeben" && r.status !== "in_arbeit" && (
-            <p className="zv-sub-inline">
-              {weitergabe
-                ? "Mit der Freigabe darf der Hersteller diese Rückmeldung lesen und umsetzen."
-                : "Die Freigabe bleibt intern, solange die Weitergabe an den Hersteller ausgeschaltet ist."}
+      {(r.bearbeitungsnotiz || r.prUrl) && (
+        <section className="zv-rm-detail-abschnitt">
+          <h4>Umsetzung</h4>
+          {r.bearbeitungsnotiz && <p className="zv-rm-detail-text">{r.bearbeitungsnotiz}</p>}
+          {r.prUrl && (
+            <p>
+              <a href={r.prUrl} target="_blank" rel="noreferrer noopener">
+                Umsetzung ansehen
+              </a>
             </p>
           )}
-          <div className="zv-aktionszeile">
+        </section>
+      )}
+
+      <section className="zv-rm-detail-abschnitt zv-rm-detail-entscheidung">
+        {gesperrt ? (
+          <div className="zv-hinweis zv-hinweis-erfolg">
+            <IErfolg />
+            Umgesetzt – abgeschlossen.
+          </div>
+        ) : (
+          <>
+            <h4>Entscheidung</h4>
+            <div className="zv-field">
+              <label htmlFor="rueckmeldung-notiz">Notiz an die meldende Person bzw. den Hersteller (bei Rückfrage und Ablehnung Pflicht)</label>
+              <textarea id="rueckmeldung-notiz" rows={3} maxLength={2000} value={notiz} onChange={(e) => setNotiz(e.target.value)} />
+            </div>
             {r.status !== "freigegeben" && r.status !== "in_arbeit" && (
-              <button type="button" className="zv-btn" onClick={() => entscheiden("freigegeben")} disabled={arbeitet}>
-                Freigeben
-              </button>
+              <p className="zv-sub-inline">
+                {weitergabe
+                  ? "Mit der Freigabe darf der Hersteller diese Rückmeldung lesen und umsetzen."
+                  : "Die Freigabe bleibt intern, solange die Weitergabe an den Hersteller ausgeschaltet ist."}
+              </p>
             )}
-            <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => entscheiden("rueckfrage")} disabled={arbeitet || !notiz.trim()}>
-              Rückfrage
-            </button>
-            <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => entscheiden("duplikat")} disabled={arbeitet}>
-              Duplikat
-            </button>
-            <button type="button" className="zv-btn zv-btn-gefahr" onClick={() => entscheiden("abgelehnt")} disabled={arbeitet || !notiz.trim()}>
-              Ablehnen
-            </button>
-          </div>
-        </>
-      )}
+            <div className="zv-aktionszeile">
+              {r.status !== "freigegeben" && r.status !== "in_arbeit" && (
+                <button type="button" className="zv-btn" onClick={() => entscheiden("freigegeben")} disabled={arbeitet}>
+                  Freigeben
+                </button>
+              )}
+              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => entscheiden("rueckfrage")} disabled={arbeitet || !notiz.trim()}>
+                Rückfrage
+              </button>
+              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => entscheiden("duplikat")} disabled={arbeitet}>
+                Duplikat
+              </button>
+              <button type="button" className="zv-btn zv-btn-gefahr" onClick={() => entscheiden("abgelehnt")} disabled={arbeitet || !notiz.trim()}>
+                Ablehnen
+              </button>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
