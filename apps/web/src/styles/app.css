@@ -3385,9 +3385,10 @@ li:last-child > .zv-kontakt-zeile,
   margin-bottom: var(--zv-space-3);
 }
 
-/* Jahresansicht: zwoelf Monate als Miniaturen. Die Tageszellen sind bewusst
-   keine Buttons (zu klein fuer ein sauberes Tippziel); angesprungen wird ueber
-   den Monatsnamen, der als 44-px-Knopf ausgelegt ist. */
+/* Jahresansicht: zwoelf Monate als Miniaturen. Angesprungen wird ueber den
+   Monatsnamen, der als 44-px-Knopf ausgelegt ist. Nur Tage MIT Terminen sind
+   Knoepfe -- sie oeffnen die Tagesvorschau (Hover, Tastaturfokus, Tippen).
+   Leere Tage bleiben Text, sonst laege man per Tab durch 365 Ziele. */
 .zv-kal-jahr {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
@@ -3396,6 +3397,7 @@ li:last-child > .zv-kontakt-zeile,
 }
 
 .zv-kal-mini {
+  position: relative;
   min-width: 0;
   padding: var(--zv-space-2);
   border: 1px solid var(--zv-border);
@@ -3440,14 +3442,69 @@ li:last-child > .zv-kontakt-zeile,
 }
 
 .zv-kal-mini-tag {
+  position: relative;
+  min-width: 0;
   padding: 2px 0;
+  border: none;
   border-radius: var(--zv-radius-s);
+  background: transparent;
   color: var(--zv-text);
+  font: inherit;
+  line-height: inherit;
+}
+
+button.zv-kal-mini-tag {
+  cursor: pointer;
+  overflow: hidden;
+}
+
+button.zv-kal-mini-tag:focus-visible {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+.zv-kal-mini-zahl {
+  position: relative;
 }
 
 .zv-kal-mini-tag.belegt {
   background: var(--zv-accent-soft);
   font-weight: var(--zv-weight-semibold);
+}
+
+/* Farbstreifen je Person, nebeneinander ueber die ganze Zelle: bei zwei
+   Personen an einem Tag sieht man beide Farben statt nur der ersten. */
+.zv-kal-mini-farben {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.zv-kal-mini-farben > span {
+  flex: 1 1 0;
+}
+
+.zv-kal-mini-tag.personfarbe {
+  color: var(--zv-text-auf-personflaeche);
+}
+
+/* Flaeche in Personenfarbe -- heller als .zv-person-farbe (Punkte), weil
+   hier eine Zahl daraufsteht: Helligkeit fest je Theme im CSS, der Farbton
+   kommt wie ueberall per --zv-person-h (CLAUDE.md, Regel 7). Beide Werte
+   halten mit --zv-text-auf-personflaeche >= 4,5:1 (gemessen, siehe Commit). */
+.zv-person-flaeche {
+  background: light-dark(oklch(0.84 0.1 var(--zv-person-h)), oklch(0.76 0.12 var(--zv-person-h)));
+}
+
+/* Von Klient:innen angelegter Termin neben einer Personenfarbe: unbunt, aber
+   in derselben festen Helligkeit, damit die Zahl darueber lesbar bleibt. */
+.zv-kal-mini-neutral {
+  background: light-dark(oklch(0.84 0 0), oklch(0.76 0 0));
+}
+
+.zv-kal-mini-tag.sammel {
+  background: var(--zv-kal-sammel-flaeche);
+  color: var(--zv-kal-sammel-text);
 }
 
 .zv-kal-mini-tag.abgesagt {
@@ -3457,8 +3514,80 @@ li:last-child > .zv-kontakt-zeile,
 
 .zv-kal-mini-tag.heute {
   outline: 1px solid var(--zv-accent);
-  color: var(--zv-accent-strong);
   font-weight: var(--zv-weight-semibold);
+}
+
+.zv-kal-mini-tag.heute:not(.personfarbe):not(.sammel) {
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-sammel-punkt {
+  background: var(--zv-kal-sammel-flaeche);
+  box-shadow: 0 0 0 1px var(--zv-border-strong);
+}
+
+/* Tagesvorschau: haengt am Monatskasten, nicht am Tag, und nimmt dessen volle
+   Breite -- so kann sie bei 390 px nie seitlich aus dem Bild ragen, egal ob
+   der Tag ganz links oder ganz rechts steht. */
+.zv-kal-vorschau {
+  position: absolute;
+  left: var(--zv-space-2);
+  right: var(--zv-space-2);
+  z-index: 20;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  box-shadow: var(--zv-shadow-2);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  text-align: left;
+  pointer-events: none;
+  /* Platz fuer die untere Navigationsleiste am Handy beim scrollIntoView. */
+  scroll-margin-bottom: var(--zv-space-7);
+}
+
+.zv-kal-vorschau-kopf {
+  display: block;
+  margin-bottom: var(--zv-space-1);
+}
+
+.zv-kal-vorschau ul {
+  display: grid;
+  gap: var(--zv-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zv-kal-vorschau li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-kal-vorschau li .zv-person-punkt {
+  margin-right: 0;
+}
+
+.zv-kal-vorschau-punkt {
+  background: var(--zv-text-faint);
+}
+
+.zv-kal-vorschau-zeit {
+  flex: none;
+  color: var(--zv-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.zv-kal-vorschau-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-kal-vorschau-text span {
+  color: var(--zv-text-muted);
 }
 
 .zv-kal-listenkopf {

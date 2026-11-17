@@ -262,6 +262,24 @@
   );
   --zv-text-gedaempft: var(--zv-text-faint);
 
+  /*
+   * Jahreskalender: Tageszellen in Personenfarbe tragen die Tageszahl als
+   * Text. Die Flaeche ist in BEIDEN Themes hell (siehe .zv-person-flaeche),
+   * also braucht die Zahl in beiden Themes dunkle Schrift -- --zv-text
+   * kippt im Dunkelmodus auf hell und laege dann bei ~1,5:1. Fester Wert
+   * = der helle --zv-text.
+   */
+  --zv-text-auf-personflaeche: oklch(0.243 0.0193 160);
+  /*
+   * Sammelfarbe fuer Tage mit mehr als drei Terminen: bewusst UNBUNT
+   * (invertierte Textfarbe). Die Personenfarben belegen ueber den goldenen
+   * Winkel den ganzen Farbkreis -- jeder bunte Ton koennte mit einer Person
+   * verwechselt werden, Schwarz/Weiss nicht. Kontrast der Zahl darauf ist
+   * der von Text auf Flaeche, nur vertauscht.
+   */
+  --zv-kal-sammel-flaeche: var(--zv-text);
+  --zv-kal-sammel-text: var(--zv-surface);
+
   /* ------------------------------------------------------------------
      Aufmerksamkeit -- Koralle, fest, nie dekorativ (siehe Kopf)
      ------------------------------------------------------------------ */
