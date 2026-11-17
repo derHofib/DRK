@@ -67,11 +67,13 @@ const STATUS_ICON = {
  * (siehe zimmer.service.ts), das Frontend ist hier absichtlich dumm.
  */
 /**
- * Mit "standortId" arbeitet die Seite eingebettet im Standort-Bereich
+ * Mit "standortIds" arbeitet die Seite eingebettet im Standort-Bereich
  * (StandortRaeume.tsx, Ansicht "Verwalten"): dieselben Funktionen wie im
  * Hauptmenue "Zimmer" -- anlegen, bearbeiten, deaktivieren, einziehen,
- * Auszug, Warteliste, Kapazitaet, Verlauf, Aufgaben --, aber nur fuer diesen
- * einen Standort, ohne Standortwahl und ohne eigene Ueberschrift. Bewusst
+ * Auszug, Warteliste, Kapazitaet, Verlauf, Aufgaben --, aber nur fuer die
+ * dort gewaehlten Standorte, ohne eigene Ueberschrift. Die Standortwahl
+ * kommt von der Belegungsseite (standortPille); Standort-Ueberschriften und
+ * die Standortauswahl beim Anlegen erscheinen nur, wenn es mehrere sind. Bewusst
  * KEINE zweite Kopie der Logik: zwei Implementierungen derselben
  * Belegungsregeln wuerden auseinanderlaufen.
  */
@@ -83,10 +85,10 @@ const ZIMMER_SORTIERUNG_LABEL: Record<ZimmerSortierung, string> = {
 };
 
 export function Zimmer({
-  standortId,
+  standortIds,
   standortPille,
 }: {
-  standortId?: string;
+  standortIds?: string[];
   /** Standortwahl der Belegungsseite, eingebettet als erste Pille der Filterleiste (sonst stuende sie in einer zweiten Zeile darueber). */
   standortPille?: ReactNode;
 } = {}) {
@@ -100,7 +102,10 @@ export function Zimmer({
   const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
 
   const [formularOffen, setFormularOffen] = useState(false);
-  const [standortAuswahl, setStandortAuswahl] = useState<string>(standortId ?? NEUER_STANDORT);
+  const eingebettet = standortIds !== undefined;
+  // Eingebettet mit genau einem Standort: kein Standortbezug in der Oberflaeche noetig.
+  const einStandort = standortIds?.length === 1 ? standortIds[0] : undefined;
+  const [standortAuswahl, setStandortAuswahl] = useState<string>(standortIds?.[0] ?? NEUER_STANDORT);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
@@ -158,7 +163,7 @@ export function Zimmer({
         // nicht erst auf (siehe unten), darf also auch nicht vorausgewaehlt
         // werden.
         const ersterAktiver = liste.find((s) => s.aktiv);
-        if (ersterAktiver && !standortId) setStandortAuswahl(ersterAktiver.id);
+        if (ersterAktiver && !eingebettet) setStandortAuswahl(ersterAktiver.id);
       })
       .catch((err) => setFehler(err.message));
   }
@@ -456,7 +461,7 @@ export function Zimmer({
   const [etageFilter, setEtageFilter] = useState("");
   const [sortierung, setSortierung] = useState<ZimmerSortierung>("nummer-auf");
 
-  const imBereich = zimmer.filter((z) => !standortId || z.standortId === standortId);
+  const imBereich = zimmer.filter((z) => !standortIds || standortIds.includes(z.standortId));
   const sichtbareZimmer = useMemo(() => {
     const nummer = (a: ZimmerListEintragDto, b: ZimmerListEintragDto) => a.nummer.localeCompare(b.nummer, "de", { numeric: true });
     return imBereich
@@ -477,9 +482,9 @@ export function Zimmer({
             return b.kapazitaet - b.bewohner.length - (a.kapazitaet - a.bewohner.length) || nummer(a, b);
         }
       });
-    // imBereich ist von zimmer/standortId abgeleitet
+    // imBereich ist von zimmer/standortIds abgeleitet
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zimmer, standortId, statusFilter, standortFilter, etageFilter, suche, sortierung]);
+  }, [zimmer, standortIds, statusFilter, standortFilter, etageFilter, suche, sortierung]);
   function zimmerExport(): ListenExport {
     return {
       titel: "Zimmer und Belegung",
@@ -567,7 +572,7 @@ export function Zimmer({
       )}
 
       <div className="zv-seiten-kopf">
-        {standortId ? <span /> : <h2>Zimmer</h2>}
+        {eingebettet ? <span /> : <h2>Zimmer</h2>}
         <button className="zv-btn" onClick={formularOeffnen}>
           <INeu />
           Neues Zimmer
@@ -585,7 +590,7 @@ export function Zimmer({
             ariaLabel="Zimmer filtern und sortieren"
             suche={{ wert: suche, onChange: setSuche, placeholder: "Zimmer, Bewohner:in…", ariaLabel: "Zimmer durchsuchen" }}
             zusatz={[
-              ...(standortId
+              ...(eingebettet
                 ? []
                 : [
                     {
@@ -642,7 +647,7 @@ export function Zimmer({
 
       {Object.entries(gruppen).map(([standortName, raum]) => (
         <div key={standortName} style={{ marginBottom: 28 }}>
-          {!standortId && (
+          {!einStandort && (
             <div className="zv-seiten-kopf">
               <h2>
                 <IStandort style={{ verticalAlign: "-3px", marginRight: 6 }} />
@@ -975,7 +980,7 @@ export function Zimmer({
               </div>
             )}
 
-            {!standortId && (
+            {!einStandort && (
               <>
             <div className="zv-field">
               <label htmlFor="zimmer-standort">Standort</label>
@@ -985,13 +990,13 @@ export function Zimmer({
                 onChange={(e) => setStandortAuswahl(e.target.value)}
               >
                 {standorte
-                  .filter((s) => s.aktiv)
+                  .filter((s) => s.aktiv && (!standortIds || standortIds.includes(s.id)))
                   .map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
                   ))}
-                <option value={NEUER_STANDORT}>+ Neuen Standort anlegen…</option>
+                {!eingebettet && <option value={NEUER_STANDORT}>+ Neuen Standort anlegen…</option>}
               </select>
             </div>
 

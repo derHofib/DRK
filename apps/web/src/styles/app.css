@@ -4736,6 +4736,27 @@ button[class],
   border-left: 1px solid var(--zv-border-strong);
   line-height: 1;
 }
+/* Standort-Kopf, wenn mehrere Standorte in einer Zeitleiste stehen: eine
+   Stufe kraeftiger als die Etage darunter (Text statt Label-Grau, Flaeche
+   abgesetzt), damit die Gruppierung auf einen Blick lesbar ist. */
+.zv-zl-standort {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: var(--zv-space-3);
+  background: var(--zv-surface-2);
+  border-top: 1px solid var(--zv-border-strong);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+}
+.zv-zl-standort .zv-mono {
+  font-weight: var(--zv-weight-medium);
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
 .zv-zl-etage {
   position: sticky;
   left: 0;
@@ -5746,4 +5767,108 @@ button[class],
 .zv-ziel-verlauf ul {
   margin: var(--zv-space-2) 0 0;
   padding-left: var(--zv-space-4);
+}
+
+/* --- Rueckmeldung: Detail im Seitenpanel --------------------------------
+   Rueckmeldung aus dem Betrieb: die Detailansicht wirkte ungeordnet, vor
+   allem die "Rahmenbedingungen" -- das <dl> hatte keine eigenen Regeln und
+   fiel auf die Browser-Vorgabe zurueck (dd 40px eingerueckt, Rohschluessel
+   untereinander). Jetzt: Kopf mit Pillen, Abschnitte durch Linien getrennt,
+   Rahmenbedingungen als zweispaltiges Raster (Bezeichnung | Wert), das im
+   schmalen Panel auf eine Spalte umbricht. */
+.zv-rm-detail-kopf h3 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-xl);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.zv-rm-detail-pillen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+.zv-rm-detail-abschnitt {
+  margin-top: var(--zv-space-5);
+  padding-top: var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-rm-detail-abschnitt h4 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-rm-detail-abschnitt h4:not(:first-child) {
+  margin-top: var(--zv-space-4);
+}
+.zv-rm-detail-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.zv-rm-detail-bild {
+  display: block;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+  background: var(--zv-surface-2);
+}
+.zv-rm-detail-bild img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.zv-rm-detail-hinweis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-kontext-raster {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+  margin: 0;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+}
+.zv-kontext-raster > div {
+  display: contents;
+}
+.zv-kontext-raster dt,
+.zv-kontext-raster dd {
+  margin: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-kontext-raster > div:first-child dt,
+.zv-kontext-raster > div:first-child dd {
+  border-top: 0;
+}
+.zv-kontext-raster dt {
+  color: var(--zv-text-muted);
+  background: var(--zv-surface-2);
+}
+.zv-kontext-raster dd {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  .zv-kontext-raster {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .zv-kontext-raster dd {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .zv-kontext-raster dt {
+    background: none;
+    padding-bottom: var(--zv-space-1);
+  }
+}
+.zv-rm-detail-entscheidung .zv-aktionszeile {
+  flex-wrap: wrap;
 }

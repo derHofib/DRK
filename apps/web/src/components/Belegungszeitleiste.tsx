@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { RaumplanEtageDto } from "@zimmerakte/shared";
 import { formatDatum, lokalesDatum } from "../format";
+import { IStandort } from "./icons";
 
 type Zimmer = RaumplanEtageDto["zimmer"][number];
 type Massstab = "monat" | "halbjahr" | "jahr";
@@ -77,11 +78,24 @@ function balkenVon(z: Zimmer, start: number, ende: number): Balken[] {
  * Bei Kapazitaet > 1 bekommt jede Person eine eigene Bahn -- zwei
  * ueberlappende Balken in einer Bahn waeren nicht zu unterscheiden.
  */
+/**
+ * Eine Gruppe je Standort. `titel` nur, wenn mehrere Standorte gezeigt
+ * werden: dann steht der Standort als eigene Kopfzeile ueber seinen Etagen --
+ * EINE Zeitleiste mit gemeinsamer Zeitachse und einem Massstab statt einer
+ * Zeitleiste je Standort, damit sich Belegungen standortuebergreifend
+ * nebeneinander vergleichen lassen.
+ */
+export interface ZeitleistenGruppe {
+  id: string;
+  titel: string | null;
+  etagen: RaumplanEtageDto[];
+}
+
 export function Belegungszeitleiste({
-  etagen,
+  gruppen,
   onOeffnen,
 }: {
-  etagen: RaumplanEtageDto[];
+  gruppen: ZeitleistenGruppe[];
   onOeffnen: (zimmerId: string) => void;
 }) {
   const [massstab, setMassstab] = useState<Massstab>("halbjahr");
@@ -107,7 +121,7 @@ export function Belegungszeitleiste({
     return liste;
   }, [massstab, start, ende, m.px]);
 
-  const alleZimmer = etagen.flatMap((e) => e.zimmer);
+  const alleZimmer = gruppen.flatMap((g) => g.etagen.flatMap((e) => e.zimmer));
 
   return (
     <div>
@@ -147,7 +161,16 @@ export function Belegungszeitleiste({
               </div>
             </div>
 
-            {etagen
+            {gruppen.map((g) => (
+              <div key={g.id} role={g.titel ? "group" : undefined} aria-label={g.titel ? `Standort ${g.titel}` : undefined}>
+              {g.titel && (
+                <div className="zv-zl-standort">
+                  <IStandort aria-hidden="true" />
+                  {g.titel}
+                  <span className="zv-mono">{g.etagen.reduce((n, e) => n + e.zimmer.length, 0)} Zimmer</span>
+                </div>
+              )}
+            {g.etagen
               .filter((e) => e.zimmer.length > 0)
               .map((e) => (
                 <div key={e.etage} role="group" aria-label={`Etage ${e.etage}`}>
@@ -196,6 +219,8 @@ export function Belegungszeitleiste({
                   })}
                 </div>
               ))}
+              </div>
+            ))}
           </div>
         </div>
       )}

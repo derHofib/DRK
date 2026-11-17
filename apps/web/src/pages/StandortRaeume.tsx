@@ -8,12 +8,12 @@ import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Zimmer as ZimmerVerwaltung } from "./Zimmer";
 import { Seitenpanel } from "../components/Seitenpanel";
-import { Filterleiste, OptionenFilter, StandortFilter, trifftSuche } from "../components/Listenfilter";
+import { Filterleiste, OptionenFilter, StandortMehrfachFilter, trifftSuche } from "../components/Listenfilter";
 import { PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
 import { AUFGABE_PRIORITAET_LABEL } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
-import { Belegungszeitleiste } from "../components/Belegungszeitleiste";
+import { Belegungszeitleiste, type ZeitleistenGruppe } from "../components/Belegungszeitleiste";
 import {
   IAbbrechen,
   IBaumAnsicht,
@@ -60,24 +60,31 @@ function speichereAnsicht(a: Ansicht) {
 const schluessel = (art: Objektart, id: string) => `${art}:${id}`;
 
 /**
- * Raumplan EINES Standorts (Unterpunkt unter "Standorte"): Etagen mit ihren
- * Zimmern und Gemeinschaftsraeumen, wahlweise als Baum (Etage links, Raeume
- * rechts abzweigend) oder auf einem hochgeladenen Grundriss, auf dem die
- * Karten frei platziert werden. Zimmer selbst werden weiterhin unter "Zimmer"
- * angelegt -- hier kommen nur die Gemeinschaftsraeume dazu, die dort keinen
- * Platz haben (sie zaehlen nicht als Wohnplatz, siehe Migration 0051).
+ * Belegung eines oder mehrerer Standorte (Menuepunkt "Standorte"): Etagen mit
+ * ihren Zimmern und Gemeinschaftsraeumen, als Zeitleiste, auf einem
+ * hochgeladenen Grundriss oder als Verwaltungsliste. Zimmer selbst werden
+ * weiterhin unter "Zimmer" angelegt -- hier kommen nur die
+ * Gemeinschaftsraeume dazu, die dort keinen Platz haben (sie zaehlen nicht
+ * als Wohnplatz, siehe Migration 0051).
+ *
+ * Mehrere Standorte (Rueckmeldung aus dem Betrieb): `standortIds` leer = alle.
+ * Zeitleiste und Verwalten gruppieren dann nach Standort. Der Grundriss
+ * bleibt naturgemaess EIN Haus und EINE Etage -- bei mehreren Standorten
+ * waehlt man das Haus dort zusaetzlich, wie die Etage. Geladen wird je
+ * Standort ueber denselben Endpunkt wie bisher (GET /standorte/:id/raumplan),
+ * also weiter unter RLS und der Standortfreigabe des Kontos.
  */
 export function StandortRaeume({
-  standortId,
-  onStandortWaehlen,
+  standortIds,
+  onStandorteWaehlen,
 }: {
-  standortId: string;
-  onStandortWaehlen: (id: string | null) => void;
+  standortIds: string[];
+  onStandorteWaehlen: (ids: string[]) => void;
 }) {
-  const [standorte, setStandorte] = useState<StandortDto[]>([]);
-  // Belegte/vorhandene Plaetze je Standort fuer den Zaehler am Reiter. Aus
-  // der Dashboard-Antwort statt einer eigenen Abfrage: dort ist die Zaehlung
-  // (Plaetze, nicht Zimmer) schon festgelegt und getestet.
+  const [standorte, setStandorte] = useState<StandortDto[] | null>(null);
+  // Belegte/vorhandene Plaetze je Standort fuer den Zaehler in der Auswahl.
+  // Aus der Dashboard-Antwort statt einer eigenen Abfrage: dort ist die
+  // Zaehlung (Plaetze, nicht Zimmer) schon festgelegt und getestet.
   const [plaetze, setPlaetze] = useState<Record<string, string>>({});
   useEffect(() => {
     api
@@ -94,11 +101,19 @@ export function StandortRaeume({
           ),
         ).then((paare) => setPlaetze(Object.fromEntries(paare.filter((p) => p !== null))));
       })
-      .catch(() => {});
+      .catch((err) => setFehler(err.message));
   }, []);
-  const [plan, setPlan] = useState<RaumplanDto | null>(null);
+
+  // Was tatsaechlich gezeigt wird: die Auswahl (in Menue-Reihenfolge der
+  // Standorte), ohne Ids, die es nicht oder nicht mehr gibt; leer = alle.
+  const sichtbar = (standorte ?? []).filter((s) => standortIds.length === 0 || standortIds.includes(s.id));
+  const sichtbarSchluessel = sichtbar.map((s) => s.id).join(",");
+  const mehrere = sichtbar.length > 1;
+
+  const [plaene, setPlaene] = useState<RaumplanDto[] | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [ansicht, setAnsicht] = useState<Ansicht>(() => ladeAnsicht());
+  const [grundrissStandortId, setGrundrissStandortId] = useState<string | null>(null);
   const [aktiveEtage, setAktiveEtage] = useState<string | null>(null);
   // Seitenpanel: welche Karte geoeffnet ist. "detail" bleibt beim Schliessen
   // stehen, damit der Inhalt waehrend der Ausfahr-Animation nicht schon
@@ -106,7 +121,7 @@ export function StandortRaeume({
   const [detail, setDetail] = useState<{ art: Objektart; id: string } | null>(null);
   const [panelOffen, setPanelOffen] = useState(false);
   const [zimmerNeuOffen, setZimmerNeuOffen] = useState(false);
-  const [raumDialog, setRaumDialog] = useState<{ id: string; name: string; etage: string } | "neu" | null>(null);
+  const [raumDialog, setRaumDialog] = useState<{ standortId: string; id: string; name: string; etage: string } | "neu" | null>(null);
   // Filter der Zeitleiste. Bewusst nur dort: der Grundriss zeigt den Standort
   // als Ganzes (ein ausgeblendetes Zimmer liesse eine Luecke im Plan), und
   // "Verwalten" hat die volle Zimmerliste mit eigener Filterleiste.
@@ -114,51 +129,66 @@ export function StandortRaeume({
   const [platzFilter, setPlatzFilter] = useState<"" | PlatzFilter>("");
 
   const laden = useCallback(() => {
-    api
-      .raumplan(standortId)
+    if (!sichtbarSchluessel) return;
+    const ids = sichtbarSchluessel.split(",");
+    Promise.all(ids.map((id) => api.raumplan(id)))
       .then((p) => {
-        setPlan(p);
+        setPlaene(p);
         setFehler(null);
-        // Die gewaehlte Etage behalten, solange es sie noch gibt.
-        setAktiveEtage((a) => (a && p.etagen.some((e) => e.etage === a) ? a : (p.etagen[0]?.etage ?? null)));
       })
       .catch((err) => setFehler(err.message));
-  }, [standortId]);
+  }, [sichtbarSchluessel]);
 
   useEffect(laden, [laden]);
+
+  // Grundriss: gewaehltes Haus behalten, solange es sichtbar ist, sonst das erste.
+  const grundrissPlan = plaene?.find((p) => p.standort.id === grundrissStandortId) ?? plaene?.[0] ?? null;
+  // Die gewaehlte Etage behalten, solange es sie im Haus noch gibt.
+  const etage = grundrissPlan?.etagen.find((e) => e.etage === aktiveEtage) ?? grundrissPlan?.etagen[0] ?? null;
 
   function ansichtWaehlen(a: Ansicht) {
     setAnsicht(a);
     speichereAnsicht(a);
     // "Verwalten" aendert Zimmer (anlegen, einziehen, ...) ausserhalb dieser
     // Komponente -- beim Zurueckwechseln den Plan neu holen, sonst zeigen
-    // Baum und Grundriss den Stand von vor der Aenderung.
+    // Zeitleiste und Grundriss den Stand von vor der Aenderung.
     if (a !== "verwalten") laden();
   }
 
-  const etage = plan?.etagen.find((e) => e.etage === aktiveEtage) ?? null;
-
-  const zeitleistenEtagen = (plan?.etagen ?? [])
-    .map((e) => ({
-      ...e,
-      zimmer: e.zimmer.filter(
-        (z) =>
-          (!platzFilter || (platzFilter === "frei" ? z.bewohner.length < z.kapazitaet : z.bewohner.length >= z.kapazitaet)) &&
-          trifftSuche(suche, [z.nummer, e.etage, ...z.bewohner.map((b) => b.name), ...z.geplanteEinzuege.map((g) => g.name)]),
-      ),
+  const zeitleistenGruppen: ZeitleistenGruppe[] = (plaene ?? [])
+    .map((p) => ({
+      id: p.standort.id,
+      titel: mehrere ? p.standort.name : null,
+      etagen: p.etagen
+        .map((e) => ({
+          ...e,
+          zimmer: e.zimmer.filter(
+            (z) =>
+              (!platzFilter || (platzFilter === "frei" ? z.bewohner.length < z.kapazitaet : z.bewohner.length >= z.kapazitaet)) &&
+              trifftSuche(suche, [z.nummer, e.etage, p.standort.name, ...z.bewohner.map((b) => b.name), ...z.geplanteEinzuege.map((g) => g.name)]),
+          ),
+        }))
+        .filter((e) => e.zimmer.length > 0),
     }))
-    .filter((e) => e.zimmer.length > 0);
-  const zeitleistenZimmer = zeitleistenEtagen.reduce((n, e) => n + e.zimmer.length, 0);
+    .filter((g) => g.etagen.length > 0);
+  const zeitleistenZimmer = zeitleistenGruppen.reduce((n, g) => n + g.etagen.reduce((m, e) => m + e.zimmer.length, 0), 0);
   const filterAktiv = Boolean(suche.trim() || platzFilter);
+  const hatEtagen = (plaene ?? []).some((p) => p.etagen.length > 0);
+  const darfRaeumeBearbeiten = (plaene ?? []).filter((p) => p.darfBearbeiten);
 
   const standortPille = (
-    <StandortFilter
-      standorte={standorte.map((st) => ({ id: st.id, name: st.name, zaehler: plaetze[st.id] }))}
-      gewaehlt={standortId}
-      onWaehlen={onStandortWaehlen}
-      pflicht
+    <StandortMehrfachFilter
+      standorte={(standorte ?? []).map((st) => ({ id: st.id, name: st.name, zaehler: plaetze[st.id] }))}
+      gewaehlt={standortIds}
+      onAendern={onStandorteWaehlen}
     />
   );
+  const kontext =
+    standortIds.length === 0 || sichtbar.length === 0
+      ? "Alle Standorte"
+      : sichtbar.length === 1
+        ? sichtbar[0].name
+        : sichtbar.map((s) => s.name).join(", ");
 
   const oeffneDetail = useCallback((art: Objektart, id: string) => {
     setDetail({ art, id });
@@ -166,18 +196,20 @@ export function StandortRaeume({
   }, []);
   const schliesseDetail = useCallback(() => setPanelOffen(false), []);
 
-  // Immer aus dem aktuellen Plan nachschlagen statt ein Objekt zu kopieren:
+  // Immer aus den aktuellen Plaenen nachschlagen statt ein Objekt zu kopieren:
   // nach "Speichern"/Neuladen zeigt das Panel sonst veraltete Daten.
-  let detailZimmer: { zimmer: Zimmer; etage: string } | null = null;
-  let detailRaum: { raum: Gemeinschaftsraum; etage: string } | null = null;
-  if (plan && detail) {
-    for (const e of plan.etagen) {
-      if (detail.art === "zimmer") {
-        const z = e.zimmer.find((x) => x.id === detail.id);
-        if (z) detailZimmer = { zimmer: z, etage: e.etage };
-      } else {
-        const r = e.raeume.find((x) => x.id === detail.id);
-        if (r) detailRaum = { raum: r, etage: e.etage };
+  let detailZimmer: { zimmer: Zimmer; etage: string; plan: RaumplanDto } | null = null;
+  let detailRaum: { raum: Gemeinschaftsraum; etage: string; plan: RaumplanDto } | null = null;
+  if (plaene && detail) {
+    for (const p of plaene) {
+      for (const e of p.etagen) {
+        if (detail.art === "zimmer") {
+          const z = e.zimmer.find((x) => x.id === detail.id);
+          if (z) detailZimmer = { zimmer: z, etage: e.etage, plan: p };
+        } else {
+          const r = e.raeume.find((x) => x.id === detail.id);
+          if (r) detailRaum = { raum: r, etage: e.etage, plan: p };
+        }
       }
     }
   }
@@ -193,16 +225,16 @@ export function StandortRaeume({
 
       <div className="zv-seiten-kopf">
         <div>
-          <p className="zv-kontextzeile">{plan ? plan.standort.name : "Standort"}</p>
+          <p className="zv-kontextzeile">{kontext}</p>
           <h2>Belegung</h2>
         </div>
-        {ansicht !== "verwalten" && (
+        {ansicht !== "verwalten" && plaene && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-2)" }}>
             <button className="zv-btn" onClick={() => setZimmerNeuOffen(true)}>
               <INeu />
               Neues Zimmer
             </button>
-            {plan?.darfBearbeiten && (
+            {darfRaeumeBearbeiten.length > 0 && (
               <button className="zv-btn zv-btn-sekundaer" onClick={() => setRaumDialog("neu")}>
                 <INeu />
                 Gemeinschaftsraum
@@ -212,7 +244,7 @@ export function StandortRaeume({
         )}
       </div>
 
-      {plan && (
+      {plaene && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--zv-space-3)", marginBottom: "var(--zv-space-4)" }}>
           <div className="zv-segmented" role="radiogroup" aria-label="Ansicht">
             <button
@@ -244,14 +276,30 @@ export function StandortRaeume({
             </button>
           </div>
 
-          {ansicht === "grundriss" && plan.etagen.length > 0 && (
+          {ansicht === "grundriss" && mehrere && grundrissPlan && (
+            <div className="zv-segmented" role="radiogroup" aria-label="Haus">
+              {plaene.map((p) => (
+                <button
+                  key={p.standort.id}
+                  role="radio"
+                  aria-checked={grundrissPlan.standort.id === p.standort.id}
+                  className={grundrissPlan.standort.id === p.standort.id ? "active" : ""}
+                  onClick={() => setGrundrissStandortId(p.standort.id)}
+                >
+                  {p.standort.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {ansicht === "grundriss" && grundrissPlan && grundrissPlan.etagen.length > 0 && (
             <div className="zv-segmented" role="radiogroup" aria-label="Etage">
-              {plan.etagen.map((e) => (
+              {grundrissPlan.etagen.map((e) => (
                 <button
                   key={e.etage}
                   role="radio"
-                  aria-checked={aktiveEtage === e.etage}
-                  className={aktiveEtage === e.etage ? "active" : ""}
+                  aria-checked={etage?.etage === e.etage}
+                  className={etage?.etage === e.etage ? "active" : ""}
                   onClick={() => setAktiveEtage(e.etage)}
                 >
                   {e.etage}
@@ -262,21 +310,16 @@ export function StandortRaeume({
         </div>
       )}
 
-      {plan && plan.etagen.length === 0 && !fehler && (
-        <Leerzustand icon={ILeerStandorte}>
-          An diesem Standort gibt es noch keine Zimmer oder Gemeinschaftsräume.
-        </Leerzustand>
-      )}
-
-      {plan && ansicht === "zeit" && plan.etagen.length > 0 && (
+      {plaene && ansicht === "zeit" && hatEtagen && (
         <>
           <Filterleiste
             ariaLabel="Belegung filtern"
             suche={{ wert: suche, onChange: setSuche, placeholder: "Zimmer, Klient:in…", ariaLabel: "Belegung durchsuchen" }}
-            aktiv={filterAktiv}
+            aktiv={filterAktiv || standortIds.length > 0}
             onZuruecksetzen={() => {
               setSuche("");
               setPlatzFilter("");
+              onStandorteWaehlen([]);
             }}
           >
             {standortPille}
@@ -289,46 +332,61 @@ export function StandortRaeume({
             />
           </Filterleiste>
           <div className="zv-sub-inline" aria-live="polite" style={{ marginBottom: "var(--zv-space-3)" }}>
-            {zeitleistenZimmer} Zimmer
+            {zeitleistenZimmer} Zimmer{mehrere ? ` an ${zeitleistenGruppen.length} Standorten` : ""}
           </div>
         </>
       )}
 
       {/* Ohne Zeitleisten-Filter (Grundriss, leerer Standort, Laden/Fehler)
-          bleibt der Standortwechsel trotzdem erreichbar -- sonst saesse man
+          bleibt die Standortwahl trotzdem erreichbar -- sonst saesse man
           auf einem leeren Standort fest. */}
-      {ansicht !== "verwalten" && !(plan && ansicht === "zeit" && plan.etagen.length > 0) && standorte.length > 1 && (
+      {ansicht !== "verwalten" && !(plaene && ansicht === "zeit" && hatEtagen) && (standorte?.length ?? 0) > 1 && (
         <div className="zv-filterleiste" role="search" aria-label="Standort wählen">
           {standortPille}
         </div>
       )}
 
-      {ansicht === "verwalten" && <ZimmerVerwaltung standortId={standortId} standortPille={standorte.length > 1 ? standortPille : undefined} />}
-
-      {plan && ansicht === "zeit" && zeitleistenEtagen.length > 0 && (
-        <Belegungszeitleiste etagen={zeitleistenEtagen} onOeffnen={(id) => oeffneDetail("zimmer", id)} />
+      {plaene && !hatEtagen && !fehler && (
+        <Leerzustand icon={ILeerStandorte}>
+          {mehrere ? "An diesen Standorten" : "An diesem Standort"} gibt es noch keine Zimmer oder Gemeinschaftsräume.
+        </Leerzustand>
       )}
-      {plan && ansicht === "zeit" && plan.etagen.length > 0 && zeitleistenEtagen.length === 0 && (
+
+      {ansicht === "verwalten" && standorte && (
+        <ZimmerVerwaltung
+          key={sichtbarSchluessel}
+          standortIds={sichtbar.map((s) => s.id)}
+          standortPille={standorte.length > 1 ? standortPille : undefined}
+        />
+      )}
+
+      {plaene && ansicht === "zeit" && zeitleistenGruppen.length > 0 && (
+        <Belegungszeitleiste gruppen={zeitleistenGruppen} onOeffnen={(id) => oeffneDetail("zimmer", id)} />
+      )}
+      {plaene && ansicht === "zeit" && hatEtagen && zeitleistenGruppen.length === 0 && (
         <Leerzustand icon={ILeerZimmer}>Kein Zimmer passt zu den Filtern.</Leerzustand>
       )}
 
-      {plan && ansicht === "grundriss" && etage && (
+      {plaene && ansicht === "grundriss" && grundrissPlan && grundrissPlan.etagen.length === 0 && hatEtagen && (
+        <Leerzustand icon={ILeerStandorte}>An diesem Standort gibt es noch keine Zimmer oder Gemeinschaftsräume.</Leerzustand>
+      )}
+      {plaene && ansicht === "grundriss" && grundrissPlan && etage && (
         <Raumgrundriss
-          key={etage.etage}
-          standortId={standortId}
+          key={`${grundrissPlan.standort.id}:${etage.etage}`}
+          standortId={grundrissPlan.standort.id}
           etage={etage}
-          darfBearbeiten={plan.darfBearbeiten}
+          darfBearbeiten={grundrissPlan.darfBearbeiten}
           onGeaendert={laden}
           onFehler={setFehler}
           onOeffnen={oeffneDetail}
         />
       )}
 
-      {zimmerNeuOffen && plan && (
+      {zimmerNeuOffen && plaene && (
         <ZimmerNeuDialog
-          standortId={standortId}
-          etagen={plan.etagen.map((e) => e.etage)}
-          standardEtage={aktiveEtage ?? "EG"}
+          plaene={plaene}
+          standardStandortId={ansicht === "grundriss" ? grundrissPlan?.standort.id : undefined}
+          standardEtage={ansicht === "grundriss" ? etage?.etage : undefined}
           onClose={() => setZimmerNeuOffen(false)}
           onAngelegt={() => {
             setZimmerNeuOffen(false);
@@ -338,11 +396,11 @@ export function StandortRaeume({
       )}
 
       <Seitenpanel offen={panelOffen} onSchliessen={schliesseDetail}>
-        {detailZimmer && plan && (
+        {detailZimmer && (
           <ZimmerDetail
             zimmer={detailZimmer.zimmer}
             etage={detailZimmer.etage}
-            standort={plan.standort.name}
+            standort={detailZimmer.plan.standort.name}
             onVerwalten={() => {
               setPanelOffen(false);
               ansichtWaehlen("verwalten");
@@ -350,26 +408,31 @@ export function StandortRaeume({
             onAktualisiert={laden}
           />
         )}
-        {detailRaum && plan && (
+        {detailRaum && (
           <RaumDetail
             raum={detailRaum.raum}
             etage={detailRaum.etage}
-            standort={plan.standort.name}
-            darfBearbeiten={plan.darfBearbeiten}
+            standort={detailRaum.plan.standort.name}
+            darfBearbeiten={detailRaum.plan.darfBearbeiten}
             onBearbeiten={() => {
               setPanelOffen(false);
-              setRaumDialog({ id: detailRaum!.raum.id, name: detailRaum!.raum.name, etage: detailRaum!.etage });
+              setRaumDialog({
+                standortId: detailRaum!.plan.standort.id,
+                id: detailRaum!.raum.id,
+                name: detailRaum!.raum.name,
+                etage: detailRaum!.etage,
+              });
             }}
           />
         )}
       </Seitenpanel>
 
-      {raumDialog && plan && (
+      {raumDialog && plaene && (
         <RaumDialog
-          standortId={standortId}
+          plaene={raumDialog === "neu" ? darfRaeumeBearbeiten : plaene.filter((p) => p.standort.id === raumDialog.standortId)}
           raum={raumDialog === "neu" ? null : raumDialog}
-          etagen={plan.etagen.map((e) => e.etage)}
-          standardEtage={aktiveEtage ?? "EG"}
+          standardStandortId={ansicht === "grundriss" ? grundrissPlan?.standort.id : undefined}
+          standardEtage={ansicht === "grundriss" ? etage?.etage : undefined}
           onClose={() => setRaumDialog(null)}
           onGespeichert={() => {
             setRaumDialog(null);
@@ -930,21 +993,54 @@ function RaumDetail({
   );
 }
 
+/**
+ * Standortwahl in den Dialogen, sobald mehr als ein Standort in Frage kommt
+ * (Belegung zeigt mehrere). Bei genau einem steht er fest und wird nicht
+ * gefragt -- wie vor der Mehrfachauswahl.
+ */
+function StandortFeld({
+  id,
+  plaene,
+  wert,
+  onWaehlen,
+}: {
+  id: string;
+  plaene: RaumplanDto[];
+  wert: string;
+  onWaehlen: (id: string) => void;
+}) {
+  if (plaene.length < 2) return null;
+  return (
+    <div className="zv-field">
+      <label htmlFor={id}>Standort</label>
+      <select id={id} value={wert} onChange={(e) => onWaehlen(e.target.value)} required>
+        {plaene.map((p) => (
+          <option key={p.standort.id} value={p.standort.id}>
+            {p.standort.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function ZimmerNeuDialog({
-  standortId,
-  etagen,
+  plaene,
+  standardStandortId,
   standardEtage,
   onClose,
   onAngelegt,
 }: {
-  standortId: string;
-  etagen: string[];
-  standardEtage: string;
+  plaene: RaumplanDto[];
+  standardStandortId?: string;
+  standardEtage?: string;
   onClose: () => void;
   onAngelegt: () => void;
 }) {
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
+  const [standortId, setStandortId] = useState(standardStandortId ?? plaene[0].standort.id);
+  const etagen = plaene.find((p) => p.standort.id === standortId)?.etagen.map((e) => e.etage) ?? [];
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -974,6 +1070,7 @@ function ZimmerNeuDialog({
             {formFehler}
           </div>
         )}
+        <StandortFeld id="neues-zimmer-standort" plaene={plaene} wert={standortId} onWaehlen={setStandortId} />
         <div className="zv-field-row">
           <div className="zv-field">
             <label htmlFor="neues-zimmer-nummer">Zimmernummer</label>
@@ -981,7 +1078,7 @@ function ZimmerNeuDialog({
           </div>
           <div className="zv-field">
             <label htmlFor="neues-zimmer-etage">Etage</label>
-            <input id="neues-zimmer-etage" name="etage" list="neues-zimmer-etagen" defaultValue={standardEtage} />
+            <input id="neues-zimmer-etage" name="etage" list="neues-zimmer-etagen" defaultValue={standardEtage ?? etagen[0] ?? "EG"} />
             <datalist id="neues-zimmer-etagen">
               {etagen.map((e) => (
                 <option key={e} value={e} />
@@ -1003,22 +1100,27 @@ function ZimmerNeuDialog({
 }
 
 function RaumDialog({
-  standortId,
+  plaene,
   raum,
-  etagen,
+  standardStandortId,
   standardEtage,
   onClose,
   onGespeichert,
 }: {
-  standortId: string;
+  /** Zur Wahl stehende Standorte; beim Bearbeiten genau der des Raums. */
+  plaene: RaumplanDto[];
   raum: { id: string; name: string; etage: string } | null;
-  etagen: string[];
-  standardEtage: string;
+  standardStandortId?: string;
+  standardEtage?: string;
   onClose: () => void;
   onGespeichert: () => void;
 }) {
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
+  const [standortId, setStandortId] = useState(
+    plaene.some((p) => p.standort.id === standardStandortId) ? standardStandortId! : plaene[0].standort.id,
+  );
+  const etagen = plaene.find((p) => p.standort.id === standortId)?.etagen.map((e) => e.etage) ?? [];
 
   async function speichern(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1058,13 +1160,14 @@ function RaumDialog({
             {formFehler}
           </div>
         )}
+        {!raum && <StandortFeld id="raum-standort" plaene={plaene} wert={standortId} onWaehlen={setStandortId} />}
         <div className="zv-field">
           <label htmlFor="raum-name">Name</label>
           <input id="raum-name" name="name" defaultValue={raum?.name ?? ""} placeholder="z. B. Küche, Waschküche" required autoFocus />
         </div>
         <div className="zv-field">
           <label htmlFor="raum-etage">Etage</label>
-          <input id="raum-etage" name="etage" list="raum-etagen" defaultValue={raum?.etage ?? standardEtage} required />
+          <input id="raum-etage" name="etage" list="raum-etagen" defaultValue={raum?.etage ?? standardEtage ?? etagen[0] ?? "EG"} required />
           <datalist id="raum-etagen">
             {etagen.map((e) => (
               <option key={e} value={e} />

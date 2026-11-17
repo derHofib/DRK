@@ -4,7 +4,7 @@ import { SCHNELLWAHL_LABEL, type Schnellwahl, zeitraumFuer } from "../pages/tage
 import type { ListenExport } from "../export/listenExport";
 import { AktionsMenue } from "./AktionsMenue";
 import { ExportMenue } from "./ExportMenue";
-import { FilterAuswahl, FilterPille } from "./Filterleiste";
+import { FilterAuswahl, FilterMehrfachAuswahl, FilterPille } from "./Filterleiste";
 import { IFilterLoeschen, IKalender, INeu, ISortierung, IStandort, ISuche } from "./icons";
 
 /**
@@ -278,7 +278,7 @@ export function trifftSuche(suche: string, felder: (string | null | undefined)[]
 
 /**
  * Standortwahl als Pille der Filterleiste -- loest die frueheren
- * Unterstrich-Reiter (StandortReiter) ab. Rueckmeldung aus dem Betrieb: die
+ * Unterstrich-Reiter ab. Rueckmeldung aus dem Betrieb: die
  * Reiterleiste wirkte bei vielen Standorten unruhig und sah anders aus als
  * jede andere Liste. Als Pille steht der Standort dort, wo auch alle anderen
  * Einschraenkungen stehen, und die Liste der Standorte ist durchsuchbar.
@@ -323,6 +323,39 @@ export function StandortFilter({
             onWaehlen(w === ALLE_STANDORTE ? null : w);
             schliessen();
           }}
+        />
+      )}
+    </FilterPille>
+  );
+}
+
+/**
+ * Standortwahl mit Mehrfachauswahl (Belegung). Leere Auswahl = alle
+ * Standorte, gruppiert. Rueckmeldung aus dem Betrieb: man will den Filter
+ * loeschen koennen und dann alle Standorte sauber gruppiert sehen, oder
+ * gezielt zwei, drei Haeuser nebeneinander. Das Kreuz leert die Auswahl,
+ * statt wie frueher auf einem Pflicht-Standort stehen zu bleiben.
+ */
+export function StandortMehrfachFilter({
+  standorte,
+  gewaehlt,
+  onAendern,
+}: {
+  /** zaehler: kurzer Zusatz wie "9/10" (belegte/vorhandene Plaetze). */
+  standorte: { id: string; name: string; zaehler?: string }[];
+  gewaehlt: string[];
+  onAendern: (ids: string[]) => void;
+}) {
+  if (standorte.length < 2) return null;
+  const namen = standorte.filter((s) => gewaehlt.includes(s.id)).map((s) => s.name);
+  const wert = namen.length === 0 ? null : namen.length === 1 ? `: ${namen[0]}` : `: ${namen.length} Standorte`;
+  return (
+    <FilterPille icon={<IStandort />} label="Standort" wert={wert} onEntfernen={() => onAendern([])}>
+      {() => (
+        <FilterMehrfachAuswahl
+          optionen={standorte.map((s) => ({ wert: s.id, label: s.zaehler ? `${s.name} · ${s.zaehler}` : s.name }))}
+          gewaehlt={gewaehlt}
+          onAendern={onAendern}
         />
       )}
     </FilterPille>

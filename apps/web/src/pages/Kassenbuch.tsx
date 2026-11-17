@@ -13,7 +13,6 @@ import { einreihen, entfernen, senden, useWarteschlange } from "../offline/warte
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { KassenbuchJournal, laufsalden, neuesterZuerst } from "../components/KassenbuchJournal";
 import { Leerzustand } from "../components/Leerzustand";
-import { StandortReiter } from "../components/StandortReiter";
 import { Modal } from "../components/Modal";
 import {
   IAblehnen,
@@ -41,7 +40,7 @@ import {
   IZurueckPfeil,
 } from "../components/icons";
 import { SignaturePad } from "../components/SignaturePad";
-import { Filterleiste, OptionenFilter, ZeitraumFilter, trifftSuche, useZeitraum } from "../components/Listenfilter";
+import { Filterleiste, OptionenFilter, StandortFilter, ZeitraumFilter, trifftSuche, useZeitraum } from "../components/Listenfilter";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { formatBetrag, formatDatum, kontextzeile } from "../format";
 
@@ -504,9 +503,21 @@ export function Kassenbuch({
     .sort((a, b) => a.localeCompare(b, "de"))
     .map((n) => ({ wert: n, label: n }));
   const journalFilterAktiv = Boolean(
+    filterStandortId ||
     filterKlientId || journalFilter !== "alle" || journalZeitraum.aktiv || typFilter || gebuchtVonFilter || journalSuche.trim(),
   );
+  // Standortwahl als Pille statt der frueheren Reiterleiste -- wie auf Heute
+  // und in der Belegung (Rueckmeldung aus dem Betrieb). Wirkt weiter
+  // serverseitig auf Buchungen und HZL-Woche (siehe ladeBuchungen).
+  const standortPille = (
+    <StandortFilter
+      standorte={standorte.filter((st) => st.aktiv || st.id === filterStandortId).map((st) => ({ id: st.id, name: st.name }))}
+      gewaehlt={filterStandortId || null}
+      onWaehlen={(id) => setFilterStandortId(id ?? "")}
+    />
+  );
   function journalZuruecksetzen() {
+    setFilterStandortId("");
     setFilterKlientId("");
     setJournalFilter("alle");
     journalZeitraum.waehlen("alle");
@@ -602,11 +613,14 @@ export function Kassenbuch({
         )}
       </div>
 
-      <StandortReiter
-        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((st) => ({ id: st.id, label: st.name }))]}
-        aktiv={filterStandortId || null}
-        onWaehle={(id) => setFilterStandortId(id ?? "")}
-      />
+      {/* HZL hat keine eigene Filterleiste -- dort steht die Standortwahl
+          allein in einer Zeile; im Kassenbuch ist sie die erste Pille der
+          Buchungs-Filterleiste (unten). */}
+      {ansicht === "hzl" && standorte.length > 1 && (
+        <div className="zv-filterleiste" role="search" aria-label="Standort wählen">
+          {standortPille}
+        </div>
+      )}
 
       {formularOffen && (
         <Modal titel="Neue Buchung" onClose={() => setFormularOffen(false)}>
@@ -967,6 +981,7 @@ export function Kassenbuch({
         aktiv={journalFilterAktiv}
         onZuruecksetzen={journalZuruecksetzen}
       >
+        {standortPille}
         <OptionenFilter
           icon={<IAnpassen />}
           label="Art"
