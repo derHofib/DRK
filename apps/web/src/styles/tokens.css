@@ -88,7 +88,7 @@
 }
 
 /*
- * Die Schrift selbst kommt aus @fontsource-variable/inter und wird in
+ * Die Schrift selbst kommt aus @fontsource-variable/nunito-sans und wird in
  * main.tsx importiert -- Vite buendelt die woff2-Datei mit und versieht sie
  * mit einem Hash. Bewusst kein Google-Fonts-CDN: das ist in Deutschland
  * abgemahnt worden (LG Muenchen I, 3 O 17493/20) und bei einer Anwendung
@@ -357,18 +357,22 @@
 
   /* Die Familiennamen sind nicht frei gewaehlt -- sie muessen zu den
      @font-face-Regeln in schrift.css passen (@fontsource-variable/
-     inter bzw. @fontsource/ibm-plex-mono). Dahinter die
+     nunito-sans). Dahinter die
      Systemkette, damit die Oberflaeche auch waehrend des Ladens
      (font-display: swap) und bei blockierter Schrift vollstaendig lesbar
      bleibt. */
-  --zv-font-body: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --zv-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --zv-font-body: "Nunito Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Zahlen und Kennungen: dieselbe Schrift mit gleich breiten Ziffern
+     (Regeln mit var(--zv-font-mono) setzen "tnum"). Bewusst KEINE
+     Monospace-Kette als Rueckfall mehr -- faellt die Schrift aus, soll
+     die Systemschrift kommen, nicht Courier. Siehe schrift.css. */
+  --zv-font-mono: var(--zv-font-body);
   /* Nur fuer die hecaso-Wortmarke (MarkenZeichen.tsx) -- bewusst nicht
      --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
      Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
   --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* UI und Fliesstext teilen sich eine neutrale Schrift (Inter): auf
-     kleinen Bildschirmen lesbar, im Web gewohnt. Eigene Variable bleibt,
+  /* UI und Fliesstext teilen sich eine Schrift (Nunito Sans): runde,
+     ruhige Formen, auf kleinen Bildschirmen lesbar. Eigene Variable bleibt,
      damit UI und Text bei Bedarf wieder getrennt werden koennen. */
   --zv-font-ui: var(--zv-font-body);
 
@@ -385,7 +389,7 @@
   --zv-marke-sonne: light-dark(#e07a5f, #f6a58b);
 
   /*
-   * Schriftskala. 15 px Basis (Inter hat eine grosse x-Hoehe und bleibt bei 15 px gut lesbar), Metadaten 13,
+   * Schriftskala. 15 px Basis (Nunito Sans bleibt bei 15 px gut lesbar), Metadaten 13,
    * Gruppenlabels 11-12 halbfett in Versalien. Die alten Namen -xs..-2xl
    * bleiben als Staffel erhalten, damit bestehende Regeln nicht brechen;
    * neue Regeln nehmen die sprechenden Namen.

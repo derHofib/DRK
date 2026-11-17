@@ -235,7 +235,7 @@ packages/shared/   Typen und Label-Maps für API und Web gemeinsam
   `display: block` (damit breite Tabellen selbst scrollen statt die Seite
   aufzureißen) — der Scrollcontainer ist damit die Tabelle selbst.
 - **`workbox.globPatterns` deckt Schriften nicht ab.** Ohne `woff2` in der
-  Liste fällt Inter offline aus, ohne dass etwas sichtbar bricht.
+  Liste fällt die Schrift (Nunito Sans) offline aus, ohne dass etwas sichtbar bricht.
 - **Die Migration setzt das Passwort von `zimmerakte_app` auf einen
   Dev-Default.** In jeder echten Umgebung einmalig per `ALTER ROLE` ändern
   (siehe `docs/DEPLOYMENT.md`, Schritt 5).

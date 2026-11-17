@@ -291,7 +291,7 @@ Damit ist der ursprüngliche Phasenplan durch. Was jetzt noch fehlt, ist in
   `aria-hidden`-Voreinstellung. Ausschließlich namentliche Importe — kein
   `import * as`, kein `DynamicIcon`, sonst landet das ganze Set (>1 MB) im
   Bundle. Gemessener Zuwachs: **+7,4 kB gzip**.
-- **Schrift:** Inter, selbst ausgeliefert, nur das Latin-Subset. Kein
+- **Schrift:** Nunito Sans (seit November 2026, vorher Inter: Rückmeldung „zu kantig“), selbst ausgeliefert, nur das Latin-Subset. Kein
   Google-Fonts-CDN (in Deutschland abgemahnt, LG München I, 3 O 17493/20)
   und keine per Hand abgelegte Binärdatei — die Version hängt an der
   `pnpm-lock.yaml`.
@@ -2994,8 +2994,9 @@ Fachfunktion. Die Leitlinien, an denen sich jede Entscheidung messen lässt:
 - **Akzent nur für Handlung** (primärer Knopf, aktiver Menüpunkt, Links);
   **Koralle nur für Aufmerksamkeit** (heute, überfällig, offen, frei) —
   nie dekorativ, und unabhängig von der gewählten Akzentfarbe.
-- **Zahlen in IBM Plex Mono** mit tabellarischen Ziffern (Beträge, Daten,
-  Zimmer- und Belegnummern); UI und Fließtext in Inter.
+- **Zahlen mit tabellarischen Ziffern** (Beträge, Daten, Zimmer- und
+  Belegnummern). Seit November 2026 alles in Nunito Sans, deren Ziffern von
+  Haus aus gleich breit sind; IBM Plex Mono und Inter sind entfallen.
 - **Jede Seite beantwortet zuerst „Was habe ich jetzt zu tun?"** (Heute:
   eine Liste statt neun Kacheln).
 

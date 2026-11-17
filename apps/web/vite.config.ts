@@ -31,7 +31,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         // woff2 muss hier ausdruecklich mit rein: die Voreinstellung von
         // workbox ist {js,css,html,ico,png,svg} -- OHNE Schriften. Ohne
-        // diese Zeile faellt Inter offline aus, die App zeigt dann still
+        // diese Zeile faellt die Schrift offline aus, die App zeigt dann still
         // die Systemschrift. Nachpruefbar an der Zeile "precache N entries"
         // in der Bauausgabe: die woff2 muss mitgezaehlt werden.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],

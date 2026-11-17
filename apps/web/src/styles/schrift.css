@@ -1,56 +1,42 @@
 /*
- * Schriften: Inter (UI und Fliesstext -- neutrale, im Web uebliche, auch auf
- * kleinen Bildschirmen gut lesbare Schrift), IBM Plex Mono
- * (Zahlen, Betraege, Daten, Zimmer- und Belegnummern, Aktenzeichen). Alle
- * selbst ausgeliefert -- nur das Latin-Subset.
+ * Schriften: Nunito Sans fuer die ganze Oberflaeche -- UI, Fliesstext UND
+ * Zahlen. Figtree nur fuer die hecaso-Wortmarke (siehe unten).
  *
- * Bewusst kein Google-Fonts-CDN: das ist in Deutschland abgemahnt worden
- * (LG Muenchen I, 3 O 17493/20), und bei einer Anwendung mit Klientendaten
- * ist ein Drittanbieter-Abruf beim Seitenaufbau nicht verhandelbar. Bewusst
- * auch keine per Hand abgelegte Binaerdatei: so haengt die Schriftversion an
- * der pnpm-lock.yaml statt an einem Download von irgendwann (siehe
- * @fontsource-variable/inter, @fontsource/ibm-plex-mono).
+ * Warum Nunito Sans: Rueckmeldung aus dem Betrieb, zweimal -- Inter wirke
+ * "kantig", gewuenscht war etwas Angenehmeres. Nunito Sans hat runde
+ * Boegen und weiche Uebergaenge, bleibt in Tabellen aber sachlich (die
+ * ganz abgerundete Nunito wirkte im Vergleich zu verspielt fuer eine
+ * Fachanwendung). Auswahl per Vergleichsbild durch die Geschaeftsfuehrung.
  *
- * Bewusst diese Regeln von Hand statt der Paket-eigenen index.css: die
- * bringt zusaetzlich Kyrillisch, Griechisch und Vietnamesisch mit. Deren
- * Dateien wuerde zwar kein deutschsprachiger Browser laden (jede
- * @font-face-Regel hat ihre unicode-range), aber sie landeten alle im
- * Bundle und damit im PWA-Precache, ohne je gebraucht zu werden.
+ * Warum keine eigene Ziffernschrift mehr (frueher IBM Plex Mono): Nunito
+ * Sans hat von Haus aus gleich breite Ziffern -- gemessen in Chromium,
+ * "111111" und "000000" sind bei 40 px exakt gleich breit (144 px). Damit
+ * stehen Betraege und Daten auch ohne Monospace sauber untereinander, und
+ * die Mono-Schrift war genau das, was die Oberflaeche technisch-eckig
+ * wirken liess. --zv-font-mono bleibt als Name fuer "Zahlen/Kennungen"
+ * bestehen, zeigt aber auf dieselbe Schrift mit "tnum".
  *
- * unicode-range woertlich aus den Paketen uebernommen (wght.css / 400.css),
- * damit der Browser dieselben Zeichen abdeckt wie dort vorgesehen -- deckt
- * insbesondere die deutschen Umlaute und ß ab (U+0000-00FF).
+ * Selbst ausgeliefert, nur das Latin-Subset. Bewusst kein Google-Fonts-CDN:
+ * das ist in Deutschland abgemahnt worden (LG Muenchen I, 3 O 17493/20),
+ * und bei einer Anwendung mit Klientendaten ist ein Drittanbieter-Abruf
+ * beim Seitenaufbau nicht verhandelbar. Bewusst auch keine per Hand
+ * abgelegte Binaerdatei: so haengt die Schriftversion an der
+ * pnpm-lock.yaml statt an einem Download von irgendwann
+ * (@fontsource-variable/nunito-sans).
+ *
+ * Bewusst diese Regel von Hand statt der Paket-eigenen index.css: die
+ * bringt zusaetzlich Kyrillisch, Vietnamesisch usw. mit, die alle im
+ * Bundle und damit im PWA-Precache landeten, ohne je gebraucht zu werden.
+ * unicode-range woertlich aus dem Paket (wght.css) -- deckt die deutschen
+ * Umlaute und ß ab (U+0000-00FF).
  */
 @font-face {
-  font-family: "Inter Variable";
+  font-family: "Nunito Sans Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 200 900;
-  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+  font-weight: 200 1000;
+  src: url("@fontsource-variable/nunito-sans/files/nunito-sans-latin-wght-normal.woff2")
     format("woff2-variations");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
-    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400;
-  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
-    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-/* 500 fuer hervorgehobene Zahlen (Kassenstand, Lage-Leiste, Zimmernummer):
-   ein eigener Schnitt statt synthetischem Fettdruck, der Plex Mono
-   verzerrt und die Ziffernbreite veraendert. */
-@font-face {
-  font-family: "IBM Plex Mono";
-  font-style: normal;
-  font-display: swap;
-  font-weight: 500;
-  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
     U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
