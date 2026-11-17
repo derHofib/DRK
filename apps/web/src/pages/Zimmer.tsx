@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import type {
   AufgabeDto,
   AufgabePrioritaet,
@@ -82,7 +82,14 @@ const ZIMMER_SORTIERUNG_LABEL: Record<ZimmerSortierung, string> = {
   "frei-zuerst": "Freie Plätze zuerst",
 };
 
-export function Zimmer({ standortId }: { standortId?: string } = {}) {
+export function Zimmer({
+  standortId,
+  standortPille,
+}: {
+  standortId?: string;
+  /** Standortwahl der Belegungsseite, eingebettet als erste Pille der Filterleiste (sonst stuende sie in einer zweiten Zeile darueber). */
+  standortPille?: ReactNode;
+} = {}) {
   const aktuelleBenutzerId = tokenBenutzerId();
 
   const [zimmer, setZimmer] = useState<ZimmerListEintragDto[]>([]);
@@ -567,6 +574,11 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
         </button>
       </div>
 
+      {zimmer.length === 0 && standortPille && (
+        <div className="zv-filterleiste" role="search" aria-label="Standort wählen">
+          {standortPille}
+        </div>
+      )}
       {zimmer.length > 0 && (
         <>
           <Filterleiste
@@ -612,6 +624,7 @@ export function Zimmer({ standortId }: { standortId?: string } = {}) {
               setSuche("");
             }}
           >
+            {standortPille}
             <OptionenFilter
               icon={<IZimmer />}
               label="Status"

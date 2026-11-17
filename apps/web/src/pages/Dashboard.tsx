@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { KachelRaster, type KachelDef } from "../components/KachelRaster";
 import { Leerzustand } from "../components/Leerzustand";
 import { Seitenpanel } from "../components/Seitenpanel";
-import { StandortReiter } from "../components/StandortReiter";
+import { Filterleiste, StandortFilter } from "../components/Listenfilter";
 import {
   IAnpassen,
   IFehler,
@@ -662,11 +662,11 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
         </div>
       </div>
 
-      <StandortReiter
-        eintraege={[{ id: null, label: "Alle Standorte" }, ...standorte.map((s) => ({ id: s.id, label: s.name }))]}
-        aktiv={standortAuswahl}
-        onWaehle={standortWaehlen}
-      />
+      {standorte.length > 1 && (
+        <Filterleiste ariaLabel="Heute filtern" aktiv={standortAuswahl !== null} onZuruecksetzen={() => standortWaehlen(null)}>
+          <StandortFilter standorte={standorte} gewaehlt={standortAuswahl} onWaehlen={standortWaehlen} />
+        </Filterleiste>
+      )}
 
       {daten && kacheln && (
         <div className="zv-heute" style={{ opacity: wirdGeladen ? 0.6 : 1 }}>
