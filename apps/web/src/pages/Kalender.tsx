@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ChatKontaktDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
 import { TERMIN_ANTWORT_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -11,6 +11,15 @@ import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, k
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MAX_TAGE_JE_TERMIN = 62;
+/**
+ * Ab mehr als drei aktiven Terminen an einem Tag bekommt die Zelle im
+ * Jahresueberblick die Sammelfarbe statt Personenstreifen: vier oder mehr
+ * Streifen in einer ~30 px breiten Zelle sind nicht mehr zu unterscheiden,
+ * und "hier ist viel los" ist dann die nuetzlichere Aussage.
+ */
+const SAMMEL_AB = 4;
+/** Mehr Zeilen machen die Vorschau hoeher als den Monatskasten; der Rest steht in der Monatsansicht. */
+const VORSCHAU_MAX = 6;
 
 type Ansicht = "woche" | "monat" | "jahr";
 const ANSICHTEN: { wert: Ansicht; label: string }[] = [
@@ -112,6 +121,12 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Tagesvorschau im Jahresueberblick: welcher Tag, und wie weit unter der
+  // Kastenoberkante sie haengt (Unterkante der Tageszelle).
+  const [vorschau, setVorschau] = useState<{ tag: string; oben: number; scrollen: boolean } | null>(null);
+  // Zeigertyp des letzten pointerdown: ein Klick per Maus kommt nach dem
+  // Hover und soll die Vorschau nicht wieder schliessen, ein Tippen schon.
+  const letzterZeiger = useRef<string>("");
 
   const monat = gewaehlt.slice(0, 7);
   const jahr = gewaehlt.slice(0, 4);
@@ -168,6 +183,38 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         .map((t) => [t.erstelltVon.id, { name: t.erstelltVon.name, farbIndex: farbIndexVon(t)! }] as const),
     ),
   ].sort(([, a], [, b]) => a.name.localeCompare(b.name, "de"));
+
+  // Ein Tag im Jahresueberblick: aktive Termine bestimmen die Farbe,
+  // abgesagte nicht (wer abgesagt hat, ist ja da).
+  const jahresTag = (tag: string) => {
+    const liste = nachTag.get(tag) ?? [];
+    const aktiv = liste.filter((t) => !t.abgesagtAm);
+    // Je Person ein Streifen; von Klient:innen angelegte Termine teilen sich einen neutralen.
+    const personen = [...new Map(aktiv.map((t) => [farbIndexVon(t) ?? "neutral", farbIndexVon(t)] as const)).values()];
+    return { liste, aktiv, personen, sammel: aktiv.length >= SAMMEL_AB };
+  };
+  const sammelImJahr = ansicht === "jahr" && [...sichtbareTage].some((tag) => jahresTag(tag).sammel);
+
+  useEffect(() => {
+    if (!vorschau) return;
+    // Tippen ausserhalb schliesst: iOS-Safari fokussiert Knoepfe beim Tippen
+    // nicht, ein blur kommt dort also nie.
+    const aussen = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest(".zv-kal-mini-tag")) setVorschau(null);
+    };
+    document.addEventListener("pointerdown", aussen);
+    return () => document.removeEventListener("pointerdown", aussen);
+  }, [vorschau]);
+
+  useEffect(() => setVorschau(null), [ansicht, jahr]);
+
+  // `scrollen` nur bei Tippen und Tastatur: am Handy haengt die Vorschau eines
+  // Tages im unteren Bildrand sonst unsichtbar unter der Navigationsleiste.
+  // Beim Maus-Hover nicht -- die Seite wuerde unter dem Zeiger wegrutschen.
+  function vorschauZeigen(tag: string, knopf: HTMLElement, scrollen: boolean) {
+    setVorschau({ tag, oben: knopf.offsetTop + knopf.offsetHeight + 4, scrollen });
+  }
+
   function schritt(richtung: 1 | -1) {
     setGewaehlt((alt) => (ansicht === "woche" ? addTage(alt, 7 * richtung) : addMonate(alt, (ansicht === "monat" ? 1 : 12) * richtung)));
   }
@@ -282,22 +329,75 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                 >
                   {name}
                 </button>
-                <div className="zv-kal-mini-raster" aria-hidden="true">
+                <div className="zv-kal-mini-raster">
                   {WOCHENTAGE.map((w) => (
-                    <span key={w} className="zv-kal-mini-kopf">
+                    <span key={w} className="zv-kal-mini-kopf" aria-hidden="true">
                       {w.slice(0, 1)}
                     </span>
                   ))}
                   {zellen.map((tag, i) => {
-                    if (!tag) return <span key={`leer-${i}`} />;
-                    const liste = nachTag.get(tag) ?? [];
+                    if (!tag) return <span key={`leer-${i}`} aria-hidden="true" />;
+                    const { liste, aktiv, personen, sammel } = jahresTag(tag);
+                    const heuteKlasse = tag === heute ? " heute" : "";
+                    if (liste.length === 0) {
+                      return (
+                        <span key={tag} className={`zv-kal-mini-tag${heuteKlasse}`} aria-hidden="true">
+                          {Number(tag.slice(8))}
+                        </span>
+                      );
+                    }
+                    const farbig = !sammel && personen.some((fi) => fi !== undefined);
+                    const offen = vorschau?.tag === tag;
+                    const zustand = aktiv.length === 0 ? " abgesagt" : sammel ? " belegt sammel" : ` belegt${farbig ? " personfarbe" : ""}`;
+                    const namen = [...new Set(aktiv.map((t) => t.erstelltVon.name))].join(", ");
                     return (
-                      <span key={tag} className={`zv-kal-mini-tag${tag === heute ? " heute" : ""}${liste.length ? (liste.some((t) => !t.abgesagtAm) ? " belegt" : " abgesagt") : ""}`}>
-                        {Number(tag.slice(8))}
-                      </span>
+                      <button
+                        type="button"
+                        key={tag}
+                        className={`zv-kal-mini-tag${heuteKlasse}${zustand}`}
+                        data-tag={tag}
+                        aria-label={`${formatDatum(tag)}, ${terminWort(liste.length)}${namen ? ` von ${namen}` : ""}`}
+                        aria-describedby={offen ? `kal-vorschau-${tag}` : undefined}
+                        aria-expanded={offen}
+                        onPointerDown={(e) => (letzterZeiger.current = e.pointerType)}
+                        onPointerEnter={(e: ReactPointerEvent<HTMLButtonElement>) => e.pointerType === "mouse" && vorschauZeigen(tag, e.currentTarget, false)}
+                        onPointerLeave={(e) => e.pointerType === "mouse" && document.activeElement !== e.currentTarget && setVorschau(null)}
+                        onFocus={(e) => e.currentTarget.matches(":focus-visible") && vorschauZeigen(tag, e.currentTarget, true)}
+                        onBlur={() => setVorschau((v) => (v?.tag === tag ? null : v))}
+                        onKeyDown={(e) => e.key === "Escape" && offen && (e.stopPropagation(), setVorschau(null))}
+                        onClick={(e) => {
+                          // Maus: Hover hat schon geoeffnet, Klick haelt offen. Tippen und Enter schalten um.
+                          if (offen && letzterZeiger.current !== "mouse") setVorschau(null);
+                          else vorschauZeigen(tag, e.currentTarget, letzterZeiger.current !== "mouse");
+                          letzterZeiger.current = "";
+                        }}
+                      >
+                        {farbig && (
+                          <span className="zv-kal-mini-farben" aria-hidden="true">
+                            {personen.map((fi, j) =>
+                              fi === undefined ? (
+                                <span key={`n${j}`} className="zv-kal-mini-neutral" />
+                              ) : (
+                                <span key={fi} className="zv-person-flaeche" style={personFarbStil(fi)} />
+                              ),
+                            )}
+                          </span>
+                        )}
+                        <span className="zv-kal-mini-zahl">{Number(tag.slice(8))}</span>
+                      </button>
                     );
                   })}
                 </div>
+                {vorschau && vorschau.tag.startsWith(m) && (
+                  <TagesVorschau
+                    id={`kal-vorschau-${vorschau.tag}`}
+                    tag={vorschau.tag}
+                    oben={vorschau.oben}
+                    scrollen={vorschau.scrollen}
+                    termine={nachTag.get(vorschau.tag) ?? []}
+                    farbIndexVon={farbIndexVon}
+                  />
+                )}
               </section>
             );
           })}
@@ -350,7 +450,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           ))
         ))}
 
-      {legende.length > 0 && (
+      {(legende.length > 0 || sammelImJahr) && (
         <div className="zv-kal-legende" role="list" aria-label="Farben je Mitarbeiter:in">
           <span className="zv-kal-legende-titel">Farben</span>
           {legende.map(([id, p]) => (
@@ -359,6 +459,12 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
               {p.name}
             </span>
           ))}
+          {sammelImJahr && (
+            <span className="zv-kal-legende-eintrag" role="listitem">
+              <span className="zv-person-punkt zv-kal-sammel-punkt" aria-hidden="true" />
+              Mehr als {SAMMEL_AB - 1} Termine am Tag
+            </span>
+          )}
         </div>
       )}
 
@@ -375,6 +481,56 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         />
       )}
       {detail && <TerminDetail termin={detail} onClose={() => setDetailId(null)} onGeaendert={ersetzen} />}
+    </div>
+  );
+}
+
+/** Tagesvorschau im Jahresueberblick: rein lesend (role=tooltip), bearbeitet wird in Woche/Monat. */
+function TagesVorschau({
+  id,
+  tag,
+  oben,
+  scrollen,
+  termine,
+  farbIndexVon,
+}: {
+  id: string;
+  tag: string;
+  oben: number;
+  scrollen: boolean;
+  termine: TerminDto[];
+  farbIndexVon: (t: TerminDto) => number | undefined;
+}) {
+  const rest = termine.length - VORSCHAU_MAX;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollen) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [scrollen, tag]);
+  return (
+    <div ref={ref} className="zv-kal-vorschau" role="tooltip" id={id} data-testid="kalender-vorschau" style={{ top: oben }}>
+      <strong className="zv-kal-vorschau-kopf">
+        {formatTagTrenner(`${tag}T12:00:00`)} · {terminWort(termine.length)}
+      </strong>
+      <ul>
+        {termine.slice(0, VORSCHAU_MAX).map((t) => {
+          const fi = farbIndexVon(t);
+          return (
+            <li key={t.id}>
+              {fi === undefined ? (
+                <span className="zv-person-punkt zv-kal-vorschau-punkt" aria-hidden="true" />
+              ) : (
+                <span className="zv-person-punkt zv-person-farbe" style={personFarbStil(fi)} aria-hidden="true" />
+              )}
+              <span className="zv-kal-vorschau-zeit">{formatTerminUhrzeit(t)}</span>
+              <span className="zv-kal-vorschau-text">
+                <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
+                {t.abgesagtAm && " (abgesagt)"} <span>· {t.erstelltVon.name}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {rest > 0 && <span className="zv-kal-vorschau-zeit">und {rest} weitere</span>}
     </div>
   );
 }
