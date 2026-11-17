@@ -32,6 +32,7 @@ import {
   type WidgetId,
 } from "../dashboard/sichtbarkeit";
 import { filtere, standortKacheln, zusammenfuehren } from "../dashboard/standortKacheln";
+import { AuslastungTacho } from "../dashboard/AuslastungTacho";
 import type { Tab } from "../navigation";
 
 /**
@@ -458,6 +459,25 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
             </div>
           ),
         })),
+        ...(sichtbarkeit.auslastung
+          ? [
+              {
+                id: "auslastung",
+                titel: "Auslastung",
+                // Vorlaeufiger Platz; die Standardanordnung von Heute wird
+                // gesondert festgelegt. Kollisionen loest KachelRaster.ordnen.
+                standard: { x: 0, y: 0, w: 4, h: 4 },
+                minW: 3,
+                minH: 4,
+                inhalt: (
+                  <section className="zv-kachel-karte" aria-label="Auslastung">
+                    {kachelKopf("Auslastung", { label: "Belegung", ziel: () => navigation.belegung(standortAuswahl) })}
+                    <AuslastungTacho gesamt={daten.zimmer.gesamt} frei={daten.zimmer.frei} />
+                  </section>
+                ),
+              } satisfies KachelDef,
+            ]
+          : []),
         {
           id: "zu-erledigen",
           titel: "Zu erledigen",

@@ -10,6 +10,7 @@
  */
 export type WidgetId =
   | "zimmer"
+  | "auslastung"
   | "hzl"
   | "rechnungen"
   | "stornoantraege"
@@ -28,6 +29,7 @@ export type WidgetId =
 
 export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "zimmer",
+  "auslastung",
   "hzl",
   "rechnungen",
   "stornoantraege",
@@ -46,6 +48,7 @@ export const WIDGET_REIHENFOLGE: WidgetId[] = [
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   zimmer: "Zimmer frei",
+  auslastung: "Auslastung (Tacho)",
   hzl: "HZL diese Woche",
   rechnungen: "Offene Rechnungen",
   stornoantraege: "Offene Storno-Anträge",
