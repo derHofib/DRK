@@ -215,6 +215,12 @@ export interface BenutzerListEintragDto {
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
   positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
+  /**
+   * 0-basierte Position in der Anlagereihenfolge aller Konten des Traegers
+   * (serverseitig abgeleitet). Daraus folgt die Personenfarbe im Kalender
+   * und in der Mitarbeitendenliste, siehe apps/web/src/personFarbe.ts.
+   */
+  farbIndex: number;
   // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
   standortIds: string[];
   // Einrichtungen, an denen die Person laut Rang arbeitet (Positionen und

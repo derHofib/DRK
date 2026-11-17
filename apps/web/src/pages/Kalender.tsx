@@ -6,6 +6,7 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { TerminFormular } from "../components/TerminFormular";
 import { IBearbeiten, IFehler, IHerunterladen, ILeerKalender, INeu, IStornieren, IVor, IZurueckPfeil } from "../components/icons";
+import { personFarbStil, useFarbIndizes } from "../personFarbe";
 import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -145,9 +146,28 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
     return karte;
   }, [termine]);
 
+  const farbIndizes = useFarbIndizes();
+  /** Personenfarbe eines Termins: nur fuer von Mitarbeitenden angelegte Termine, deren Konto die Liste kennt. */
+  const farbIndexVon = (t: TerminDto): number | undefined =>
+    t.erstelltVon.art === "benutzer" ? farbIndizes.get(t.erstelltVon.id) : undefined;
+
   const listenTage = ansicht === "woche" ? wochenTage : ansicht === "monat" ? rasterTage.filter((t) => t.startsWith(monat)) : [];
   const listeMitTerminen = listenTage.filter((t) => (nachTag.get(t) ?? []).length > 0);
 
+  // Legende: alle Mitarbeitenden, die im sichtbaren Zeitraum einen Termin
+  // eingetragen haben. Zugeordnet wird nach der Person, die den Termin
+  // angelegt hat -- wer sich "Urlaub" oder "Fortbildung" eintraegt, ist
+  // genau die Person, die dann weg ist. Von Klient:innen angelegte Termine
+  // bleiben neutral (keine Personenfarbe fuer Klient:innen).
+  const sichtbareTage = new Set(ansicht === "jahr" ? [...nachTag.keys()].filter((t) => t.startsWith(jahr)) : listenTage);
+  const legende = [
+    ...new Map(
+      [...sichtbareTage]
+        .flatMap((tag) => nachTag.get(tag) ?? [])
+        .filter((t) => farbIndexVon(t) !== undefined)
+        .map((t) => [t.erstelltVon.id, { name: t.erstelltVon.name, farbIndex: farbIndexVon(t)! }] as const),
+    ),
+  ].sort(([, a], [, b]) => a.name.localeCompare(b.name, "de"));
   function schritt(richtung: 1 | -1) {
     setGewaehlt((alt) => (ansicht === "woche" ? addTage(alt, 7 * richtung) : addMonate(alt, (ansicht === "monat" ? 1 : 12) * richtung)));
   }
@@ -184,9 +204,17 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         <span className="zv-kal-tag-zahl">{Number(tag.slice(8))}</span>
         {liste.length > 0 && (
           <span className="zv-kal-punkte" aria-hidden="true">
-            {aktiv > 0 && <span className="zv-kal-punkt" />}
-            {aktiv > 1 && <span className="zv-kal-punkt" />}
-            {aktiv > 2 && <span className="zv-kal-punkt" />}
+            {liste
+              .filter((t) => !t.abgesagtAm)
+              .slice(0, 3)
+              .map((t) => {
+                const fi = farbIndexVon(t);
+                return fi === undefined ? (
+                  <span key={t.id} className="zv-kal-punkt" />
+                ) : (
+                  <span key={t.id} className="zv-kal-punkt zv-person-farbe" style={personFarbStil(fi)} />
+                );
+              })}
             {aktiv === 0 && <span className="zv-kal-punkt abgesagt" />}
           </span>
         )}
@@ -298,10 +326,16 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                 {(nachTag.get(tag) ?? []).map((t) => (
                   <li key={t.id}>
                     <button type="button" className="zv-kal-termin" onClick={() => setDetailId(t.id)}>
+                      {farbIndexVon(t) !== undefined && (
+                        <span className="zv-kal-person-streifen zv-person-farbe" style={personFarbStil(farbIndexVon(t)!)} aria-hidden="true" />
+                      )}
                       <span className="zv-kal-zeit">{formatTerminUhrzeit(t)}</span>
                       <span className="zv-kal-termin-text">
                         <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
-                        {t.ort && <span>{t.ort}</span>}
+                        <span>
+                          {t.erstelltVon.name}
+                          {t.ort && ` · ${t.ort}`}
+                        </span>
                       </span>
                       {t.abgesagtAm ? (
                         <span className="zv-pill zv-pill-danger">Abgesagt</span>
@@ -315,6 +349,18 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
             </div>
           ))
         ))}
+
+      {legende.length > 0 && (
+        <div className="zv-kal-legende" role="list" aria-label="Farben je Mitarbeiter:in">
+          <span className="zv-kal-legende-titel">Farben</span>
+          {legende.map(([id, p]) => (
+            <span key={id} className="zv-kal-legende-eintrag" role="listitem">
+              <span className="zv-person-punkt zv-person-farbe" style={personFarbStil(p.farbIndex)} aria-hidden="true" />
+              {p.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {neuOffen && (
         <NeuerTermin

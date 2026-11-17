@@ -23,6 +23,7 @@ export interface BenutzerListEintrag {
   // Positionen. Leer = (noch) keine Position zugewiesen, also keine Rechte.
   positionen: { positionId: string; titel: string; accountTypName: string }[];
   aktiv: boolean;
+  farbIndex: number;
   standortIds: string[];
   einheitIds: string[];
 }
@@ -69,10 +70,18 @@ export class BenutzerService {
         email: string;
         name: string;
         aktiv: boolean;
+        farb_index: string;
         standort_ids: string[];
         positionen: { positionId: string; titel: string; accountTypName: string }[];
       }>(
+        // farb_index: Position in der Anlagereihenfolge ALLER Konten des
+        // Traegers -- daraus leitet die Oberflaeche die Personenfarbe ab
+        // (apps/web/src/personFarbe.ts). Abgeleitet statt gespeichert, und
+        // nach Anlage sortiert, damit ein neues Konto hinten anhaengt und
+        // niemandes Farbe verschiebt. Deaktivierte Konten bleiben in der
+        // Zaehlung (sie werden nie geloescht), also bleibt die Folge stabil.
         `SELECT b.id, b.email, b.name, b.aktiv,
+                (row_number() OVER (ORDER BY b.erstellt_am, b.id) - 1) AS farb_index,
                 COALESCE(array_agg(DISTINCT bs.standort_id) FILTER (WHERE bs.standort_id IS NOT NULL), '{}') AS standort_ids,
                 COALESCE(
                   json_agg(DISTINCT jsonb_build_object('positionId', p.id, 'titel', p.titel, 'accountTypName', a.name))
@@ -86,7 +95,7 @@ export class BenutzerService {
                 AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
          LEFT JOIN org_position p ON p.id = pb.position_id AND p.aktiv
          LEFT JOIN account_typ a ON a.id = p.account_typ_id
-         GROUP BY b.id, b.email, b.name, b.aktiv
+         GROUP BY b.id, b.email, b.name, b.aktiv, b.erstellt_am
          ORDER BY b.name`
       );
       // Wo die Person laut Rang arbeitet: Heimat-Einheit, weitere Einheiten und
@@ -113,6 +122,7 @@ export class BenutzerService {
         email: r.email,
         name: r.name,
         aktiv: r.aktiv,
+        farbIndex: Number(r.farb_index),
         standortIds: r.standort_ids,
         einheitIds: einheitenJeBenutzer.get(r.id) ?? [],
         positionen: eindeutigePositionen(r.positionen),
