@@ -139,7 +139,7 @@ import type { ComponentType } from "react";
 
 /**
  * strokeWidth 1.75 statt der lucide-Voreinstellung 2: bei 16px wirken die
- * Icons damit weniger schwer neben Inter, ohne auszufransen. Der Wert
+ * Icons damit weniger schwer neben der Schrift, ohne auszufransen. Der Wert
  * spiegelt --zv-icon-stroke aus tokens.css.
  */
 const grund = {
