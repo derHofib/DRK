@@ -80,6 +80,11 @@ export class ProtokollController {
     return this.protokolle.verwaltungsDetail(id);
   }
 
+  @Get("formulare/:id/kennzahlen")
+  kennzahlen(@Param("id", ParseUUIDPipe) id: string) {
+    return this.protokolle.kennzahlen(id);
+  }
+
   @Delete("formulare/:id")
   async formularLoeschen(@Param("id", ParseUUIDPipe) id: string) {
     await this.protokolle.formularLoeschen(id);

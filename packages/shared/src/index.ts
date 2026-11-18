@@ -2295,6 +2295,8 @@ export interface FormularVerwaltungDto {
   standortIds: string[];
   anheftungen: FormularAnheftung[];
   anzahlProtokolle: number;
+  /** Abgeschlossene Protokolle der letzten 30 Tage (alle Versionen). */
+  anzahl30Tage: number;
 }
 
 export interface FormularVersionInfoDto {
@@ -2302,6 +2304,37 @@ export interface FormularVersionInfoDto {
   veroeffentlichtAm: string | null;
   veroeffentlichtVonName: string | null;
   anzahlProtokolle: number;
+  /** Fuer „Aufbau“ mit Versionswahl und den Vergleich zur Vorversion. */
+  definition: FormularDefinition;
+}
+
+/**
+ * Zahlen fuer den Reiter „Übersicht“ eines Formulars (Rueckmeldung „Aufbau
+ * Formular“). Alles abgeleitet, nichts gespeichert. Gezaehlt werden nur
+ * abgeschlossene Protokolle; angefangene stehen getrennt in `offen`.
+ */
+export interface FormularKennzahlenDto {
+  gesamt: number;
+  /** Erstes abgeschlossenes Protokoll (ISO), null = noch nie ausgefuellt. */
+  seit: string | null;
+  letzte30Tage: number;
+  vorige30Tage: number;
+  offen: number;
+  aeltesterOffenerSeit: string | null;
+  zuletzt: { am: string; standortName: string | null } | null;
+  /** Die letzten 12 Kalenderwochen (Montag als Start, Europe/Berlin), aelteste zuerst. */
+  wochen: { wocheAb: string; kw: number; jeVersion: Record<string, number> }[];
+  /** Standorte des Traegers mit Anzahl der letzten 30 Tage; zugelassen = Formular gilt dort. */
+  standorte: { id: string; name: string; anzahl: number; zugelassen: boolean }[];
+  /** Ohne Standort: Klient:in hatte am Bezugstag keine Belegung. */
+  ohneStandort: number;
+  /**
+   * Die letzten abgeschlossenen Protokolle -- nur solche, deren Klient:in man
+   * sehen darf, und nur mit Initialen (Konzept Frage 3).
+   */
+  letzte: { id: string; klientId: string; abgeschlossenAm: string; klientInitialen: string; standortName: string | null; versionNummer: number }[];
+  /** Je Version und Feldschluessel: in wie vielen abgeschlossenen Protokollen ein Wert steht. */
+  felder: Record<string, Record<string, number>>;
 }
 
 export interface FormularDetailDto extends FormularVerwaltungDto {

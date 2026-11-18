@@ -161,6 +161,7 @@ describe("Formulare: Entwicklung, Standorte, Anheften", () => {
           "zimmer",
           "klient_stammdaten",
           "klient",
+          "benutzer_standort",
           "standort",
         ]) {
           await admin.query(`DELETE FROM ${t} WHERE mandant_id = $1`, [m]);
@@ -631,5 +632,67 @@ describe("Formulare: Entwicklung, Standorte, Anheften", () => {
     expect(zeilen).toBe(0);
     // Gegenprobe: im eigenen Traeger gibt es die Zeilen.
     expect(await alsApp(mandantA, async (c) => (await c.query("SELECT count(*)::int AS n FROM formular_anheftung")).rows[0].n)).toBeGreaterThan(0);
+  });
+
+  describe("Übersicht: Kennzahlen (Rueckmeldung „Aufbau Formular“)", () => {
+    let protokollId: string;
+
+    beforeAll(async () => {
+      // Formular fuer alle Standorte, damit das Protokoll sicher angelegt werden darf.
+      await als(leitungA).put(`/formulare/${formularId}/einstellungen`, { name: "Nachtkontrolle", standortIds: [], anheftungen: [] });
+      const neu = await als(betreuerA).post("/protokolle", { formularId, klientId: klientLinden });
+      expect(neu.status).toBe(201);
+      protokollId = neu.body.id;
+      const fertig = await als(betreuerA).post(`/protokolle/${protokollId}/abschliessen`, { werte: { schlaf: "ruhig", vorfall: false } });
+      expect(fertig.status).toBe(201);
+    });
+
+    async function standortLeitung(kurz: string, standortId: string) {
+      const token = await konto({ id: mandantA, slug: (await admin.query("SELECT slug FROM mandant WHERE id = $1", [mandantA])).rows[0].slug }, "einrichtungsleitung", kurz);
+      const { rows } = await admin.query<{ id: string }>("SELECT id FROM benutzer WHERE email = $1", [`${kurz}-${suffix}@beispiel.test`]);
+      await admin.query("INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)", [mandantA, rows[0].id, standortId]);
+      return token;
+    }
+
+    it("zaehlt abgeschlossene Protokolle passend zu den Versionen, ohne Klientennamen", async () => {
+      const res = await als(leitungA).get(`/formulare/${formularId}/kennzahlen`);
+      expect(res.status).toBe(200);
+      const detail = (await als(leitungA).get(`/formulare/${formularId}`)).body;
+      const jeVersion = detail.versionen.reduce((n: number, v: { anzahlProtokolle: number }) => n + v.anzahlProtokolle, 0);
+      expect(res.body.gesamt).toBe(jeVersion);
+      expect(res.body.gesamt).toBeGreaterThan(0);
+      expect(res.body.letzte30Tage).toBe(detail.anzahl30Tage);
+      expect(res.body.wochen).toHaveLength(12);
+      const dieseWoche = res.body.wochen[11].jeVersion as Record<string, number>;
+      expect(Object.values(dieseWoche).reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+      const linden = res.body.standorte.find((st: { id: string }) => st.id === standorte.lindenweg);
+      expect(linden.anzahl).toBeGreaterThan(0);
+      expect(res.body.zuletzt.standortName).toBe("Haus Lindenweg");
+      expect(res.body.letzte.map((l: { id: string }) => l.id)).toContain(protokollId);
+      expect(res.body.letzte[0].klientInitialen).toMatch(/^[A-ZÄÖÜ]\. [A-ZÄÖÜ]\.$/);
+      // Vorname der Test-Klient:innen ist "Mira": er darf nirgends in der Antwort stehen.
+      expect(JSON.stringify(res.body)).not.toContain("Mira");
+      const neuste = String(Math.max(...detail.versionen.filter((v: { veroeffentlichtAm: string | null }) => v.veroeffentlichtAm).map((v: { nummer: number }) => v.nummer)));
+      expect(res.body.felder[neuste].schlaf).toBeGreaterThan(0);
+      // Version mitsamt Definition fuer die Versionswahl im Reiter „Aufbau“.
+      expect(detail.versionen[0].definition.bausteine.length).toBeGreaterThan(0);
+    });
+
+    it("„Zuletzt ausgefüllt“ beachtet die Standort-Einschraenkung, die Zaehlung nicht", async () => {
+      const park = await standortLeitung("f-leitung-park", standorte.park);
+      const res = await als(park).get(`/formulare/${formularId}/kennzahlen`);
+      expect(res.status).toBe(200);
+      expect(res.body.letzte).toEqual([]);
+      expect(res.body.gesamt).toBeGreaterThan(0);
+      // Gegenprobe: am Standort Lindenweg erscheint das Protokoll.
+      const linden = await standortLeitung("f-leitung-linden", standorte.lindenweg);
+      const ok = await als(linden).get(`/formulare/${formularId}/kennzahlen`);
+      expect(ok.body.letzte.map((l: { id: string }) => l.id)).toContain(protokollId);
+    });
+
+    it("nur mit dem Recht, Formulare zu verwalten, und nur im eigenen Traeger", async () => {
+      expect((await als(betreuerA).get(`/formulare/${formularId}/kennzahlen`)).status).toBe(403);
+      expect((await als(leitungB).get(`/formulare/${formularId}/kennzahlen`)).status).toBe(404);
+    });
   });
 });

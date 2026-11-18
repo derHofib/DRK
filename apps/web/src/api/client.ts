@@ -6,6 +6,7 @@ import type {
   FormularAnheftung,
   FormularDefinition,
   FormularDetailDto,
+  FormularKennzahlenDto,
   FormularVerwaltungDto,
   ProtokollAenderungDto,
   ProtokollDto,
@@ -434,6 +435,7 @@ export const api = {
   protokolleRechte: () => request<ProtokolleRechteDto>("/protokolle/rechte"),
   formulare: () => request<FormularVerwaltungDto[]>("/formulare"),
   formular: (id: string) => request<FormularDetailDto>(`/formulare/${id}`),
+  formularKennzahlen: (id: string) => request<FormularKennzahlenDto>(`/formulare/${id}/kennzahlen`),
   formularAnlegen: (name: string, beschreibung: string | null) =>
     request<FormularDetailDto>("/formulare", { method: "POST", body: JSON.stringify({ name, beschreibung }) }),
   formularLoeschen: (id: string) => request<{ ok: true }>(`/formulare/${id}`, { method: "DELETE" }),
