@@ -6804,3 +6804,374 @@ button[class],
 .zv-rm-detail-entscheidung .zv-aktionszeile {
   flex-wrap: wrap;
 }
+
+/* ==================================================================
+   Protokolle (Formular-Baukasten, migrations/0075)
+   ================================================================== */
+.zv-protokoll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  max-width: 760px;
+}
+
+.zv-protokoll-abschnitt {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-1);
+  margin: 0 0 var(--zv-space-3);
+  min-width: 0;
+}
+
+.zv-protokoll-abschnitt legend,
+.zv-protokoll-abschnitt h4 {
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+  padding: 0 var(--zv-space-1);
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-protokoll-hilfe {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-protokoll-warnung {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-status-warn);
+}
+
+.zv-protokoll-anzeige {
+  display: flex;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-1) 0;
+  font-size: var(--zv-text-m);
+}
+
+.zv-protokoll-label {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  min-width: 0;
+}
+
+.zv-protokoll-anzeige .zv-protokoll-label {
+  flex: 0 0 9.5rem;
+}
+
+.zv-protokoll-nurlesen {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: var(--zv-space-1) 0;
+  color: var(--zv-text);
+}
+
+.zv-protokoll-pill {
+  margin-left: var(--zv-space-2);
+  vertical-align: middle;
+}
+
+.zv-field-fehler input,
+.zv-field-fehler textarea,
+.zv-field-fehler select {
+  border-color: var(--zv-status-danger);
+}
+
+.zv-feld-fehler {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-status-danger);
+}
+
+.zv-protokoll-zahl {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-zahl input {
+  max-width: 12rem;
+}
+
+/* Knoepfe statt Ausklappliste bis fuenf Optionen: am Handy ein Tipp statt
+   drei, und alle Moeglichkeiten sind auf einen Blick sichtbar. */
+.zv-protokoll-knoepfe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-knoepfe button {
+  min-height: 40px;
+  min-width: 3rem;
+  padding: 0 var(--zv-space-4);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-m);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-protokoll-knoepfe button:hover {
+  border-color: var(--zv-accent);
+}
+
+.zv-protokoll-knoepfe button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  border-color: var(--zv-accent);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-protokoll-mehrfach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-field .zv-protokoll-haken {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text);
+  margin: 0;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+/* .zv-field input gibt Eingaben width:100% -- ein Haekchen darf das nicht. */
+.zv-field .zv-protokoll-haken input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+  flex: none;
+}
+
+.zv-protokoll-skala-enden {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  margin-top: var(--zv-space-1);
+  max-width: 22rem;
+}
+
+.zv-protokoll-personen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-person {
+  height: auto;
+  padding: var(--zv-space-1) var(--zv-space-1) var(--zv-space-1) var(--zv-space-2);
+}
+
+.zv-protokoll-personen select {
+  flex: 1 1 12rem;
+  width: auto;
+}
+
+/* Lesende Ansicht: Beschriftung | Wert | Herkunft. Am Handy untereinander. */
+.zv-protokoll-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  gap: var(--zv-space-3);
+  align-items: baseline;
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-protokoll-abschnitt .zv-protokoll-zeile:last-child {
+  border-bottom: none;
+}
+
+.zv-protokoll-wert {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.zv-protokoll-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-protokoll-detail > .zv-link-btn {
+  align-self: flex-start;
+}
+
+.zv-protokoll-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+}
+
+.zv-protokoll-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+}
+
+.zv-protokoll-meta {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-protokoll-kopf-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-leiste {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  max-width: 760px;
+  padding-top: var(--zv-space-2);
+  border-top: 1px solid var(--zv-border);
+}
+
+.zv-protokoll-status {
+  margin-right: auto;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-protokoll-korrektur {
+  max-width: 760px;
+}
+
+.zv-protokoll-historie h4 {
+  font-size: var(--zv-text-m);
+  margin: var(--zv-space-3) 0 var(--zv-space-2);
+}
+
+.zv-protokoll-formularwahl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-formularwahl-eintrag {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-1);
+  text-align: left;
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zv-protokoll-formularwahl-eintrag:hover {
+  border-color: var(--zv-accent);
+}
+
+.zv-protokoll-formularwahl-eintrag span {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-formular-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zv-formular-liste li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-formular-liste li:last-child {
+  border-bottom: none;
+}
+
+.zv-formular-meta {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .zv-protokoll-abschnitt {
+    padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-1);
+  }
+
+  .zv-protokoll-zeile {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--zv-space-1) var(--zv-space-2);
+  }
+
+  .zv-protokoll-zeile .zv-protokoll-label {
+    grid-column: 1 / -1;
+  }
+
+  .zv-protokoll-anzeige .zv-protokoll-label {
+    flex-basis: 7.5rem;
+  }
+
+  .zv-protokoll-leiste .zv-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .zv-formular-liste li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.zv-protokoll-kopfzeile {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-protokoll-kopfzeile h3 {
+  margin: 0;
+  font-size: var(--zv-text-basis);
+}
+
+.zv-protokoll-modal-text {
+  margin-top: 0;
+}
+
+.zv-formular-stillgelegt {
+  margin-left: var(--zv-space-2);
+}

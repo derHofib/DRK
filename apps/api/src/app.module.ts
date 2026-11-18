@@ -29,6 +29,7 @@ import { ProfilModule } from "./profil/profil.module";
 import { SucheModule } from "./suche/suche.module";
 import { RueckmeldungModule } from "./rueckmeldung/rueckmeldung.module";
 import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
+import { ProtokollModule } from "./protokolle/protokoll.module";
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
     SucheModule,
     RueckmeldungModule,
     StundenbuchungModule,
+    ProtokollModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
