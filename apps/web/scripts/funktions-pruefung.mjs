@@ -232,6 +232,8 @@ if (laufe(4)) {
   const page = await ctx.newPage();
   await anmelden(page, LEITUNG);
   await reiterWaehlen(page, "Einstellungen");
+  // Seit der Trennung Mein Konto / Traeger liegt die Farbe im Bereich "Erscheinungsbild".
+  await page.click('.zv-einstellungen-menue button:has-text("Erscheinungsbild")');
   await page.waitForSelector(".zv-swatch-grid", { timeout: 5000 });
 
   const knopfFarbe = () => page.evaluate(() => {
@@ -267,6 +269,7 @@ if (laufe(4)) {
   await page.reload({ waitUntil: "load" });
   await page.waitForSelector(".zv-content", { timeout: 10000 });
   await reiterWaehlen(page, "Einstellungen");
+  await page.click('.zv-einstellungen-menue button:has-text("Erscheinungsbild")');
   await page.waitForSelector(".zv-swatch-grid");
   const nachReload = await knopfFarbe();
   ok(nachReload === nachAuswahl, `Farbe ueberlebt das Neuladen (${nachReload})`);
@@ -304,7 +307,8 @@ if (laufe(4)) {
   await reiterWaehlen(page2, "Einstellungen");
   await page2.waitForTimeout(500);
   const hatFarbwahl = await page2.locator(".zv-swatch-grid").count();
-  ok(hatFarbwahl === 0, "Bezugsbetreuung bekommt den Farbabschnitt gar nicht erst angeboten");
+  const hatBereich = await page2.locator('.zv-einstellungen-menue button:has-text("Erscheinungsbild")').count();
+  ok(hatFarbwahl === 0 && hatBereich === 0, "Bezugsbetreuung bekommt den Bereich Erscheinungsbild gar nicht erst angeboten");
 
   const status = await page2.evaluate(async () => {
     const r = await fetch("/api/mandant/me", {
@@ -336,7 +340,7 @@ if (laufe(5)) {
       const ueberlauf = await page.evaluate(() =>
         document.documentElement.scrollWidth > document.documentElement.clientWidth);
       ok(!ueberlauf, `${theme}/390px "${reiter}": kein horizontaler Ueberlauf`);
-      // Einstellungen hat keine h2, sondern eine eigene Reiterleiste -- daher "irgendein Inhalt" statt einer Ueberschrift.
+      // "irgendein Inhalt" statt einer bestimmten Ueberschrift: die Seiten haben unterschiedliche Koepfe.
       const inhalt = (await page.locator(".zv-content").innerText().catch(() => "")).trim();
       ok(inhalt.length > 0, `${theme}/390px "${reiter}": Seite gerendert (${inhalt.split("\n")[0].slice(0, 30)})`);
     }

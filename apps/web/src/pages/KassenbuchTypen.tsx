@@ -97,8 +97,7 @@ export function KassenbuchTypen() {
         </div>
       )}
 
-      <div className="zv-seiten-kopf">
-        <h2>Kassenbuch-Typen</h2>
+      <div className="zv-seiten-kopf zv-seiten-kopf-ohne-titel">
         <button
           className="zv-btn"
           onClick={() => {

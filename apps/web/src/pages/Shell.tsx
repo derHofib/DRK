@@ -119,6 +119,8 @@ const KLIENTEN_MOBIL_PANEL: { ansicht: KlientenAnsicht; label: string; icon: typ
 /** Diese Ansichten tragen Kartenlisten/breite Inhalte und bekommen mehr Platz. */
 const BREITE_REITER = new Set<Tab>([
   "dashboard",
+  // Einstellungen: Menuespalte + Kartenraster brauchen die Breite (Einstellungen.tsx).
+  "einstellungen",
   "standorte",
   "kassenbuch",
   "hzl",

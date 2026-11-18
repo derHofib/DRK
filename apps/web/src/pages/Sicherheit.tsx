@@ -130,8 +130,10 @@ export function Sicherheit() {
     }
   }
 
+  // Fragment statt eigener Karte: die Einstellungen legen jeden Abschnitt als
+  // eigene Karte ins Raster (app.css, .zv-einstellungen-raster).
   return (
-    <div className="zv-card zv-card-weit">
+    <>
       <PasswortAendern />
 
       <section className="zv-einstellungen-abschnitt">
@@ -221,6 +223,6 @@ export function Sicherheit() {
         </div>
       )}
       </section>
-    </div>
+    </>
   );
 }
