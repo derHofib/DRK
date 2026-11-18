@@ -18,7 +18,7 @@ import { GrundAbfrage } from "../components/GrundAbfrage";
 import { KlientZugang } from "../components/KlientZugang";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { AngehefteteFormulare, useAngehefteteFormulare } from "../components/AngehefteteFormulare";
+import { NeuerTagesberichtFenster } from "../components/NeuerTagesbericht";
 import {
   IAbbrechen,
   IAblehnen,
@@ -57,7 +57,7 @@ import { dateiZuBase64 } from "../datei";
 import { formatBetrag, formatDatum, heuteBerlin } from "../format";
 import { HilfeplanTab } from "./klient/HilfeplanTab";
 import { ProtokolleTab } from "./klient/ProtokolleTab";
-import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
+import { berichtFormularTexte, TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
 type Tab = "ueberblick" | "tagesberichte" | "protokolle" | "hilfeplan" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
 
@@ -362,6 +362,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           <UeberblickTab
             klient={klient}
             berichte={berichte}
+            onBerichtSchreiben={berichtSchreiben}
             onBerichtAngelegt={berichteLaden}
             onAlleBerichte={() => setTab("tagesberichte")}
             onKontakte={() => setTab("stammdaten")}
@@ -823,12 +824,14 @@ function tageBis(datum: string): number {
 function UeberblickTab({
   klient,
   berichte,
+  onBerichtSchreiben,
   onBerichtAngelegt,
   onAlleBerichte,
   onKontakte,
 }: {
   klient: KlientDetailDto;
   berichte: TagesberichtDto[];
+  onBerichtSchreiben: () => void;
   onBerichtAngelegt: () => void;
   onAlleBerichte: () => void;
   onKontakte: () => void;
@@ -838,6 +841,23 @@ function UeberblickTab({
   const [text, setText] = useState("");
   const [wirdGespeichert, setWirdGespeichert] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
+  // Haengt am Standort ein Pflicht-Formular am Tagesbericht (bei "ersetzt"
+  // immer), lehnt der Server einen reinen Freitext ab. Statt eines Feldes,
+  // das nur eine Fehlermeldung liefern kann, gibt es dann den Knopf ins
+  // richtige Fenster. null = noch unbekannt, dann bleibt das Feld.
+  const [brauchtFormular, setBrauchtFormular] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let aktuell = true;
+    setBrauchtFormular(null);
+    api
+      .formularAngebot(klient.id, "tagesbericht")
+      .then((l) => aktuell && setBrauchtFormular(l.some((a) => a.pflicht)))
+      .catch(() => aktuell && setBrauchtFormular(false));
+    return () => {
+      aktuell = false;
+    };
+  }, [klient.id]);
 
   useEffect(() => {
     api
@@ -888,22 +908,32 @@ function UeberblickTab({
             Alle Tagesberichte
           </button>
         </div>
-        <form className="zv-schnelleintrag" onSubmit={schnellEintrag}>
-          <label htmlFor="schnelleintrag" className="zv-sr-only">
-            Schnelleintrag für heute
-          </label>
-          <textarea
-            id="schnelleintrag"
-            rows={2}
-            value={text}
-            placeholder="Kurzer Eintrag für heute …"
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button className="zv-btn zv-btn-sekundaer" type="submit" disabled={wirdGespeichert || !text.trim()}>
-            <ISpeichern />
-            Speichern
-          </button>
-        </form>
+        {brauchtFormular ? (
+          <div className="zv-schnelleintrag-formular">
+            <button type="button" className="zv-btn zv-btn-block" onClick={onBerichtSchreiben}>
+              <INeu />
+              Tagesbericht für heute
+            </button>
+            <p className="zv-sub-inline">An ihrem Standort gehört ein Formular zum Tagesbericht.</p>
+          </div>
+        ) : (
+          <form className="zv-schnelleintrag" onSubmit={schnellEintrag}>
+            <label htmlFor="schnelleintrag" className="zv-sr-only">
+              Schnelleintrag für heute
+            </label>
+            <textarea
+              id="schnelleintrag"
+              rows={2}
+              value={text}
+              placeholder="Kurzer Eintrag für heute …"
+              onChange={(e) => setText(e.target.value)}
+            />
+            <button className="zv-btn zv-btn-sekundaer" type="submit" disabled={wirdGespeichert || !text.trim()}>
+              <ISpeichern />
+              Speichern
+            </button>
+          </form>
+        )}
         {fehler && <p className="zv-fehlertext">{fehler}</p>}
         {berichte.length === 0 ? (
           <Leerzustand icon={ILeerTagesberichte}>Noch kein Tagesbericht. Der erste Eintrag steht oben.</Leerzustand>
@@ -913,7 +943,7 @@ function UeberblickTab({
               <li key={b.id}>
                 <span className="zv-chronik-datum zv-mono">{formatDatum(b.datum)}</span>
                 <span className="zv-chronik-text">
-                  <span className="zv-chronik-inhalt">{b.text}</span>
+                  <span className="zv-chronik-inhalt">{b.text || berichtFormularTexte(b).join(" · ")}</span>
                   <span className="zv-todo-meta">
                     {b.autorName ?? "unbekannt"}
                     {b.tags.length > 0 && ` · ${b.tags.map((t) => t.name).join(", ")}`}
@@ -1843,8 +1873,6 @@ function TagesberichteTab({
   // "Tagesbericht schreiben" im Kopf der Akte oeffnet direkt das Formular --
   // sonst waere der primaere Knopf nur ein Tabwechsel und ein Klick zu wenig.
   const [formularOffen, setFormularOffen] = useState(startMitFormular);
-  const [formFehler, setFormFehler] = useState<string | null>(null);
-  const angeheftet = useAngehefteteFormulare(formularOffen ? klientId : null, "tagesbericht");
   useEffect(() => {
     if (startMitFormular) onFormularGenutzt?.();
   }, [startMitFormular, onFormularGenutzt]);
@@ -1855,47 +1883,6 @@ function TagesberichteTab({
   }
 
   useEffect(laden, [klientId]);
-
-  async function anlegen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const tagsText = String(form.get("tags") ?? "");
-    const datei = form.get("dokument") as File | null;
-    setFormFehler(null);
-    if (String(form.get("datum")) > heuteBerlin()) {
-      setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
-      return;
-    }
-    const formularFehler = angeheftet.pruefen();
-    if (formularFehler) {
-      setFormFehler(formularFehler);
-      return;
-    }
-    try {
-      let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
-      if (datei && datei.size > 0) {
-        dokumente = [
-          { base64: await dateiZuBase64(datei), dateiname: datei.name, mimeType: datei.type || "application/octet-stream" },
-        ];
-      }
-      await api.tagesberichtAnlegen({
-        protokolle: angeheftet.eingaben(),
-        klientId,
-        datum: String(form.get("datum")),
-        text: String(form.get("text")),
-        tagNamen: tagsText
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        dokumente,
-      });
-      setFormularOffen(false);
-      laden();
-    } catch (err) {
-      angeheftet.serverFehler(err);
-      setFormFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht angelegt werden.");
-    }
-  }
 
   async function tagEntfernen(berichtId: string, tagId: string) {
     try {
@@ -1938,50 +1925,21 @@ function TagesberichteTab({
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h3 style={{ margin: 0, fontSize: 15 }}>Tagesberichte</h3>
-        <button
-          className="zv-btn"
-          onClick={() => {
-            setFormFehler(null);
-            setFormularOffen(true);
-          }}
-        >
+        <button className="zv-btn" onClick={() => setFormularOffen(true)}>
           <INeu />
           Neuer Tagesbericht
         </button>
       </div>
 
       {formularOffen && (
-        <Modal titel="Neuer Tagesbericht" onClose={() => setFormularOffen(false)}>
-          <form onSubmit={anlegen}>
-            {formFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {formFehler}
-              </div>
-            )}
-            <div className="zv-field">
-              <label>Datum</label>
-              <input name="datum" type="date" required autoFocus max={heute} defaultValue={heute} />
-            </div>
-            <div className="zv-field">
-              <label>Bericht</label>
-              <textarea name="text" required rows={5} />
-            </div>
-            <AngehefteteFormulare z={angeheftet} />
-            <div className="zv-field">
-              <label>Tags (optional, durch Komma getrennt)</label>
-              <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />
-            </div>
-            <div className="zv-field">
-              <label>Dokument (optional)</label>
-              <input name="dokument" type="file" accept="application/pdf,image/*" />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit">
-              <ISpeichern />
-              Anlegen
-            </button>
-          </form>
-        </Modal>
+        <NeuerTagesberichtFenster
+          klientId={klientId}
+          onClose={() => setFormularOffen(false)}
+          onAngelegt={() => {
+            setFormularOffen(false);
+            laden();
+          }}
+        />
       )}
 
       <TagVorschlaegeDatalist tags={tagVorschlaege} />

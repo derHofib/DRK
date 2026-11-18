@@ -391,6 +391,7 @@ function BaumKnoten({
     if (b.vorausfuellen) merkmale.push(b.vorausfuellen.art === "festgehalten" ? "festgehalten" : "vorausgefüllt");
     if (b.intern) merkmale.push("intern");
   }
+  if ((istEingabe(b) || b.typ === "berechnung") && b.inTagesberichtListe) merkmale.push("in der Liste");
   if (definition.bezugsdatumFeld === b.schluessel) merkmale.push("Bezugsdatum");
   return (
     <li className={b.typ === "abschnitt" ? "zv-fe-knoten zv-fe-knoten-abschnitt" : "zv-fe-knoten"}>
@@ -584,6 +585,17 @@ function Eigenschaften({
             <label className="zv-checkbox-zeile">
               <input type="checkbox" checked={!!b.intern} onChange={(e) => onAendern({ ...b, intern: e.target.checked || undefined })} />
               Intern: nie in Ausdrucke für Ämter
+            </label>
+          )}
+
+          {(istEingabe(b) || b.typ === "berechnung") && (
+            <label className="zv-checkbox-zeile">
+              <input
+                type="checkbox"
+                checked={!!b.inTagesberichtListe}
+                onChange={(e) => onAendern({ ...b, inTagesberichtListe: e.target.checked || undefined })}
+              />
+              In der Tagesbericht-Liste zeigen
             </label>
           )}
 

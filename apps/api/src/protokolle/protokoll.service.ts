@@ -17,6 +17,7 @@ import {
   type FeldWert,
   type FeldWerte,
   type FormularDefinition,
+  type AnheftDarstellung,
   type AnheftModus,
   type Anheftpunkt,
   type AngeheftetesProtokollEingabe,
@@ -282,6 +283,9 @@ export class ProtokollService {
     const { mandantId } = requireTenantContext();
     for (const a of input.anheftungen) {
       if (a.pflicht && a.modus !== "automatisch") throw new BadRequestException("Pflicht geht nur bei „automatisch dabei“.");
+      if (a.darstellung === "ersetzt" && !(a.modus === "automatisch" && a.pflicht)) {
+        throw new BadRequestException("„Ersetzt die Standardsicht“ geht nur bei „automatisch dabei“ und Pflicht.");
+      }
     }
     if (new Set(input.anheftungen.map((a) => a.anheftpunkt)).size !== input.anheftungen.length) {
       throw new BadRequestException("Ein Anheftpunkt ist doppelt angegeben.");
@@ -302,8 +306,8 @@ export class ProtokollService {
       await client.query("DELETE FROM formular_anheftung WHERE formular_id = $1", [id]);
       for (const a of input.anheftungen) {
         await client.query(
-          "INSERT INTO formular_anheftung (mandant_id, formular_id, anheftpunkt, modus, pflicht) VALUES ($1, $2, $3, $4, $5)",
-          [mandantId, id, a.anheftpunkt, a.modus, a.pflicht]
+          "INSERT INTO formular_anheftung (mandant_id, formular_id, anheftpunkt, modus, pflicht, darstellung) VALUES ($1, $2, $3, $4, $5, $6)",
+          [mandantId, id, a.anheftpunkt, a.modus, a.pflicht, a.darstellung]
         );
       }
       return ladeFormularDetail(client, id);
@@ -355,7 +359,7 @@ export class ProtokollService {
   async angehefteteAbschliessen(
     client: PoolClient,
     input: { klientId: string; tagesberichtId: string; datum: string; eingaben: AngeheftetesProtokollEingabe[] }
-  ): Promise<void> {
+  ): Promise<{ ersetzt: boolean }> {
     const { mandantId, benutzerId } = requireTenantContext();
     const angebote = await ladeAngebot(client, input.klientId, "tagesbericht");
     const nachId = new Map(angebote.map((a) => [a.id, a]));
@@ -366,7 +370,10 @@ export class ProtokollService {
     if (new Set(input.eingaben.map((e) => e.formularId)).size !== input.eingaben.length) {
       throw new BadRequestException("Ein Formular ist doppelt angegeben.");
     }
-    if (input.eingaben.length === 0) return;
+    // "ersetzt" ist immer automatisch + Pflicht (CHECK in 0077), steht also
+    // nach der Pflichtpruefung oben sicher in den Eingaben.
+    const ersetzt = angebote.some((a) => a.darstellung === "ersetzt");
+    if (input.eingaben.length === 0) return { ersetzt };
     if (!(await this.rechte.hatRecht("protokolle", "ausfuellen"))) {
       throw new ForbiddenException("Keine Berechtigung, Protokolle auszufüllen.");
     }
@@ -404,6 +411,7 @@ export class ProtokollService {
         benutzerId,
       ]);
     }
+    return { ersetzt };
   }
 
   // -------------------------------------------------------------------------
@@ -904,7 +912,7 @@ const VERWALTUNG_AUSWAHL = `
          (SELECT max(nummer) FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NOT NULL) AS veroeffentlicht,
          (SELECT nummer FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NULL) AS entwurf,
          COALESCE((SELECT array_agg(fs.standort_id) FROM formular_standort fs WHERE fs.formular_id = f.id), '{}') AS standort_ids,
-         COALESCE((SELECT json_agg(json_build_object('anheftpunkt', fa.anheftpunkt, 'modus', fa.modus, 'pflicht', fa.pflicht))
+         COALESCE((SELECT json_agg(json_build_object('anheftpunkt', fa.anheftpunkt, 'modus', fa.modus, 'pflicht', fa.pflicht, 'darstellung', fa.darstellung))
                    FROM formular_anheftung fa WHERE fa.formular_id = f.id), '[]') AS anheftungen,
          (SELECT count(*)::int FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
           WHERE pv.formular_id = f.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl
@@ -987,6 +995,7 @@ interface AngebotZeile {
   definition: FormularDefinition;
   modus: AnheftModus | null;
   pflicht: boolean;
+  darstellung: AnheftDarstellung | null;
 }
 
 /**
@@ -999,7 +1008,7 @@ interface AngebotZeile {
  */
 async function ladeAngebot(client: PoolClient, klientId: string, anheftpunkt: Anheftpunkt | null): Promise<AngebotZeile[]> {
   const { rows } = await client.query(
-    `SELECT f.id, f.name, f.beschreibung, v.id AS version_id, v.nummer, v.definition, fa.modus, COALESCE(fa.pflicht, false) AS pflicht
+    `SELECT f.id, f.name, f.beschreibung, v.id AS version_id, v.nummer, v.definition, fa.modus, COALESCE(fa.pflicht, false) AS pflicht, fa.darstellung
      FROM formular f
      JOIN LATERAL (
        SELECT id, nummer, definition FROM formular_version
@@ -1029,6 +1038,7 @@ async function ladeAngebot(client: PoolClient, klientId: string, anheftpunkt: An
     definition: r.definition,
     modus: anheftpunkt ? r.modus : null,
     pflicht: anheftpunkt ? r.pflicht : false,
+    darstellung: anheftpunkt ? r.darstellung : null,
   }));
 }
 

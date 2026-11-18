@@ -712,8 +712,13 @@ export interface TagesberichtDto {
   dokumente: TagesberichtDokumentDto[];
   anzahlAenderungen: number;
   bearbeitbar: boolean;
-  /** Mit dem Tagesbericht abgeschlossene, angeheftete Formulare. */
-  protokolle: { id: string; formularName: string }[];
+  /**
+   * Mit dem Tagesbericht abgeschlossene, angeheftete Formulare. Die
+   * Kurzfassung ("Schlaf: unruhig · Vorfall: Nein") wird beim Lesen aus den
+   * Datenpunkten abgeleitet, nie gespeichert (CLAUDE.md Regel 4) -- sie
+   * steht in der Liste dort, wo sonst der Freitext steht.
+   */
+  protokolle: { id: string; formularName: string; kurzfassung: string }[];
 }
 
 export interface TagesberichtAenderungDto {
@@ -1579,6 +1584,8 @@ interface EingabeBasis extends BausteinBasis {
   intern?: boolean;
   vorausfuellen?: Vorausfuellung;
   pruefungen?: Vergleichspruefung[];
+  /** In der Tagesbericht-Liste als Kurzfassung zeigen (ohne Markierung: die ersten drei Antworten). */
+  inTagesberichtListe?: boolean;
 }
 
 export interface AbschnittBaustein extends BausteinBasis {
@@ -1636,6 +1643,7 @@ export interface BerechnungBaustein extends BausteinBasis {
   ausdruck: Ausdruck;
   einheit?: string;
   nachkommastellen?: number;
+  inTagesberichtListe?: boolean;
 }
 
 export type EingabeBaustein =
@@ -1924,6 +1932,60 @@ export function werteAus(def: FormularDefinition, eingabe: FeldWerte): Auswertun
   return { sichtbar, pflicht, werte };
 }
 
+/**
+ * Ein Wert als kurzer Text fuer Listen. Ohne Personenliste: Mitarbeitende
+ * erscheinen nur als Anzahl -- Namen gehoeren in die Protokollansicht.
+ */
+export function wertAlsKurztext(b: Baustein, w: FeldWert): string {
+  switch (b.typ) {
+    case "ja_nein":
+      return w ? "Ja" : "Nein";
+    case "datum": {
+      const [j, m, t] = String(w).split("-");
+      return t ? `${t}.${m}.${j}` : String(w);
+    }
+    case "auswahl":
+      return b.optionen.find((o) => o.wert === w)?.label ?? String(w);
+    case "mehrfachauswahl":
+      return (w as string[]).map((x) => b.optionen.find((o) => o.wert === x)?.label ?? x).join(", ");
+    case "mitarbeitende": {
+      const n = (w as string[]).length;
+      return n === 1 ? "1 Person" : `${n} Personen`;
+    }
+    case "zahl":
+    case "berechnung":
+      return `${String(w).replace(".", ",")}${b.einheit ? ` ${b.einheit}` : ""}`;
+    case "skala":
+      return `${w} von ${b.max}`;
+    case "langtext": {
+      const t = String(w).replace(/\s+/g, " ").trim();
+      return t.length > 80 ? `${t.slice(0, 79)}…` : t;
+    }
+    default:
+      return String(w);
+  }
+}
+
+/**
+ * Kurzfassung eines Protokolls fuer die Tagesbericht-Liste: die im Editor
+ * markierten Felder, ohne Markierung die ersten drei beantworteten. Nur
+ * sichtbare Felder -- ein verborgener Wert gehoert nicht in die Liste.
+ * Mitarbeitende zaehlen ohne Markierung nicht mit (nur eine Anzahl waere
+ * keine Aussage).
+ */
+export function protokollKurzfassung(def: FormularDefinition, werte: FeldWerte): string {
+  const { sichtbar, werte: gueltig } = werteAus(def, werte);
+  const kandidaten = alleBausteine(def).filter(
+    (b): b is EingabeBaustein | BerechnungBaustein =>
+      speichernderBaustein(b) && sichtbar.has(b.schluessel) && !istLeer(gueltig[b.schluessel] ?? werte[b.schluessel])
+  );
+  const markiert = kandidaten.filter((b) => b.inTagesberichtListe);
+  const gewaehlt = markiert.length > 0 ? markiert : kandidaten.filter((b) => b.typ !== "mitarbeitende").slice(0, 3);
+  return gewaehlt
+    .map((b) => `${b.beschriftung}: ${wertAlsKurztext(b, (gueltig[b.schluessel] ?? werte[b.schluessel]) as FeldWert)}`)
+    .join(" · ");
+}
+
 export interface FeldFehler {
   schluessel: string;
   meldung: string;
@@ -2191,12 +2253,24 @@ export const ANHEFTPUNKTE = {
 
 export type Anheftpunkt = keyof typeof ANHEFTPUNKTE;
 export type AnheftModus = "automatisch" | "dazunehmen";
+/**
+ * "ergaenzt": Freitext bleibt Pflicht, das Formular kommt darunter.
+ * "ersetzt": das Formular IST der Tagesbericht, Freitext nur noch als
+ * optionale Bemerkung. Nur bei automatisch + Pflicht (CHECK in 0077).
+ */
+export type AnheftDarstellung = "ergaenzt" | "ersetzt";
+
+export const ANHEFT_DARSTELLUNG_LABEL: Record<AnheftDarstellung, string> = {
+  ergaenzt: "Ergänzt den Bericht",
+  ersetzt: "Ersetzt die Standardsicht",
+};
 
 export interface FormularAnheftung {
   anheftpunkt: Anheftpunkt;
   modus: AnheftModus;
   /** Nur bei "automatisch": der Tagesbericht laesst sich erst mit vollstaendigem Formular speichern. */
   pflicht: boolean;
+  darstellung: AnheftDarstellung;
 }
 
 /** Abgeleitet (CLAUDE.md Regel 4), nie gespeichert. */
@@ -2250,6 +2324,8 @@ export interface FormularAngebotDto {
   /** null = Klientenakte (kein Anheftpunkt). */
   modus: AnheftModus | null;
   pflicht: boolean;
+  /** null = Klientenakte (kein Anheftpunkt). */
+  darstellung: AnheftDarstellung | null;
   /** Vorausgefuellte Werte (Vorschlag und festgehalten) fuer diese Klient:in. */
   werte: Record<string, FeldWert>;
   anzeige: Record<string, string | null>;

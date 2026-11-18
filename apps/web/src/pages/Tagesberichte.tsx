@@ -5,7 +5,7 @@ import { dateiZuBase64 } from "../datei";
 import { formatDatum, heuteBerlin } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { AngehefteteFormulare, useAngehefteteFormulare } from "../components/AngehefteteFormulare";
+import { NeuerTagesberichtFenster } from "../components/NeuerTagesbericht";
 import { ProtokollAnsicht } from "../components/ProtokollFormular";
 import {
   SCHNELLWAHL_LABEL,
@@ -100,7 +100,9 @@ export function TagesberichtZeile({
     if (!bearbeiten) return;
     setBearbeitenFehler(null);
     try {
-      await api.tagesberichtBearbeiten(bericht.id, { text: bearbeiten.text, datum: bearbeiten.datum });
+      // Ein Formular-Tagesbericht darf ohne Freitext bleiben (Migration 0077):
+      // dann nur das Datum schicken, der Server verlangt sonst Text.
+      await api.tagesberichtBearbeiten(bericht.id, { text: bearbeiten.text.trim() ? bearbeiten.text : undefined, datum: bearbeiten.datum });
       setBearbeiten(null);
       onGeaendert();
     } catch (err) {
@@ -142,7 +144,7 @@ export function TagesberichtZeile({
             />
             {bearbeitenFehler && <div role="alert">{bearbeitenFehler}</div>}
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" disabled={!bearbeiten.text.trim() || !bearbeiten.datum}>
+              <button type="submit" disabled={(!bearbeiten.text.trim() && Boolean(bericht.text)) || !bearbeiten.datum}>
                 Speichern
               </button>
               <button type="button" onClick={() => setBearbeiten(null)}>
@@ -152,9 +154,10 @@ export function TagesberichtZeile({
           </form>
         ) : (
           <>
-            {bericht.text}
+            {/* Ohne Freitext ist das Formular der Bericht und steht oben. */}
+            {bericht.text ? bericht.text : <TagesberichtProtokolle protokolle={bericht.protokolle} />}
             {bericht.autorName && <div className="zv-sub-inline">Verfasst von {bericht.autorName}</div>}
-            <TagesberichtProtokolle protokolle={bericht.protokolle} />
+            {bericht.text && <TagesberichtProtokolle protokolle={bericht.protokolle} />}
             <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
               {bericht.bearbeitbar && (
                 <button
@@ -327,10 +330,6 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   const [tagVorschlaege, setTagVorschlaege] = useState<TagDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(Boolean(startKlientId));
-  const [formFehler, setFormFehler] = useState<string | null>(null);
-  // Die Klient:in bestimmt den Standort und damit, welche Formulare dazugehoeren.
-  const [neuKlientId, setNeuKlientId] = useState(startKlientId ?? "");
-  const angeheftet = useAngehefteteFormulare(formularOffen && neuKlientId ? neuKlientId : null, "tagesbericht");
 
   // Zeitraum wird serverseitig gefiltert (kann ueber Jahre gross werden);
   // Klient-Filter und Sortierung arbeiten auf der geladenen Liste, damit sie
@@ -383,7 +382,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
         (!tagFilter || b.tags.some((t) => t.name === tagFilter)) &&
         (!autorFilter || b.autorName === autorFilter) &&
         (!q ||
-          [b.text, b.klientName, b.autorName ?? "", ...b.tags.map((t) => t.name)].some((f) =>
+          [b.text, b.klientName, b.autorName ?? "", ...b.tags.map((t) => t.name), ...berichtFormularTexte(b)].some((f) =>
             f.toLocaleLowerCase("de").includes(q)
           ))
     );
@@ -430,51 +429,18 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
         { titel: "Tags", breite: 12 },
         { titel: "Bericht", breite: 50 },
       ],
-      zeilen: sichtbar.map((b) => [formatDatum(b.datum), b.klientName, b.autorName ?? "", b.tags.map((t) => t.name).join(", "), b.text]),
+      zeilen: sichtbar.map((b) => [
+        formatDatum(b.datum),
+        b.klientName,
+        b.autorName ?? "",
+        b.tags.map((t) => t.name).join(", "),
+        // Ein Formular-Tagesbericht hat oft keinen Freitext -- ohne die
+        // Kurzfassung waere seine Zeile im Export leer.
+        [...berichtFormularTexte(b), b.text].filter(Boolean).join("\n"),
+      ]),
     };
   }
   const filterAktiv = Boolean(von || bis || klientFilter || tagFilter || autorFilter || suche.trim());
-
-  async function anlegen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const tagsText = String(form.get("tags") ?? "");
-    const datei = form.get("dokument") as File | null;
-    setFormFehler(null);
-    if (String(form.get("datum")) > heuteBerlin()) {
-      setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
-      return;
-    }
-    const formularFehler = angeheftet.pruefen();
-    if (formularFehler) {
-      setFormFehler(formularFehler);
-      return;
-    }
-    try {
-      let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
-      if (datei && datei.size > 0) {
-        dokumente = [
-          { base64: await dateiZuBase64(datei), dateiname: datei.name, mimeType: datei.type || "application/octet-stream" },
-        ];
-      }
-      await api.tagesberichtAnlegen({
-        klientId: String(form.get("klientId")),
-        datum: String(form.get("datum")),
-        text: String(form.get("text")),
-        tagNamen: tagsText
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        dokumente,
-        protokolle: angeheftet.eingaben(),
-      });
-      setFormularOffen(false);
-      laden();
-    } catch (err) {
-      angeheftet.serverFehler(err);
-      setFormFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht angelegt werden.");
-    }
-  }
 
   async function tagEntfernen(berichtId: string, tagId: string) {
     try {
@@ -519,11 +485,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
         <h2>Tagesberichte</h2>
         <button
           className="zv-btn"
-          onClick={() => {
-            setFormFehler(null);
-            setNeuKlientId(startKlientId ?? "");
-            setFormularOffen(true);
-          }}
+          onClick={() => setFormularOffen(true)}
         >
           <INeu />
           Neuer Tagesbericht
@@ -531,52 +493,16 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
       </div>
 
       {formularOffen && (
-        <Modal titel="Neuer Tagesbericht" onClose={() => setFormularOffen(false)}>
-          <form onSubmit={anlegen}>
-            {formFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {formFehler}
-              </div>
-            )}
-            <div className="zv-field-row">
-              <div className="zv-field">
-                <label>Klient:in</label>
-                <select key={klienten.length} name="klientId" required autoFocus defaultValue={startKlientId ?? ""} onChange={(e) => setNeuKlientId(e.target.value)}>
-                  <option value="" disabled>
-                    Bitte wählen
-                  </option>
-                  {klienten.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.vorname} {k.nachname}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="zv-field">
-                <label>Datum</label>
-                <input name="datum" type="date" required max={heute} defaultValue={heute} />
-              </div>
-            </div>
-            <div className="zv-field">
-              <label>Bericht</label>
-              <textarea name="text" required rows={5} />
-            </div>
-            <AngehefteteFormulare z={angeheftet} />
-            <div className="zv-field">
-              <label>Tags (optional, durch Komma getrennt)</label>
-              <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />
-            </div>
-            <div className="zv-field">
-              <label>Dokument (optional)</label>
-              <input name="dokument" type="file" accept="application/pdf,image/*" />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit">
-              <ISpeichern />
-              Anlegen
-            </button>
-          </form>
-        </Modal>
+        <NeuerTagesberichtFenster
+          klienten={klienten.filter((k) => !k.archiviertAm)}
+          // Ist die Liste nach einer Klient:in gefiltert, ist sie vorausgewaehlt.
+          startKlientId={startKlientId ?? (klientFilter || undefined)}
+          onClose={() => setFormularOffen(false)}
+          onAngelegt={() => {
+            setFormularOffen(false);
+            laden();
+          }}
+        />
       )}
 
       <TagVorschlaegeDatalist tags={tagVorschlaege} />
@@ -759,10 +685,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
               <button
                 type="button"
                 className="zv-btn zv-btn-sekundaer"
-                onClick={() => {
-                  setFormFehler(null);
-                  setFormularOffen(true);
-                }}
+                onClick={() => setFormularOffen(true)}
               >
                 Tagesbericht schreiben
               </button>
@@ -806,6 +729,11 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   );
 }
 
+/** Formularname und Kurzfassung je angeheftetem Protokoll -- fuer Suche und Export. */
+export function berichtFormularTexte(b: TagesberichtDto): string[] {
+  return (b.protokolle ?? []).map((p) => (p.kurzfassung ? `${p.formularName}: ${p.kurzfassung}` : p.formularName));
+}
+
 /**
  * Protokolle, die zusammen mit dem Tagesbericht abgeschlossen wurden
  * (angeheftete Formulare). Lesen hier, korrigieren in der Klientenakte unter
@@ -818,21 +746,23 @@ export function TagesberichtProtokolle({ protokolle }: { protokolle: Tagesberich
   return (
     <div className="zv-tagesbericht-protokolle">
       {protokolle.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className="zv-pill zv-pill-info zv-tagesbericht-protokoll"
-          onClick={() => {
-            setFehler(null);
-            api
-              .protokoll(p.id)
-              .then(setOffen)
-              .catch((err) => setFehler(err instanceof Error ? err.message : "Protokoll konnte nicht geladen werden."));
-          }}
-        >
-          <IDokument />
-          {p.formularName}
-        </button>
+        <div key={p.id} className="zv-tagesbericht-protokoll-zeile">
+          <button
+            type="button"
+            className="zv-pill zv-pill-info zv-tagesbericht-protokoll"
+            onClick={() => {
+              setFehler(null);
+              api
+                .protokoll(p.id)
+                .then(setOffen)
+                .catch((err) => setFehler(err instanceof Error ? err.message : "Protokoll konnte nicht geladen werden."));
+            }}
+          >
+            <IDokument />
+            {p.formularName}
+          </button>
+          {p.kurzfassung && <span className="zv-tagesbericht-kurzfassung">{p.kurzfassung}</span>}
+        </div>
       ))}
       {fehler && <span className="zv-feld-fehler">{fehler}</span>}
       {offen && (

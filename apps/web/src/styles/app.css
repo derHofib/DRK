@@ -7773,3 +7773,50 @@ button[class],
 .zv-protokoll-zum-tagesbericht {
   margin-left: var(--zv-space-2);
 }
+
+/* Formular-Tagesbericht in der Liste: Formularname als Pille, daneben die
+   beim Lesen abgeleitete Kurzfassung (Migration 0077). Eine Zeile je
+   Protokoll, damit zwei Formulare nicht ineinanderlaufen. */
+.zv-tagesbericht-protokoll-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.zv-tagesbericht-kurzfassung {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Neuer Tagesbericht: Bemerkung zugeklappt unter einem ersetzenden Formular. */
+.zv-ntb-bemerkung {
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-ntb-bemerkung > summary {
+  cursor: pointer;
+  color: var(--zv-text);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-ntb-zusammen {
+  text-align: center;
+  margin-top: var(--zv-space-2);
+}
+
+/* Formular-Einstellungen: Darstellung im Tagesbericht (ergaenzt / ersetzt). */
+.zv-formular-darstellung {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  margin: var(--zv-space-1) 0 var(--zv-space-2);
+  min-inline-size: 0;
+}
+
+.zv-formular-darstellung > legend {
+  font-weight: 600;
+  padding: 0 var(--zv-space-1);
+}

@@ -14,7 +14,9 @@ const dokumentSchema = z.object({
 const anlegenSchema = z.object({
   klientId: z.string().uuid(),
   datum: z.string().date(),
-  text: z.string().min(1),
+  // Darf leer sein, wenn ein Formular den Tagesbericht ersetzt -- das
+  // entscheidet der Service anhand des Standorts, nicht dieses Schema.
+  text: z.string(),
   tagNamen: z.array(z.string().min(1)).optional(),
   dokumente: z.array(dokumentSchema).optional(),
   // Angeheftete Formulare (Migration 0076). Die Werte prueft der gemeinsame
