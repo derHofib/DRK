@@ -78,7 +78,7 @@ export function KlientShell({ onLoggedOut }: { onLoggedOut: () => void }) {
       </header>
 
       <main className="zv-klient-inhalt" data-bereich={bereich}>
-        {bereich === "nachrichten" ? <Nachrichten klient /> : <Kalender titel="Meine Termine" kontakteLaden={kontakteLaden} />}
+        {bereich === "nachrichten" ? <Nachrichten klient /> : <Kalender titel="Meine Termine" kontakteLaden={kontakteLaden} mitAbwesenheiten={false} />}
       </main>
 
       <nav className="zv-klient-nav" aria-label="Bereiche">

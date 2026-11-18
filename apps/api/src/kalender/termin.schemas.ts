@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const terminArtSchema = z.enum(["termin", "besprechung", "klient"]);
+
 export const terminTeilnehmerSchema = z.union([
   z.object({ benutzerId: z.string().uuid() }).strict(),
   z.object({ klientId: z.string().uuid() }).strict(),
@@ -14,5 +16,6 @@ export const terminAnlegenSchema = z.object({
   beginn: z.string(),
   ende: z.string(),
   ganztaegig: z.boolean().optional(),
+  art: terminArtSchema.optional(),
   teilnehmer: z.array(terminTeilnehmerSchema).optional(),
 });

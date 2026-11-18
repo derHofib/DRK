@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
-import type { ChatKontaktDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
+import type { ChatKontaktDto, TerminAnlegenEingabe, TerminArt, TerminDto } from "@zimmerakte/shared";
+import { TERMIN_ART_LABEL } from "@zimmerakte/shared";
 import { lokalesDatum, terminTag } from "../format";
 import { IFehler, ISpeichern } from "./icons";
 import { KontaktAuswahl, kontaktEingabe, kontaktSchluessel } from "./chat/KontaktAuswahl";
@@ -48,6 +49,7 @@ export function TerminFormular({
   const [beschreibung, setBeschreibung] = useState(initial?.beschreibung ?? "");
   const [ort, setOrt] = useState(initial?.ort ?? "");
   const [ganztaegig, setGanztaegig] = useState(initial?.ganztaegig ?? false);
+  const [art, setArt] = useState<TerminArt>(initial?.art ?? "termin");
   const [datum, setDatum] = useState(initial ? terminTag(initial.beginn, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [endDatum, setEndDatum] = useState(initial ? terminTag(initial.ende, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [von, setVon] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.beginn) : (standardUhrzeit ?? "09:00"));
@@ -79,6 +81,7 @@ export function TerminFormular({
       beginn,
       ende,
       ganztaegig,
+      art,
       ...(kontakte ? { teilnehmer: [...auswahl.values()].map(kontaktEingabe) } : {}),
     });
   }
@@ -96,6 +99,16 @@ export function TerminFormular({
       <div className="zv-field">
         <label htmlFor="termin-titel">Titel</label>
         <input id="termin-titel" value={titel} onChange={(e) => setTitel(e.target.value)} required maxLength={200} autoFocus />
+      </div>
+      <div className="zv-field">
+        <label htmlFor="termin-art">Art</label>
+        <select id="termin-art" value={art} onChange={(e) => setArt(e.target.value as TerminArt)}>
+          {(Object.keys(TERMIN_ART_LABEL) as TerminArt[]).map((a) => (
+            <option key={a} value={a}>
+              {TERMIN_ART_LABEL[a]}
+            </option>
+          ))}
+        </select>
       </div>
       <label className="zv-checkbox-zeile" style={{ marginBottom: "var(--zv-space-3)" }}>
         <input type="checkbox" checked={ganztaegig} onChange={(e) => setGanztaegig(e.target.checked)} />

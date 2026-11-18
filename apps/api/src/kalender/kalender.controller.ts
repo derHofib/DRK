@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { z } from "zod";
 import { TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { KalenderService } from "./kalender.service";
-import { terminAnlegenSchema } from "./termin.schemas";
+import { terminAnlegenSchema, terminArtSchema } from "./termin.schemas";
 
 const aendernSchema = z
   .object({
@@ -13,6 +13,7 @@ const aendernSchema = z
     beginn: z.string().optional(),
     ende: z.string().optional(),
     ganztaegig: z.boolean().optional(),
+    art: terminArtSchema.optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, "Mindestens ein Feld muss angegeben werden.");

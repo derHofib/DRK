@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import type {
   TerminAnlegenEingabe,
   TerminAntwort,
+  TerminArt,
   TerminDto,
   TerminPersonDto,
   TerminTeilnehmerDto,
@@ -29,6 +30,7 @@ export interface TerminAendernEingabe {
   beginn?: string;
   ende?: string;
   ganztaegig?: boolean;
+  art?: TerminArt;
 }
 
 interface TerminRow {
@@ -39,6 +41,7 @@ interface TerminRow {
   beginn: Date;
   ende: Date;
   ganztaegig: boolean;
+  art: TerminArt;
   erstellt_am: Date;
   abgesagt_am: Date | null;
   erstellt_von_benutzer_id: string | null;
@@ -139,12 +142,13 @@ export class KalenderService {
     const id = randomUUID();
     await client.query(
       `INSERT INTO termin (id, mandant_id, titel, beschreibung, ort, beginn, ende, ganztaegig,
-                           erstellt_von_benutzer_id, erstellt_von_klient_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                           erstellt_von_benutzer_id, erstellt_von_klient_id, art)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         id, ctx.mandantId, eingabe.titel.trim(), leerZuNull(eingabe.beschreibung), leerZuNull(eingabe.ort),
         zeitraum.beginn, zeitraum.ende, eingabe.ganztaegig ?? false,
         ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null,
+        eingabe.art ?? "termin",
       ]
     );
     await client.query(
@@ -176,7 +180,7 @@ export class KalenderService {
       const zeitraum = berechneZeitraum(ganztaegig, eingabe.beginn ?? alt.beginn, eingabe.ende ?? alt.ende);
 
       await client.query(
-        `UPDATE termin SET titel = $2, beschreibung = $3, ort = $4, beginn = $5, ende = $6, ganztaegig = $7
+        `UPDATE termin SET titel = $2, beschreibung = $3, ort = $4, beginn = $5, ende = $6, ganztaegig = $7, art = $8
          WHERE id = $1`,
         [
           id,
@@ -184,6 +188,7 @@ export class KalenderService {
           eingabe.beschreibung !== undefined ? leerZuNull(eingabe.beschreibung) : alt.beschreibung,
           eingabe.ort !== undefined ? leerZuNull(eingabe.ort) : alt.ort,
           zeitraum.beginn, zeitraum.ende, ganztaegig,
+          eingabe.art ?? alt.art,
         ]
       );
       return this.ladeEinzeln(client, ich, id);
@@ -309,6 +314,7 @@ export class KalenderService {
         ort: r.ort,
         ...zeitraumFuerAusgabe(r),
         ganztaegig: r.ganztaegig,
+        art: r.art,
         erstelltVon,
         erstelltAm: r.erstellt_am.toISOString(),
         abgesagtAm: r.abgesagt_am?.toISOString() ?? null,
@@ -328,7 +334,7 @@ function prinzipalParameter(ich: Teilnehmer): [string | null, string | null] {
 
 async function ladeTermine(client: PoolClient, ich: Teilnehmer, bedingung: string, weitere: unknown[]): Promise<TerminRow[]> {
   const { rows } = await client.query<TerminRow>(
-    `SELECT t.id, t.titel, t.beschreibung, t.ort, t.beginn, t.ende, t.ganztaegig, t.erstellt_am, t.abgesagt_am,
+    `SELECT t.id, t.titel, t.beschreibung, t.ort, t.beginn, t.ende, t.ganztaegig, t.art, t.erstellt_am, t.abgesagt_am,
             t.erstellt_von_benutzer_id, t.erstellt_von_klient_id,
             eb.name AS ersteller_benutzer_name, ek.vorname AS ersteller_klient_vorname, ek.nachname AS ersteller_klient_nachname,
             mein.antwort AS meine_antwort

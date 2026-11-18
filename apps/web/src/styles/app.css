@@ -3502,6 +3502,216 @@ button.zv-kal-mini-tag:focus-visible {
   background: light-dark(oklch(0.84 0 0), oklch(0.76 0 0));
 }
 
+/* ------------------------------------------------------------------
+   Arten im Kalender (Rueckmeldung "Filter Kalender", migrations/0074).
+   Die Klasse .zv-art-<art> setzt nur Farbton/Buntheit aus tokens.css; die
+   Helligkeit steht hier fest je Theme -- dieselben Werte wie bei
+   .zv-person-flaeche bzw. .zv-person-farbe, damit Text darauf denselben
+   gemessenen Kontrast behaelt (CLAUDE.md, Regel 7).
+   ------------------------------------------------------------------ */
+.zv-art-krank { --zv-art-h: var(--zv-art-krank-h); --zv-art-c: var(--zv-art-krank-c); }
+.zv-art-urlaub { --zv-art-h: var(--zv-art-urlaub-h); --zv-art-c: var(--zv-art-urlaub-c); }
+.zv-art-frei { --zv-art-h: var(--zv-art-frei-h); --zv-art-c: var(--zv-art-frei-c); }
+.zv-art-fortbildung { --zv-art-h: var(--zv-art-fortbildung-h); --zv-art-c: var(--zv-art-fortbildung-c); }
+.zv-art-abwesend { --zv-art-h: var(--zv-art-abwesend-h); --zv-art-c: var(--zv-art-abwesend-c); }
+.zv-art-klient { --zv-art-h: var(--zv-art-klient-h); --zv-art-c: var(--zv-art-klient-c); }
+.zv-art-besprechung { --zv-art-h: var(--zv-art-besprechung-h); --zv-art-c: var(--zv-art-besprechung-c); }
+.zv-art-termin { --zv-art-h: var(--zv-art-termin-h); --zv-art-c: var(--zv-art-termin-c); }
+
+.zv-art-flaeche,
+.zv-art-marke {
+  background: light-dark(oklch(0.84 var(--zv-art-c) var(--zv-art-h)), oklch(0.76 var(--zv-art-c) var(--zv-art-h)));
+}
+
+/* Kraeftiger als die Flaeche: die Ecke muss sich von einer Personenflaeche
+   gleicher Helligkeit abheben. Dass sie das auch bei gleichem Farbton tut
+   (rote Person, krank), leistet der Trennrand unten, nicht die Farbe. */
+.zv-art-farbe,
+.zv-art-dreieck,
+.zv-kal-ecke::after {
+  background: light-dark(oklch(0.58 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)), oklch(0.82 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)));
+}
+
+.zv-art-marke {
+  display: inline-block;
+  padding: 0 var(--zv-space-2);
+  margin-right: var(--zv-space-1);
+  border-radius: var(--zv-radius-pill);
+  color: var(--zv-text-auf-personflaeche);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.zv-art-dreieck {
+  display: inline-block;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-right: var(--zv-space-2);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+/* Statusecke oben rechts in der Tageszelle des Jahresueberblicks. Zwei
+   Dreiecke uebereinander: das aeussere in Kartenfarbe trennt, das innere
+   traegt die Art. Ohne den Trennrand verschwand im Entwurf eine rote
+   "krank"-Ecke auf einer roten Personenflaeche. */
+/* Ring statt Punkt im Monatsraster: die Personenfarbe als Rand, innen leer. */
+.zv-kal-punkt.zv-kal-punkt-abwesend {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
+}
+
+.zv-kal-ecke {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 13px;
+  height: 13px;
+  background: var(--zv-surface);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+}
+
+.zv-kal-ecke::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+/* Abwesenheiten in Woche/Monat: eine umbrechende Zeile ueber dem Kalender. */
+.zv-kal-abwesend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-kal-abwesend-titel {
+  font-size: var(--zv-text-meta);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-abwesend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.zv-kal-abwesend-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  max-width: 100%;
+  min-height: 36px;
+  padding: var(--zv-space-1) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  cursor: pointer;
+}
+
+.zv-kal-abwesend-chip:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-abwesend-chip .zv-person-punkt {
+  margin-right: 0;
+}
+
+.zv-kal-abwesend-zeit {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-meta);
+}
+
+/* "Farbe nach" sitzt in der Filterleiste; der Titel ist kein Knopf. */
+.zv-kal-farbmodus {
+  align-items: center;
+}
+
+.zv-kal-farbmodus-titel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  padding: 0 var(--zv-space-2);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+}
+
+.zv-kal-farbmodus-titel svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Art-Auswahl im Dialog "Abwesenheit eintragen": Radios als Chips. */
+.zv-art-wahl {
+  border: none;
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+}
+
+.zv-art-wahl legend {
+  margin-bottom: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-art-wahl-optionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+/* Doppelte Klasse: .zv-field label/input (Formularfelder) wuerden sonst
+   Block-Layout, Abstand und volle Breite auf die Chips legen. */
+.zv-art-wahl .zv-art-wahl-option {
+  display: inline-flex;
+  margin: 0;
+  color: var(--zv-text);
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-pill);
+  cursor: pointer;
+}
+
+.zv-art-wahl-option.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-art-wahl-option:focus-within {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+/* Visuell versteckt, aber per Tastatur und Screenreader bedienbar. */
+.zv-art-wahl .zv-art-wahl-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 .zv-kal-mini-tag.sammel {
   background: var(--zv-kal-sammel-flaeche);
   color: var(--zv-kal-sammel-text);
@@ -3652,6 +3862,20 @@ button.zv-kal-mini-tag:focus-visible {
 .zv-kal-termin-text span {
   font-size: var(--zv-text-s);
   color: var(--zv-text-muted);
+}
+
+/* Die Marke steht in Zeilen, deren span-Regeln die Schrift dimmen -- auf
+   der hellen Artflaeche waere gedaempfte Schrift kaum lesbar. */
+.zv-kal-termin-text .zv-art-marke,
+.zv-kal-vorschau-text .zv-art-marke {
+  color: var(--zv-text-auf-personflaeche);
+  font-size: var(--zv-text-xs);
+}
+
+.zv-kal-kopf-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
 }
 
 @media (min-width: 1001px) {
