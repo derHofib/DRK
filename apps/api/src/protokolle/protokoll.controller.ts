@@ -37,7 +37,13 @@ const einstellungenSchema = z.object({
   beschreibung: z.string().trim().max(500).nullish(),
   standortIds: z.array(z.string().uuid()).max(200),
   anheftungen: z
-    .array(z.object({ anheftpunkt: anheftpunktSchema, modus: z.enum(["automatisch", "dazunehmen"]), pflicht: z.boolean() }))
+    .array(z.object({
+        anheftpunkt: anheftpunktSchema,
+        modus: z.enum(["automatisch", "dazunehmen"]),
+        pflicht: z.boolean(),
+        // Default fuer aeltere Oberflaechen, die das Feld noch nicht schicken.
+        darstellung: z.enum(["ergaenzt", "ersetzt"]).default("ergaenzt"),
+      }))
     .max(20),
 });
 const angebotSchema = z.object({ klientId: z.string().uuid(), anheftpunkt: anheftpunktSchema.optional() });
@@ -103,7 +109,11 @@ export class ProtokollController {
   @Put("formulare/:id/einstellungen")
   einstellungen(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
     const e = lies(einstellungenSchema, body);
-    return this.protokolle.einstellungenSpeichern(id, { ...e, beschreibung: e.beschreibung || null });
+    return this.protokolle.einstellungenSpeichern(id, {
+      ...e,
+      beschreibung: e.beschreibung || null,
+      anheftungen: e.anheftungen.map((a) => ({ ...a, darstellung: a.darstellung ?? "ergaenzt" })),
+    });
   }
 
   @Post("formulare/:id/archivieren")

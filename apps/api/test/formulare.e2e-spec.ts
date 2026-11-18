@@ -19,7 +19,7 @@ import { Test } from "@nestjs/testing";
 import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
-import type { FormularDefinition } from "@zimmerakte/shared";
+import { protokollKurzfassung, type FormularDefinition } from "@zimmerakte/shared";
 import { AppModule } from "../src/app.module";
 import { kontoMitAlterRolle, raeumeKontoMitRolleAuf, type AlteRolle } from "./support/konto-mit-rolle";
 
@@ -374,7 +374,7 @@ describe("Formulare: Entwicklung, Standorte, Anheften", () => {
         anheftungen: [{ anheftpunkt: "tagesbericht", modus: "automatisch", pflicht: true }],
       });
       expect(res.status).toBe(200);
-      expect(res.body.anheftungen).toEqual([{ anheftpunkt: "tagesbericht", modus: "automatisch", pflicht: true }]);
+      expect(res.body.anheftungen).toEqual([{ anheftpunkt: "tagesbericht", modus: "automatisch", pflicht: true, darstellung: "ergaenzt" }]);
 
       const angebot = await als(betreuerA).get(`/formulare/angebot?klientId=${klientLinden}&anheftpunkt=tagesbericht`);
       const f = angebot.body.find((x: { id: string }) => x.id === formularId);
@@ -418,7 +418,7 @@ describe("Formulare: Entwicklung, Standorte, Anheften", () => {
         protokolle: [{ formularId, werte: { schlaf: "unruhig", vorfall: true, vorfall_text: "Kurz laut.", wohnung: "Erfunden" } }],
       });
       expect(res.status).toBe(201);
-      expect(res.body.protokolle).toEqual([{ id: expect.any(String), formularName: "Nachtkontrolle" }]);
+      expect(res.body.protokolle).toEqual([{ id: expect.any(String), formularName: "Nachtkontrolle", kurzfassung: expect.stringContaining("Schlaf: unruhig") }]);
 
       const p = await als(betreuerA).get(`/protokolle/${res.body.protokolle[0].id}`);
       expect(p.body).toMatchObject({ abgeschlossen: true, tagesberichtId: res.body.id, bezugsdatum: "2026-11-01", versionNummer: 2 });
@@ -478,6 +478,143 @@ describe("Formulare: Entwicklung, Standorte, Anheften", () => {
           )
         )
       ).rejects.toThrow(/foreign key/);
+    });
+  });
+
+  describe("Formular ersetzt die Standardsicht (Migration 0077)", () => {
+    const einstellen = (anheftung: object, standortIds: string[] = [standorte.lindenweg]) =>
+      als(leitungA).put(`/formulare/${formularId}/einstellungen`, {
+        name: "Nachtkontrolle",
+        standortIds,
+        anheftungen: [{ anheftpunkt: "tagesbericht", ...anheftung }],
+      });
+    const anzahlBerichte = async (klientId: string) =>
+      (await admin.query("SELECT count(*)::int AS n FROM tagesbericht WHERE klient_id = $1", [klientId])).rows[0].n as number;
+
+    it("ersetzen geht nur bei automatisch und Pflicht -- im Service und in der Datenbank", async () => {
+      expect((await einstellen({ modus: "automatisch", pflicht: false, darstellung: "ersetzt" })).status).toBe(400);
+      expect((await einstellen({ modus: "dazunehmen", pflicht: false, darstellung: "ersetzt" })).status).toBe(400);
+      expect((await einstellen({ modus: "automatisch", pflicht: true, darstellung: "ersetzt" })).status).toBe(200);
+      await expect(
+        alsApp(mandantA, (c) => c.query("UPDATE formular_anheftung SET pflicht = false WHERE formular_id = $1", [formularId]))
+      ).rejects.toThrow(/formular_anheftung_ersetzt_pflicht/);
+    });
+
+    it("das Angebot nennt die Darstellung", async () => {
+      const angebot = await als(betreuerA).get(`/formulare/angebot?klientId=${klientLinden}&anheftpunkt=tagesbericht`);
+      expect(angebot.body.find((x: { id: string }) => x.id === formularId)).toMatchObject({
+        modus: "automatisch",
+        pflicht: true,
+        darstellung: "ersetzt",
+      });
+      // Ohne Anheftpunkt (Klientenakte) gibt es keine Darstellung.
+      const akte = await als(betreuerA).get(`/formulare/angebot?klientId=${klientLinden}`);
+      expect(akte.body.find((x: { id: string }) => x.id === formularId).darstellung).toBeNull();
+    });
+
+    it("ohne Freitext: das Formular ist der Tagesbericht, die Liste zeigt die Kurzfassung", async () => {
+      const res = await als(betreuerA).post("/tagesberichte", {
+        klientId: klientLinden,
+        datum: "2026-11-03",
+        text: "   ",
+        protokolle: [{ formularId, werte: { schlaf: "unruhig", vorfall: false } }],
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.text).toBe("");
+      const kurz = res.body.protokolle[0].kurzfassung as string;
+      expect(kurz).toContain("Schlaf: unruhig");
+      expect(kurz).toContain("Vorfall in der Nacht?: Nein");
+      // Das verborgene Feld (nur bei Vorfall) taucht nicht auf.
+      expect(kurz).not.toContain("Was ist passiert?");
+      const liste = (await als(betreuerA).get(`/tagesberichte?klientId=${klientLinden}`)).body as {
+        id: string;
+        protokolle: { kurzfassung: string }[];
+      }[];
+      expect(liste.find((b) => b.id === res.body.id)?.protokolle[0].kurzfassung).toBe(kurz);
+    });
+
+    it("eine Bemerkung bleibt moeglich", async () => {
+      const res = await als(betreuerA).post("/tagesberichte", {
+        klientId: klientLinden,
+        datum: "2026-11-03",
+        text: "Fenster klemmt.",
+        protokolle: [{ formularId, werte: { schlaf: "ruhig", vorfall: false } }],
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.text).toBe("Fenster klemmt.");
+    });
+
+    it("GEGENPROBE: ohne ersetzendes Formular (anderer Standort) braucht es weiter einen Text", async () => {
+      const vorher = await anzahlBerichte(klientSued);
+      const res = await als(betreuerA).post("/tagesberichte", { klientId: klientSued, datum: "2026-11-03", text: "" });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/Bericht schreiben/);
+      expect(await anzahlBerichte(klientSued)).toBe(vorher);
+    });
+
+    it("GEGENPROBE: bei „ergaenzt“ braucht es weiter einen Text, auch mit Formular", async () => {
+      expect((await einstellen({ modus: "automatisch", pflicht: true, darstellung: "ergaenzt" })).status).toBe(200);
+      const vorher = await anzahlBerichte(klientLinden);
+      const res = await als(betreuerA).post("/tagesberichte", {
+        klientId: klientLinden,
+        datum: "2026-11-03",
+        text: "",
+        protokolle: [{ formularId, werte: { schlaf: "ruhig", vorfall: false } }],
+      });
+      expect(res.status).toBe(400);
+      expect(await anzahlBerichte(klientLinden)).toBe(vorher);
+      const { rows } = await admin.query(
+        "SELECT count(*)::int AS n FROM protokoll WHERE klient_id = $1 AND bezugsdatum = '2026-11-03'",
+        [klientLinden]
+      );
+      expect(rows[0].n).toBe(2); // nur die beiden aus den Tests oben, keins aus dem abgelehnten Versuch
+    });
+
+    it("Kurzfassung: markierte Felder gehen vor, verborgene fehlen immer", () => {
+      const markiert: FormularDefinition = {
+        bausteine: KONTROLLE.bausteine.map((b) => (b.schluessel === "vorfall_text" || b.schluessel === "schlaf" ? { ...b, inTagesberichtListe: true } : b)),
+      };
+      expect(protokollKurzfassung(markiert, { schlaf: "wach", vorfall: true, vorfall_text: "Kurz laut." })).toBe(
+        "Schlaf: wach · Was ist passiert?: Kurz laut."
+      );
+      // Ist der Vorfall verneint, ist das Feld verborgen -- auch wenn noch ein Wert drinsteht.
+      expect(protokollKurzfassung(markiert, { schlaf: "wach", vorfall: false, vorfall_text: "alt" })).toBe("Schlaf: wach");
+      // Ohne Markierung: die ersten drei Antworten.
+      expect(protokollKurzfassung(KONTROLLE, { wohnung: "Haus A", schlaf: "ruhig", vorfall: false })).toBe(
+        "Wohnung: Haus A · Schlaf: ruhig · Vorfall in der Nacht?: Nein"
+      );
+    });
+
+    it("Datenbank: ein leerer Tagesbericht ohne Protokoll scheitert, mit Protokoll nicht", async () => {
+      const benutzer = await admin.query<{ id: string }>("SELECT id FROM benutzer WHERE mandant_id = $1 LIMIT 1", [mandantA]);
+      await expect(
+        alsApp(mandantA, async (c) => {
+          await c.query("INSERT INTO tagesbericht (mandant_id, klient_id, autor_id, datum, text) VALUES ($1, $2, $3, '2026-11-03', '')", [
+            mandantA,
+            klientLinden,
+            benutzer.rows[0].id,
+          ]);
+          // Verzoegerter Constraint-Trigger: sofort pruefen statt erst beim COMMIT.
+          await c.query("SET CONSTRAINTS ALL IMMEDIATE");
+        })
+      ).rejects.toThrow(/ohne Text braucht ein angeheftetes Formular/);
+      // Auch nachtraeglich leeren geht nicht ...
+      const mitText = await admin.query<{ id: string }>("SELECT id FROM tagesbericht WHERE klient_id = $1 AND text <> '' LIMIT 1", [klientSued]);
+      await expect(
+        alsApp(mandantA, async (c) => {
+          await c.query("UPDATE tagesbericht SET text = '' WHERE id = $1", [mitText.rows[0].id]);
+          await c.query("SET CONSTRAINTS ALL IMMEDIATE");
+        })
+      ).rejects.toThrow(/ohne Text braucht ein angeheftetes Formular/);
+      // ... bei einem Bericht MIT Protokoll schon (Gegenprobe zur Bedingung).
+      const mitProtokoll = await admin.query<{ id: string }>(
+        "SELECT t.id FROM tagesbericht t WHERE t.klient_id = $1 AND EXISTS (SELECT 1 FROM protokoll p WHERE p.tagesbericht_id = t.id) LIMIT 1",
+        [klientLinden]
+      );
+      await alsApp(mandantA, async (c) => {
+        await c.query("UPDATE tagesbericht SET text = '' WHERE id = $1", [mitProtokoll.rows[0].id]);
+        await c.query("SET CONSTRAINTS ALL IMMEDIATE");
+      });
     });
   });
 

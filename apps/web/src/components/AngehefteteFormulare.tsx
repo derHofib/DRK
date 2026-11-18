@@ -26,12 +26,17 @@ export function useAngehefteteFormulare(klientId: string | null, anheftpunkt: An
   const [werte, setWerte] = useState<Record<string, FeldWerte>>({});
   const [fehler, setFehler] = useState<Record<string, Record<string, string>>>({});
   const [personen, setPersonen] = useState<PersonAuswahl[]>([]);
+  // Fuer welche Klient:in das Angebot schon da ist. Solange es fehlt, weiss
+  // das Fenster noch nicht, ob ein Formular die Standardsicht ersetzt --
+  // es zeigt dann lieber nichts als kurz die falsche Sicht.
+  const [geladenFuer, setGeladenFuer] = useState<string | null>(null);
 
   useEffect(() => {
     setAngebote([]);
     setDazugenommen([]);
     setWerte({});
     setFehler({});
+    setGeladenFuer(null);
     if (!klientId) return;
     let aktuell = true;
     api
@@ -40,9 +45,14 @@ export function useAngehefteteFormulare(klientId: string | null, anheftpunkt: An
         if (!aktuell) return;
         setAngebote(l);
         setWerte(Object.fromEntries(l.map((a) => [a.id, { ...a.werte }])));
+        setGeladenFuer(klientId);
       })
       // Ohne Recht zum Ausfuellen oder bei einem Fehler: der Ablauf selbst geht weiter wie bisher.
-      .catch(() => aktuell && setAngebote([]));
+      .catch(() => {
+        if (!aktuell) return;
+        setAngebote([]);
+        setGeladenFuer(klientId);
+      });
     return () => {
       aktuell = false;
     };
@@ -62,6 +72,9 @@ export function useAngehefteteFormulare(klientId: string | null, anheftpunkt: An
   return {
     angebote,
     aktiv,
+    geladen: klientId !== null && geladenFuer === klientId,
+    /** Ein Formular IST hier der Tagesbericht; Freitext nur noch als Bemerkung. */
+    ersetzt: angebote.some((a) => a.darstellung === "ersetzt"),
     werte,
     fehler,
     personen,

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { heuteBerlin } from "../common/heute";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { AngeheftetesProtokollEingabe } from "@zimmerakte/shared";
+import { protokollKurzfassung, type AngeheftetesProtokollEingabe, type FeldWerte, type FormularDefinition } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
 import { ProtokollService } from "../protokolle/protokoll.service";
 import { requireTenantContext } from "../common/tenant-context";
@@ -55,7 +55,7 @@ export interface TagesberichtDto {
   /** Nur der Autor darf den Text/das Datum aendern. */
   bearbeitbar: boolean;
   /** Mit dem Tagesbericht abgeschlossene, angeheftete Formulare (Migration 0076). */
-  protokolle: { id: string; formularName: string }[];
+  protokolle: { id: string; formularName: string; kurzfassung: string }[];
 }
 
 const AUSWAHL = `
@@ -73,7 +73,15 @@ const AUSWAHL = `
       '[]'
     ) AS dokumente,
     COALESCE(
-      (SELECT json_agg(json_build_object('id', p.id, 'formularName', f.name) ORDER BY f.name)
+      (SELECT json_agg(json_build_object(
+                'id', p.id, 'formularName', f.name, 'definition', v.definition,
+                -- Datenpunkte als {schluessel: wert}; zuDto leitet daraus die
+                -- Kurzfassung ab. Zeiten ohne Sekunden wie in wertAusZeile.
+                'werte', (SELECT COALESCE(jsonb_object_agg(w.feld_schluessel, COALESCE(
+                            to_jsonb(w.wert_text), to_jsonb(w.wert_zahl), to_jsonb(w.wert_datum::text),
+                            to_jsonb(left(w.wert_zeit::text, 5)), to_jsonb(w.wert_bool), to_jsonb(w.wert_liste))), '{}')
+                          FROM protokoll_wert w WHERE w.protokoll_id = p.id)
+              ) ORDER BY f.name)
        FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id JOIN formular f ON f.id = v.formular_id
        WHERE p.tagesbericht_id = t.id),
       '[]'
@@ -159,7 +167,7 @@ export class TagesberichtService {
       const { rows } = await client.query(
         `INSERT INTO tagesbericht (mandant_id, klient_id, autor_id, datum, text)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mandantId, input.klientId, benutzerId, input.datum, input.text]
+        [mandantId, input.klientId, benutzerId, input.datum, input.text.trim()]
       );
       const tagesberichtId = rows[0].id as string;
 
@@ -172,12 +180,19 @@ export class TagesberichtService {
       // In derselben Transaktion: scheitert ein angeheftetes Formular (fehlt
       // ein Pflichtfeld oder ein Pflicht-Formular), gibt es auch keinen
       // halben Tagesbericht ohne sein Formular.
-      await this.protokolle.angehefteteAbschliessen(client, {
+      const { ersetzt } = await this.protokolle.angehefteteAbschliessen(client, {
         klientId: input.klientId,
         tagesberichtId,
         datum: input.datum,
         eingaben: input.protokolle ?? [],
       });
+      // Freitext darf nur fehlen, wenn ein Formular an diesem Standort den
+      // Tagesbericht ersetzt. Erst NACH dem Abschliessen pruefbar, weil das
+      // Angebot vom Standort der Klient:in abhaengt; die Ausnahme rollt die
+      // ganze Transaktion zurueck. Die Datenbank prueft es zusaetzlich (0077).
+      if (!ersetzt && input.text.trim() === "") {
+        throw new BadRequestException("Bitte einen Bericht schreiben.");
+      }
       return ladeEinen(client, tagesberichtId, benutzerId);
     });
   }
@@ -412,6 +427,10 @@ function zuDto(r: any, benutzerId: string): TagesberichtDto {
     dokumente: r.dokumente,
     anzahlAenderungen: r.anzahl_aenderungen,
     bearbeitbar: r.autor_id !== null && r.autor_id === benutzerId,
-    protokolle: r.protokolle,
+    protokolle: (r.protokolle as { id: string; formularName: string; definition: FormularDefinition; werte: FeldWerte }[]).map((p) => ({
+      id: p.id,
+      formularName: p.formularName,
+      kurzfassung: protokollKurzfassung(p.definition, p.werte),
+    })),
   };
 }

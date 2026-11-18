@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ANHEFTPUNKTE,
+  ANHEFT_DARSTELLUNG_LABEL,
   FORMULAR_STATUS_LABEL,
   formularVergleich,
   pruefeVeroeffentlichung,
@@ -61,7 +62,7 @@ function standorteText(ids: string[], standorte: StandortDto[]): string {
 function anheftungText(a: FormularAnheftung[]): string {
   if (a.length === 0) return "–";
   return a
-    .map((x) => `${ANHEFTPUNKTE[x.anheftpunkt].label.replace(" anlegen", "")} · ${x.modus === "automatisch" ? (x.pflicht ? "Pflicht" : "automatisch") : "zum Dazunehmen"}`)
+    .map((x) => `${ANHEFTPUNKTE[x.anheftpunkt].label.replace(" anlegen", "")} · ${x.darstellung === "ersetzt" ? "ersetzt die Standardsicht" : x.modus === "automatisch" ? (x.pflicht ? "Pflicht" : "automatisch") : "zum Dazunehmen"}`)
     .join(", ");
 }
 
@@ -698,7 +699,7 @@ function Einstellungen({
           return (
             <div key={punkt} className="zv-formular-anheftung">
               <label className="zv-checkbox-zeile">
-                <input type="checkbox" checked={!!a} onChange={(e) => setzeAnheftung(punkt, e.target.checked ? { anheftpunkt: punkt, modus: "automatisch", pflicht: false } : null)} />
+                <input type="checkbox" checked={!!a} onChange={(e) => setzeAnheftung(punkt, e.target.checked ? { anheftpunkt: punkt, modus: "automatisch", pflicht: false, darstellung: "ergaenzt" } : null)} />
                 <span>
                   <strong>{ANHEFTPUNKTE[punkt].label}</strong>
                   <span className="zv-formular-meta">{ANHEFTPUNKTE[punkt].beschreibung}</span>
@@ -711,15 +712,50 @@ function Einstellungen({
                     Automatisch dabei
                   </label>
                   <label className="zv-checkbox-zeile zv-formular-einrueck">
-                    <input type="checkbox" disabled={a.modus !== "automatisch"} checked={a.pflicht} onChange={(e) => setzeAnheftung(punkt, { ...a, pflicht: e.target.checked })} />
+                    <input
+                      type="checkbox"
+                      // Ersetzt das Formular die Standardsicht, ist es immer Pflicht (CHECK in 0077).
+                      disabled={a.modus !== "automatisch" || a.darstellung === "ersetzt"}
+                      checked={a.pflicht}
+                      onChange={(e) => setzeAnheftung(punkt, { ...a, pflicht: e.target.checked })}
+                    />
                     Pflicht: speichern erst, wenn das Formular vollständig ist
                   </label>
+                  {punkt === "tagesbericht" && a.modus === "automatisch" && (
+                    <fieldset className="zv-formular-darstellung zv-formular-einrueck">
+                      <legend>Darstellung im Tagesbericht</legend>
+                      <label className="zv-checkbox-zeile">
+                        <input
+                          type="radio"
+                          name={`zv-fe-darstellung-${punkt}`}
+                          checked={a.darstellung !== "ersetzt"}
+                          onChange={() => setzeAnheftung(punkt, { ...a, darstellung: "ergaenzt" })}
+                        />
+                        <span>
+                          {ANHEFT_DARSTELLUNG_LABEL.ergaenzt}
+                          <span className="zv-formular-meta">Freitext bleibt Pflicht, das Formular kommt darunter.</span>
+                        </span>
+                      </label>
+                      <label className="zv-checkbox-zeile">
+                        <input
+                          type="radio"
+                          name={`zv-fe-darstellung-${punkt}`}
+                          checked={a.darstellung === "ersetzt"}
+                          onChange={() => setzeAnheftung(punkt, { ...a, darstellung: "ersetzt", pflicht: true })}
+                        />
+                        <span>
+                          {ANHEFT_DARSTELLUNG_LABEL.ersetzt}
+                          <span className="zv-formular-meta">Das Formular ist der Tagesbericht. Freitext nur noch als optionale Bemerkung.</span>
+                        </span>
+                      </label>
+                    </fieldset>
+                  )}
                   <label className="zv-checkbox-zeile">
                     <input
                       type="radio"
                       name={`zv-fe-modus-${punkt}`}
                       checked={a.modus === "dazunehmen"}
-                      onChange={() => setzeAnheftung(punkt, { ...a, modus: "dazunehmen", pflicht: false })}
+                      onChange={() => setzeAnheftung(punkt, { ...a, modus: "dazunehmen", pflicht: false, darstellung: "ergaenzt" })}
                     />
                     Zum Dazunehmen per Knopf
                   </label>
