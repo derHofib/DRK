@@ -7,6 +7,7 @@ import {
   KLIENT_LOESCHFRIST_MAX_TAGE,
   KLIENT_LOESCHFRIST_MIN_TAGE,
   PASTELL_PALETTEN,
+  type EinstellungenRechteDto,
   type MandantDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -25,13 +26,20 @@ import {
   IErfolg,
   IFehler,
   IKassenbuch,
+  IPasswort,
+  IPerson,
+  IRueckmeldungen,
   ISicherheit,
   ISpeichern,
   IStandort,
+  ITraeger,
   IVerschiebenHoch,
   IVerschiebenRunter,
   IZiehen,
+  IVor,
+  IZurueckPfeil,
   IZuruecksetzen,
+  type IconKomponente,
 } from "../components/icons";
 import {
   MENUE_GRUPPEN,
@@ -42,8 +50,50 @@ import {
   type MenueGruppeId,
 } from "../navigation";
 
-type Bereich = "profil" | "darstellung" | "standorte" | "kassenbuch" | "sicherheit";
+type KontoBereich = "profil" | "darstellung" | "anmeldung";
+type TraegerBereich = "erscheinungsbild" | "standorte" | "kassenbuch" | "datenschutz" | "rueckmeldungen";
+type Bereich = KontoBereich | TraegerBereich;
 
+interface BereichEintrag<B extends Bereich> {
+  wert: B;
+  label: string;
+  icon: IconKomponente;
+  beschreibung: string;
+}
+
+const KONTO_BEREICHE: BereichEintrag<KontoBereich>[] = [
+  { wert: "profil", label: "Profil", icon: IMitarbeitende, beschreibung: "Deine Kontaktdaten und was andere davon sehen." },
+  { wert: "darstellung", label: "Darstellung", icon: IDarstellung, beschreibung: "Wie die Zimmerakte für dich aussieht, auf diesem Gerät." },
+  { wert: "anmeldung", label: "Anmeldung & Sicherheit", icon: IPasswort, beschreibung: "Passwort und Zwei-Faktor-Anmeldung deines Kontos." },
+];
+
+/**
+ * Welches Recht einen Traeger-Bereich sichtbar macht, steht in
+ * EinstellungenRechteDto (mandant.service.ts, einstellungenRechte()).
+ * Rueckmeldungen haengt bewusst am Datenschutz-Recht: dieselbe Pruefung
+ * schuetzt dort das Speichern (setzeRueckmeldungWeitergabe).
+ */
+const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof EinstellungenRechteDto })[] = [
+  { wert: "erscheinungsbild", label: "Erscheinungsbild", icon: ITraeger, recht: "erscheinungsbild", beschreibung: "Trägerfarbe und Grundfarbe des dunklen Designs." },
+  { wert: "standorte", label: "Standorte", icon: IStandort, recht: "standorte", beschreibung: "Standorte des Trägers anlegen und bearbeiten." },
+  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch, recht: "kassenbuch", beschreibung: "Buchungstypen für das Kassenbuch." },
+  { wert: "datenschutz", label: "Datenschutz", icon: ISicherheit, recht: "datenschutz", beschreibung: "Fristen, nach denen Daten endgültig gelöscht werden." },
+  { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
+];
+
+const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false };
+
+/**
+ * Zwei Gruppen statt einer Reiterleiste: "Mein Konto" gilt nur fuer die
+ * angemeldete Person, "Traeger" fuer alle Mitarbeitenden. Frueher lagen
+ * beide gemischt in denselben Reitern (Trägerfarbe unter "Darstellung",
+ * Loeschfristen unter "Sicherheit"), und ein Betreuer sah Regler, die er
+ * nicht speichern durfte -- er merkte es erst an der Fehlermeldung.
+ *
+ * Traeger-Bereiche ohne Recht werden ausgeblendet, nicht ausgegraut. Das ist
+ * nur Bequemlichkeit: verbindlich prueft jeder Speicherpfad im Service selbst
+ * (test/einstellungen-rechte.e2e-spec.ts prueft beides).
+ */
 export function Einstellungen({
   mandant,
   onMandantAktualisiert,
@@ -59,90 +109,148 @@ export function Einstellungen({
   menuReihenfolge: HauptReiter[];
   onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
-  const [bereich, setBereich] = useState<Bereich>("darstellung");
+  const [bereich, setBereich] = useState<Bereich>("profil");
+  // Nur auf schmalen Bildschirmen relevant: dort ist entweder die Liste oder
+  // ein Bereich zu sehen (app.css, .zv-einstellungen[data-ansicht]).
+  const [ansicht, setAnsicht] = useState<"liste" | "bereich">("liste");
+  const [rechte, setRechte] = useState<EinstellungenRechteDto>(KEINE_TRAEGER_RECHTE);
+
+  useEffect(() => {
+    let aktiv = true;
+    api
+      .einstellungenRechte()
+      .then((r) => aktiv && setRechte(r))
+      // Ohne Antwort bleibt es bei "Mein Konto" -- lieber zu wenig zeigen als
+      // Regler, die beim Speichern scheitern.
+      .catch(() => undefined);
+    return () => {
+      aktiv = false;
+    };
+  }, []);
+
+  const traegerBereiche = TRAEGER_BEREICHE.filter((b) => rechte[b.recht]);
+  const alle: BereichEintrag<Bereich>[] = [...KONTO_BEREICHE, ...traegerBereiche];
+  // Faellt ein Recht weg (z. B. Vertretung beendet), nicht auf einem leeren Bereich stehen bleiben.
+  const aktuell = alle.find((b) => b.wert === bereich) ?? KONTO_BEREICHE[0];
+  const istTraeger = traegerBereiche.some((b) => b.wert === aktuell.wert);
+
+  function waehle(b: Bereich) {
+    setBereich(b);
+    setAnsicht("bereich");
+  }
+
+  const menuePunkt = (b: BereichEintrag<Bereich>) => {
+    const Icon = b.icon;
+    return (
+      <button
+        key={b.wert}
+        type="button"
+        className={b.wert === aktuell.wert ? "active" : ""}
+        aria-current={b.wert === aktuell.wert ? "page" : undefined}
+        onClick={() => waehle(b.wert)}
+      >
+        <Icon />
+        <span>{b.label}</span>
+        <IVor className="zv-einstellungen-menue-pfeil" />
+      </button>
+    );
+  };
 
   return (
-    <div>
-      <div className="zv-tabbar" style={{ padding: 0, marginBottom: 24 }}>
-        <button
-          className={bereich === "profil" ? "active" : ""}
-          onClick={() => setBereich("profil")}
-        >
-          <IMitarbeitende />
-          Mein Profil
-        </button>
-        <button
-          className={bereich === "darstellung" ? "active" : ""}
-          onClick={() => setBereich("darstellung")}
-        >
-          <IDarstellung />
-          Darstellung
-        </button>
-        <button
-          className={bereich === "standorte" ? "active" : ""}
-          onClick={() => setBereich("standorte")}
-        >
-          <IStandort />
-          Standorte
-        </button>
-        <button
-          className={bereich === "kassenbuch" ? "active" : ""}
-          onClick={() => setBereich("kassenbuch")}
-        >
-          <IKassenbuch />
-          Kassenbuch
-        </button>
-        <button
-          className={bereich === "sicherheit" ? "active" : ""}
-          onClick={() => setBereich("sicherheit")}
-        >
-          <ISicherheit />
-          Sicherheit
-        </button>
-      </div>
+    <div className="zv-einstellungen" data-ansicht={ansicht}>
+      <nav className="zv-einstellungen-menue" aria-label="Bereiche der Einstellungen">
+        <div role="group" aria-labelledby="zv-einst-konto">
+          <div className="zv-gruppenlabel" id="zv-einst-konto">
+            Mein Konto
+          </div>
+          {KONTO_BEREICHE.map(menuePunkt)}
+        </div>
+        {traegerBereiche.length > 0 && (
+          <div role="group" aria-labelledby="zv-einst-traeger">
+            <div className="zv-gruppenlabel" id="zv-einst-traeger">
+              Träger{mandant ? ` · ${mandant.name}` : ""}
+            </div>
+            {traegerBereiche.map(menuePunkt)}
+          </div>
+        )}
+      </nav>
 
-      {bereich === "profil" && <MeinProfil />}
-      {bereich === "darstellung" && (
-        <Darstellung
-          mandant={mandant}
-          onMandantAktualisiert={onMandantAktualisiert}
-          hoverAusklappen={hoverAusklappen}
-          onHoverAusklappenAendern={onHoverAusklappenAendern}
-          menuReihenfolge={menuReihenfolge}
-          onMenuReihenfolgeAendern={onMenuReihenfolgeAendern}
-        />
-      )}
-      {bereich === "standorte" && <Standorte />}
-      {bereich === "kassenbuch" && <KassenbuchTypen />}
-      {bereich === "sicherheit" && (
-        <>
-          <Sicherheit />
-          {mandant && <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
-          {mandant && <KlientLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
-          {mandant && <RueckmeldungWeitergabe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />}
-        </>
-      )}
+      <div className="zv-einstellungen-inhalt">
+        <button type="button" className="zv-btn zv-btn-sekundaer zv-btn-klein zv-einstellungen-zurueck" onClick={() => setAnsicht("liste")}>
+          <IZurueckPfeil />
+          Einstellungen
+        </button>
+        <div className="zv-seiten-kopf zv-einstellungen-kopf">
+          <div>
+            <h2>{aktuell.label}</h2>
+            <p className="zv-sub">{aktuell.beschreibung}</p>
+          </div>
+          {istTraeger ? (
+            <span className="zv-einstellungen-geltung zv-einstellungen-geltung-traeger">
+              <ITraeger />
+              Gilt für alle Mitarbeitenden{mandant ? ` von ${mandant.name}` : ""}
+            </span>
+          ) : (
+            <span className="zv-einstellungen-geltung">
+              <IPerson />
+              Nur für dich
+            </span>
+          )}
+        </div>
+
+        {aktuell.wert === "profil" && <MeinProfil />}
+        {aktuell.wert === "darstellung" && (
+          <div className="zv-einstellungen-raster">
+            <Darstellung
+              hoverAusklappen={hoverAusklappen}
+              onHoverAusklappenAendern={onHoverAusklappenAendern}
+              menuReihenfolge={menuReihenfolge}
+              onMenuReihenfolgeAendern={onMenuReihenfolgeAendern}
+            />
+          </div>
+        )}
+        {aktuell.wert === "anmeldung" && (
+          <div className="zv-einstellungen-raster">
+            <Sicherheit />
+          </div>
+        )}
+        {aktuell.wert === "erscheinungsbild" && mandant && (
+          <div className="zv-einstellungen-raster">
+            <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+            <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+          </div>
+        )}
+        {aktuell.wert === "standorte" && <Standorte />}
+        {aktuell.wert === "kassenbuch" && <KassenbuchTypen />}
+        {aktuell.wert === "datenschutz" && mandant && (
+          <div className="zv-einstellungen-raster">
+            <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+            <KlientLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+          </div>
+        )}
+        {aktuell.wert === "rueckmeldungen" && mandant && (
+          <div className="zv-einstellungen-raster">
+            <RueckmeldungWeitergabe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function Darstellung({
-  mandant,
-  onMandantAktualisiert,
   hoverAusklappen,
   onHoverAusklappenAendern,
   menuReihenfolge,
   onMenuReihenfolgeAendern,
 }: {
-  mandant: MandantDto | null;
-  onMandantAktualisiert: (m: MandantDto) => void;
   hoverAusklappen: boolean;
   onHoverAusklappenAendern: (wert: boolean) => void;
   menuReihenfolge: HauptReiter[];
   onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
   return (
-    <div className="zv-card zv-card-weit">
+    <>
       <section className="zv-einstellungen-abschnitt">
         <h3>
           <IDarstellung />
@@ -173,14 +281,7 @@ function Darstellung({
       </section>
 
       <MenuReihenfolge reihenfolge={menuReihenfolge} onAendern={onMenuReihenfolgeAendern} />
-
-      {mandant && (
-        <>
-          <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
-          <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
-        </>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -201,7 +302,7 @@ function MenuReihenfolge({
   onAendern: (reihenfolge: HauptReiter[]) => void;
 }) {
   return (
-    <section className="zv-einstellungen-abschnitt">
+    <section className="zv-einstellungen-abschnitt zv-einstellungen-abschnitt-breit">
       <h3>
         <IAnpassen />
         Reihenfolge der Menüpunkte
@@ -210,9 +311,11 @@ function MenuReihenfolge({
         Gilt nur für dich, auf diesem Gerät. Die Reihenfolge gilt innerhalb der Gruppe; zum Verschieben ziehen oder die
         Pfeile nutzen.
       </p>
-      {MENUE_GRUPPEN.map((g) => (
-        <MenuReihenfolgeGruppe key={g.id} gruppe={g.id} label={g.label} reihenfolge={reihenfolge} onAendern={onAendern} />
-      ))}
+      <div className="zv-reihenfolge-gruppen">
+        {MENUE_GRUPPEN.map((g) => (
+          <MenuReihenfolgeGruppe key={g.id} gruppe={g.id} label={g.label} reihenfolge={reihenfolge} onAendern={onAendern} />
+        ))}
+      </div>
       <button
         type="button"
         className="zv-btn zv-btn-still zv-btn-klein"
@@ -249,7 +352,7 @@ function MenuReihenfolgeGruppe({
   }
 
   return (
-    <>
+    <div>
       <h4 className="zv-gruppenlabel">{label}</h4>
       <ul className="zv-reihenfolge-liste" aria-label={`Reihenfolge ${label}`}>
         {eintraege.map((r, i) => (
@@ -305,7 +408,7 @@ function MenuReihenfolgeGruppe({
           </li>
         ))}
       </ul>
-    </>
+    </div>
   );
 }
 
@@ -389,9 +492,9 @@ function Traegerfarbe({
 
   return (
     <section className="zv-einstellungen-abschnitt">
-      <h3>Erscheinungsbild des Trägers</h3>
+      <h3>Trägerfarbe</h3>
       <p className="zv-sub">
-        Gilt für alle Mitarbeitenden von {mandant.name}. Nur die Leitung kann das ändern.
+        Akzentfarbe für Knöpfe, Markierungen und das aktive Menü, für alle Mitarbeitenden von {mandant.name}.
       </p>
 
       {fehler && (
@@ -659,9 +762,10 @@ function Vorschau() {
 /**
  * Trägerweite Datenschutzentscheidung (migrations/0061), deshalb neben den
  * eigenen Sicherheitseinstellungen und nicht unter "Darstellung". Ob die
- * Person sie ändern darf, entscheidet allein der Server (Recht
- * mandanten.datenschutz-bearbeiten) -- hier wird nichts vorab ausgeblendet,
- * eine Ablehnung erscheint als Fehlermeldung.
+ * Person sie ändern darf, entscheidet der Server (Recht
+ * mandanten.datenschutz-bearbeiten); ohne dieses Recht blendet Einstellungen()
+ * den ganzen Bereich aus. Eine Ablehnung erscheint trotzdem als Fehlermeldung,
+ * falls das Recht waehrend der Sitzung wegfaellt.
  */
 function ChatLoeschfrist({
   mandant,

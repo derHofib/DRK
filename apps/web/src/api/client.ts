@@ -1,5 +1,6 @@
 import type {
   AnwaerterDto,
+  EinstellungenRechteDto,
   RueckmeldungBerechtigungDto,
   RueckmeldungDetailDto,
   RueckmeldungEntscheidung,
@@ -406,6 +407,7 @@ export const api = {
     request<MandantDto>("/mandant/me/klient-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
   mandantRueckmeldungWeitergabeSetzen: (aktiv: boolean) =>
     request<MandantDto>("/mandant/me/rueckmeldung-weitergabe", { method: "PATCH", body: JSON.stringify({ aktiv }) }),
+  einstellungenRechte: () => request<EinstellungenRechteDto>("/mandant/me/einstellungen-rechte"),
 
   // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)
   rueckmeldungMelden: (eingabe: {

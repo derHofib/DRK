@@ -1752,6 +1752,192 @@
   margin-bottom: var(--zv-space-6);
 }
 
+/*
+ * Einstellungen: eigene Menuespalte (Mein Konto / Traeger) statt Reiterleiste,
+ * rechts der gewaehlte Bereich in voller Breite. Die Abschnitte eines Bereichs
+ * werden zu Karten im Raster -- bei 1780 px waeren einzelne, ueber die ganze
+ * Breite gezogene Formulare kaum lesbar, und eine schmale Spalte liess vorher
+ * die halbe Seite leer (Rueckmeldung "Angepasstes Design Einstellungen").
+ */
+.zv-einstellungen {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+
+.zv-einstellungen-menue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--zv-space-2);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  /* Bleibt beim Scrollen langer Bereiche (Standorte) erreichbar. */
+  position: sticky;
+  top: var(--zv-space-5);
+}
+
+.zv-einstellungen-menue [role="group"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-einstellungen-menue [role="group"]:first-child .zv-gruppenlabel {
+  padding-top: var(--zv-space-2);
+}
+
+.zv-einstellungen-menue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font: inherit;
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-einstellungen-menue button span {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-einstellungen-menue button:hover {
+  background: var(--zv-surface-3);
+  color: var(--zv-text);
+}
+
+.zv-einstellungen-menue button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Der Pfeil sagt nur auf dem Handy "fuehrt weiter"; am Desktop steht der
+   Bereich ohnehin daneben. */
+.zv-einstellungen-menue-pfeil {
+  display: none;
+  color: var(--zv-text-faint);
+}
+
+.zv-einstellungen-inhalt {
+  min-width: 0;
+}
+
+.zv-einstellungen-zurueck {
+  display: none;
+}
+
+.zv-einstellungen-kopf {
+  align-items: flex-start;
+}
+
+.zv-einstellungen-kopf .zv-sub {
+  margin: var(--zv-space-1) 0 0;
+}
+
+.zv-einstellungen-geltung {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: var(--zv-tag-hoehe);
+  padding: var(--zv-space-1) var(--zv-space-3);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-tag-erledigt-bg);
+  color: var(--zv-tag-erledigt-text);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Traeger-Bereiche tragen die Frist-/Achtung-Farbe: eine Aenderung hier
+   trifft alle Mitarbeitenden, das soll man vor dem Speichern sehen. */
+.zv-einstellungen-geltung-traeger {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+.zv-einstellungen-geltung svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zv-einstellungen-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: var(--zv-space-5);
+  align-items: start;
+}
+
+.zv-einstellungen-raster > .zv-einstellungen-abschnitt {
+  margin: 0;
+  min-width: 0;
+  padding: var(--zv-space-5);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+}
+
+.zv-einstellungen-raster > .zv-einstellungen-abschnitt-breit {
+  grid-column: 1 / -1;
+}
+
+/* Die Menuegruppen nebeneinander, sobald Platz ist -- jede Liste bleibt
+   dabei hoechstens 420 px breit (.zv-reihenfolge-liste). */
+.zv-reihenfolge-gruppen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  column-gap: var(--zv-space-5);
+}
+
+/* Titel kommt aus dem Kopf der Einstellungen; der "Neu"-Knopf bleibt rechts. */
+.zv-seiten-kopf-ohne-titel {
+  justify-content: flex-end;
+}
+
+/* Handy: erst die Liste, ein Tipp oeffnet den Bereich, "Einstellungen" fuehrt
+   zurueck -- zwei Spalten passen bei 390 px nicht nebeneinander. */
+@media (max-width: 760px) {
+  .zv-einstellungen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zv-einstellungen-menue {
+    position: static;
+  }
+
+  .zv-einstellungen-menue-pfeil {
+    display: block;
+  }
+
+  .zv-einstellungen-menue button.active {
+    background: none;
+    color: var(--zv-text-sekundaer);
+    font-weight: var(--zv-weight-medium);
+  }
+
+  .zv-einstellungen[data-ansicht="liste"] .zv-einstellungen-inhalt,
+  .zv-einstellungen[data-ansicht="bereich"] .zv-einstellungen-menue {
+    display: none;
+  }
+
+  .zv-einstellungen-zurueck {
+    display: inline-flex;
+    margin-bottom: var(--zv-space-4);
+  }
+
+  .zv-einstellungen-raster > .zv-einstellungen-abschnitt {
+    padding: var(--zv-space-4);
+  }
+}
+
 .zv-einstellungen-abschnitt > h3 {
   display: flex;
   align-items: center;

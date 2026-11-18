@@ -3,9 +3,9 @@
  * Dev-Server.
  *
  * Misst: Hinweis auf die Frist steht im Chatverlauf und folgt einer
- * Änderung; die Einstellung unter Einstellungen → Sicherheit warnt vor dem
- * Verkürzen, speichert für die Leitung und lehnt für Betreuer:innen mit
- * Fehlermeldung ab; kein horizontaler Überlauf bei 320/768/1280 px in Hell
+ * Änderung; die Einstellung unter Einstellungen → Datenschutz warnt vor dem
+ * Verkürzen, speichert für die Leitung und wird Betreuer:innen gar nicht
+ * erst angeboten; kein horizontaler Überlauf bei 320/768/1280 px in Hell
  * und Dunkel.
  *
  * Aufruf (aus apps/web): node scripts/chat-loeschfrist-pruefung.mjs <slug> <passwort> <leitung-email> <betreuer-email>
@@ -61,9 +61,14 @@ async function oeffneChat(page) {
 
 async function zurFrist(page) {
   await reiter(page, "Einstellungen");
-  await page.getByRole("button", { name: "Sicherheit" }).click();
+  await page.getByRole("button", { name: "Datenschutz" }).click();
   await page.getByRole("heading", { name: "Löschfrist für Chatnachrichten" }).waitFor();
 }
+
+// Der Knopf IM Abschnitt der Chat-Frist: ".last()" traf seit der Klienten-Löschfrist
+// (Migration 0070) deren Knopf, der ohne Änderung gesperrt bleibt.
+const fristSpeichern = (page) =>
+  page.locator(".zv-einstellungen-abschnitt", { has: page.locator("#chat-loeschfrist") }).getByRole("button", { name: "Speichern" });
 
 const ueberlauf = (page) => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 
@@ -74,13 +79,13 @@ try {
   pruefe((await b.page.locator(".zv-chat-frist").innerText()).includes("nach 90 Tagen"), "Verlauf nennt die Frist (90 Tage)");
 
   // --- Betreuer:in darf nicht ändern ---------------------------------------------
-  await zurFrist(b.page);
-  const feldB = b.page.locator("#chat-loeschfrist");
-  pruefe((await feldB.inputValue()) === "90", "Feld zeigt den gespeicherten Wert 90");
-  await feldB.fill("60");
-  await b.page.getByRole("button", { name: "Speichern" }).last().click();
-  await b.page.locator(".zv-einstellungen-abschnitt .zv-hinweis-fehler", { hasText: /Leitung/ }).waitFor();
-  pruefe(true, "Betreuer:in bekommt beim Speichern eine Fehlermeldung (403)");
+  // Seit der Trennung Mein Konto / Träger sieht sie den Bereich gar nicht mehr;
+  // dass ein direkter Speicherversuch weiter 403 bekommt, prüft
+  // test/einstellungen-rechte.e2e-spec.ts.
+  await reiter(b.page, "Einstellungen");
+  await b.page.locator(".zv-einstellungen-menue").waitFor();
+  await b.page.waitForTimeout(500);
+  pruefe((await b.page.getByRole("button", { name: "Datenschutz" }).count()) === 0, "Betreuer:in bekommt den Bereich Datenschutz nicht angeboten");
   await b.context.close();
 
   // --- Leitung ändert ----------------------------------------------------------
@@ -88,10 +93,10 @@ try {
   await zurFrist(l.page);
   const feld = l.page.locator("#chat-loeschfrist");
   await feld.fill("3");
-  pruefe((await l.page.getByRole("button", { name: "Speichern" }).last().isDisabled()) && (await l.page.getByText("Bitte zwischen 7 und 3650 Tagen.").count()) === 1, "3 Tage: Speichern gesperrt, Grenzen genannt");
+  pruefe((await fristSpeichern(l.page).isDisabled()) && (await l.page.getByText("Bitte zwischen 7 und 3650 Tagen.").count()) === 1, "3 Tage: Speichern gesperrt, Grenzen genannt");
   await feld.fill("30");
   pruefe((await l.page.getByText(/älter als 30 Tage sind, werden innerhalb der nächsten Stunde gelöscht/).count()) === 1, "Verkürzen zeigt die Warnung vor dem endgültigen Löschen");
-  await l.page.getByRole("button", { name: "Speichern" }).last().click();
+  await fristSpeichern(l.page).click();
   await l.page.getByText("Löschfrist gespeichert: 30 Tage.").waitFor();
   pruefe(true, "Leitung speichert 30 Tage");
   await l.page.reload();
@@ -103,7 +108,7 @@ try {
   // zurück auf den Ausgangswert, damit die Prüfung wiederholbar ist
   await zurFrist(l.page);
   await l.page.locator("#chat-loeschfrist").fill("90");
-  await l.page.getByRole("button", { name: "Speichern" }).last().click();
+  await fristSpeichern(l.page).click();
   await l.page.getByText("Löschfrist gespeichert: 90 Tage.").waitFor();
   await l.context.close();
 
@@ -130,6 +135,6 @@ try {
 }
 
 // Ein Prüfskript, das nichts misst, muss fehlschlagen (CLAUDE.md).
-if (messungen < 14) fehler.push(`nur ${messungen} Messungen statt mindestens 14`);
+if (messungen < 13) fehler.push(`nur ${messungen} Messungen statt mindestens 13`);
 console.log(`\n${messungen} Messungen, ${fehler.length} Fehler`);
 process.exit(fehler.length === 0 ? 0 : 1);

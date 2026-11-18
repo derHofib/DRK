@@ -94,8 +94,7 @@ export function Standorte() {
         </div>
       )}
 
-      <div className="zv-seiten-kopf">
-        <h2>Standorte</h2>
+      <div className="zv-seiten-kopf zv-seiten-kopf-ohne-titel">
         <button className="zv-btn" onClick={() => { setFormFehler(null); setNeuFormularOffen(true); }}>
           <INeu />
           Neuer Standort

@@ -25,7 +25,7 @@ async function login(page, email, pw) {
   await page.waitForTimeout(1200);
 }
 
-// --- Flow 1: Passwort selbst aendern (Einstellungen/Sicherheit) -----------
+// --- Flow 1: Passwort selbst aendern (Einstellungen/Anmeldung & Sicherheit) -----------
 const seite1 = await browser.newPage();
 await login(seite1, leitungEmail, passwort);
 const loginFehler1 = await seite1.locator(".zv-hinweis-fehler").first().textContent().catch(() => null);
@@ -36,7 +36,7 @@ if (loginFehler1) {
 
 await seite1.getByRole("button", { name: /^Einstellungen$/ }).first().click();
 await seite1.waitForTimeout(400);
-await seite1.getByRole("button", { name: /^Sicherheit$/ }).click();
+await seite1.getByRole("button", { name: /^Anmeldung & Sicherheit$/ }).click();
 await seite1.waitForTimeout(400);
 
 const neuesPasswort = "ein per ui gewaehltes neues passwort";

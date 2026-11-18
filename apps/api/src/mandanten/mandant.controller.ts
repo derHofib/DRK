@@ -69,6 +69,11 @@ export class MandantController {
     return this.mandant.findEigenenMandanten();
   }
 
+  @Get("me/einstellungen-rechte")
+  async einstellungenRechte() {
+    return this.mandant.einstellungenRechte();
+  }
+
   /**
    * Die Rollenpruefung sitzt bewusst im Service, nicht hier: dort liegt sie
    * neben dem SQL, das sie schuetzt, und gilt auch fuer jeden kuenftigen

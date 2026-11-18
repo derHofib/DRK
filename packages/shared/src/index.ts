@@ -107,6 +107,22 @@ export interface RueckmeldungMeineDto {
   entscheidungsnotiz: string | null;
 }
 
+/**
+ * Welche Träger-Bereiche der Einstellungen die angemeldete Person sieht
+ * (GET /mandant/me/einstellungen-rechte). Nur Oberfläche: verbindlich prüft
+ * jeder Speicherpfad im Service selbst.
+ */
+export interface EinstellungenRechteDto {
+  /** Trägerfarbe, dunkle Grundfarbe -- mandanten.branding-bearbeiten. */
+  erscheinungsbild: boolean;
+  /** standorte.anlegen oder standorte.bearbeiten. */
+  standorte: boolean;
+  /** Buchungstypen -- kassenbuch.typen-verwalten. */
+  kassenbuch: boolean;
+  /** Löschfristen und Rückmeldungs-Weitergabe -- mandanten.datenschutz-bearbeiten. */
+  datenschutz: boolean;
+}
+
 export interface RueckmeldungBerechtigungDto {
   verwalten: boolean;
   anzahlNeu: number;

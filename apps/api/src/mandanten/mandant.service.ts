@@ -62,6 +62,24 @@ export class MandantService {
   }
 
   /**
+   * Fuer die Einstellungsseite: welche Traeger-Bereiche angezeigt werden.
+   * Blendet nur aus -- jeder Speicherpfad prueft sein Recht weiterhin selbst
+   * (unten bzw. standort.service.ts, kassenbuchung-typ.service.ts). Ueber
+   * hatRecht() statt eigener Logik, damit Vertretungen genau so wirken wie
+   * beim Speichern: was hier true ist, darf auch gespeichert werden.
+   */
+  async einstellungenRechte() {
+    const [erscheinungsbild, standortAnlegen, standortBearbeiten, kassenbuch, datenschutz] = await Promise.all([
+      this.rechte.hatRecht("mandanten", "branding-bearbeiten"),
+      this.rechte.hatRecht("standorte", "anlegen"),
+      this.rechte.hatRecht("standorte", "bearbeiten"),
+      this.rechte.hatRecht("kassenbuch", "typen-verwalten"),
+      this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"),
+    ]);
+    return { erscheinungsbild, standorte: standortAnlegen || standortBearbeiten, kassenbuch, datenschutz };
+  }
+
+  /**
    * Setzt Akzentfarbe und/oder dunkle Grundfarbe -- beide sind dieselbe
    * traegerweite Branding-Entscheidung, nur zwei unabhaengige Werte davon
    * (siehe migrations/0019 und 0029: die dunkle Grundfarbe folgte bis dahin
