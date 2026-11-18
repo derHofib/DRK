@@ -1,16 +1,13 @@
 import type { FormularDefinition } from "@zimmerakte/shared";
 
 /**
- * Vorlagenbibliothek: Formulare, die Zimmerakte mitbringt.
- *
- * Bewusst als Code und nicht als traegeruebergreifende Tabelle: eine Tabelle,
- * die alle Traeger lesen duerfen, waere die erste Ausnahme von der
- * Mandantentrennung im Fachdatenmodell (CLAUDE.md, Regel 1). Beim Uebernehmen
- * entsteht eine KOPIE im Traeger (formular + formular_version 1), die er danach
- * frei weiterentwickelt; neue Vorlagen kommen mit einem Update.
- *
- * Feldschluessel hier sind nach der Uebernahme fest -- eine Aenderung an einer
- * Vorlage wirkt nie auf schon uebernommene Formulare.
+ * Beispielformulare fuer die Tests (frueher die mitgelieferte
+ * Vorlagenbibliothek). Die Vorlagen sind mit der Rueckmeldung „Formulare"
+ * (18.11.2026: „ich brauche keine Vorlagen") aus der Anwendung entfallen;
+ * als realistische, vollstaendig ausgefuellte Definitionen mit Abschnitten,
+ * Logik, Berechnung und Vorausfuellung bleiben sie die Testgrundlage. Die
+ * Tests legen sie ueber den Editor-Weg an (anlegen, Entwurf speichern,
+ * veroeffentlichen).
  */
 export interface FormularVorlage {
   schluessel: string;

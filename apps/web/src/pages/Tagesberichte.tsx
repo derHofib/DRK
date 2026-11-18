@@ -1,10 +1,12 @@
 import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
-import type { KlientListEintragDto, TagDto, TagesberichtAenderungDto, TagesberichtDto } from "@zimmerakte/shared";
+import type { KlientListEintragDto, ProtokollDto, TagDto, TagesberichtAenderungDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
 import { formatDatum, heuteBerlin } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
+import { AngehefteteFormulare, useAngehefteteFormulare } from "../components/AngehefteteFormulare";
+import { ProtokollAnsicht } from "../components/ProtokollFormular";
 import {
   SCHNELLWAHL_LABEL,
   SORTIERUNG_LABEL,
@@ -152,6 +154,7 @@ export function TagesberichtZeile({
           <>
             {bericht.text}
             {bericht.autorName && <div className="zv-sub-inline">Verfasst von {bericht.autorName}</div>}
+            <TagesberichtProtokolle protokolle={bericht.protokolle} />
             <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
               {bericht.bearbeitbar && (
                 <button
@@ -325,6 +328,9 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
   const [fehler, setFehler] = useState<string | null>(null);
   const [formularOffen, setFormularOffen] = useState(Boolean(startKlientId));
   const [formFehler, setFormFehler] = useState<string | null>(null);
+  // Die Klient:in bestimmt den Standort und damit, welche Formulare dazugehoeren.
+  const [neuKlientId, setNeuKlientId] = useState(startKlientId ?? "");
+  const angeheftet = useAngehefteteFormulare(formularOffen && neuKlientId ? neuKlientId : null, "tagesbericht");
 
   // Zeitraum wird serverseitig gefiltert (kann ueber Jahre gross werden);
   // Klient-Filter und Sortierung arbeiten auf der geladenen Liste, damit sie
@@ -439,6 +445,11 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
       setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
       return;
     }
+    const formularFehler = angeheftet.pruefen();
+    if (formularFehler) {
+      setFormFehler(formularFehler);
+      return;
+    }
     try {
       let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
       if (datei && datei.size > 0) {
@@ -455,10 +466,12 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
           .map((t) => t.trim())
           .filter(Boolean),
         dokumente,
+        protokolle: angeheftet.eingaben(),
       });
       setFormularOffen(false);
       laden();
     } catch (err) {
+      angeheftet.serverFehler(err);
       setFormFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht angelegt werden.");
     }
   }
@@ -508,6 +521,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
           className="zv-btn"
           onClick={() => {
             setFormFehler(null);
+            setNeuKlientId(startKlientId ?? "");
             setFormularOffen(true);
           }}
         >
@@ -528,7 +542,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
             <div className="zv-field-row">
               <div className="zv-field">
                 <label>Klient:in</label>
-                <select key={klienten.length} name="klientId" required autoFocus defaultValue={startKlientId ?? ""}>
+                <select key={klienten.length} name="klientId" required autoFocus defaultValue={startKlientId ?? ""} onChange={(e) => setNeuKlientId(e.target.value)}>
                   <option value="" disabled>
                     Bitte wählen
                   </option>
@@ -548,6 +562,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
               <label>Bericht</label>
               <textarea name="text" required rows={5} />
             </div>
+            <AngehefteteFormulare z={angeheftet} />
             <div className="zv-field">
               <label>Tags (optional, durch Komma getrennt)</label>
               <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />
@@ -786,6 +801,47 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Protokolle, die zusammen mit dem Tagesbericht abgeschlossen wurden
+ * (angeheftete Formulare). Lesen hier, korrigieren in der Klientenakte unter
+ * Protokolle -- dort gibt es Grund und Historie.
+ */
+export function TagesberichtProtokolle({ protokolle }: { protokolle: TagesberichtDto["protokolle"] }) {
+  const [offen, setOffen] = useState<ProtokollDto | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  if (!protokolle?.length) return null;
+  return (
+    <div className="zv-tagesbericht-protokolle">
+      {protokolle.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="zv-pill zv-pill-info zv-tagesbericht-protokoll"
+          onClick={() => {
+            setFehler(null);
+            api
+              .protokoll(p.id)
+              .then(setOffen)
+              .catch((err) => setFehler(err instanceof Error ? err.message : "Protokoll konnte nicht geladen werden."));
+          }}
+        >
+          <IDokument />
+          {p.formularName}
+        </button>
+      ))}
+      {fehler && <span className="zv-feld-fehler">{fehler}</span>}
+      {offen && (
+        <Modal titel={offen.formularName} onClose={() => setOffen(null)}>
+          <p className="zv-protokoll-meta zv-protokoll-modal-text">
+            Gehört zu diesem Tagesbericht. Korrigieren lässt es sich in der Klientenakte unter Protokolle.
+          </p>
+          <ProtokollAnsicht definition={offen.definition} werte={offen.werte} anzeige={offen.anzeige} quellen={offen.quellen} personen={offen.personen} />
+        </Modal>
       )}
     </div>
   );

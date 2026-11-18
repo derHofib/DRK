@@ -1,6 +1,6 @@
 /**
  * Protokolle aus Formularen (Migration 0075). Prueft neben dem Ablauf
- * (Vorlage uebernehmen, Entwurf, Abschliessen, Korrektur) vor allem das, was
+ * (Formular anlegen, Entwurf, Abschliessen, Korrektur) vor allem das, was
  * Datenbank und gemeinsamer Auswerter erzwingen sollen:
  *  - Mandantentrennung und Sichtbarkeit fremder Entwuerfe
  *  - verborgene Felder werden verworfen, Pflicht/bedingte Pflicht greift
@@ -16,7 +16,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { pruefeDefinition, werteAus, type FormularDefinition } from "@zimmerakte/shared";
-import { FORMULAR_VORLAGEN } from "../src/protokolle/formular-vorlagen";
+import { FORMULAR_VORLAGEN } from "./support/formular-beispiele";
 import { AppModule } from "../src/app.module";
 import { kontoMitAlterRolle, raeumeKontoMitRolleAuf, type AlteRolle } from "./support/konto-mit-rolle";
 
@@ -157,8 +157,8 @@ describe("Protokolle", () => {
     }
   }
 
-  describe("Auswerter und Vorlagen (ohne Datenbank)", () => {
-    it("alle mitgelieferten Vorlagen sind gueltig", () => {
+  describe("Auswerter und Beispielformulare (ohne Datenbank)", () => {
+    it("alle Beispielformulare sind gueltig", () => {
       for (const v of FORMULAR_VORLAGEN) expect([v.schluessel, pruefeDefinition(v.definition)]).toEqual([v.schluessel, []]);
     });
 
@@ -188,20 +188,20 @@ describe("Protokolle", () => {
 
   let formularId: string;
 
-  it("nur wer Formulare verwalten darf, uebernimmt Vorlagen -- und jede nur einmal", async () => {
-    expect((await als(betreuerA).post("/formulare/vorlagen/nachtdienst")).status).toBe(403);
-    const ok = await als(leitungA).post("/formulare/vorlagen/nachtdienst");
-    expect(ok.status).toBe(201);
-    expect(ok.body.aktuelleVersion.nummer).toBe(1);
-    formularId = ok.body.id;
-    expect((await als(leitungA).post("/formulare/vorlagen/nachtdienst")).status).toBe(400);
-    expect((await als(leitungA).post("/formulare/vorlagen/gibtsnicht")).status).toBe(404);
-
-    const vorlagen = await als(leitungA).get("/formulare/vorlagen");
-    expect(vorlagen.body.find((v: { schluessel: string }) => v.schluessel === "nachtdienst").uebernommen).toBe(true);
-    // Betreuende sehen das Formular, um es auszufuellen.
-    const liste = await als(betreuerA).get("/formulare");
-    expect(liste.body.map((f: { id: string }) => f.id)).toContain(formularId);
+  it("nur wer Formulare verwalten darf, legt ein Formular an und veroeffentlicht es", async () => {
+    const nacht = FORMULAR_VORLAGEN.find((v) => v.schluessel === "nachtdienst")!;
+    expect((await als(betreuerA).post("/formulare", { name: nacht.name })).status).toBe(403);
+    const neu = await als(leitungA).post("/formulare", { name: nacht.name, beschreibung: nacht.beschreibung });
+    expect(neu.status).toBe(201);
+    expect(neu.body.status).toBe("in_entwicklung");
+    formularId = neu.body.id;
+    expect((await als(leitungA).put(`/formulare/${formularId}/entwurf`, { definition: nacht.definition })).status).toBe(200);
+    const pub = await als(leitungA).post(`/formulare/${formularId}/veroeffentlichen`);
+    expect(pub.status).toBe(201);
+    expect(pub.body.veroeffentlichteVersion).toBe(1);
+    // Betreuende bekommen das Formular in der Klientenakte angeboten.
+    const angebot = await als(betreuerA).get(`/formulare/angebot?klientId=${klientA}`);
+    expect(angebot.body.map((f: { id: string }) => f.id)).toContain(formularId);
   });
 
   let protokollId: string;
@@ -390,7 +390,7 @@ describe("Protokolle", () => {
 
   it("ein stillgelegtes Formular nimmt keine neuen Protokolle an", async () => {
     expect((await als(betreuerA).post(`/formulare/${formularId}/archivieren`, { archiviert: true })).status).toBe(403);
-    expect((await als(leitungA).post(`/formulare/${formularId}/archivieren`, { archiviert: true })).body.archiviert).toBe(true);
+    expect((await als(leitungA).post(`/formulare/${formularId}/archivieren`, { archiviert: true })).body.status).toBe("stillgelegt");
     expect((await als(betreuerA).post("/protokolle", { formularId, klientId: klientA })).status).toBe(404);
     await als(leitungA).post(`/formulare/${formularId}/archivieren`, { archiviert: false });
   });

@@ -84,10 +84,13 @@ export function ProtokollEingabe({
   auswahlPersonen,
   fehler,
   onAendern,
+  idPraefix = "",
 }: Gemeinsam & {
   auswahlPersonen: PersonAuswahl[];
   fehler: Record<string, string>;
   onAendern: (schluessel: string, wert: FeldWert | null) => void;
+  /** Mehrere Formulare in einem Fenster (Tagesbericht): Feld-IDs muessen eindeutig bleiben, sonst zeigt ein <label> aufs falsche Feld. */
+  idPraefix?: string;
 }) {
   const auswertung = useMemo(() => werteAus(definition, werte), [definition, werte]);
   const namen = useMemo(() => {
@@ -142,6 +145,7 @@ export function ProtokollEingabe({
             namen={namen}
             auswahlPersonen={auswahlPersonen}
             onAendern={(w) => onAendern(b.schluessel, w)}
+            idPraefix={idPraefix}
           />
         );
     }
@@ -159,7 +163,9 @@ function EingabeFeld({
   namen,
   auswahlPersonen,
   onAendern,
+  idPraefix,
 }: {
+  idPraefix: string;
   b: EingabeBaustein;
   wert: FeldWert | null;
   pflicht: boolean;
@@ -169,7 +175,7 @@ function EingabeFeld({
   auswahlPersonen: PersonAuswahl[];
   onAendern: (w: FeldWert | null) => void;
 }) {
-  const id = `zv-feld-${b.schluessel}`;
+  const id = `zv-feld-${idPraefix}${b.schluessel}`;
   const fest = b.vorausfuellen?.art === "festgehalten";
   const kopf = (
     <label htmlFor={id}>

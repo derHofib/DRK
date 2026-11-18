@@ -1,7 +1,12 @@
 import type {
   FeldWerte,
-  FormularDto,
-  FormularVorlageDto,
+  AngeheftetesProtokollEingabe,
+  Anheftpunkt,
+  FormularAngebotDto,
+  FormularAnheftung,
+  FormularDefinition,
+  FormularDetailDto,
+  FormularVerwaltungDto,
   ProtokollAenderungDto,
   ProtokollDto,
   ProtokolleRechteDto,
@@ -109,7 +114,9 @@ export class ApiFehler extends Error {
     message: string,
     readonly status: number,
     /** Feldgenaue Fehler, wo der Server sie liefert (Protokolle: { schluessel, meldung }[]). */
-    readonly fehler?: { schluessel: string; meldung: string }[]
+    readonly fehler?: { schluessel: string; meldung: string }[],
+    /** Weitere Angaben des Servers: Pruefliste beim Veroeffentlichen, betroffenes Formular beim Tagesbericht. */
+    readonly zusatz: { pruefung?: string[]; formularId?: string } = {}
   ) {
     super(message);
   }
@@ -233,7 +240,11 @@ async function request<T>(path: string, init?: RequestInit, ohneToken = false): 
     throw new ApiFehler(
       body.message ?? `Anfrage fehlgeschlagen (${res.status})`,
       res.status,
-      Array.isArray(body.fehler) ? body.fehler : undefined
+      Array.isArray(body.fehler) ? body.fehler : undefined,
+      {
+        pruefung: Array.isArray(body.pruefung) ? body.pruefung : undefined,
+        formularId: typeof body.formularId === "string" ? body.formularId : undefined,
+      }
     );
   }
 
@@ -421,12 +432,26 @@ export const api = {
   mandantRueckmeldungWeitergabeSetzen: (aktiv: boolean) =>
     request<MandantDto>("/mandant/me/rueckmeldung-weitergabe", { method: "PATCH", body: JSON.stringify({ aktiv }) }),
   protokolleRechte: () => request<ProtokolleRechteDto>("/protokolle/rechte"),
-  formulare: () => request<FormularDto[]>("/formulare"),
-  formularVorlagen: () => request<FormularVorlageDto[]>("/formulare/vorlagen"),
-  formularVorlageUebernehmen: (schluessel: string) =>
-    request<FormularDto>(`/formulare/vorlagen/${encodeURIComponent(schluessel)}`, { method: "POST" }),
+  formulare: () => request<FormularVerwaltungDto[]>("/formulare"),
+  formular: (id: string) => request<FormularDetailDto>(`/formulare/${id}`),
+  formularAnlegen: (name: string, beschreibung: string | null) =>
+    request<FormularDetailDto>("/formulare", { method: "POST", body: JSON.stringify({ name, beschreibung }) }),
+  formularLoeschen: (id: string) => request<{ ok: true }>(`/formulare/${id}`, { method: "DELETE" }),
+  formularEntwurfStarten: (id: string) => request<FormularDetailDto>(`/formulare/${id}/entwurf`, { method: "POST" }),
+  formularEntwurfSpeichern: (id: string, definition: FormularDefinition) =>
+    request<FormularDetailDto>(`/formulare/${id}/entwurf`, { method: "PUT", body: JSON.stringify({ definition }) }),
+  formularEntwurfVerwerfen: (id: string) => request<FormularDetailDto>(`/formulare/${id}/entwurf`, { method: "DELETE" }),
+  formularVeroeffentlichen: (id: string) => request<FormularDetailDto>(`/formulare/${id}/veroeffentlichen`, { method: "POST" }),
+  formularEinstellungen: (
+    id: string,
+    e: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[] }
+  ) => request<FormularDetailDto>(`/formulare/${id}/einstellungen`, { method: "PUT", body: JSON.stringify(e) }),
   formularArchivieren: (id: string, archiviert: boolean) =>
-    request<FormularDto>(`/formulare/${id}/archivieren`, { method: "POST", body: JSON.stringify({ archiviert }) }),
+    request<FormularDetailDto>(`/formulare/${id}/archivieren`, { method: "POST", body: JSON.stringify({ archiviert }) }),
+  formularAngebot: (klientId: string, anheftpunkt?: Anheftpunkt) =>
+    request<FormularAngebotDto[]>(
+      `/formulare/angebot?klientId=${encodeURIComponent(klientId)}${anheftpunkt ? `&anheftpunkt=${anheftpunkt}` : ""}`
+    ),
   protokolle: (klientId: string) => request<ProtokollKurzDto[]>(`/protokolle?klientId=${encodeURIComponent(klientId)}`),
   protokoll: (id: string) => request<ProtokollDto>(`/protokolle/${id}`),
   protokollHistorie: (id: string) => request<ProtokollAenderungDto[]>(`/protokolle/${id}/historie`),
@@ -768,6 +793,7 @@ export const api = {
     text: string;
     tagNamen?: string[];
     dokumente?: { base64: string; dateiname: string; mimeType: string }[];
+    protokolle?: AngeheftetesProtokollEingabe[];
   }) => request<TagesberichtDto>("/tagesberichte", { method: "POST", body: JSON.stringify(payload) }),
   tagesberichtBearbeiten: (id: string, payload: { text?: string; datum?: string }) =>
     request<TagesberichtDto>(`/tagesberichte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

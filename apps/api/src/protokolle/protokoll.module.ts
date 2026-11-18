@@ -8,5 +8,7 @@ import { ProtokollService } from "./protokoll.service";
   imports: [AuthModule, RechteModule],
   controllers: [ProtokollController],
   providers: [ProtokollService],
+  // Der Tagesbericht schliesst angeheftete Formulare in seiner Transaktion ab.
+  exports: [ProtokollService],
 })
 export class ProtokollModule {}

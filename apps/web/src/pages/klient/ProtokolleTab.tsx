@@ -3,7 +3,7 @@ import {
   alleBausteine,
   type FeldWert,
   type FeldWerte,
-  type FormularDto,
+  type FormularAngebotDto,
   type ProtokollAenderungDto,
   type ProtokollDto,
   type ProtokolleRechteDto,
@@ -36,7 +36,7 @@ import { formatDatum, formatUhrzeit } from "../../format";
 export function ProtokolleTab({ klientId, archiviert }: { klientId: string; archiviert: boolean }) {
   const [rechte, setRechte] = useState<ProtokolleRechteDto | null>(null);
   const [liste, setListe] = useState<ProtokollKurzDto[]>([]);
-  const [formulare, setFormulare] = useState<FormularDto[]>([]);
+  const [formulare, setFormulare] = useState<FormularAngebotDto[]>([]);
   const [offen, setOffen] = useState<string | null>(null);
   const [auswahlOffen, setAuswahlOffen] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -47,9 +47,11 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
 
   useEffect(() => {
     api.protokolleRechte().then(setRechte).catch(() => setRechte({ ansehen: false, ausfuellen: false, formulareVerwalten: false }));
-    api.formulare().then(setFormulare).catch(() => setFormulare([]));
+    // Nur, was fuer DIESE Klient:in angeboten wird: veroeffentlicht, nicht
+    // stillgelegt, fuer ihren Standort freigegeben (prueft der Server).
+    api.formularAngebot(klientId).then(setFormulare).catch(() => setFormulare([]));
     laden();
-  }, [laden]);
+  }, [laden, klientId]);
 
   async function neu(formularId: string) {
     setFehler(null);
@@ -75,7 +77,7 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
     );
   }
 
-  const nutzbar = formulare.filter((f) => !f.archiviert && f.aktuelleVersion);
+  const nutzbar = formulare;
 
   return (
     <div>
@@ -111,7 +113,7 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
       {liste.length === 0 ? (
         <Leerzustand icon={ILeerTagesberichte}>
           {nutzbar.length === 0
-            ? "Noch keine Formulare vorhanden. Die Leitung kann sie unter Einstellungen › Formulare aus Vorlagen übernehmen."
+            ? "Für diese Klient:in ist noch kein Formular veröffentlicht. Formulare werden unter Organisatorisch › Formulare gebaut."
             : "Noch keine Protokolle für diese Klient:in."}
         </Leerzustand>
       ) : (
@@ -139,7 +141,10 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
               <span className="zv-liste-zelle" data-label="Datum">
                 {formatDatum(p.bezugsdatum)}
               </span>
-              <span className="zv-liste-zelle-titel">{p.formularName}</span>
+              <span className="zv-liste-zelle-titel">
+                {p.formularName}
+                {p.tagesberichtId && <span className="zv-pill zv-protokoll-zum-tagesbericht">zum Tagesbericht</span>}
+              </span>
               <span className="zv-liste-zelle" data-label="Ausgefüllt von">
                 {p.autorName ?? "–"}
               </span>
