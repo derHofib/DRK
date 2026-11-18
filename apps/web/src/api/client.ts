@@ -26,6 +26,9 @@ import type {
   KlientEmailAendernPruefungDto,
   KlientZugangDto,
   TerminAnlegenEingabe,
+  AbwesenheitAnlegenEingabe,
+  AbwesenheitDto,
+  AbwesenheitRechteDto,
   TerminAntwort,
   TerminDto,
   AnwaerterStatus,
@@ -972,13 +975,19 @@ export const api = {
     request<TerminDto>("/kalender/termine", { method: "POST", body: JSON.stringify(eingabe) }),
   terminAendern: (
     id: string,
-    payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean }
+    payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean; art?: TerminDto["art"] }
   ) => request<TerminDto>(`/kalender/termine/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   terminAbsagen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/absagen`, { method: "POST" }),
   terminAntworten: (id: string, antwort: TerminAntwort) =>
     request<TerminDto>(`/kalender/termine/${id}/antwort`, { method: "POST", body: JSON.stringify({ antwort }) }),
   terminUebernehmen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/uebernehmen`, { method: "POST" }),
   terminIcsHerunterladen: (id: string) => dateiHerunterladen(`/kalender/termine/${id}/ics`, "termin.ics"),
+  abwesenheiten: (von: string, bis: string) =>
+    request<AbwesenheitDto[]>(`/kalender/abwesenheiten?von=${encodeURIComponent(von)}&bis=${encodeURIComponent(bis)}`),
+  abwesenheitRechte: () => request<AbwesenheitRechteDto>("/kalender/abwesenheiten/rechte"),
+  abwesenheitAnlegen: (eingabe: AbwesenheitAnlegenEingabe) =>
+    request<AbwesenheitDto>("/kalender/abwesenheiten", { method: "POST", body: JSON.stringify(eingabe) }),
+  abwesenheitStornieren: (id: string) => request<{ ok: true }>(`/kalender/abwesenheiten/${id}/stornieren`, { method: "POST" }),
 
   // Zugang der Klient:innen zur App (Verwaltung durch Mitarbeitende)
   klientZugang: (klientId: string) => request<KlientZugangDto>(`/klienten/${klientId}/zugang`),

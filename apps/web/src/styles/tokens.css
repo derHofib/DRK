@@ -280,6 +280,32 @@
   --zv-kal-sammel-flaeche: var(--zv-text);
   --zv-kal-sammel-text: var(--zv-surface);
 
+  /*
+   * Statusfarben je Art (Kalender: Ecke, Flaeche im Modus "Farbe nach Art",
+   * Marken). Hier stehen NUR Farbton und Buntheit -- die Helligkeit legt
+   * app.css je Theme fest (.zv-art-flaeche / .zv-art-farbe), wie bei den
+   * Personenfarben. So haelt der Kontrast der Tageszahl, egal welche Art.
+   * Abwesenheiten sind warm/kraeftig (fallen auf), Termine kuehler; "Termin"
+   * (allgemein) und "abwesend" (Grund nicht sichtbar) sind bewusst fast
+   * unbunt -- sie sagen nur "da ist etwas".
+   */
+  --zv-art-krank-h: 25;
+  --zv-art-krank-c: 0.17;
+  --zv-art-urlaub-h: 85;
+  --zv-art-urlaub-c: 0.15;
+  --zv-art-frei-h: 235;
+  --zv-art-frei-c: 0.11;
+  --zv-art-fortbildung-h: 305;
+  --zv-art-fortbildung-c: 0.13;
+  --zv-art-abwesend-h: 270;
+  --zv-art-abwesend-c: 0.03;
+  --zv-art-klient-h: 145;
+  --zv-art-klient-c: 0.13;
+  --zv-art-besprechung-h: 195;
+  --zv-art-besprechung-c: 0.1;
+  --zv-art-termin-h: 0;
+  --zv-art-termin-c: 0;
+
   /* ------------------------------------------------------------------
      Aufmerksamkeit -- Koralle, fest, nie dekorativ (siehe Kopf)
      ------------------------------------------------------------------ */

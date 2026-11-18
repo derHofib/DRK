@@ -967,6 +967,18 @@ export const TERMIN_ANTWORT_LABEL: Record<TerminAntwort, string> = {
   abgelehnt: "Abgelehnt",
 };
 
+/**
+ * Terminart (migrations/0074): feste Liste, steuert Filter und Statusfarbe
+ * im Kalender. "klient" = Termin mit oder fuer Klient:innen.
+ */
+export type TerminArt = "termin" | "besprechung" | "klient";
+
+export const TERMIN_ART_LABEL: Record<TerminArt, string> = {
+  termin: "Termin",
+  besprechung: "Besprechung",
+  klient: "Klient:innentermin",
+};
+
 export interface TerminPersonDto {
   art: "benutzer" | "klient";
   id: string;
@@ -991,6 +1003,7 @@ export interface TerminDto {
   beginn: string;
   ende: string;
   ganztaegig: boolean;
+  art: TerminArt;
   erstelltVon: TerminPersonDto;
   erstelltAm: string;
   abgesagtAm: string | null;
@@ -1009,7 +1022,50 @@ export interface TerminAnlegenEingabe {
   beginn: string;
   ende: string;
   ganztaegig?: boolean;
+  art?: TerminArt;
   teilnehmer?: TerminTeilnehmerEingabe[];
+}
+
+/**
+ * Abwesenheiten (migrations/0074): alle Mitarbeitenden sehen, DASS und WANN
+ * jemand fehlt; den Grund nur die Person selbst und wer
+ * abwesenheiten.art-sehen hat. Fuer alle anderen ist art = null ("abwesend").
+ */
+export type AbwesenheitArt = "urlaub" | "krank" | "frei" | "fortbildung";
+
+export const ABWESENHEIT_ART_LABEL: Record<AbwesenheitArt, string> = {
+  urlaub: "Urlaub",
+  krank: "krank",
+  frei: "frei / Überstunden",
+  fortbildung: "Fortbildung",
+};
+
+export interface AbwesenheitDto {
+  id: string;
+  benutzer: { id: string; name: string };
+  /** null = Grund fuer die anfragende Person nicht sichtbar. */
+  art: AbwesenheitArt | null;
+  /** Erster und letzter Tag, beide inklusive ("YYYY-MM-DD"). */
+  von: string;
+  bis: string;
+  notiz: string | null;
+  stornierbar: boolean;
+}
+
+export interface AbwesenheitAnlegenEingabe {
+  /** Fehlt = fuer mich selbst. */
+  benutzerId?: string;
+  art: AbwesenheitArt;
+  von: string;
+  bis: string;
+  notiz?: string | null;
+}
+
+export interface AbwesenheitRechteDto {
+  /** Grund fremder Abwesenheiten sehen. */
+  artSehen: boolean;
+  /** Fuer andere eintragen und fremde stornieren. */
+  verwalten: boolean;
 }
 
 // --- Klient-Zugang: E-Mail aendern (Chat-Plan 1b) ---

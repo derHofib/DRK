@@ -1,13 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { ChatKontaktDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
+import type { AbwesenheitDto, AbwesenheitRechteDto, ChatKontaktDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
 import { TERMIN_ANTWORT_LABEL } from "@zimmerakte/shared";
-import { api } from "../api/client";
+import { api, tokenBenutzerId } from "../api/client";
+import { FilterMehrfachAuswahl, FilterPille } from "../components/Filterleiste";
+import { Filterleiste } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { TerminFormular } from "../components/TerminFormular";
-import { IBearbeiten, IFehler, IHerunterladen, ILeerKalender, INeu, IStornieren, IVor, IZurueckPfeil } from "../components/icons";
+import { IBearbeiten, IDarstellung, IFehler, IHerunterladen, ILeerKalender, INeu, IPerson, IStornieren, ITag, IVor, IZurueckPfeil } from "../components/icons";
+import { AbwesenheitDetail, AbwesenheitEintragen, AbwesenheitsZeile, ArtDreieck } from "../kalender/Abwesenheiten";
+import {
+  KALENDER_ARTEN,
+  KALENDER_ART_LABEL,
+  KEIN_FILTER,
+  abwesenheitArt,
+  abwesenheitPasst,
+  abwesenheitTage,
+  filterAktiv,
+  istAbwesenheitsArt,
+  terminPasst,
+  wichtigsteArt,
+  type KalenderArt,
+  type KalenderFilter,
+} from "../kalender/eintraege";
 import { WochenZeitraster } from "../kalender/WochenZeitraster";
-import { personFarbStil, useFarbIndizes } from "../personFarbe";
+import { personFarbStil, useMitarbeitendeMitFarbe } from "../personFarbe";
 import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -23,6 +40,8 @@ const SAMMEL_AB = 4;
 const VORSCHAU_MAX = 6;
 
 type Ansicht = "woche" | "monat" | "jahr";
+/** Woher die Farbe einer Tageszelle im Jahresueberblick kommt. Standard: Person (Rueckmeldung "Filter Kalender"). */
+type FarbModus = "person" | "art";
 const ANSICHTEN: { wert: Ansicht; label: string }[] = [
   { wert: "woche", label: "Woche" },
   { wert: "monat", label: "Monat" },
@@ -106,19 +125,39 @@ function terminWort(anzahl: number): string {
   return `${anzahl} Termin${anzahl === 1 ? "" : "e"}`;
 }
 
+/** Text einer Mehrfachauswahl in der Pille: zwei Namen passen, danach zaehlt sie nur noch. */
+function auswahlText(labels: string[]): string {
+  return labels.length <= 2 ? labels.join(", ") : `${labels[0]} und ${labels.length - 1} weitere`;
+}
+
 /**
  * `kontakteLaden`: woher die waehlbaren Teilnehmenden kommen. Mitarbeitende
  * nutzen die Voreinstellung (/chat/kontakte); fuer Klient:innen liefert
  * dieser Endpunkt bewusst nichts -- sie koennen nur Personen eintragen, mit
  * denen sie einen gemeinsamen Chat haben (KlientShell leitet sie daraus ab).
  */
-export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKontakte() }: { titel?: string; kontakteLaden?: () => Promise<ChatKontaktDto[]> }) {
+export function Kalender({
+  titel = "Kalender",
+  kontakteLaden = () => api.chatKontakte(),
+  mitAbwesenheiten = true,
+}: {
+  titel?: string;
+  kontakteLaden?: () => Promise<ChatKontaktDto[]>;
+  /** Klient:innen sehen keine Abwesenheiten des Teams (die API laesst sie gar nicht erst zu). */
+  mitAbwesenheiten?: boolean;
+}) {
   const heute = lokalesDatum(new Date());
   // `gewaehlt` ist der einzige Zeitanker: Woche, Monat und Jahr leiten sich daraus ab.
   // So landet man beim Umschalten immer im Zeitraum, den man gerade ansieht.
   const [gewaehlt, setGewaehlt] = useState(heute);
   const [ansicht, setAnsicht] = useState<Ansicht>("woche");
   const [termine, setTermine] = useState<TerminDto[]>([]);
+  const [abwesenheiten, setAbwesenheiten] = useState<AbwesenheitDto[]>([]);
+  const [abwRechte, setAbwRechte] = useState<AbwesenheitRechteDto>({ artSehen: false, verwalten: false });
+  const [filter, setFilter] = useState<KalenderFilter>(KEIN_FILTER);
+  const [farbModus, setFarbModus] = useState<FarbModus>("person");
+  const [abwNeuOffen, setAbwNeuOffen] = useState(false);
+  const [abwDetail, setAbwDetail] = useState<AbwesenheitDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
   // Beginn fuer "Neuer Termin", wenn er per Klick in eine Stunde des Zeitrasters geoeffnet wurde.
@@ -139,12 +178,12 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
 
   const laden = useCallback(() => {
     let verworfen = false;
-    api
-      .termine(ladeVon, ladeBis)
-      .then((t) => {
+    Promise.all([api.termine(ladeVon, ladeBis), mitAbwesenheiten ? api.abwesenheiten(ladeVon, ladeBis) : Promise.resolve([])])
+      .then(([t, a]) => {
         // Schnelles Durchblaettern: eine spaete Antwort fuer einen laengst verlassenen Zeitraum darf die aktuelle nicht ueberschreiben.
         if (verworfen) return;
         setTermine(t);
+        setAbwesenheiten(a);
         setFehler(null);
       })
       .catch((err) => {
@@ -153,18 +192,33 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
     return () => {
       verworfen = true;
     };
-  }, [ladeVon, ladeBis]);
+  }, [ladeVon, ladeBis, mitAbwesenheiten]);
 
   useEffect(laden, [laden]);
 
+  useEffect(() => {
+    if (mitAbwesenheiten) api.abwesenheitRechte().then(setAbwRechte).catch(() => {});
+  }, [mitAbwesenheiten]);
+
+  // Gefiltert wird hier einmal fuer alle drei Ansichten: der Filter bleibt
+  // beim Umschalten zwischen Woche, Monat und Jahr erhalten.
+  const sichtTermine = useMemo(() => termine.filter((t) => terminPasst(t, filter)), [termine, filter]);
+  const sichtAbwesenheiten = useMemo(() => abwesenheiten.filter((a) => abwesenheitPasst(a, filter)), [abwesenheiten, filter]);
+
   const nachTag = useMemo(() => {
     const karte = new Map<string, TerminDto[]>();
-    for (const t of termine) for (const tag of tageVon(t)) karte.set(tag, [...(karte.get(tag) ?? []), t]);
+    for (const t of sichtTermine) for (const tag of tageVon(t)) karte.set(tag, [...(karte.get(tag) ?? []), t]);
     for (const liste of karte.values()) liste.sort(sortiere);
     return karte;
-  }, [termine]);
+  }, [sichtTermine]);
 
-  const farbIndizes = useFarbIndizes();
+  const abwNachTag = useMemo(() => {
+    const karte = new Map<string, AbwesenheitDto[]>();
+    for (const a of sichtAbwesenheiten) for (const tag of abwesenheitTage(a, addTage)) karte.set(tag, [...(karte.get(tag) ?? []), a]);
+    return karte;
+  }, [sichtAbwesenheiten]);
+
+  const { liste: mitarbeitende, farbIndizes } = useMitarbeitendeMitFarbe();
   /** Personenfarbe eines Termins: nur fuer von Mitarbeitenden angelegte Termine, deren Konto die Liste kennt. */
   const farbIndexVon = (t: TerminDto): number | undefined =>
     t.erstelltVon.art === "benutzer" ? farbIndizes.get(t.erstelltVon.id) : undefined;
@@ -177,26 +231,62 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
   // angelegt hat -- wer sich "Urlaub" oder "Fortbildung" eintraegt, ist
   // genau die Person, die dann weg ist. Von Klient:innen angelegte Termine
   // bleiben neutral (keine Personenfarbe fuer Klient:innen).
-  const sichtbareTage = new Set(ansicht === "jahr" ? [...nachTag.keys()].filter((t) => t.startsWith(jahr)) : listenTage);
+  const sichtbareTage = new Set(
+    ansicht === "jahr" ? [...new Set([...nachTag.keys(), ...abwNachTag.keys()])].filter((t) => t.startsWith(jahr)) : listenTage,
+  );
   const legende = [
-    ...new Map(
-      [...sichtbareTage]
+    ...new Map([
+      ...[...sichtbareTage]
         .flatMap((tag) => nachTag.get(tag) ?? [])
         .filter((t) => farbIndexVon(t) !== undefined)
         .map((t) => [t.erstelltVon.id, { name: t.erstelltVon.name, farbIndex: farbIndexVon(t)! }] as const),
-    ),
+      ...[...sichtbareTage]
+        .flatMap((tag) => abwNachTag.get(tag) ?? [])
+        .filter((a) => farbIndizes.has(a.benutzer.id))
+        .map((a) => [a.benutzer.id, { name: a.benutzer.name, farbIndex: farbIndizes.get(a.benutzer.id)! }] as const),
+    ]),
   ].sort(([, a], [, b]) => a.name.localeCompare(b.name, "de"));
+  const artenImBlick = KALENDER_ARTEN.filter((art) =>
+    [...sichtbareTage].some(
+      (tag) => (nachTag.get(tag) ?? []).some((t) => !t.abgesagtAm && t.art === art) || (abwNachTag.get(tag) ?? []).some((a) => abwesenheitArt(a) === art),
+    ),
+  );
 
-  // Ein Tag im Jahresueberblick: aktive Termine bestimmen die Farbe,
-  // abgesagte nicht (wer abgesagt hat, ist ja da).
+  // Ein Tag im Jahresueberblick: aktive Termine und Abwesenheiten bestimmen
+  // die Farbe, abgesagte Termine nicht (wer abgesagt hat, ist ja da).
   const jahresTag = (tag: string) => {
     const liste = nachTag.get(tag) ?? [];
+    const abw = abwNachTag.get(tag) ?? [];
     const aktiv = liste.filter((t) => !t.abgesagtAm);
+    const arten = KALENDER_ARTEN.filter((art) => aktiv.some((t) => t.art === art) || abw.some((a) => abwesenheitArt(a) === art));
     // Je Person ein Streifen; von Klient:innen angelegte Termine teilen sich einen neutralen.
-    const personen = [...new Map(aktiv.map((t) => [farbIndexVon(t) ?? "neutral", farbIndexVon(t)] as const)).values()];
-    return { liste, aktiv, personen, sammel: aktiv.length >= SAMMEL_AB };
+    const personen = [
+      ...new Map([
+        ...abw.map((a) => [farbIndizes.get(a.benutzer.id) ?? "neutral", farbIndizes.get(a.benutzer.id)] as const),
+        ...aktiv.map((t) => [farbIndexVon(t) ?? "neutral", farbIndexVon(t)] as const),
+      ]).values(),
+    ];
+    const anzahl = aktiv.length + abw.length;
+    const sammel = farbModus === "art" ? arten.length >= SAMMEL_AB : anzahl >= SAMMEL_AB;
+    return { liste, abw, aktiv, anzahl, arten, personen, sammel, ecke: wichtigsteArt(arten) };
   };
   const sammelImJahr = ansicht === "jahr" && [...sichtbareTage].some((tag) => jahresTag(tag).sammel);
+
+  // Personen fuer den Filter: aktive Konten plus alle, die im geladenen
+  // Zeitraum vorkommen (auch deaktivierte mit alten Eintraegen).
+  const personenOptionen = [
+    ...new Map([
+      ...mitarbeitende.filter((m) => m.aktiv).map((m) => [m.id, m.name] as const),
+      ...termine.filter((t) => t.erstelltVon.art === "benutzer").map((t) => [t.erstelltVon.id, t.erstelltVon.name] as const),
+      ...abwesenheiten.map((a) => [a.benutzer.id, a.benutzer.name] as const),
+    ]),
+  ]
+    .map(([wert, label]) => ({ wert, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  // "abwesend" ist nur eine Art fuer alle, die den Grund nicht sehen duerfen.
+  const artOptionen = KALENDER_ARTEN.filter((a) =>
+    !mitAbwesenheiten ? !istAbwesenheitsArt(a) : a === "abwesend" ? !abwRechte.artSehen : true,
+  );
 
   useEffect(() => {
     if (!vorschau) return;
@@ -240,6 +330,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
 
   function tagKnopf(tag: string, fremd: boolean) {
     const liste = nachTag.get(tag) ?? [];
+    const abw = abwNachTag.get(tag) ?? [];
     const aktiv = liste.filter((t) => !t.abgesagtAm).length;
     return (
       <button
@@ -248,15 +339,20 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         role="gridcell"
         className={`zv-kal-tag${tag === gewaehlt ? " gewaehlt" : ""}${tag === heute ? " heute" : ""}${fremd ? " fremd" : ""}`}
         onClick={() => setGewaehlt(tag)}
-        aria-label={`${formatDatum(tag)}${liste.length ? `, ${terminWort(liste.length)}` : ""}`}
+        aria-label={`${formatDatum(tag)}${liste.length ? `, ${terminWort(liste.length)}` : ""}${abw.length ? `, ${abw.length} abwesend` : ""}`}
         aria-pressed={tag === gewaehlt}
       >
         <span className="zv-kal-tag-zahl">{Number(tag.slice(8))}</span>
-        {liste.length > 0 && (
+        {(liste.length > 0 || abw.length > 0) && (
           <span className="zv-kal-punkte" aria-hidden="true">
+            {/* Abwesenheiten als Ring statt Punkt: "fehlt" ist etwas anderes als "hat einen Termin". */}
+            {abw.slice(0, 3).map((a) => {
+              const fi = farbIndizes.get(a.benutzer.id);
+              return <span key={a.id} className="zv-kal-punkt zv-kal-punkt-abwesend zv-person-farbe" style={fi === undefined ? undefined : personFarbStil(fi)} />;
+            })}
             {liste
               .filter((t) => !t.abgesagtAm)
-              .slice(0, 3)
+              .slice(0, Math.max(0, 3 - abw.length))
               .map((t) => {
                 const fi = farbIndexVon(t);
                 return fi === undefined ? (
@@ -282,6 +378,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
       )}
       <div className="zv-seiten-kopf">
         <h2>{titel}</h2>
+        <div className="zv-kal-kopf-aktionen">
         <button
           className="zv-btn"
           onClick={() => {
@@ -292,6 +389,13 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           <INeu />
           Neuer Termin
         </button>
+        {mitAbwesenheiten && (
+          <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setAbwNeuOffen(true)}>
+            <INeu />
+            Abwesenheit
+          </button>
+        )}
+        </div>
       </div>
 
       <div className="zv-kal-umschalter">
@@ -303,6 +407,47 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           ))}
         </div>
       </div>
+
+      <Filterleiste ariaLabel="Kalender filtern" aktiv={filterAktiv(filter) || farbModus !== "person"} onZuruecksetzen={() => (setFilter(KEIN_FILTER), setFarbModus("person"))}>
+        {personenOptionen.length > 0 && (
+          <FilterPille
+            icon={<IPerson />}
+            label="Mitarbeitende"
+            wert={filter.personen.length > 0 ? `: ${auswahlText(filter.personen.map((id) => personenOptionen.find((o) => o.wert === id)?.label ?? "?"))}` : null}
+            onEntfernen={() => setFilter((f) => ({ ...f, personen: [] }))}
+          >
+            {() => <FilterMehrfachAuswahl optionen={personenOptionen} gewaehlt={filter.personen} onAendern={(personen) => setFilter((f) => ({ ...f, personen }))} durchsuchbar />}
+          </FilterPille>
+        )}
+        <FilterPille
+          icon={<ITag />}
+          label="Art"
+          wert={filter.arten.length > 0 ? `: ${auswahlText(filter.arten.map((a) => KALENDER_ART_LABEL[a]))}` : null}
+          onEntfernen={() => setFilter((f) => ({ ...f, arten: [] }))}
+        >
+          {() => (
+            <FilterMehrfachAuswahl
+              optionen={artOptionen.map((a) => ({ wert: a, label: istAbwesenheitsArt(a) ? `Abwesenheit: ${KALENDER_ART_LABEL[a]}` : KALENDER_ART_LABEL[a] }))}
+              gewaehlt={filter.arten}
+              onAendern={(arten) => setFilter((f) => ({ ...f, arten }))}
+              durchsuchbar={false}
+            />
+          )}
+        </FilterPille>
+        {ansicht === "jahr" && (
+          <div className="zv-segmented zv-kal-farbmodus" role="radiogroup" aria-label="Farbe der Tage nach">
+            <span className="zv-kal-farbmodus-titel" aria-hidden="true">
+              <IDarstellung />
+              Farbe nach
+            </span>
+            {(["person", "art"] as const).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={farbModus === m} className={farbModus === m ? "active" : ""} onClick={() => setFarbModus(m)}>
+                {m === "person" ? "Person" : "Art"}
+              </button>
+            ))}
+          </div>
+        )}
+      </Filterleiste>
 
       <div className="zv-kal-navigation">
         <button type="button" className="zv-icon-btn" onClick={() => schritt(-1)} aria-label={`Vorherige${endung} ${einheit}`}>
@@ -319,6 +464,14 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         </button>
       </div>
 
+      {ansicht !== "jahr" && (
+        <AbwesenheitsZeile
+          abwesenheiten={sichtAbwesenheiten.filter((a) => a.bis >= listenTage[0] && a.von <= listenTage[listenTage.length - 1])}
+          farbIndizes={farbIndizes}
+          onOeffnen={setAbwDetail}
+        />
+      )}
+
       {/* Container fuer die Breitenabfrage Zeitraster/Kacheln (app.css). Bewusst nicht
           .zv-kalender selbst: Containment macht das Element zum Bezugsrahmen fuer
           position: fixed, und die Dialoge unten wuerden darin eingesperrt. */}
@@ -327,7 +480,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
         <div className="zv-kal-jahr" data-testid="kalender-jahr">
           {Array.from({ length: 12 }, (_, i) => `${jahr}-${String(i + 1).padStart(2, "0")}`).map((m) => {
             const zellen = miniMonat(m);
-            const anzahl = zellen.reduce((n, tag) => n + (tag && (nachTag.get(tag) ?? []).length > 0 ? 1 : 0), 0);
+            const anzahl = zellen.reduce((n, tag) => n + (tag && ((nachTag.get(tag) ?? []).length > 0 || abwNachTag.has(tag)) ? 1 : 0), 0);
             const name = datumAusKey(`${m}-01`).toLocaleDateString("de-DE", { month: "long" });
             return (
               <section key={m} className={`zv-kal-mini${m === heute.slice(0, 7) ? " heute" : ""}`}>
@@ -350,26 +503,35 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                   ))}
                   {zellen.map((tag, i) => {
                     if (!tag) return <span key={`leer-${i}`} aria-hidden="true" />;
-                    const { liste, aktiv, personen, sammel } = jahresTag(tag);
+                    const { liste, abw, aktiv, anzahl: tagAnzahl, arten, personen, sammel, ecke } = jahresTag(tag);
                     const heuteKlasse = tag === heute ? " heute" : "";
-                    if (liste.length === 0) {
+                    if (liste.length === 0 && abw.length === 0) {
                       return (
                         <span key={tag} className={`zv-kal-mini-tag${heuteKlasse}`} aria-hidden="true">
                           {Number(tag.slice(8))}
                         </span>
                       );
                     }
-                    const farbig = !sammel && personen.some((fi) => fi !== undefined);
+                    const farbig = !sammel && (farbModus === "art" ? arten.length > 0 : personen.some((fi) => fi !== undefined));
                     const offen = vorschau?.tag === tag;
-                    const zustand = aktiv.length === 0 ? " abgesagt" : sammel ? " belegt sammel" : ` belegt${farbig ? " personfarbe" : ""}`;
+                    const zustand = tagAnzahl === 0 ? " abgesagt" : sammel ? " belegt sammel" : ` belegt${farbig ? " personfarbe" : ""}`;
                     const namen = [...new Set(aktiv.map((t) => t.erstelltVon.name))].join(", ");
+                    const abwesendText = abw.map((a) => (a.art ? `${a.benutzer.name} (${KALENDER_ART_LABEL[a.art]})` : a.benutzer.name)).join(", ");
+                    // Die Ecke traegt nur im Personenmodus Information: im Artmodus ist die Flaeche selbst schon die Art.
+                    const mitEcke = farbModus === "person" && ecke !== null && tagAnzahl > 0;
                     return (
                       <button
                         type="button"
                         key={tag}
                         className={`zv-kal-mini-tag${heuteKlasse}${zustand}`}
                         data-tag={tag}
-                        aria-label={`${formatDatum(tag)}, ${terminWort(liste.length)}${namen ? ` von ${namen}` : ""}`}
+                        aria-label={[
+                          formatDatum(tag),
+                          liste.length > 0 ? `${terminWort(liste.length)}${namen ? ` von ${namen}` : ""}` : null,
+                          abw.length > 0 ? `abwesend: ${abwesendText}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
                         aria-describedby={offen ? `kal-vorschau-${tag}` : undefined}
                         aria-expanded={offen}
                         onPointerDown={(e) => (letzterZeiger.current = e.pointerType)}
@@ -387,16 +549,19 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                       >
                         {farbig && (
                           <span className="zv-kal-mini-farben" aria-hidden="true">
-                            {personen.map((fi, j) =>
-                              fi === undefined ? (
-                                <span key={`n${j}`} className="zv-kal-mini-neutral" />
-                              ) : (
-                                <span key={fi} className="zv-person-flaeche" style={personFarbStil(fi)} />
-                              ),
-                            )}
+                            {farbModus === "art"
+                              ? arten.map((a) => <span key={a} className={`zv-art-flaeche zv-art-${a}`} />)
+                              : personen.map((fi, j) =>
+                                  fi === undefined ? (
+                                    <span key={`n${j}`} className="zv-kal-mini-neutral" />
+                                  ) : (
+                                    <span key={fi} className="zv-person-flaeche" style={personFarbStil(fi)} />
+                                  ),
+                                )}
                           </span>
                         )}
                         <span className="zv-kal-mini-zahl">{Number(tag.slice(8))}</span>
+                        {mitEcke && <span className={`zv-kal-ecke zv-art-${ecke}`} aria-hidden="true" />}
                       </button>
                     );
                   })}
@@ -408,7 +573,9 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                     oben={vorschau.oben}
                     scrollen={vorschau.scrollen}
                     termine={nachTag.get(vorschau.tag) ?? []}
+                    abwesenheiten={abwNachTag.get(vorschau.tag) ?? []}
                     farbIndexVon={farbIndexVon}
+                    farbIndizes={farbIndizes}
                   />
                 )}
               </section>
@@ -422,7 +589,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
               wochenTage={wochenTage}
               heute={heute}
               gewaehlt={gewaehlt}
-              termine={termine}
+              termine={sichtTermine}
               farbIndexVon={farbIndexVon}
               onTagWaehlen={setGewaehlt}
               onTerminOeffnen={setDetailId}
@@ -465,6 +632,7 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
                       <span className="zv-kal-termin-text">
                         <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
                         <span>
+                          {t.art !== "termin" && <span className={`zv-art-marke zv-art-${t.art}`}>{KALENDER_ART_LABEL[t.art]}</span>}
                           {t.erstelltVon.name}
                           {t.ort && ` · ${t.ort}`}
                         </span>
@@ -485,8 +653,20 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
       )}
       </div>
 
-      {(legende.length > 0 || sammelImJahr) && (
-        <div className="zv-kal-legende" role="list" aria-label="Farben je Mitarbeiter:in">
+      {(legende.length > 0 || sammelImJahr || artenImBlick.length > 0) && (
+        <div className="zv-kal-legende" role="list" aria-label="Legende der Farben">
+          {farbModus === "art" && ansicht === "jahr" ? (
+            <>
+              <span className="zv-kal-legende-titel">Arten</span>
+              {artenImBlick.map((a) => (
+                <span key={a} className="zv-kal-legende-eintrag" role="listitem">
+                  <span className={`zv-person-punkt zv-art-flaeche zv-art-${a}`} aria-hidden="true" />
+                  {KALENDER_ART_LABEL[a]}
+                </span>
+              ))}
+            </>
+          ) : (
+            <>
           <span className="zv-kal-legende-titel">Farben</span>
           {legende.map(([id, p]) => (
             <span key={id} className="zv-kal-legende-eintrag" role="listitem">
@@ -497,8 +677,21 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           {sammelImJahr && (
             <span className="zv-kal-legende-eintrag" role="listitem">
               <span className="zv-person-punkt zv-kal-sammel-punkt" aria-hidden="true" />
-              Mehr als {SAMMEL_AB - 1} Termine am Tag
+              Mehr als {SAMMEL_AB - 1} {farbModus === "art" ? "Arten" : "Einträge"} am Tag
             </span>
+          )}
+          {ansicht === "jahr" && artenImBlick.length > 0 && (
+            <>
+              <span className="zv-kal-legende-titel">Ecke = Art</span>
+              {artenImBlick.map((a) => (
+                <span key={a} className="zv-kal-legende-eintrag" role="listitem">
+                  <ArtDreieck art={a} />
+                  {KALENDER_ART_LABEL[a]}
+                </span>
+              ))}
+            </>
+          )}
+            </>
           )}
         </div>
       )}
@@ -516,6 +709,29 @@ export function Kalender({ titel = "Kalender", kontakteLaden = () => api.chatKon
           }}
         />
       )}
+      {abwNeuOffen && (
+        <AbwesenheitEintragen
+          standardDatum={gewaehlt}
+          verwalten={abwRechte.verwalten}
+          mitarbeitende={mitarbeitende}
+          ichId={tokenBenutzerId()}
+          onClose={() => setAbwNeuOffen(false)}
+          onAngelegt={() => {
+            setAbwNeuOffen(false);
+            laden();
+          }}
+        />
+      )}
+      {abwDetail && (
+        <AbwesenheitDetail
+          abwesenheit={abwDetail}
+          onClose={() => setAbwDetail(null)}
+          onStorniert={() => {
+            setAbwDetail(null);
+            laden();
+          }}
+        />
+      )}
       {detail && <TerminDetail termin={detail} onClose={() => setDetailId(null)} onGeaendert={ersetzen} />}
     </div>
   );
@@ -528,16 +744,22 @@ function TagesVorschau({
   oben,
   scrollen,
   termine,
+  abwesenheiten,
   farbIndexVon,
+  farbIndizes,
 }: {
   id: string;
   tag: string;
   oben: number;
   scrollen: boolean;
   termine: TerminDto[];
+  abwesenheiten: AbwesenheitDto[];
   farbIndexVon: (t: TerminDto) => number | undefined;
+  farbIndizes: Map<string, number>;
 }) {
-  const rest = termine.length - VORSCHAU_MAX;
+  // Abwesenheiten zuerst: "wer fehlt" ist die Frage, mit der man in den Jahresueberblick schaut.
+  const platzFuerTermine = Math.max(0, VORSCHAU_MAX - abwesenheiten.length);
+  const rest = termine.length - platzFuerTermine;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollen) ref.current?.scrollIntoView({ block: "nearest" });
@@ -545,10 +767,29 @@ function TagesVorschau({
   return (
     <div ref={ref} className="zv-kal-vorschau" role="tooltip" id={id} data-testid="kalender-vorschau" style={{ top: oben }}>
       <strong className="zv-kal-vorschau-kopf">
-        {formatTagTrenner(`${tag}T12:00:00`)} · {terminWort(termine.length)}
+        {formatTagTrenner(`${tag}T12:00:00`)}
+        {termine.length > 0 && ` · ${terminWort(termine.length)}`}
+        {abwesenheiten.length > 0 && ` · ${abwesenheiten.length} abwesend`}
       </strong>
       <ul>
-        {termine.slice(0, VORSCHAU_MAX).map((t) => {
+        {abwesenheiten.map((a) => {
+          const fi = farbIndizes.get(a.benutzer.id);
+          const art = abwesenheitArt(a);
+          return (
+            <li key={a.id}>
+              {fi === undefined ? (
+                <span className="zv-person-punkt zv-kal-vorschau-punkt" aria-hidden="true" />
+              ) : (
+                <span className="zv-person-punkt zv-person-farbe" style={personFarbStil(fi)} aria-hidden="true" />
+              )}
+              <span className="zv-kal-vorschau-zeit">ganztägig</span>
+              <span className="zv-kal-vorschau-text">
+                <strong>{a.benutzer.name}</strong> <span className={`zv-art-marke zv-art-${art}`}>{KALENDER_ART_LABEL[art]}</span>
+              </span>
+            </li>
+          );
+        })}
+        {termine.slice(0, platzFuerTermine).map((t) => {
           const fi = farbIndexVon(t);
           return (
             <li key={t.id}>
@@ -560,7 +801,8 @@ function TagesVorschau({
               <span className="zv-kal-vorschau-zeit">{formatTerminUhrzeit(t)}</span>
               <span className="zv-kal-vorschau-text">
                 <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
-                {t.abgesagtAm && " (abgesagt)"} <span>· {t.erstelltVon.name}</span>
+                {t.abgesagtAm && " (abgesagt)"} <span>· {t.erstelltVon.name}</span>{" "}
+                {t.art !== "termin" && <span className={`zv-art-marke zv-art-${t.art}`}>{KALENDER_ART_LABEL[t.art]}</span>}
               </span>
             </li>
           );
@@ -647,7 +889,7 @@ function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onC
           fehler={fehler}
           onAbsenden={async (e) => {
             const ok = await aktion(
-              () => api.terminAendern(termin.id, { titel: e.titel, beschreibung: e.beschreibung ?? null, ort: e.ort ?? null, beginn: e.beginn, ende: e.ende, ganztaegig: e.ganztaegig }),
+              () => api.terminAendern(termin.id, { titel: e.titel, beschreibung: e.beschreibung ?? null, ort: e.ort ?? null, beginn: e.beginn, ende: e.ende, ganztaegig: e.ganztaegig, art: e.art }),
               "Termin konnte nicht gespeichert werden."
             );
             if (ok) setBearbeiten(false);

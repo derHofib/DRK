@@ -97,6 +97,13 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "stunden", aktion: "fuer-andere-buchen" },
   { modul: "stunden", aktion: "stornieren", sensibel: true },
 
+  // Abwesenheiten im Kalender (migrations/0074). Eintragen und stornieren
+  // darf jede:r fuer sich selbst ohne Recht. "art-sehen" zeigt den GRUND
+  // fremder Abwesenheiten (krank ist ein Gesundheitsdatum), "verwalten"
+  // erlaubt Eintragen und Stornieren fuer andere. Beides sensibel.
+  { modul: "abwesenheiten", aktion: "art-sehen", sensibel: true },
+  { modul: "abwesenheiten", aktion: "verwalten", sensibel: true },
+
 
   // Heutiges ROLLEN_MIT_STANDORT_ANLEGEN/-BEARBEITEN (standort.service.ts).
   { modul: "standorte", aktion: "ansehen" },

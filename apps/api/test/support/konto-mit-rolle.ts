@@ -59,6 +59,10 @@ const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "kassenbuch", aktion: "storno-entscheiden", scope: "einrichtung" },
   { modul: "stunden", aktion: "stornieren", scope: "einrichtung" },
   { modul: "stunden", aktion: "fuer-andere-buchen", scope: "einrichtung" },
+  // Wie Migration 0074: wer Storno-Antraege entscheidet, sieht den Grund
+  // fremder Abwesenheiten und darf sie fuer andere eintragen.
+  { modul: "abwesenheiten", aktion: "art-sehen", scope: "einrichtung" },
+  { modul: "abwesenheiten", aktion: "verwalten", scope: "einrichtung" },
   { modul: "kassenbuch", aktion: "typen-verwalten", scope: "einrichtung" },
   { modul: "standorte", aktion: "bearbeiten", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "status-wechseln", scope: "einrichtung" },

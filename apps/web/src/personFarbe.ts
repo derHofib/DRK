@@ -1,4 +1,5 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import type { BenutzerListEintragDto } from "@zimmerakte/shared";
 import { api } from "./api/client";
 
 /**
@@ -39,16 +40,22 @@ export function personFarbStil(farbIndex: number): CSSProperties {
  * bleiben die Termine eben neutral statt die Seite zu blockieren.
  */
 export function useFarbIndizes(): Map<string, number> {
-  const [karte, setKarte] = useState<Map<string, number>>(new Map());
+  return useMitarbeitendeMitFarbe().farbIndizes;
+}
+
+/** Wie useFarbIndizes, plus die Liste selbst (Kalender: Personenfilter und "Fuer wen"). */
+export function useMitarbeitendeMitFarbe(): { liste: BenutzerListEintragDto[]; farbIndizes: Map<string, number> } {
+  const [liste, setListe] = useState<BenutzerListEintragDto[]>([]);
   useEffect(() => {
     let abgebrochen = false;
     api
       .benutzerListe()
-      .then((l) => !abgebrochen && setKarte(new Map(l.map((b) => [b.id, b.farbIndex]))))
+      .then((l) => !abgebrochen && setListe(l))
       .catch(() => {});
     return () => {
       abgebrochen = true;
     };
   }, []);
-  return karte;
+  const farbIndizes = useMemo(() => new Map(liste.map((b) => [b.id, b.farbIndex])), [liste]);
+  return { liste, farbIndizes };
 }
