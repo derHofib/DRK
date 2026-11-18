@@ -18,6 +18,7 @@ import { GrundAbfrage } from "../components/GrundAbfrage";
 import { KlientZugang } from "../components/KlientZugang";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
+import { AngehefteteFormulare, useAngehefteteFormulare } from "../components/AngehefteteFormulare";
 import {
   IAbbrechen,
   IAblehnen,
@@ -1843,6 +1844,7 @@ function TagesberichteTab({
   // sonst waere der primaere Knopf nur ein Tabwechsel und ein Klick zu wenig.
   const [formularOffen, setFormularOffen] = useState(startMitFormular);
   const [formFehler, setFormFehler] = useState<string | null>(null);
+  const angeheftet = useAngehefteteFormulare(formularOffen ? klientId : null, "tagesbericht");
   useEffect(() => {
     if (startMitFormular) onFormularGenutzt?.();
   }, [startMitFormular, onFormularGenutzt]);
@@ -1864,6 +1866,11 @@ function TagesberichteTab({
       setFormFehler("Ein Tagesbericht darf nicht in der Zukunft liegen.");
       return;
     }
+    const formularFehler = angeheftet.pruefen();
+    if (formularFehler) {
+      setFormFehler(formularFehler);
+      return;
+    }
     try {
       let dokumente: { base64: string; dateiname: string; mimeType: string }[] | undefined;
       if (datei && datei.size > 0) {
@@ -1872,6 +1879,7 @@ function TagesberichteTab({
         ];
       }
       await api.tagesberichtAnlegen({
+        protokolle: angeheftet.eingaben(),
         klientId,
         datum: String(form.get("datum")),
         text: String(form.get("text")),
@@ -1884,6 +1892,7 @@ function TagesberichteTab({
       setFormularOffen(false);
       laden();
     } catch (err) {
+      angeheftet.serverFehler(err);
       setFormFehler(err instanceof Error ? err.message : "Tagesbericht konnte nicht angelegt werden.");
     }
   }
@@ -1958,6 +1967,7 @@ function TagesberichteTab({
               <label>Bericht</label>
               <textarea name="text" required rows={5} />
             </div>
+            <AngehefteteFormulare z={angeheftet} />
             <div className="zv-field">
               <label>Tags (optional, durch Komma getrennt)</label>
               <input name="tags" placeholder="z. B. Beobachtung, Freizeit" />

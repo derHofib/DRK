@@ -712,6 +712,8 @@ export interface TagesberichtDto {
   dokumente: TagesberichtDokumentDto[];
   anzahlAenderungen: number;
   bearbeitbar: boolean;
+  /** Mit dem Tagesbericht abgeschlossene, angeheftete Formulare. */
+  protokolle: { id: string; formularName: string }[];
 }
 
 export interface TagesberichtAenderungDto {
@@ -2122,25 +2124,6 @@ export const PROTOKOLL_QUELLE_LABEL: Record<ProtokollWertQuelle, string> = {
   berechnet: "berechnet",
 };
 
-export interface FormularVorlageDto {
-  schluessel: string;
-  name: string;
-  beschreibung: string;
-  /** Schon in diesem Traeger uebernommen? */
-  uebernommen: boolean;
-}
-
-export interface FormularDto {
-  id: string;
-  name: string;
-  beschreibung: string | null;
-  bezug: "klient";
-  archiviert: boolean;
-  /** Juengste veroeffentlichte Version -- mit ihr werden neue Protokolle angelegt. */
-  aktuelleVersion: { id: string; nummer: number; definition: FormularDefinition } | null;
-  anzahlProtokolle: number;
-}
-
 export interface ProtokollKurzDto {
   id: string;
   formularId: string;
@@ -2153,6 +2136,8 @@ export interface ProtokollKurzDto {
   abgeschlossen: boolean;
   abgeschlossenAm: string | null;
   anzahlAenderungen: number;
+  /** Gehoert zu diesem Tagesbericht (angeheftetes Formular, Migration 0076). */
+  tagesberichtId: string | null;
 }
 
 export interface ProtokollDto extends ProtokollKurzDto {
@@ -2185,4 +2170,235 @@ export interface ProtokolleRechteDto {
   ansehen: boolean;
   ausfuellen: boolean;
   formulareVerwalten: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Formulare verwalten: Status, Standorte, Anheftungen (Migration 0076)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stellen in der Zimmerakte, an denen Formulare dazugezogen werden. Die Liste
+ * steht hier im Code und als CHECK in Migration 0076 -- ein Traeger waehlt
+ * nur aus, welche Formulare wo haengen. "Klientenakte > Protokolle" ist kein
+ * Anheftpunkt, dort ist jedes veroeffentlichte Formular immer dabei.
+ */
+export const ANHEFTPUNKTE = {
+  tagesbericht: {
+    label: "Tagesbericht anlegen",
+    beschreibung: "Beim Schreiben eines Tagesberichts wird das Formular im selben Fenster dazugezogen.",
+  },
+} as const satisfies Record<string, { label: string; beschreibung: string }>;
+
+export type Anheftpunkt = keyof typeof ANHEFTPUNKTE;
+export type AnheftModus = "automatisch" | "dazunehmen";
+
+export interface FormularAnheftung {
+  anheftpunkt: Anheftpunkt;
+  modus: AnheftModus;
+  /** Nur bei "automatisch": der Tagesbericht laesst sich erst mit vollstaendigem Formular speichern. */
+  pflicht: boolean;
+}
+
+/** Abgeleitet (CLAUDE.md Regel 4), nie gespeichert. */
+export type FormularStatus = "in_entwicklung" | "veroeffentlicht" | "stillgelegt";
+
+export const FORMULAR_STATUS_LABEL: Record<FormularStatus, string> = {
+  in_entwicklung: "In Entwicklung",
+  veroeffentlicht: "Veröffentlicht",
+  stillgelegt: "Stillgelegt",
+};
+
+export interface FormularVerwaltungDto {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  status: FormularStatus;
+  /** Nummer der Version, mit der heute ausgefuellt wird (null = nie veroeffentlicht). */
+  veroeffentlichteVersion: number | null;
+  /** Nummer des Entwurfs der naechsten Version, falls es einen gibt. */
+  entwurfVersion: number | null;
+  /** Leer = alle Standorte, auch kuenftige. */
+  standortIds: string[];
+  anheftungen: FormularAnheftung[];
+  anzahlProtokolle: number;
+}
+
+export interface FormularVersionInfoDto {
+  nummer: number;
+  veroeffentlichtAm: string | null;
+  veroeffentlichtVonName: string | null;
+  anzahlProtokolle: number;
+}
+
+export interface FormularDetailDto extends FormularVerwaltungDto {
+  entwurf: { nummer: number; definition: FormularDefinition } | null;
+  veroeffentlicht: { nummer: number; definition: FormularDefinition } | null;
+  versionen: FormularVersionInfoDto[];
+  /** Definitionen aller frueher veroeffentlichten Versionen -- fuer gesperrte Schluessel und Optionen. */
+  frueher: FormularDefinition[];
+  /** Offene Protokoll-Entwuerfe auf der bisherigen Version (bleiben dort beim Veroeffentlichen). */
+  offeneEntwuerfe: number;
+}
+
+/** Ein Formular, das an einer Stelle zum Ausfuellen angeboten wird -- mit Vorbelegung fuer eine Klient:in. */
+export interface FormularAngebotDto {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  versionNummer: number;
+  definition: FormularDefinition;
+  /** null = Klientenakte (kein Anheftpunkt). */
+  modus: AnheftModus | null;
+  pflicht: boolean;
+  /** Vorausgefuellte Werte (Vorschlag und festgehalten) fuer diese Klient:in. */
+  werte: Record<string, FeldWert>;
+  anzeige: Record<string, string | null>;
+}
+
+/** Ein Formular, das zusammen mit einem Tagesbericht abgeschlossen wird. */
+export interface AngeheftetesProtokollEingabe {
+  formularId: string;
+  werte: FeldWerte;
+}
+
+export function formularStatus(archiviert: boolean, veroeffentlichteVersion: number | null): FormularStatus {
+  if (archiviert) return "stillgelegt";
+  return veroeffentlichteVersion === null ? "in_entwicklung" : "veroeffentlicht";
+}
+
+/**
+ * Feldschluessel aus einer Beschriftung: "Wie war die Nacht?" -> "wie_war_die_nacht".
+ * Kollidiert er mit einem vorhandenen, wird hochgezaehlt.
+ */
+export function schluesselAusBeschriftung(beschriftung: string, vorhanden: Set<string>): string {
+  const basis =
+    beschriftung
+      .toLowerCase()
+      .replace(/ä/g, "ae")
+      .replace(/ö/g, "oe")
+      .replace(/ü/g, "ue")
+      .replace(/ß/g, "ss")
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .replace(/^[0-9_]+/, "")
+      .slice(0, 50) || "feld";
+  let s = basis;
+  for (let i = 2; vorhanden.has(s); i++) s = `${basis}_${i}`;
+  return s;
+}
+
+/**
+ * Was eine neue Version gegenueber allen frueher veroeffentlichten nicht darf
+ * (Konzept Protokolle 7.3): Ein einmal veroeffentlichter Feldschluessel behaelt
+ * seine Speicherform (sonst stuende in derselben Auswertungsspalte mal true,
+ * mal "teilweise"), und eine benutzte Option wird nie geloescht, nur
+ * ausgeblendet (sonst verlieren alte Protokolle ihre Beschriftung).
+ * Gilt im Editor als Hinweis und auf dem Server als harte Pruefung.
+ */
+export function pruefeVeroeffentlichung(neu: FormularDefinition, frueher: FormularDefinition[]): string[] {
+  const fehler = pruefeDefinition(neu);
+  const bausteine = alleBausteine(neu);
+  if (!bausteine.some(speichernderBaustein)) fehler.push("Das Formular hat noch kein Feld, das etwas speichert.");
+  const neuNach = new Map(bausteine.map((b) => [b.schluessel, b]));
+  const gemeldet = new Set<string>();
+  for (const alt of frueher) {
+    for (const a of alleBausteine(alt)) {
+      const n = neuNach.get(a.schluessel);
+      if (!n) continue;
+      const dtAlt = datentypVon(a.typ);
+      const dtNeu = datentypVon(n.typ);
+      if (dtAlt !== null && dtAlt !== dtNeu && !gemeldet.has(a.schluessel)) {
+        gemeldet.add(a.schluessel);
+        fehler.push(
+          `„${n.beschriftung || n.schluessel}“ war früher ein Feld vom Typ ${BAUSTEIN_LABEL[a.typ]}. Bitte ein neues Feld anlegen, statt den Typ zu ändern.`
+        );
+      }
+      if ((a.typ === "auswahl" || a.typ === "mehrfachauswahl") && (n.typ === "auswahl" || n.typ === "mehrfachauswahl")) {
+        for (const o of a.optionen) {
+          if (!n.optionen.some((x) => x.wert === o.wert) && !gemeldet.has(`${a.schluessel}:${o.wert}`)) {
+            gemeldet.add(`${a.schluessel}:${o.wert}`);
+            fehler.push(`„${n.beschriftung}“: Die Option „${o.label}“ wurde schon benutzt. Bitte ausblenden statt löschen.`);
+          }
+        }
+      }
+    }
+  }
+  return fehler;
+}
+
+export interface FormularAenderung {
+  art: "neu" | "geaendert" | "ausgeblendet" | "entfernt";
+  text: string;
+}
+
+/** "Was ist neu gegenueber Version n" -- Pflichtblick vor dem Veroeffentlichen. */
+export function formularVergleich(alt: FormularDefinition | null, neu: FormularDefinition): FormularAenderung[] {
+  const altNach = new Map(alt ? alleBausteine(alt).map((b) => [b.schluessel, b]) : []);
+  const neuNach = new Map(alleBausteine(neu).map((b) => [b.schluessel, b]));
+  const out: FormularAenderung[] = [];
+  const name = (b: Baustein) => b.beschriftung || BAUSTEIN_LABEL[b.typ];
+  for (const n of neuNach.values()) {
+    const a = altNach.get(n.schluessel);
+    if (!a) {
+      out.push({ art: "neu", text: `${BAUSTEIN_LABEL[n.typ]} „${name(n)}“` });
+      continue;
+    }
+    if (a.beschriftung !== n.beschriftung) out.push({ art: "geaendert", text: `Beschriftung „${a.beschriftung}“ → „${n.beschriftung}“` });
+    if (a.typ !== n.typ) out.push({ art: "geaendert", text: `„${name(n)}“: ${BAUSTEIN_LABEL[a.typ]} → ${BAUSTEIN_LABEL[n.typ]}` });
+    const pa = "pflicht" in a ? a.pflicht : undefined;
+    const pn = "pflicht" in n ? n.pflicht : undefined;
+    if (JSON.stringify(pa ?? false) !== JSON.stringify(pn ?? false)) out.push({ art: "geaendert", text: `„${name(n)}“: Pflicht geändert` });
+    if (JSON.stringify(a.sichtbarWenn ?? null) !== JSON.stringify(n.sichtbarWenn ?? null)) {
+      out.push({ art: "geaendert", text: `„${name(n)}“: Sichtbarkeit geändert` });
+    }
+    if ((a.typ === "auswahl" || a.typ === "mehrfachauswahl") && (n.typ === "auswahl" || n.typ === "mehrfachauswahl")) {
+      for (const o of n.optionen) {
+        const ao = a.optionen.find((x) => x.wert === o.wert);
+        if (!ao) out.push({ art: "neu", text: `„${name(n)}“: Option „${o.label}“` });
+        else if (o.ausgeblendet && !ao.ausgeblendet) out.push({ art: "ausgeblendet", text: `„${name(n)}“: Option „${o.label}“ (alte Protokolle behalten sie)` });
+        else if (ao.label !== o.label) out.push({ art: "geaendert", text: `„${name(n)}“: Option „${ao.label}“ → „${o.label}“` });
+      }
+    }
+    const rest = (b: Baustein) => {
+      const { beschriftung: _b, sichtbarWenn: _s, kinder: _k, optionen: _o, pflicht: _p, ...r } = b as unknown as Record<string, unknown>;
+      return JSON.stringify(r);
+    };
+    if (a.typ === n.typ && rest(a) !== rest(n)) out.push({ art: "geaendert", text: `„${name(n)}“: Einstellungen geändert` });
+  }
+  for (const a of altNach.values()) {
+    if (!neuNach.has(a.schluessel)) out.push({ art: "entfernt", text: `${BAUSTEIN_LABEL[a.typ]} „${name(a)}“ (alte Protokolle behalten den Wert)` });
+  }
+  return out;
+}
+
+const OP_SATZ: Record<BedingungOperator, string> = {
+  ist: "ist",
+  ist_nicht: "ist nicht",
+  eine_von: "ist eine von",
+  enthaelt: "enthält",
+  leer: "ist leer",
+  nicht_leer: "ist ausgefüllt",
+  groesser: "ist größer als",
+  kleiner: "ist kleiner als",
+  mindestens: "ist mindestens",
+  hoechstens: "ist höchstens",
+};
+
+/** Eine Bedingung als lesbarer Satz: "Polizei gerufen ist Ja und Vorfall ist ausgefüllt". */
+export function bedingungAlsSatz(def: FormularDefinition, b: Bedingung): string {
+  if ("alle" in b) return b.alle.map((x) => bedingungAlsSatz(def, x)).join(" und ");
+  if ("eine" in b) return b.eine.map((x) => bedingungAlsSatz(def, x)).join(" oder ");
+  const feld = alleBausteine(def).find((x) => x.schluessel === b.feld);
+  const name = feld?.beschriftung || b.feld;
+  if (b.op === "leer" || b.op === "nicht_leer") return `${name} ${OP_SATZ[b.op]}`;
+  const wertText = (w: unknown): string => {
+    if (typeof w === "boolean") return w ? "Ja" : "Nein";
+    if (feld && (feld.typ === "auswahl" || feld.typ === "mehrfachauswahl")) {
+      return feld.optionen.find((o) => o.wert === w)?.label ?? String(w);
+    }
+    return String(w);
+  };
+  const w = Array.isArray(b.wert) ? b.wert.map(wertText).join(", ") : wertText(b.wert);
+  return `${name} ${OP_SATZ[b.op]} ${w}`;
 }

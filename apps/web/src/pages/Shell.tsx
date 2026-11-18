@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BenutzerListEintragDto, MandantDto, RueckmeldungBerechtigungDto, StandortDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, MandantDto, ProtokolleRechteDto, RueckmeldungBerechtigungDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
@@ -27,6 +27,7 @@ import {
 } from "../components/icons";
 import {
   MENUE_GRUPPEN,
+  ORGANISATORISCH,
   ladeMenuReihenfolge,
   reiterDerGruppe,
   speichereMenuReihenfolge,
@@ -55,6 +56,7 @@ import { Einstellungen } from "./Einstellungen";
 import { Nachrichten } from "./Nachrichten";
 import { Kalender } from "./Kalender";
 import { Rueckmeldungen } from "./Rueckmeldungen";
+import { Formulare } from "./Formulare";
 import { RueckmeldungDialog } from "../components/RueckmeldungDialog";
 import { SICHTBAR_ATTRIBUT } from "../rueckmeldung/maskierung";
 import { nimmMaskiertenScreenshot, type MaskierterScreenshot } from "../rueckmeldung/screenshot";
@@ -134,12 +136,17 @@ const BREITE_REITER = new Set<Tab>([
   "vertretung",
   "organigramm",
   "rueckmeldungen",
+  "formulare",
 ]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
 const SIDEBAR_HOVER_SPEICHER = "zimmerakte_sidebar_hover_ausklappen";
 const SIDEBAR_KLIENTEN_AUFGEKLAPPT_SPEICHER = "zimmerakte_sidebar_klienten_aufgeklappt";
 const sidebarGruppeSpeicher = (haupt: HauptReiter) => `zimmerakte_sidebar_${haupt}_aufgeklappt`;
+// Anders als die uebrigen Gruppen standardmaessig ZU (ladeBoolean, nicht
+// ...DefaultAn): Organisatorisches braucht man selten, es soll im Alltag
+// nicht auffallen (Rueckmeldung "Formulare", Wunsch "Aktenlippe").
+const SIDEBAR_ORGANISATORISCH_SPEICHER = "zimmerakte_sidebar_organisatorisch_aufgeklappt";
 
 // Reine Anzeigepraeferenzen dieses Geraets -- wie das Theme (siehe
 // ThemeProvider) gehoert das bewusst nicht in die Datenbank und ist nach
@@ -264,7 +271,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // brauchen je Gruppe einen eigenen (Fokus zurueck beim Schliessen).
   const gruppenKnopfRefs = useRef<Partial<Record<HauptReiter, HTMLButtonElement | null>>>({});
   const gruppenPanelRef = useRef<HTMLDivElement>(null);
-  const aktuelleRouteImMehr = REITER_MOBIL_MEHR.some((r) => r.wert === hauptreiterVon(tab));
+  const aktuelleRouteImMehr =
+    REITER_MOBIL_MEHR.some((r) => r.wert === hauptreiterVon(tab)) || ORGANISATORISCH.some((o) => o.wert === tab);
 
   function panelSchliessen() {
     const vorheriges = offenesPanel;
@@ -373,6 +381,24 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   }, []);
   useEffect(rmRechtLaden, [rmRechtLaden]);
 
+  // --- Organisatorisch ---------------------------------------------------
+  // Wie bei den Rueckmeldungen nur Ausblenden: die API lehnt ohne Recht ab.
+  const [protokolleRechte, setProtokolleRechte] = useState<ProtokolleRechteDto | null>(null);
+  useEffect(() => {
+    api
+      .protokolleRechte()
+      .then(setProtokolleRechte)
+      .catch(() => {});
+  }, []);
+  const organisatorisch = ORGANISATORISCH.filter((o) => protokolleRechte?.[o.recht]);
+  const [organisatorischOffen, setOrganisatorischOffen] = useState(() => ladeBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER));
+  useEffect(() => speichereBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER, organisatorischOffen), [organisatorischOffen]);
+  // Wer ueber die Befehlspalette auf eine Seite darin springt, soll sehen, wo sie wohnt.
+  const inOrganisatorisch = ORGANISATORISCH.some((o) => o.wert === tab);
+  useEffect(() => {
+    if (inOrganisatorisch) setOrganisatorischOffen(true);
+  }, [inOrganisatorisch]);
+
   // Der Screenshot entsteht VOR dem Oeffnen des Dialogs, damit dieser nicht
   // selbst im Bild landet; er ist beim Entstehen schon maskiert.
   const [rmDialog, setRmDialog] = useState<{ screenshot: MaskierterScreenshot | null; seite: string } | null>(null);
@@ -474,6 +500,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     ...Object.values(UNTERPUNKTE)
       .flat()
       .map((u) => ({ schluessel: `nav:${u.wert}`, titel: u.label, icon: u.icon, ausfuehren: () => geheZu(u.wert) })),
+    ...organisatorisch.map((o) => ({ schluessel: `nav:${o.wert}`, titel: o.label, hinweis: "Organisatorisch", icon: o.icon, ausfuehren: () => geheZu(o.wert) })),
     ...standorte.map((st) => ({
       schluessel: `nav:standort:${st.id}`,
       titel: `Belegung: ${st.name}`,
@@ -660,6 +687,42 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             ))}
           </nav>
 
+          {organisatorisch.length > 0 && (
+            // Die "Aktenlippe": ein kleiner, blasser Reiter, der auf der
+            // Trennlinie zum Fuss sitzt -- wie die Lasche eines Ordners, der
+            // hinten im Schrank steht. Bewusst unauffaelliger als die
+            // Gruppen oben (Wunsch aus der Rueckmeldung).
+            <div className="zv-aktenlippe" data-offen={organisatorischOffen} {...{ [SICHTBAR_ATTRIBUT]: "" }}>
+              <button
+                type="button"
+                className="zv-aktenlippe-lasche"
+                onClick={() => setOrganisatorischOffen((v) => !v)}
+                aria-expanded={organisatorischOffen}
+                aria-controls="zv-organisatorisch"
+                title={organisatorischOffen ? "Organisatorisch einklappen" : "Organisatorisch ausklappen"}
+              >
+                <span className="zv-sidebar-label">Organisatorisch</span>
+                {organisatorischOffen ? <IZuklappen aria-hidden="true" /> : <IAufklappen aria-hidden="true" />}
+              </button>
+              {organisatorischOffen && (
+                <nav id="zv-organisatorisch" className="zv-sidebar-nav zv-aktenlippe-inhalt" aria-label="Organisatorisch">
+                  {organisatorisch.map((o) => (
+                    <button
+                      key={o.wert}
+                      className={tab === o.wert ? "active" : ""}
+                      onClick={() => tabWaehlen(o.wert)}
+                      aria-current={tab === o.wert ? "page" : undefined}
+                      title={o.label}
+                    >
+                      <o.icon />
+                      <span className="zv-sidebar-label">{o.label}</span>
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </div>
+          )}
+
           <div className="zv-sidebar-foot">
             <nav className="zv-sidebar-nav" aria-label="Einstellungen" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
               {rmRecht.verwalten && (
@@ -783,6 +846,25 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
                 <NavBadge anzahl={badgeFuer(wert)} />
               </button>
             ))}
+            {organisatorisch.length > 0 && (
+              <>
+                <div className="zv-sammelmenue-trenner" role="presentation">
+                  Organisatorisch
+                </div>
+                {organisatorisch.map((o) => (
+                  <button
+                    key={o.wert}
+                    role="menuitem"
+                    className={tab === o.wert ? "active" : ""}
+                    onClick={() => tabWaehlen(o.wert)}
+                    aria-current={tab === o.wert ? "page" : undefined}
+                  >
+                    <o.icon />
+                    {o.label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
 
@@ -890,6 +972,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "mitarbeitende" && <Mitarbeitende />}
           {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}
+          {tab === "formulare" && <Formulare />}
           {tab === "rueckmeldungen" && <Rueckmeldungen mandant={mandant} onGeaendert={rmRechtLaden} />}
           {tab === "einstellungen" && (
             <Einstellungen

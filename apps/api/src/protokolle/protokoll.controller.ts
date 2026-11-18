@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query } from "@nestjs/common";
 import { z } from "zod";
+import { ANHEFTPUNKTE, type Anheftpunkt, type FormularDefinition } from "@zimmerakte/shared";
 import { Authenticated } from "../common/authenticated.decorator";
 import { ProtokollService } from "./protokoll.service";
 
@@ -23,6 +24,23 @@ const korrigierenSchema = z.object({
   grund: z.string().trim().min(1, "Bitte einen Grund für die Korrektur angeben.").max(1000),
 });
 const archivierenSchema = z.object({ archiviert: z.boolean() });
+const anlegenFormularSchema = z.object({
+  name: z.string().trim().min(1, "Bitte einen Namen angeben.").max(120),
+  beschreibung: z.string().trim().max(500).nullish(),
+});
+// Die Definition prueft der Service (strukturFehler, beim Veroeffentlichen
+// pruefeDefinition); hier nur, dass es ueberhaupt ein Objekt ist.
+const definitionSchema = z.object({ definition: z.object({ bausteine: z.array(z.unknown()) }).passthrough() });
+const anheftpunktSchema = z.enum(Object.keys(ANHEFTPUNKTE) as [Anheftpunkt, ...Anheftpunkt[]]);
+const einstellungenSchema = z.object({
+  name: z.string().trim().min(1, "Bitte einen Namen angeben.").max(120),
+  beschreibung: z.string().trim().max(500).nullish(),
+  standortIds: z.array(z.string().uuid()).max(200),
+  anheftungen: z
+    .array(z.object({ anheftpunkt: anheftpunktSchema, modus: z.enum(["automatisch", "dazunehmen"]), pflicht: z.boolean() }))
+    .max(20),
+});
+const angebotSchema = z.object({ klientId: z.string().uuid(), anheftpunkt: anheftpunktSchema.optional() });
 const listeSchema = z.object({ klientId: z.string().uuid().optional() });
 
 @Controller()
@@ -37,17 +55,55 @@ export class ProtokollController {
 
   @Get("formulare")
   formulare() {
-    return this.protokolle.formulare();
+    return this.protokolle.verwaltungsListe();
   }
 
-  @Get("formulare/vorlagen")
-  vorlagen() {
-    return this.protokolle.vorlagen();
+  @Post("formulare")
+  formularAnlegen(@Body() body: unknown) {
+    const { name, beschreibung } = lies(anlegenFormularSchema, body);
+    return this.protokolle.formularAnlegen({ name, beschreibung: beschreibung || null });
   }
 
-  @Post("formulare/vorlagen/:schluessel")
-  vorlageUebernehmen(@Param("schluessel") schluessel: string) {
-    return this.protokolle.vorlageUebernehmen(schluessel);
+  @Get("formulare/angebot")
+  angebot(@Query() query: Record<string, unknown>) {
+    return this.protokolle.angebot(lies(angebotSchema, { klientId: query.klientId, anheftpunkt: query.anheftpunkt || undefined }));
+  }
+
+  @Get("formulare/:id")
+  formular(@Param("id", ParseUUIDPipe) id: string) {
+    return this.protokolle.verwaltungsDetail(id);
+  }
+
+  @Delete("formulare/:id")
+  async formularLoeschen(@Param("id", ParseUUIDPipe) id: string) {
+    await this.protokolle.formularLoeschen(id);
+    return { ok: true };
+  }
+
+  @Post("formulare/:id/entwurf")
+  entwurfStarten(@Param("id", ParseUUIDPipe) id: string) {
+    return this.protokolle.entwurfStarten(id);
+  }
+
+  @Put("formulare/:id/entwurf")
+  formularEntwurf(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    return this.protokolle.formularEntwurfSpeichern(id, lies(definitionSchema, body).definition as unknown as FormularDefinition);
+  }
+
+  @Delete("formulare/:id/entwurf")
+  entwurfVerwerfen(@Param("id", ParseUUIDPipe) id: string) {
+    return this.protokolle.entwurfVerwerfen(id);
+  }
+
+  @Post("formulare/:id/veroeffentlichen")
+  veroeffentlichen(@Param("id", ParseUUIDPipe) id: string) {
+    return this.protokolle.veroeffentlichen(id);
+  }
+
+  @Put("formulare/:id/einstellungen")
+  einstellungen(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const e = lies(einstellungenSchema, body);
+    return this.protokolle.einstellungenSpeichern(id, { ...e, beschreibung: e.beschreibung || null });
   }
 
   @Post("formulare/:id/archivieren")

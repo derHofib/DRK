@@ -17,6 +17,20 @@ const anlegenSchema = z.object({
   text: z.string().min(1),
   tagNamen: z.array(z.string().min(1)).optional(),
   dokumente: z.array(dokumentSchema).optional(),
+  // Angeheftete Formulare (Migration 0076). Die Werte prueft der gemeinsame
+  // Auswerter gegen die Definition; hier nur die grobe Form.
+  protokolle: z
+    .array(
+      z.object({
+        formularId: z.string().uuid(),
+        werte: z.record(
+          z.string().max(63),
+          z.union([z.string().max(20000), z.number(), z.boolean(), z.array(z.string().max(200)).max(200), z.null()])
+        ),
+      })
+    )
+    .max(10)
+    .optional(),
 });
 
 // Zeitraum als geschlossenes Intervall [von, bis]; beide Grenzen optional.

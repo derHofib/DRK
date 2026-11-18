@@ -2,7 +2,10 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { PoolClient } from "pg";
 import {
   alleBausteine,
+  BAUSTEIN_LABEL,
   datentypVon,
+  formularStatus,
+  pruefeVeroeffentlichung,
   istEingabe,
   pruefeDefinition,
   pruefeWerte,
@@ -14,8 +17,13 @@ import {
   type FeldWert,
   type FeldWerte,
   type FormularDefinition,
-  type FormularDto,
-  type FormularVorlageDto,
+  type AnheftModus,
+  type Anheftpunkt,
+  type AngeheftetesProtokollEingabe,
+  type FormularAnheftung,
+  type FormularAngebotDto,
+  type FormularDetailDto,
+  type FormularVerwaltungDto,
   type ProtokollAenderungDto,
   type ProtokollDto,
   type ProtokolleRechteDto,
@@ -33,7 +41,6 @@ import {
   klientStandortBedingung,
 } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
-import { FORMULAR_VORLAGEN } from "./formular-vorlagen";
 
 interface WertZeile {
   feld_schluessel: string;
@@ -116,58 +123,194 @@ export class ProtokollService {
   }
 
   // -------------------------------------------------------------------------
-  // Formulare
+  // Formulare verwalten (Menuepunkt "Formulare", Migration 0076)
   // -------------------------------------------------------------------------
 
-  async vorlagen(): Promise<FormularVorlageDto[]> {
+  async verwaltungsListe(): Promise<FormularVerwaltungDto[]> {
     await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
-    return this.db.withTenant(async (client) => {
-      const { rows } = await client.query<{ vorlage_schluessel: string }>(
-        "SELECT vorlage_schluessel FROM formular WHERE vorlage_schluessel IS NOT NULL"
-      );
-      const vorhanden = new Set(rows.map((r) => r.vorlage_schluessel));
-      return FORMULAR_VORLAGEN.map((v) => ({
-        schluessel: v.schluessel,
-        name: v.name,
-        beschreibung: v.beschreibung,
-        uebernommen: vorhanden.has(v.schluessel),
-      }));
-    });
+    return this.db.withTenant((client) => ladeVerwaltung(client));
   }
 
-  /** Kopie der Vorlage als Formular mit veroeffentlichter Version 1. */
-  async vorlageUebernehmen(schluessel: string): Promise<FormularDto> {
+  async verwaltungsDetail(id: string): Promise<FormularDetailDto> {
     await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
-    const vorlage = FORMULAR_VORLAGEN.find((v) => v.schluessel === schluessel);
-    if (!vorlage) throw new NotFoundException("Vorlage nicht gefunden.");
-    const fehler = pruefeDefinition(vorlage.definition);
-    // Eine kaputte Vorlage ist ein Programmfehler, kein Nutzerfehler -- und
-    // darf nie als veroeffentlichte (eingefrorene) Version landen.
-    if (fehler.length > 0) throw new Error(`Vorlage ${schluessel} ist ungültig: ${fehler.join(" ")}`);
+    return this.db.withTenant((client) => ladeFormularDetail(client, id));
+  }
+
+  /**
+   * Ein neues Formular beginnt immer "in Entwicklung": Version 1 als leerer
+   * Entwurf. Keine Vorlagen (Rueckmeldung "Formulare": "ich brauche keine
+   * Vorlagen").
+   */
+  async formularAnlegen(input: { name: string; beschreibung: string | null }): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      const vorhanden = await client.query("SELECT 1 FROM formular WHERE vorlage_schluessel = $1", [schluessel]);
-      if (vorhanden.rows.length > 0) throw new BadRequestException("Diese Vorlage wurde schon übernommen.");
       const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO formular (mandant_id, name, beschreibung, bezug, vorlage_schluessel, erstellt_von)
-         VALUES ($1, $2, $3, 'klient', $4, $5) RETURNING id`,
-        [mandantId, vorlage.name, vorlage.beschreibung, schluessel, benutzerId]
+        `INSERT INTO formular (mandant_id, name, beschreibung, bezug, erstellt_von)
+         VALUES ($1, $2, $3, 'klient', $4) RETURNING id`,
+        [mandantId, input.name, input.beschreibung, benutzerId]
       );
       await client.query(
-        `INSERT INTO formular_version (mandant_id, formular_id, nummer, definition, erstellt_von, veroeffentlicht_am, veroeffentlicht_von)
-         VALUES ($1, $2, 1, $3, $4, now(), $4)`,
-        [mandantId, rows[0].id, JSON.stringify(vorlage.definition), benutzerId]
+        `INSERT INTO formular_version (mandant_id, formular_id, nummer, definition, erstellt_von)
+         VALUES ($1, $2, 1, $3, $4)`,
+        [mandantId, rows[0].id, JSON.stringify({ bausteine: [] }), benutzerId]
       );
-      return (await ladeFormulare(client, rows[0].id))[0];
+      return ladeFormularDetail(client, rows[0].id);
     });
   }
 
-  async formulare(): Promise<FormularDto[]> {
-    await this.brauche("ansehen", "Keine Berechtigung, Protokolle zu sehen.");
-    return this.db.withTenant((client) => ladeFormulare(client));
+  /**
+   * "Bearbeiten" eines veroeffentlichten Formulars legt den Entwurf der
+   * naechsten Version an -- ein veroeffentlichtes Formular geht nie "zurueck
+   * in Entwicklung", sonst waere es mitten im Dienst ploetzlich weg.
+   */
+  async entwurfStarten(id: string): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    const { mandantId, benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const f = await ladeFormularKopf(client, id);
+      if (f.archiviert) throw new BadRequestException("Ein stillgelegtes Formular wird nicht mehr bearbeitet.");
+      const { rows } = await client.query<{ nummer: number; definition: FormularDefinition; veroeffentlicht_am: string | null }>(
+        "SELECT nummer, definition, veroeffentlicht_am FROM formular_version WHERE formular_id = $1 ORDER BY nummer DESC LIMIT 1",
+        [id]
+      );
+      if (rows[0] && rows[0].veroeffentlicht_am === null) return ladeFormularDetail(client, id);
+      await client.query(
+        `INSERT INTO formular_version (mandant_id, formular_id, nummer, definition, erstellt_von)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [mandantId, id, (rows[0]?.nummer ?? 0) + 1, JSON.stringify(rows[0]?.definition ?? { bausteine: [] }), benutzerId]
+      );
+      return ladeFormularDetail(client, id);
+    });
   }
 
-  async formularArchivieren(formularId: string, archiviert: boolean): Promise<FormularDto> {
+  /**
+   * Zwischenspeichern des Entwurfs aus dem Editor. Ein Entwurf darf
+   * unfertig sein (eine Beschriftung fehlt noch) -- geprueft wird nur die
+   * Form, damit nichts Unlesbares in der Datenbank landet. Die volle
+   * Pruefung kommt beim Veroeffentlichen.
+   */
+  async formularEntwurfSpeichern(id: string, definition: FormularDefinition): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    const form = strukturFehler(definition);
+    if (form) throw new BadRequestException(form);
+    return this.db.withTenant(async (client) => {
+      await ladeFormularKopf(client, id);
+      const { rowCount } = await client.query(
+        "UPDATE formular_version SET definition = $2 WHERE formular_id = $1 AND veroeffentlicht_am IS NULL",
+        [id, JSON.stringify(definition)]
+      );
+      if (!rowCount) throw new BadRequestException("Es gibt keinen Entwurf. Bitte zuerst „Bearbeiten“ wählen.");
+      return ladeFormularDetail(client, id);
+    });
+  }
+
+  async entwurfVerwerfen(id: string): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    return this.db.withTenant(async (client) => {
+      const f = await ladeFormularKopf(client, id);
+      if (f.veroeffentlichteVersion === null) {
+        throw new BadRequestException("Dieses Formular war noch nie veröffentlicht. Es kann nur ganz gelöscht werden.");
+      }
+      await client.query("DELETE FROM formular_version WHERE formular_id = $1 AND veroeffentlicht_am IS NULL", [id]);
+      return ladeFormularDetail(client, id);
+    });
+  }
+
+  /**
+   * Veroeffentlichen: volle Pruefung der Definition und der Vertraeglichkeit
+   * mit allen frueheren Versionen (pruefeVeroeffentlichung, derselbe Code
+   * wie im Editor). Danach friert der Trigger aus 0075 die Version ein.
+   */
+  async veroeffentlichen(id: string): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const f = await ladeFormularKopf(client, id);
+      if (f.archiviert) throw new BadRequestException("Ein stillgelegtes Formular wird nicht veröffentlicht.");
+      const { rows } = await client.query<{ id: string; definition: FormularDefinition; veroeffentlicht_am: string | null }>(
+        "SELECT id, definition, veroeffentlicht_am FROM formular_version WHERE formular_id = $1 ORDER BY nummer",
+        [id]
+      );
+      const entwurf = rows.find((r) => r.veroeffentlicht_am === null);
+      if (!entwurf) throw new BadRequestException("Es gibt keinen Entwurf zum Veröffentlichen.");
+      const fehler = pruefeVeroeffentlichung(
+        entwurf.definition,
+        rows.filter((r) => r.veroeffentlicht_am !== null).map((r) => r.definition)
+      );
+      if (fehler.length > 0) {
+        throw new BadRequestException({
+          statusCode: 400,
+          message: fehler.length === 1 ? fehler[0] : `${fehler.length} Punkte verhindern das Veröffentlichen.`,
+          pruefung: fehler,
+        });
+      }
+      await client.query("UPDATE formular_version SET veroeffentlicht_am = now(), veroeffentlicht_von = $2 WHERE id = $1", [
+        entwurf.id,
+        benutzerId,
+      ]);
+      return ladeFormularDetail(client, id);
+    });
+  }
+
+  /**
+   * Nur ein nie veroeffentlichtes Formular. Danach verhindert es die
+   * Datenbank (Trigger formular_version_eingefroren + Fremdschluessel), nicht
+   * nur diese Pruefung.
+   */
+  async formularLoeschen(id: string): Promise<void> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    await this.db.withTenant(async (client) => {
+      const f = await ladeFormularKopf(client, id);
+      if (f.veroeffentlichteVersion !== null) {
+        throw new BadRequestException("Ein veröffentlichtes Formular kann nicht gelöscht, nur stillgelegt werden.");
+      }
+      await client.query("DELETE FROM formular_version WHERE formular_id = $1", [id]);
+      await client.query("DELETE FROM formular WHERE id = $1", [id]);
+    });
+  }
+
+  /**
+   * Formular-Einstellungen: wirken sofort, ohne neue Version -- sie aendern
+   * nicht, WAS gefragt wird, sondern WO das Formular angeboten wird.
+   */
+  async einstellungenSpeichern(
+    id: string,
+    input: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[] }
+  ): Promise<FormularDetailDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    const { mandantId } = requireTenantContext();
+    for (const a of input.anheftungen) {
+      if (a.pflicht && a.modus !== "automatisch") throw new BadRequestException("Pflicht geht nur bei „automatisch dabei“.");
+    }
+    if (new Set(input.anheftungen.map((a) => a.anheftpunkt)).size !== input.anheftungen.length) {
+      throw new BadRequestException("Ein Anheftpunkt ist doppelt angegeben.");
+    }
+    return this.db.withTenant(async (client) => {
+      await ladeFormularKopf(client, id);
+      const standortIds = [...new Set(input.standortIds)];
+      if (standortIds.length > 0) {
+        // RLS: Standorte eines fremden Traegers sind hier unsichtbar -> "gibt es nicht".
+        const { rows } = await client.query("SELECT id FROM standort WHERE id = ANY($1::uuid[])", [standortIds]);
+        if (rows.length !== standortIds.length) throw new BadRequestException("Ein ausgewählter Standort existiert nicht.");
+      }
+      await client.query("UPDATE formular SET name = $2, beschreibung = $3 WHERE id = $1", [id, input.name, input.beschreibung]);
+      await client.query("DELETE FROM formular_standort WHERE formular_id = $1", [id]);
+      for (const s of standortIds) {
+        await client.query("INSERT INTO formular_standort (mandant_id, formular_id, standort_id) VALUES ($1, $2, $3)", [mandantId, id, s]);
+      }
+      await client.query("DELETE FROM formular_anheftung WHERE formular_id = $1", [id]);
+      for (const a of input.anheftungen) {
+        await client.query(
+          "INSERT INTO formular_anheftung (mandant_id, formular_id, anheftpunkt, modus, pflicht) VALUES ($1, $2, $3, $4, $5)",
+          [mandantId, id, a.anheftpunkt, a.modus, a.pflicht]
+        );
+      }
+      return ladeFormularDetail(client, id);
+    });
+  }
+
+  async formularArchivieren(formularId: string, archiviert: boolean): Promise<FormularDetailDto> {
     await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
     return this.db.withTenant(async (client) => {
       const { rowCount } = await client.query(
@@ -175,8 +318,92 @@ export class ProtokollService {
         [formularId, archiviert]
       );
       if (!rowCount) throw new NotFoundException("Formular nicht gefunden.");
-      return (await ladeFormulare(client, formularId))[0];
+      return ladeFormularDetail(client, formularId);
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Angebot: welche Formulare wo ausgefuellt werden koennen
+  // -------------------------------------------------------------------------
+
+  /**
+   * Formulare fuer eine Klient:in -- ohne Anheftpunkt die der Klientenakte
+   * (alle veroeffentlichten), mit Anheftpunkt nur die dort angehefteten.
+   * Immer nur veroeffentlichte, nicht stillgelegte und fuer den Standort der
+   * Klient:in zugelassene. Mit Vorbelegung, damit z. B. der Tagesbericht das
+   * Formular direkt zeigen kann, ohne erst einen Entwurf anzulegen.
+   */
+  async angebot(input: { klientId: string; anheftpunkt?: Anheftpunkt }): Promise<FormularAngebotDto[]> {
+    await this.brauche("ausfuellen", "Keine Berechtigung, Protokolle auszufüllen.");
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      await schreibbarerKlient(client, benutzerId, input.klientId);
+      const angebote = await ladeAngebot(client, input.klientId, input.anheftpunkt ?? null);
+      if (angebote.length === 0) return [];
+      const quellen = await ladeQuellen(client, input.klientId, benutzerId);
+      return angebote.map((a) => ({ ...a, ...vorbelegung(a.definition, quellen) }));
+    });
+  }
+
+  /**
+   * Die an einen Tagesbericht angehefteten Formulare -- in DERSELBEN
+   * Transaktion wie der Tagesbericht (TagesberichtService.anlegen): entweder
+   * beides oder nichts. Jedes wird als ganz normales, abgeschlossenes
+   * Protokoll gespeichert, mit allen Pruefungen aus Schritt 1. Pflicht-
+   * Formulare prueft der Server, nicht nur die Oberflaeche.
+   */
+  async angehefteteAbschliessen(
+    client: PoolClient,
+    input: { klientId: string; tagesberichtId: string; datum: string; eingaben: AngeheftetesProtokollEingabe[] }
+  ): Promise<void> {
+    const { mandantId, benutzerId } = requireTenantContext();
+    const angebote = await ladeAngebot(client, input.klientId, "tagesbericht");
+    const nachId = new Map(angebote.map((a) => [a.id, a]));
+    const fehlend = angebote.filter((a) => a.pflicht && !input.eingaben.some((e) => e.formularId === a.id));
+    if (fehlend.length > 0) {
+      throw new BadRequestException(`Bitte auch „${fehlend[0].name}“ ausfüllen, es gehört an diesem Standort zum Tagesbericht.`);
+    }
+    if (new Set(input.eingaben.map((e) => e.formularId)).size !== input.eingaben.length) {
+      throw new BadRequestException("Ein Formular ist doppelt angegeben.");
+    }
+    if (input.eingaben.length === 0) return;
+    if (!(await this.rechte.hatRecht("protokolle", "ausfuellen"))) {
+      throw new ForbiddenException("Keine Berechtigung, Protokolle auszufüllen.");
+    }
+    const quellen = await ladeQuellen(client, input.klientId, benutzerId);
+    for (const e of input.eingaben) {
+      const a = nachId.get(e.formularId);
+      // Nicht angeheftet, nicht fuer den Standort zugelassen, in Entwicklung oder stillgelegt: gibt es hier nicht.
+      if (!a) throw new NotFoundException("Dieses Formular wird beim Tagesbericht nicht angeboten.");
+      const zusammen: FeldWerte = { ...e.werte };
+      for (const b of alleBausteine(a.definition)) {
+        if (istEingabe(b) && b.vorausfuellen?.art === "festgehalten") {
+          const w = quellen[b.vorausfuellen.quelle];
+          zusammen[b.schluessel] = w !== null && w !== undefined && w !== "" && typFehler(b, w) === null ? w : null;
+        }
+      }
+      const fehler = pruefeWerte(a.definition, zusammen, { heute: heuteBerlin() });
+      await mitarbeitendePruefen(client, a.definition, zusammen, fehler);
+      if (fehler.length > 0) {
+        const ausnahme = feldFehlerAusnahme(fehler);
+        const antwort = ausnahme.getResponse() as Record<string, unknown>;
+        throw new BadRequestException({ ...antwort, message: `${a.name}: ${antwort.message}`, formularId: a.id });
+      }
+      const { werte } = werteAus(a.definition, zusammen);
+      const vor = vorbelegung(a.definition, quellen).werte;
+      const ins = await client.query<{ id: string }>(
+        `INSERT INTO protokoll (mandant_id, formular_version_id, klient_id, autor_id, bezugsdatum, tagesbericht_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [mandantId, a.versionId, input.klientId, benutzerId, bezugsdatumAus(a.definition, werte, input.datum), input.tagesberichtId]
+      );
+      const vorAlt: Record<string, { wert: FeldWert; quelle: ProtokollWertQuelle }> = {};
+      for (const [k, w] of Object.entries(vor)) vorAlt[k] = { wert: w, quelle: "vorschlag" };
+      await schreibeWerte(client, mandantId, ins.rows[0].id, a.definition, werte, quellenFuer(a.definition, werte, vorAlt));
+      await client.query("UPDATE protokoll SET abgeschlossen_am = now(), abgeschlossen_von = $2 WHERE id = $1", [
+        ins.rows[0].id,
+        benutzerId,
+      ]);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -264,28 +491,18 @@ export class ProtokollService {
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
       await schreibbarerKlient(client, benutzerId, input.klientId);
-      const { rows } = await client.query<{ id: string; definition: FormularDefinition }>(
-        `SELECT v.id, v.definition
-         FROM formular f
-         JOIN formular_version v ON v.formular_id = f.id AND v.veroeffentlicht_am IS NOT NULL
-         WHERE f.id = $1 AND f.archiviert_am IS NULL
-         ORDER BY v.nummer DESC LIMIT 1`,
-        [input.formularId]
-      );
-      if (rows.length === 0) throw new NotFoundException("Formular nicht gefunden.");
-      const { id: versionId, definition } = rows[0];
+      // Dieselbe Abfrage wie das Angebot der Klientenakte: veroeffentlicht,
+      // nicht stillgelegt, fuer den Standort der Klient:in zugelassen. Der
+      // Browser bietet nur das an; hier wird es verbindlich geprueft.
+      const angebot = (await ladeAngebot(client, input.klientId, null)).find((a) => a.id === input.formularId);
+      if (!angebot) throw new NotFoundException("Formular nicht gefunden.");
+      const { versionId, definition } = angebot;
 
       const quellen = await ladeQuellen(client, input.klientId, benutzerId);
       const vor: Record<string, { wert: FeldWert; quelle: ProtokollWertQuelle }> = {};
-      for (const b of alleBausteine(definition)) {
-        if (!istEingabe(b) || !b.vorausfuellen) continue;
-        const w = quellen[b.vorausfuellen.quelle];
-        if (w === null || w === undefined || w === "") continue;
-        // Nur uebernehmen, was zum Feldtyp passt (ein "Amt" in ein Zahlenfeld nie).
-        if (typFehler(b, w) !== null) continue;
-        vor[b.schluessel] = { wert: w, quelle: b.vorausfuellen.art === "festgehalten" ? "festgehalten" : "vorschlag" };
-      }
-      const bezugsdatum = bezugsdatumAus(definition, Object.fromEntries(Object.entries(vor).map(([k, v]) => [k, v.wert])));
+      const vb = vorbelegung(definition, quellen);
+      for (const [k, w] of Object.entries(vb.werte)) vor[k] = { wert: w, quelle: vb.quellen[k] };
+      const bezugsdatum = bezugsdatumAus(definition, vb.werte);
 
       const ins = await client.query<{ id: string }>(
         `INSERT INTO protokoll (mandant_id, formular_version_id, klient_id, autor_id, bezugsdatum)
@@ -417,9 +634,9 @@ async function schreibbarerKlient(client: PoolClient, benutzerId: string, klient
   }
 }
 
-function bezugsdatumAus(def: FormularDefinition, werte: FeldWerte): string {
+function bezugsdatumAus(def: FormularDefinition, werte: FeldWerte, sonst?: string): string {
   const w = def.bezugsdatumFeld ? werte[def.bezugsdatumFeld] : undefined;
-  return typeof w === "string" && /^\d{4}-\d{2}-\d{2}$/.test(w) ? w : heuteBerlin();
+  return typeof w === "string" && /^\d{4}-\d{2}-\d{2}$/.test(w) ? w : (sonst ?? heuteBerlin());
 }
 
 /**
@@ -591,7 +808,7 @@ async function ladeQuellen(client: PoolClient, klientId: string, benutzerId: str
 
 const KURZ_AUSWAHL = `
   SELECT p.id, f.id AS formular_id, f.name AS formular_name, v.nummer AS version_nummer,
-         p.klient_id, k.vorname, k.nachname, b.name AS autor_name, p.bezugsdatum, p.abgeschlossen_am,
+         p.klient_id, k.vorname, k.nachname, b.name AS autor_name, p.bezugsdatum, p.abgeschlossen_am, p.tagesbericht_id,
          (SELECT count(*)::int FROM protokoll_aenderung a WHERE a.protokoll_id = p.id) AS anzahl_aenderungen
   FROM protokoll p
   JOIN formular_version v ON v.id = p.formular_version_id
@@ -613,6 +830,7 @@ function kurzDto(r: Record<string, any>): ProtokollKurzDto {
     abgeschlossen: r.abgeschlossen_am !== null,
     abgeschlossenAm: r.abgeschlossen_am ? new Date(r.abgeschlossen_am).toISOString() : null,
     anzahlAenderungen: r.anzahl_aenderungen,
+    tagesberichtId: r.tagesbericht_id,
   };
 }
 
@@ -681,28 +899,191 @@ async function ladeDetail(
   };
 }
 
-async function ladeFormulare(client: PoolClient, nurId?: string): Promise<FormularDto[]> {
+const VERWALTUNG_AUSWAHL = `
+  SELECT f.id, f.name, f.beschreibung, f.archiviert_am,
+         (SELECT max(nummer) FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NOT NULL) AS veroeffentlicht,
+         (SELECT nummer FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NULL) AS entwurf,
+         COALESCE((SELECT array_agg(fs.standort_id) FROM formular_standort fs WHERE fs.formular_id = f.id), '{}') AS standort_ids,
+         COALESCE((SELECT json_agg(json_build_object('anheftpunkt', fa.anheftpunkt, 'modus', fa.modus, 'pflicht', fa.pflicht))
+                   FROM formular_anheftung fa WHERE fa.formular_id = f.id), '[]') AS anheftungen,
+         (SELECT count(*)::int FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
+          WHERE pv.formular_id = f.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl
+  FROM formular f
+`;
+
+function verwaltungDto(r: Record<string, any>): FormularVerwaltungDto {
+  const veroeffentlicht: number | null = r.veroeffentlicht ?? null;
+  return {
+    id: r.id,
+    name: r.name,
+    beschreibung: r.beschreibung,
+    status: formularStatus(r.archiviert_am !== null, veroeffentlicht),
+    veroeffentlichteVersion: veroeffentlicht,
+    entwurfVersion: r.entwurf ?? null,
+    standortIds: r.standort_ids,
+    anheftungen: r.anheftungen,
+    anzahlProtokolle: r.anzahl,
+  };
+}
+
+async function ladeVerwaltung(client: PoolClient): Promise<FormularVerwaltungDto[]> {
+  const { rows } = await client.query(`${VERWALTUNG_AUSWAHL} ORDER BY f.archiviert_am IS NOT NULL, f.name`);
+  return rows.map(verwaltungDto);
+}
+
+async function ladeFormularKopf(client: PoolClient, id: string): Promise<{ archiviert: boolean; veroeffentlichteVersion: number | null }> {
+  const { rows } = await client.query(`${VERWALTUNG_AUSWAHL} WHERE f.id = $1`, [id]);
+  if (!rows[0]) throw new NotFoundException("Formular nicht gefunden.");
+  const d = verwaltungDto(rows[0]);
+  return { archiviert: d.status === "stillgelegt", veroeffentlichteVersion: d.veroeffentlichteVersion };
+}
+
+async function ladeFormularDetail(client: PoolClient, id: string): Promise<FormularDetailDto> {
+  const { rows } = await client.query(`${VERWALTUNG_AUSWAHL} WHERE f.id = $1`, [id]);
+  if (!rows[0]) throw new NotFoundException("Formular nicht gefunden.");
+  const basis = verwaltungDto(rows[0]);
+  const versionen = await client.query<{
+    id: string;
+    nummer: number;
+    definition: FormularDefinition;
+    veroeffentlicht_am: Date | null;
+    von: string | null;
+    anzahl: number;
+  }>(
+    `SELECT v.id, v.nummer, v.definition, v.veroeffentlicht_am, b.name AS von,
+            (SELECT count(*)::int FROM protokoll p WHERE p.formular_version_id = v.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl
+     FROM formular_version v LEFT JOIN benutzer b ON b.id = v.veroeffentlicht_von
+     WHERE v.formular_id = $1 ORDER BY v.nummer DESC`,
+    [id]
+  );
+  const veroeffentlichte = versionen.rows.filter((v) => v.veroeffentlicht_am !== null);
+  const entwurf = versionen.rows.find((v) => v.veroeffentlicht_am === null);
+  const offen = await client.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id
+     WHERE v.formular_id = $1 AND p.abgeschlossen_am IS NULL`,
+    [id]
+  );
+  return {
+    ...basis,
+    entwurf: entwurf ? { nummer: entwurf.nummer, definition: entwurf.definition } : null,
+    veroeffentlicht: veroeffentlichte[0] ? { nummer: veroeffentlichte[0].nummer, definition: veroeffentlichte[0].definition } : null,
+    versionen: versionen.rows.map((v) => ({
+      nummer: v.nummer,
+      veroeffentlichtAm: v.veroeffentlicht_am ? new Date(v.veroeffentlicht_am).toISOString() : null,
+      veroeffentlichtVonName: v.von,
+      anzahlProtokolle: v.anzahl,
+    })),
+    frueher: veroeffentlichte.map((v) => v.definition),
+    offeneEntwuerfe: offen.rows[0].n,
+  };
+}
+
+interface AngebotZeile {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  versionId: string;
+  versionNummer: number;
+  definition: FormularDefinition;
+  modus: AnheftModus | null;
+  pflicht: boolean;
+}
+
+/**
+ * Die eine Stelle, die entscheidet, welches Formular wo ausgefuellt werden
+ * darf: neueste veroeffentlichte Version, nicht stillgelegt, Standort der
+ * Klient:in zugelassen (keine Zeile in formular_standort = alle Standorte;
+ * ohne aktuelle Belegung nur solche), ggf. am Anheftpunkt angeheftet.
+ * Angebot, Anlegen und Tagesbericht benutzen sie alle -- so kann der Browser
+ * nichts einreichen, was hier nicht angeboten wuerde.
+ */
+async function ladeAngebot(client: PoolClient, klientId: string, anheftpunkt: Anheftpunkt | null): Promise<AngebotZeile[]> {
   const { rows } = await client.query(
-    `SELECT f.id, f.name, f.beschreibung, f.bezug, f.archiviert_am,
-            v.id AS version_id, v.nummer, v.definition,
-            (SELECT count(*)::int FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
-             WHERE pv.formular_id = f.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl
+    `SELECT f.id, f.name, f.beschreibung, v.id AS version_id, v.nummer, v.definition, fa.modus, COALESCE(fa.pflicht, false) AS pflicht
      FROM formular f
-     LEFT JOIN LATERAL (
+     JOIN LATERAL (
        SELECT id, nummer, definition FROM formular_version
        WHERE formular_id = f.id AND veroeffentlicht_am IS NOT NULL ORDER BY nummer DESC LIMIT 1
      ) v ON true
-     WHERE ($1::uuid IS NULL OR f.id = $1)
-     ORDER BY f.archiviert_am IS NOT NULL, f.name`,
-    [nurId ?? null]
+     LEFT JOIN formular_anheftung fa ON fa.formular_id = f.id AND fa.anheftpunkt = $2
+     WHERE f.archiviert_am IS NULL
+       AND ($2::text IS NULL OR fa.formular_id IS NOT NULL)
+       AND (
+         NOT EXISTS (SELECT 1 FROM formular_standort fs WHERE fs.formular_id = f.id)
+         OR EXISTS (
+           SELECT 1 FROM formular_standort fs
+           JOIN zimmer z ON z.standort_id = fs.standort_id
+           JOIN belegung b ON b.zimmer_id = z.id
+           WHERE fs.formular_id = f.id AND b.klient_id = $1 AND b.auszug IS NULL AND b.einzug <= CURRENT_DATE
+         )
+       )
+     ORDER BY fa.modus = 'automatisch' DESC NULLS LAST, f.name`,
+    [klientId, anheftpunkt]
   );
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     beschreibung: r.beschreibung,
-    bezug: r.bezug,
-    archiviert: r.archiviert_am !== null,
-    aktuelleVersion: r.version_id ? { id: r.version_id, nummer: r.nummer, definition: r.definition } : null,
-    anzahlProtokolle: r.anzahl,
+    versionId: r.version_id,
+    versionNummer: r.nummer,
+    definition: r.definition,
+    modus: anheftpunkt ? r.modus : null,
+    pflicht: anheftpunkt ? r.pflicht : false,
   }));
+}
+
+/** Vorausgefuellte Werte (Vorschlag und festgehalten) und Anzeigewerte fuer eine Klient:in. */
+function vorbelegung(
+  definition: FormularDefinition,
+  quellen: Record<Datenquelle, FeldWert | null>
+): { werte: Record<string, FeldWert>; quellen: Record<string, ProtokollWertQuelle>; anzeige: Record<string, string | null> } {
+  const werte: Record<string, FeldWert> = {};
+  const herkunft: Record<string, ProtokollWertQuelle> = {};
+  const anzeige: Record<string, string | null> = {};
+  for (const b of alleBausteine(definition)) {
+    if (b.typ === "anzeige") {
+      const w = quellen[b.quelle];
+      anzeige[b.schluessel] = w === null || w === undefined ? null : String(w);
+      continue;
+    }
+    if (!istEingabe(b) || !b.vorausfuellen) continue;
+    const w = quellen[b.vorausfuellen.quelle];
+    if (w === null || w === undefined || w === "") continue;
+    // Nur uebernehmen, was zum Feldtyp passt (ein "Amt" in ein Zahlenfeld nie).
+    if (typFehler(b, w) !== null) continue;
+    werte[b.schluessel] = w;
+    herkunft[b.schluessel] = b.vorausfuellen.art === "festgehalten" ? "festgehalten" : "vorschlag";
+  }
+  return { werte, quellen: herkunft, anzeige };
+}
+
+/**
+ * Grobe Form einer Definition aus dem Editor: lesbar fuer werteAus und die
+ * Anzeige, auch wenn noch nicht fertig. Inhaltliches (Beschriftungen,
+ * Verweise, Identitaetsquellen) prueft pruefeDefinition beim Veroeffentlichen.
+ */
+function strukturFehler(def: unknown): string | null {
+  if (!def || typeof def !== "object" || !Array.isArray((def as FormularDefinition).bausteine)) return "Die Definition hat keine Bausteine.";
+  let anzahl = 0;
+  const pruefe = (liste: unknown[], tiefe: number): string | null => {
+    if (tiefe > 3) return "Abschnitte sind zu tief verschachtelt.";
+    for (const b of liste) {
+      anzahl++;
+      if (anzahl > 400) return "Das Formular hat zu viele Bausteine.";
+      if (!b || typeof b !== "object") return "Ein Baustein ist ungültig.";
+      const x = b as Record<string, unknown>;
+      if (typeof x.typ !== "string" || !(x.typ in BAUSTEIN_LABEL)) return "Ein Baustein hat einen unbekannten Typ.";
+      if (typeof x.schluessel !== "string" || typeof x.beschriftung !== "string") return "Ein Baustein hat keinen Schlüssel.";
+      if (x.typ === "abschnitt") {
+        if (!Array.isArray(x.kinder)) return "Ein Abschnitt ist ungültig.";
+        const f = pruefe(x.kinder, tiefe + 1);
+        if (f) return f;
+      }
+      if ((x.typ === "auswahl" || x.typ === "mehrfachauswahl") && !Array.isArray(x.optionen)) return "Eine Auswahl hat keine Optionen.";
+      if (x.typ === "berechnung" && (x.ausdruck === undefined || x.ausdruck === null)) return "Eine Berechnung hat keine Formel.";
+      if (x.typ === "anzeige" && typeof x.quelle !== "string") return "Eine Anzeige hat keine Quelle.";
+    }
+    return null;
+  };
+  return pruefe((def as FormularDefinition).bausteine, 0);
 }

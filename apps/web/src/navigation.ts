@@ -8,6 +8,7 @@ import {
   IAuszahlen,
   IAufgaben,
   IDashboard,
+  IDokument,
   IEinstellungen,
   IKassenbuch,
   IKalender,
@@ -48,7 +49,10 @@ export type UnterReiter =
   // Eingang der Rueckmeldungen (Idee/Fehler): kein sortierbarer Hauptpunkt,
   // sondern nur mit dem Recht rueckmeldungen.verwalten in der Fusszeile der
   // Seitenleiste sichtbar (Shell.tsx).
-  | "rueckmeldungen";
+  | "rueckmeldungen"
+  // Gruppe "Organisatorisch" (siehe ORGANISATORISCH): nicht frei sortierbar,
+  // immer ganz unten und eingeklappt.
+  | "formulare";
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -96,6 +100,19 @@ export const MENUE_GRUPPEN: { id: MenueGruppeId; label: string; reiter: HauptRei
   { id: "arbeit", label: "Arbeit", reiter: ["dashboard", "nachrichten", "kalender", "aufgaben"] },
   { id: "menschen", label: "Menschen", reiter: ["klienten", "mitarbeitende"] },
   { id: "haus", label: "Haus", reiter: ["standorte", "tagesberichte", "stunden", "kassenbuch"] },
+];
+
+/**
+ * Gruppe "Organisatorisch" (Rueckmeldung "Formulare", 18.11.2026): Dinge, die
+ * man selten braucht und die im Alltag nicht auffallen sollen. Sie steht
+ * IMMER ganz unten im Hauptmenue und ist standardmaessig eingeklappt -- als
+ * kleine, blasse Aktenlippe. Bewusst nicht Teil von MENUE_GRUPPEN und der
+ * frei sortierbaren Reihenfolge: ein Verwaltungsbereich, den man nach oben
+ * schieben kann, verliert genau die Unauffaelligkeit, um die es geht.
+ * Jeder Eintrag nennt das Recht, ohne das er nicht erscheint.
+ */
+export const ORGANISATORISCH: (UnterpunktEintrag & { recht: "formulareVerwalten" })[] = [
+  { wert: "formulare", label: "Formulare", icon: IDokument, recht: "formulareVerwalten" },
 ];
 
 /** In welcher Gruppe ein Hauptpunkt steht; Einstellungen: keine. */

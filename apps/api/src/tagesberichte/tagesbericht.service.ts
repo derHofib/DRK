@@ -2,7 +2,9 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { heuteBerlin } from "../common/heute";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { AngeheftetesProtokollEingabe } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
+import { ProtokollService } from "../protokolle/protokoll.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { dateiAusBase64 } from "../common/datei";
 import {
@@ -52,6 +54,8 @@ export interface TagesberichtDto {
   anzahlAenderungen: number;
   /** Nur der Autor darf den Text/das Datum aendern. */
   bearbeitbar: boolean;
+  /** Mit dem Tagesbericht abgeschlossene, angeheftete Formulare (Migration 0076). */
+  protokolle: { id: string; formularName: string }[];
 }
 
 const AUSWAHL = `
@@ -67,7 +71,13 @@ const AUSWAHL = `
         'id', d.id, 'dateiname', d.dateiname, 'mimeType', d.mime_type, 'erstelltAm', d.erstellt_am
       )) FILTER (WHERE d.id IS NOT NULL),
       '[]'
-    ) AS dokumente
+    ) AS dokumente,
+    COALESCE(
+      (SELECT json_agg(json_build_object('id', p.id, 'formularName', f.name) ORDER BY f.name)
+       FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id JOIN formular f ON f.id = v.formular_id
+       WHERE p.tagesbericht_id = t.id),
+      '[]'
+    ) AS protokolle
   FROM tagesbericht t
   JOIN klient k ON k.id = t.klient_id
   LEFT JOIN benutzer b ON b.id = t.autor_id
@@ -78,7 +88,10 @@ const AUSWAHL = `
 
 @Injectable()
 export class TagesberichtService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly protokolle: ProtokollService
+  ) {}
 
   /**
    * Ohne klientId: alle Tagesberichte des Mandanten (der allgemeine
@@ -128,6 +141,7 @@ export class TagesberichtService {
     text: string;
     tagNamen?: string[];
     dokumente?: { base64: string; dateiname: string; mimeType: string }[];
+    protokolle?: AngeheftetesProtokollEingabe[];
   }): Promise<TagesberichtDto> {
     const { mandantId, benutzerId } = requireTenantContext();
     // ISO-Daten sind lexikographisch vergleichbar. Hier im Service, weil jeder
@@ -155,6 +169,15 @@ export class TagesberichtService {
       for (const dokument of input.dokumente ?? []) {
         await dokumentSpeichern(client, mandantId, tagesberichtId, benutzerId, dokument);
       }
+      // In derselben Transaktion: scheitert ein angeheftetes Formular (fehlt
+      // ein Pflichtfeld oder ein Pflicht-Formular), gibt es auch keinen
+      // halben Tagesbericht ohne sein Formular.
+      await this.protokolle.angehefteteAbschliessen(client, {
+        klientId: input.klientId,
+        tagesberichtId,
+        datum: input.datum,
+        eingaben: input.protokolle ?? [],
+      });
       return ladeEinen(client, tagesberichtId, benutzerId);
     });
   }
@@ -389,5 +412,6 @@ function zuDto(r: any, benutzerId: string): TagesberichtDto {
     dokumente: r.dokumente,
     anzahlAenderungen: r.anzahl_aenderungen,
     bearbeitbar: r.autor_id !== null && r.autor_id === benutzerId,
+    protokolle: r.protokolle,
   };
 }
