@@ -24,6 +24,7 @@ import {
   type FormularAnheftung,
   type FormularAngebotDto,
   type FormularDetailDto,
+  type FormularKennzahlenDto,
   type FormularVerwaltungDto,
   type ProtokollAenderungDto,
   type ProtokollDto,
@@ -135,6 +136,23 @@ export class ProtokollService {
   async verwaltungsDetail(id: string): Promise<FormularDetailDto> {
     await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
     return this.db.withTenant((client) => ladeFormularDetail(client, id));
+  }
+
+  /**
+   * Reiter „Übersicht“ (Rueckmeldung „Aufbau Formular“). Die Zaehlungen
+   * laufen ueber alle Protokolle des Traegers -- wie schon `anzahlProtokolle`
+   * in der Liste: eine Zahl verraet nichts ueber eine Person. Die Liste
+   * „Zuletzt ausgefuellt“ nennt dagegen Klient:innen und ist deshalb auf die
+   * erlaubten Standorte eingeschraenkt, und auch dann nur mit Initialen.
+   */
+  async kennzahlen(id: string): Promise<FormularKennzahlenDto> {
+    await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const kopf = await ladeFormularKopf(client, id);
+      const erlaubte = await ermittleErlaubteStandortIds(client, benutzerId);
+      return ladeKennzahlen(client, id, kopf.standortIds, erlaubte);
+    });
   }
 
   /**
@@ -915,7 +933,9 @@ const VERWALTUNG_AUSWAHL = `
          COALESCE((SELECT json_agg(json_build_object('anheftpunkt', fa.anheftpunkt, 'modus', fa.modus, 'pflicht', fa.pflicht, 'darstellung', fa.darstellung))
                    FROM formular_anheftung fa WHERE fa.formular_id = f.id), '[]') AS anheftungen,
          (SELECT count(*)::int FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
-          WHERE pv.formular_id = f.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl
+          WHERE pv.formular_id = f.id AND p.abgeschlossen_am IS NOT NULL) AS anzahl,
+         (SELECT count(*)::int FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
+          WHERE pv.formular_id = f.id AND p.abgeschlossen_am >= now() - interval '30 days') AS anzahl30
   FROM formular f
 `;
 
@@ -931,6 +951,7 @@ function verwaltungDto(r: Record<string, any>): FormularVerwaltungDto {
     standortIds: r.standort_ids,
     anheftungen: r.anheftungen,
     anzahlProtokolle: r.anzahl,
+    anzahl30Tage: r.anzahl30,
   };
 }
 
@@ -939,11 +960,151 @@ async function ladeVerwaltung(client: PoolClient): Promise<FormularVerwaltungDto
   return rows.map(verwaltungDto);
 }
 
-async function ladeFormularKopf(client: PoolClient, id: string): Promise<{ archiviert: boolean; veroeffentlichteVersion: number | null }> {
+async function ladeFormularKopf(
+  client: PoolClient,
+  id: string
+): Promise<{ archiviert: boolean; veroeffentlichteVersion: number | null; standortIds: string[] }> {
   const { rows } = await client.query(`${VERWALTUNG_AUSWAHL} WHERE f.id = $1`, [id]);
   if (!rows[0]) throw new NotFoundException("Formular nicht gefunden.");
   const d = verwaltungDto(rows[0]);
-  return { archiviert: d.status === "stillgelegt", veroeffentlichteVersion: d.veroeffentlichteVersion };
+  return { archiviert: d.status === "stillgelegt", veroeffentlichteVersion: d.veroeffentlichteVersion, standortIds: d.standortIds };
+}
+
+/*
+ * Standort eines Protokolls = Standort der Belegung am Bezugstag. Nicht die
+ * heutige Belegung: wer umgezogen ist, soll die alten Protokolle nicht an
+ * den neuen Standort mitnehmen. Belegungen sind halboffen [einzug, auszug)
+ * (Migration 0010), daher "auszug > bezugsdatum".
+ */
+const PROTOKOLL_STANDORT = `
+  (SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id
+   WHERE b.klient_id = p.klient_id AND b.einzug <= p.bezugsdatum AND (b.auszug IS NULL OR b.auszug > p.bezugsdatum)
+   ORDER BY b.einzug DESC LIMIT 1)`;
+
+async function ladeKennzahlen(
+  client: PoolClient,
+  formularId: string,
+  zugelasseneStandorte: string[],
+  erlaubteStandorte: string[] | null
+): Promise<FormularKennzahlenDto> {
+  // Grenzen in Berliner Zeit, sonst rutscht ein Protokoll von 00:30 in den Vortag/die Vorwoche.
+  const basis = `
+    WITH pr AS (
+      SELECT p.id, p.klient_id, p.abgeschlossen_am, p.erstellt_am, v.nummer AS version,
+             (p.abgeschlossen_am AT TIME ZONE 'Europe/Berlin') AS lokal,
+             ${PROTOKOLL_STANDORT} AS standort_id
+      FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id
+      WHERE v.formular_id = $1
+    )`;
+  const summen = await client.query<{
+    gesamt: number;
+    seit: Date | null;
+    l30: number;
+    v30: number;
+    offen: number;
+    aeltester: Date | null;
+  }>(
+    `${basis}
+     SELECT count(*) FILTER (WHERE abgeschlossen_am IS NOT NULL)::int AS gesamt,
+            min(abgeschlossen_am) AS seit,
+            count(*) FILTER (WHERE abgeschlossen_am >= now() - interval '30 days')::int AS l30,
+            count(*) FILTER (WHERE abgeschlossen_am >= now() - interval '60 days' AND abgeschlossen_am < now() - interval '30 days')::int AS v30,
+            count(*) FILTER (WHERE abgeschlossen_am IS NULL)::int AS offen,
+            min(erstellt_am) FILTER (WHERE abgeschlossen_am IS NULL) AS aeltester
+     FROM pr`,
+    [formularId]
+  );
+  const zuletzt = await client.query<{ am: Date; standort: string | null }>(
+    `${basis}
+     SELECT pr.abgeschlossen_am AS am, s.name AS standort FROM pr LEFT JOIN standort s ON s.id = pr.standort_id
+     WHERE pr.abgeschlossen_am IS NOT NULL ORDER BY pr.abgeschlossen_am DESC LIMIT 1`,
+    [formularId]
+  );
+  const wochen = await client.query<{ woche: string; kw: number; version: number | null; n: number }>(
+    `${basis}, w AS (
+       SELECT generate_series(date_trunc('week', (now() AT TIME ZONE 'Europe/Berlin')) - interval '11 weeks',
+                              date_trunc('week', (now() AT TIME ZONE 'Europe/Berlin')), interval '1 week') AS ab
+     )
+     SELECT to_char(w.ab, 'YYYY-MM-DD') AS woche, extract(week FROM w.ab)::int AS kw, pr.version, count(pr.id)::int AS n
+     FROM w LEFT JOIN pr ON pr.abgeschlossen_am IS NOT NULL AND date_trunc('week', pr.lokal) = w.ab
+     GROUP BY w.ab, pr.version ORDER BY w.ab`,
+    [formularId]
+  );
+  const jeStandort = await client.query<{ id: string | null; n: number }>(
+    `${basis}
+     SELECT standort_id AS id, count(*)::int AS n FROM pr
+     WHERE abgeschlossen_am >= now() - interval '30 days' GROUP BY standort_id`,
+    [formularId]
+  );
+  const alleStandorte = await client.query<{ id: string; name: string }>("SELECT id, name FROM standort ORDER BY name");
+
+  const params: unknown[] = [formularId];
+  const bedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+  const letzte = await client.query<{
+    id: string;
+    klient_id: string;
+    am: Date;
+    vorname: string;
+    nachname: string;
+    standort: string | null;
+    version: number;
+  }>(
+    `${basis}
+     SELECT pr.id, pr.klient_id, pr.abgeschlossen_am AS am, k.vorname, k.nachname, s.name AS standort, pr.version
+     FROM pr JOIN klient k ON k.id = pr.klient_id LEFT JOIN standort s ON s.id = pr.standort_id
+     WHERE pr.abgeschlossen_am IS NOT NULL AND ${bedingung}
+     ORDER BY pr.abgeschlossen_am DESC LIMIT 5`,
+    params
+  );
+  const felder = await client.query<{ version: number; schluessel: string; n: number }>(
+    `SELECT v.nummer AS version, w.feld_schluessel AS schluessel, count(DISTINCT p.id)::int AS n
+     FROM protokoll_wert w JOIN protokoll p ON p.id = w.protokoll_id JOIN formular_version v ON v.id = p.formular_version_id
+     WHERE v.formular_id = $1 AND p.abgeschlossen_am IS NOT NULL
+     GROUP BY v.nummer, w.feld_schluessel`,
+    [formularId]
+  );
+
+  const s = summen.rows[0];
+  const wochenListe: FormularKennzahlenDto["wochen"] = [];
+  for (const r of wochen.rows) {
+    let w = wochenListe[wochenListe.length - 1];
+    if (!w || w.wocheAb !== r.woche) {
+      w = { wocheAb: r.woche, kw: r.kw, jeVersion: {} };
+      wochenListe.push(w);
+    }
+    if (r.version !== null) w.jeVersion[String(r.version)] = r.n;
+  }
+  const anzahlJe = new Map(jeStandort.rows.map((r) => [r.id, r.n]));
+  const felderJe: FormularKennzahlenDto["felder"] = {};
+  for (const r of felder.rows) (felderJe[String(r.version)] ??= {})[r.schluessel] = r.n;
+  const z = zuletzt.rows[0];
+
+  return {
+    gesamt: s.gesamt,
+    seit: s.seit ? new Date(s.seit).toISOString() : null,
+    letzte30Tage: s.l30,
+    vorige30Tage: s.v30,
+    offen: s.offen,
+    aeltesterOffenerSeit: s.aeltester ? new Date(s.aeltester).toISOString() : null,
+    zuletzt: z ? { am: new Date(z.am).toISOString(), standortName: z.standort } : null,
+    wochen: wochenListe,
+    standorte: alleStandorte.rows.map((st) => ({
+      id: st.id,
+      name: st.name,
+      anzahl: anzahlJe.get(st.id) ?? 0,
+      zugelassen: zugelasseneStandorte.length === 0 || zugelasseneStandorte.includes(st.id),
+    })),
+    ohneStandort: anzahlJe.get(null) ?? 0,
+    letzte: letzte.rows.map((r) => ({
+      id: r.id,
+      klientId: r.klient_id,
+      abgeschlossenAm: new Date(r.am).toISOString(),
+      klientInitialen: initialen(r.vorname, r.nachname),
+      standortName: r.standort,
+      versionNummer: r.version,
+    })),
+    felder: felderJe,
+  };
 }
 
 async function ladeFormularDetail(client: PoolClient, id: string): Promise<FormularDetailDto> {
@@ -980,6 +1141,7 @@ async function ladeFormularDetail(client: PoolClient, id: string): Promise<Formu
       veroeffentlichtAm: v.veroeffentlicht_am ? new Date(v.veroeffentlicht_am).toISOString() : null,
       veroeffentlichtVonName: v.von,
       anzahlProtokolle: v.anzahl,
+      definition: v.definition,
     })),
     frueher: veroeffentlichte.map((v) => v.definition),
     offeneEntwuerfe: offen.rows[0].n,

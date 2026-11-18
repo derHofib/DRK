@@ -9,6 +9,7 @@ import {
   type FormularAnheftung,
   type FormularDefinition,
   type FormularDetailDto,
+  type FormularKennzahlenDto,
   type FormularStatus,
   type FormularVerwaltungDto,
   type StandortDto,
@@ -18,7 +19,6 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { FormularEditor } from "../components/FormularEditor";
-import { ProtokollAnsicht } from "../components/ProtokollFormular";
 import {
   IArchivieren,
   IBearbeiten,
@@ -29,12 +29,16 @@ import {
   IInfo,
   ILoeschen,
   INeu,
+  ISichtbar,
   IStandort,
   ITag,
   IVerknuepft,
   IZurueck,
 } from "../components/icons";
 import { formatDatum, formatUhrzeit } from "../format";
+import { FormularUebersicht } from "./formulare/FormularUebersicht";
+import { aufbauVersionen, FormularAufbau, VersionWahl } from "./formulare/FormularAufbau";
+import { FormularAnsichten } from "./formulare/FormularAnsichten";
 
 /**
  * Formulare selbst bauen (Rueckmeldung "Formulare", Konzept
@@ -50,7 +54,7 @@ const STATUS_PILL: Record<FormularStatus, string> = {
 };
 
 const SPALTEN = {
-  "--zv-liste-spalten": "minmax(0,2.2fr) minmax(150px,1.2fr) minmax(64px,0.5fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(80px,0.6fr)",
+  "--zv-liste-spalten": "minmax(0,2.2fr) minmax(150px,1.2fr) minmax(64px,0.5fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(80px,0.6fr) minmax(80px,0.6fr)",
 } as CSSProperties;
 
 function standorteText(ids: string[], standorte: StandortDto[]): string {
@@ -218,6 +222,7 @@ export function Formulare() {
             <span>Standorte</span>
             <span>Angeheftet an</span>
             <span>Protokolle</span>
+            <span>30 Tage</span>
           </div>
           {sichtbar.map((f) => (
             <div
@@ -252,6 +257,9 @@ export function Formulare() {
               </span>
               <span className="zv-liste-zelle zv-mono" data-label="Protokolle">
                 {f.anzahlProtokolle}
+              </span>
+              <span className="zv-liste-zelle zv-mono" data-label="Letzte 30 Tage">
+                {f.anzahl30Tage}
               </span>
             </div>
           ))}
@@ -325,11 +333,17 @@ function NeuesFormular({ onClose, onAngelegt }: { onClose: () => void; onAngeleg
 // Ein Formular: Aufbau, Einstellungen, Versionen
 // ---------------------------------------------------------------------------
 
-type Reiter = "aufbau" | "einstellungen" | "versionen";
+type Reiter = "uebersicht" | "aufbau" | "ansichten" | "einstellungen" | "versionen";
 
 function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: StandortDto[]; onZurueck: () => void }) {
   const [d, setD] = useState<FormularDetailDto | null>(null);
-  const [reiter, setReiter] = useState<Reiter>("aufbau");
+  // null bis das Formular geladen ist: ein nie veroeffentlichtes Formular oeffnet im
+  // Aufbau (dort wird gearbeitet), alle anderen in der Übersicht (Konzept „Aufbau Formular“).
+  const [reiterGewaehlt, setReiter] = useState<Reiter | null>(null);
+  const [kennzahlen, setKennzahlen] = useState<FormularKennzahlenDto | null>(null);
+  const [kennzahlenFehler, setKennzahlenFehler] = useState<string | null>(null);
+  // null = Standard: der Entwurf, wenn es einen gibt, sonst die veroeffentlichte Version.
+  const [aufbauVersion, setAufbauVersion] = useState<number | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   const [entwurf, setEntwurf] = useState<FormularDefinition | null>(null);
   const [speicher, setSpeicher] = useState<{ zustand: "gespeichert" | "laeuft" | "fehler"; um?: string; meldung?: string }>({ zustand: "gespeichert" });
@@ -349,9 +363,32 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
   useEffect(() => {
     api
       .formular(id)
-      .then(uebernehmen)
+      .then((neu) => {
+        uebernehmen(neu);
+        // Den Startreiter einmal festlegen -- sonst sprange die Seite nach dem ersten
+        // Veroeffentlichen vom Aufbau in die Übersicht.
+        setReiter((r) => r ?? (neu.veroeffentlichteVersion === null ? "aufbau" : "uebersicht"));
+      })
       .catch((err) => setFehler(err.message));
   }, [id, uebernehmen]);
+
+  // Neu laden, wenn sich die ausgefuellte Version aendert (Veroeffentlichen) -- die Zahlen je Version haengen daran.
+  const veroeffentlichteVersion = d?.veroeffentlichteVersion;
+  useEffect(() => {
+    if (veroeffentlichteVersion === undefined) return;
+    let aktiv = true;
+    api
+      .formularKennzahlen(id)
+      .then((k) => {
+        if (!aktiv) return;
+        setKennzahlen(k);
+        setKennzahlenFehler(null);
+      })
+      .catch((err) => aktiv && setKennzahlenFehler(err instanceof Error ? err.message : "Zahlen konnten nicht geladen werden."));
+    return () => {
+      aktiv = false;
+    };
+  }, [id, veroeffentlichteVersion]);
 
   const speichernJetzt = useCallback(async (): Promise<boolean> => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -418,6 +455,15 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
   }
 
   const stillgelegt = d.status === "stillgelegt";
+  const reiter: Reiter = reiterGewaehlt ?? (d.veroeffentlichteVersion === null ? "aufbau" : "uebersicht");
+  const versionen = aufbauVersionen(d);
+  const standardVersion = d.entwurf && !stillgelegt ? d.entwurf.nummer : (d.veroeffentlichteVersion ?? versionen[0]?.nummer ?? 1);
+  const gezeigteVersion = aufbauVersion !== null && versionen.some((v) => v.nummer === aufbauVersion) ? aufbauVersion : standardVersion;
+  const imEditor = !stillgelegt && d.entwurf !== null && gezeigteVersion === d.entwurf.nummer;
+  const versionAnsehen = (n: number) => {
+    setAufbauVersion(n);
+    setReiter("aufbau");
+  };
   const speicherText =
     speicher.zustand === "laeuft" ? "Wird gespeichert…" : speicher.zustand === "fehler" ? speicher.meldung : speicher.um ? `Entwurf gespeichert ${speicher.um}` : "Entwurf gespeichert";
 
@@ -461,6 +507,7 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
               disabled={laeuft}
               onClick={() => {
                 setReiter("aufbau");
+                setAufbauVersion(null);
                 void aktion(() => api.formularEntwurfStarten(d.id));
               }}
             >
@@ -499,7 +546,9 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
       <nav className="zv-reiter" aria-label="Bereiche des Formulars">
         {(
           [
+            ["uebersicht", "Übersicht"],
             ["aufbau", "Aufbau"],
+            ["ansichten", "Ansichten"],
             ["einstellungen", "Einstellungen"],
             ["versionen", "Versionen"],
           ] as [Reiter, string][]
@@ -510,21 +559,40 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
         ))}
       </nav>
 
+      {reiter === "uebersicht" && (
+        <FormularUebersicht
+          d={d}
+          k={kennzahlen}
+          fehler={kennzahlenFehler}
+          standorte={standorte}
+          onVersionAnsehen={versionAnsehen}
+          onEntwurfOeffnen={() => versionAnsehen(d.entwurf!.nummer)}
+          onEinstellungen={() => setReiter("einstellungen")}
+        />
+      )}
+
       {reiter === "aufbau" &&
-        (entwurf && !stillgelegt ? (
+        (imEditor && entwurf ? (
           <>
+            {versionen.length > 1 && (
+              <div className="zv-fa-leiste">
+                <div className="zv-fa-leiste-links">
+                  <VersionWahl versionen={versionen} gewaehlt={gezeigteVersion} onWaehlen={setAufbauVersion} />
+                  <span className="zv-sub">Ältere Versionen nur zum Ansehen</span>
+                </div>
+              </div>
+            )}
             <p className="zv-formular-schmal-hinweis zv-hinweis zv-hinweis-info">
               <IInfo />
               Der Editor braucht einen größeren Bildschirm. Bitte am Rechner bearbeiten.
             </p>
             <FormularEditor definition={entwurf} frueher={d.frueher} onAendern={entwurfAendern} status={speicherText} />
           </>
-        ) : d.veroeffentlicht ? (
-          <div className="zv-formular-vorschau">
-            <p className="zv-sub">Aufbau von Version {d.veroeffentlicht.nummer}. Mit „Bearbeiten“ entsteht Version {d.veroeffentlicht.nummer + 1}.</p>
-            <ProtokollAnsicht definition={d.veroeffentlicht.definition} werte={{}} anzeige={{}} personen={{}} />
-          </div>
-        ) : null)}
+        ) : (
+          <FormularAufbau d={d} version={gezeigteVersion} onVersion={setAufbauVersion} kennzahlen={kennzahlen} />
+        ))}
+
+      {reiter === "ansichten" && <FormularAnsichten key={d.id} d={d} kennzahlen={kennzahlen} />}
 
       {reiter === "einstellungen" && (
         <Einstellungen
@@ -538,7 +606,7 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
         />
       )}
 
-      {reiter === "versionen" && <Versionen d={d} />}
+      {reiter === "versionen" && <Versionen d={d} onAnsehen={versionAnsehen} />}
 
       {veroeffentlichenOffen && d.entwurf && (
         <Veroeffentlichen
@@ -644,9 +712,30 @@ function Einstellungen({
 
   return (
     <div className="zv-formular-einstellungen">
-      <p className="zv-sub">Diese Einstellungen wirken sofort und brauchen keine neue Version: sie ändern nicht, was gefragt wird, sondern wo das Formular angeboten wird.</p>
+      {/* Speichern oben und mitlaufend: unten zwischen Anheftungen und Stilllegen wurde der Knopf leicht uebersehen (Rueckmeldung „Aufbau Formular“). */}
+      <div className="zv-fe-speichernleiste">
+        <span>Wirkt sofort und braucht keine neue Version: es ändert nicht, was gefragt wird, sondern wo das Formular angeboten wird.</span>
+        <span className="zv-fe-speichernleiste-rechts">
+          {gespeichert && (
+            <span className="zv-protokoll-status">
+              <IBestaetigen size={14} /> Gespeichert
+            </span>
+          )}
+          <button type="button" className="zv-btn zv-btn-klein" disabled={speichert} onClick={speichern}>
+            Einstellungen speichern
+          </button>
+        </span>
+      </div>
+      {fehler && (
+        <div className="zv-hinweis zv-hinweis-fehler">
+          <IFehler />
+          {fehler}
+        </div>
+      )}
 
-      <section className="zv-einstellungen-abschnitt">
+      <div className="zv-fe-spalten">
+      <div className="zv-fe-spalte">
+      <section className="zv-fo-karte">
         <h3>Allgemein</h3>
         <div className="zv-field">
           <label htmlFor="zv-fe-name">Name</label>
@@ -658,7 +747,7 @@ function Einstellungen({
         </div>
       </section>
 
-      <section className="zv-einstellungen-abschnitt">
+      <section className="zv-fo-karte">
         <h3>Standorte</h3>
         <p className="zv-sub">Maßgeblich ist der Standort, an dem die Klient:in gerade wohnt. Ohne aktuelle Belegung gibt es nur Formulare für alle Standorte.</p>
         <label className="zv-checkbox-zeile">
@@ -691,7 +780,9 @@ function Einstellungen({
         )}
       </section>
 
-      <section className="zv-einstellungen-abschnitt">
+      </div>
+      <div className="zv-fe-spalte">
+      <section className="zv-fo-karte">
         <h3>Angeheftet an</h3>
         <p className="zv-sub">In der Klientenakte unter Protokolle ist jedes veröffentlichte Formular immer dabei. Zusätzlich lässt es sich hier an Abläufe heften.</p>
         {(Object.keys(ANHEFTPUNKTE) as Anheftpunkt[]).map((punkt) => {
@@ -766,25 +857,10 @@ function Einstellungen({
         })}
         <p className="zv-protokoll-hilfe">Weitere Stellen wie Einzug, Auszug oder Termin erledigt kommen später dazu.</p>
       </section>
-
-      {fehler && (
-        <div className="zv-hinweis zv-hinweis-fehler">
-          <IFehler />
-          {fehler}
-        </div>
-      )}
-      <div className="zv-protokoll-leiste">
-        {gespeichert && (
-          <span className="zv-protokoll-status">
-            <IBestaetigen size={14} /> Gespeichert
-          </span>
-        )}
-        <button type="button" className="zv-btn" disabled={speichert} onClick={speichern}>
-          Einstellungen speichern
-        </button>
+      </div>
       </div>
 
-      <section className="zv-einstellungen-abschnitt zv-formular-gefahr">
+      <section className="zv-fo-karte zv-formular-gefahr">
         <h3>{d.veroeffentlichteVersion === null ? "Löschen" : d.status === "stillgelegt" ? "Wieder aktivieren" : "Stilllegen"}</h3>
         {d.veroeffentlichteVersion === null ? (
           <>
@@ -813,14 +889,18 @@ function Einstellungen({
   );
 }
 
-function Versionen({ d }: { d: FormularDetailDto }) {
+function Versionen({ d, onAnsehen }: { d: FormularDetailDto; onAnsehen: (nummer: number) => void }) {
   return (
-    <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "minmax(64px,0.5fr) minmax(0,1.4fr) minmax(0,1.4fr) minmax(80px,0.6fr)" } as CSSProperties}>
+    <div
+      className="zv-karten-liste"
+      style={{ "--zv-liste-spalten": "minmax(64px,0.4fr) minmax(0,1.4fr) minmax(0,1.4fr) minmax(80px,0.6fr) minmax(220px,1fr)" } as CSSProperties}
+    >
       <div className="zv-liste-kopf">
         <span>Version</span>
         <span>Veröffentlicht</span>
         <span>von</span>
         <span>Protokolle</span>
+        <span />
       </div>
       {d.versionen.map((v) => (
         <div key={v.nummer} className="zv-info-karte">
@@ -833,6 +913,16 @@ function Versionen({ d }: { d: FormularDetailDto }) {
           </span>
           <span className="zv-liste-zelle zv-mono" data-label="Protokolle">
             {v.anzahlProtokolle}
+          </span>
+          <span className="zv-liste-zelle zv-formular-versions-knoepfe">
+            <button type="button" className="zv-btn zv-btn-sekundaer zv-btn-klein" onClick={() => onAnsehen(v.nummer)}>
+              <ISichtbar size={14} />
+              {v.veroeffentlichtAm === null ? "Bearbeiten" : "Ansehen"}
+            </button>
+            {/* Die Markierung der Aenderungen ist im Aufbau standardmaessig an: "Ansehen" ist damit zugleich der Vergleich. */}
+            {d.versionen.some((x) => x.nummer < v.nummer) && v.veroeffentlichtAm !== null && (
+              <span className="zv-sub-inline">mit Änderungen zu {d.versionen.find((x) => x.nummer < v.nummer)!.nummer}</span>
+            )}
           </span>
         </div>
       ))}
