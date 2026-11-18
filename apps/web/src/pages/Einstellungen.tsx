@@ -17,10 +17,12 @@ import { MeinProfil } from "../components/MeinProfil";
 import { Sicherheit } from "./Sicherheit";
 import { Standorte } from "./Standorte";
 import { KassenbuchTypen } from "./KassenbuchTypen";
+import { FormulareVerwaltung } from "./FormulareVerwaltung";
 import {
   IAnpassen,
   IBestaetigen,
   IDarstellung,
+  IDokument,
   IMitarbeitende,
   IEinklappen,
   IErfolg,
@@ -51,7 +53,7 @@ import {
 } from "../navigation";
 
 type KontoBereich = "profil" | "darstellung" | "anmeldung";
-type TraegerBereich = "erscheinungsbild" | "standorte" | "kassenbuch" | "datenschutz" | "rueckmeldungen";
+type TraegerBereich = "erscheinungsbild" | "standorte" | "kassenbuch" | "formulare" | "datenschutz" | "rueckmeldungen";
 type Bereich = KontoBereich | TraegerBereich;
 
 interface BereichEintrag<B extends Bereich> {
@@ -77,11 +79,12 @@ const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof Einstel
   { wert: "erscheinungsbild", label: "Erscheinungsbild", icon: ITraeger, recht: "erscheinungsbild", beschreibung: "Trägerfarbe und Grundfarbe des dunklen Designs." },
   { wert: "standorte", label: "Standorte", icon: IStandort, recht: "standorte", beschreibung: "Standorte des Trägers anlegen und bearbeiten." },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch, recht: "kassenbuch", beschreibung: "Buchungstypen für das Kassenbuch." },
+  { wert: "formulare", label: "Formulare", icon: IDokument, recht: "formulare", beschreibung: "Formulare für Protokolle aus Vorlagen übernehmen und stilllegen." },
   { wert: "datenschutz", label: "Datenschutz", icon: ISicherheit, recht: "datenschutz", beschreibung: "Fristen, nach denen Daten endgültig gelöscht werden." },
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
 ];
 
-const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false };
+const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false };
 
 /**
  * Zwei Gruppen statt einer Reiterleiste: "Mein Konto" gilt nur fuer die
@@ -222,6 +225,7 @@ export function Einstellungen({
         )}
         {aktuell.wert === "standorte" && <Standorte />}
         {aktuell.wert === "kassenbuch" && <KassenbuchTypen />}
+        {aktuell.wert === "formulare" && <FormulareVerwaltung />}
         {aktuell.wert === "datenschutz" && mandant && (
           <div className="zv-einstellungen-raster">
             <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />

@@ -86,6 +86,17 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "tagesberichte", aktion: "ansehen" },
   { modul: "tagesberichte", aktion: "anlegen" },
 
+  // Protokolle aus Formularen (migrations/0075). "ausfuellen" legt Entwuerfe an
+  // und schliesst sie ab; das EIGENE abgeschlossene Protokoll darf die
+  // Autor:in immer korrigieren (mit Grund, Historie per Trigger). Fremde
+  // korrigieren ist sensibel: es veraendert die Dokumentation einer anderen
+  // Person gegenueber dem Amt. "formulare-verwalten" uebernimmt Vorlagen und
+  // legt Formulare still (Editor folgt in Schritt 2).
+  { modul: "protokolle", aktion: "ansehen" },
+  { modul: "protokolle", aktion: "ausfuellen" },
+  { modul: "protokolle", aktion: "korrigieren-fremde", sensibel: true },
+  { modul: "protokolle", aktion: "formulare-verwalten" },
+
   // Stundenbuchung (migrations/0072). "buchen" gilt fuer die eigene Leistung;
   // fuer eine andere Person buchen darf nur, wer "fuer-andere-buchen" hat.
   // "stornieren" betrifft FREMDE Buchungen -- die eigene darf die buchende

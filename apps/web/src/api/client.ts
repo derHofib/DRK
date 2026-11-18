@@ -1,4 +1,11 @@
 import type {
+  FeldWerte,
+  FormularDto,
+  FormularVorlageDto,
+  ProtokollAenderungDto,
+  ProtokollDto,
+  ProtokolleRechteDto,
+  ProtokollKurzDto,
   AnwaerterDto,
   EinstellungenRechteDto,
   RueckmeldungBerechtigungDto,
@@ -100,7 +107,9 @@ export interface KassenbuchungAnlegenPayload {
 export class ApiFehler extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    /** Feldgenaue Fehler, wo der Server sie liefert (Protokolle: { schluessel, meldung }[]). */
+    readonly fehler?: { schluessel: string; meldung: string }[]
   ) {
     super(message);
   }
@@ -221,7 +230,11 @@ async function request<T>(path: string, init?: RequestInit, ohneToken = false): 
       sitzungBeenden();
     }
     const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new ApiFehler(body.message ?? `Anfrage fehlgeschlagen (${res.status})`, res.status);
+    throw new ApiFehler(
+      body.message ?? `Anfrage fehlgeschlagen (${res.status})`,
+      res.status,
+      Array.isArray(body.fehler) ? body.fehler : undefined
+    );
   }
 
   if (res.status === 204) return undefined as T;
@@ -407,6 +420,25 @@ export const api = {
     request<MandantDto>("/mandant/me/klient-loeschfrist", { method: "PATCH", body: JSON.stringify({ tage }) }),
   mandantRueckmeldungWeitergabeSetzen: (aktiv: boolean) =>
     request<MandantDto>("/mandant/me/rueckmeldung-weitergabe", { method: "PATCH", body: JSON.stringify({ aktiv }) }),
+  protokolleRechte: () => request<ProtokolleRechteDto>("/protokolle/rechte"),
+  formulare: () => request<FormularDto[]>("/formulare"),
+  formularVorlagen: () => request<FormularVorlageDto[]>("/formulare/vorlagen"),
+  formularVorlageUebernehmen: (schluessel: string) =>
+    request<FormularDto>(`/formulare/vorlagen/${encodeURIComponent(schluessel)}`, { method: "POST" }),
+  formularArchivieren: (id: string, archiviert: boolean) =>
+    request<FormularDto>(`/formulare/${id}/archivieren`, { method: "POST", body: JSON.stringify({ archiviert }) }),
+  protokolle: (klientId: string) => request<ProtokollKurzDto[]>(`/protokolle?klientId=${encodeURIComponent(klientId)}`),
+  protokoll: (id: string) => request<ProtokollDto>(`/protokolle/${id}`),
+  protokollHistorie: (id: string) => request<ProtokollAenderungDto[]>(`/protokolle/${id}/historie`),
+  protokollAnlegen: (formularId: string, klientId: string) =>
+    request<ProtokollDto>("/protokolle", { method: "POST", body: JSON.stringify({ formularId, klientId }) }),
+  protokollEntwurfSpeichern: (id: string, werte: FeldWerte) =>
+    request<ProtokollDto>(`/protokolle/${id}/entwurf`, { method: "PUT", body: JSON.stringify({ werte }) }),
+  protokollAbschliessen: (id: string, werte: FeldWerte) =>
+    request<ProtokollDto>(`/protokolle/${id}/abschliessen`, { method: "POST", body: JSON.stringify({ werte }) }),
+  protokollKorrigieren: (id: string, werte: FeldWerte, grund: string) =>
+    request<ProtokollDto>(`/protokolle/${id}/korrektur`, { method: "POST", body: JSON.stringify({ werte, grund }) }),
+  protokollEntwurfLoeschen: (id: string) => request<{ ok: true }>(`/protokolle/${id}`, { method: "DELETE" }),
   einstellungenRechte: () => request<EinstellungenRechteDto>("/mandant/me/einstellungen-rechte"),
 
   // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)

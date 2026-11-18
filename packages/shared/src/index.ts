@@ -121,6 +121,8 @@ export interface EinstellungenRechteDto {
   kassenbuch: boolean;
   /** Löschfristen und Rückmeldungs-Weitergabe -- mandanten.datenschutz-bearbeiten. */
   datenschutz: boolean;
+  /** Formulare für Protokolle -- protokolle.formulare-verwalten. */
+  formulare: boolean;
 }
 
 export interface RueckmeldungBerechtigungDto {
@@ -1433,4 +1435,754 @@ export function formatMinutenAlsStunden(minuten: number): string {
   const vorzeichen = minuten < 0 ? "-" : "";
   const m = Math.abs(minuten);
   return `${vorzeichen}${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+}
+
+// ===========================================================================
+// Formular-Baukasten (Protokolle, migrations/0075)
+// ===========================================================================
+//
+// Bewusst in DIESER Datei statt in einer eigenen formular.ts: im Entwicklungs-
+// betrieb laedt Node das Paket direkt als TypeScript (Typen werden nur
+// entfernt), und ein relativer Import ohne Dateiendung ("./formular") ist dort
+// nicht aufloesbar -- mit Endung (".ts") wiederum nicht im CommonJS-Build fuer
+// den Container (Dockerfile). Ein Modul, eine Datei vermeidet beides.
+
+/**
+ * Formular-Baukasten: Aufbau einer Formulardefinition und der Auswerter fuer
+ * ihre Logik (Sichtbarkeit, Pflicht, Pruefung, Berechnung).
+ *
+ * Warum hier in packages/shared und nicht je einmal in API und Web: dieselbe
+ * Regel muss im Browser (sofortiges Ein-/Ausblenden) und auf dem Server
+ * (Pruefung beim Abschliessen) GLEICH ausgewertet werden. Zwei Implementierungen
+ * laufen irgendwann auseinander -- und dann akzeptiert der Server ein Feld, das
+ * die Oberflaeche verborgen hat, oder umgekehrt. Siehe Konzept
+ * /mnt/project-files/protokolle/konzept-protokolle.md, Abschnitt 5.1.
+ *
+ * Logik ist bewusst DEKLARATIV (JSON) und nie ausfuehrbarer Code: ein Traeger
+ * baut seine Formulare selbst, und eine Formel darf im Browser anderer
+ * Mitarbeitender nichts anderes tun koennen als rechnen.
+ */
+
+// ---------------------------------------------------------------------------
+// Datenquellen fuer die Vorausfuellung
+// ---------------------------------------------------------------------------
+
+/**
+ * Katalog der Datenquellen. Eine Code-Registry wie rechte/registry.ts: ein
+ * Formular kann nur anzapfen, was hier steht -- keine beliebige Tabelle.
+ * Sensible Stammdaten (Diagnosen, Medikamente, IBAN) stehen bewusst nicht drin.
+ */
+export const DATENQUELLEN = {
+  "klient.name": { label: "Klient:in › Name", identitaet: true },
+  "klient.vorname": { label: "Klient:in › Vorname", identitaet: true },
+  "klient.nachname": { label: "Klient:in › Nachname", identitaet: true },
+  "klient.initialen": { label: "Klient:in › Initialen", identitaet: true },
+  "klient.geburtsdatum": { label: "Klient:in › Geburtsdatum", identitaet: true },
+  "klient.alter": { label: "Klient:in › Alter", identitaet: true },
+  "klient.aktenzeichen": { label: "Klient:in › Aktenzeichen", identitaet: true },
+  "klient.amt": { label: "Klient:in › Amt", identitaet: false },
+  "klient.bezugsbetreuung": { label: "Klient:in › Bezugsbetreuung", identitaet: false },
+  "belegung.standort": { label: "Belegung › Standort", identitaet: false },
+  "belegung.zimmer": { label: "Belegung › Zimmer", identitaet: false },
+  "belegung.wohnung": { label: "Belegung › Standort und Zimmer", identitaet: false },
+  "ausfuellende.name": { label: "Ausfüllende Person › Name", identitaet: false },
+  "zeit.heute": { label: "Zeit › Heute", identitaet: false },
+  "zeit.jetzt": { label: "Zeit › Jetzt (Uhrzeit)", identitaet: false },
+} as const satisfies Record<string, { label: string; identitaet: boolean }>;
+
+export type Datenquelle = keyof typeof DATENQUELLEN;
+
+/**
+ * "festgehalten": nur lesend, der Stand beim Abschliessen wird gespeichert.
+ * "vorschlag": vorausgefuellt, darf geaendert werden.
+ * Die dritte Art aus dem Konzept ("Anzeige") ist kein Eingabefeld, sondern der
+ * eigene Baustein "anzeige" -- er erzeugt nie einen Datenpunkt.
+ *
+ * Identitaetsquellen (Name, Geburtsdatum, ...) duerfen NIE festgehalten oder
+ * vorgeschlagen werden, nur angezeigt: eine Kopie in jedem Protokoll wuerde
+ * die Anonymisierung (Migration 0070) unterlaufen. pruefeDefinition() lehnt das ab.
+ */
+export type VorausfuellArt = "festgehalten" | "vorschlag";
+
+export interface Vorausfuellung {
+  quelle: Datenquelle;
+  art: VorausfuellArt;
+}
+
+// ---------------------------------------------------------------------------
+// Bedingungen und Ausdruecke
+// ---------------------------------------------------------------------------
+
+export type BedingungOperator =
+  | "ist"
+  | "ist_nicht"
+  | "eine_von"
+  | "enthaelt"
+  | "leer"
+  | "nicht_leer"
+  | "groesser"
+  | "kleiner"
+  | "mindestens"
+  | "hoechstens";
+
+export type Bedingung =
+  | { alle: Bedingung[] }
+  | { eine: Bedingung[] }
+  | { feld: string; op: BedingungOperator; wert?: string | number | boolean | string[] };
+
+export type Ausdruck =
+  | number
+  | { feld: string }
+  | { op: "+" | "-" | "*" | "/"; a: Ausdruck; b: Ausdruck }
+  | { fn: "summe" | "anzahl" | "mittelwert" | "min" | "max"; args: Ausdruck[] }
+  /** Minuten zwischen zwei Uhrzeiten; ueber Mitternacht wird gerechnet ("23:10" -> "00:35" = 85). */
+  | { fn: "dauer_minuten"; von: string; bis: string }
+  | { fn: "tage_zwischen"; von: string; bis: string }
+  | { wenn: Bedingung; dann: Ausdruck; sonst: Ausdruck };
+
+/** Pruefung gegen ein anderes Feld, z. B. "Ende nach Beginn". */
+export interface Vergleichspruefung {
+  op: "groesser" | "kleiner" | "mindestens" | "hoechstens";
+  feld: string;
+  meldung: string;
+}
+
+// ---------------------------------------------------------------------------
+// Bausteine
+// ---------------------------------------------------------------------------
+
+export interface Option {
+  /** Fester Schluessel (wird gespeichert). Einmal benutzt, nie loeschen -- nur ausblenden. */
+  wert: string;
+  label: string;
+  /** Fuer neue Eingaben nicht mehr waehlbar; alte Protokolle behalten die Beschriftung. */
+  ausgeblendet?: boolean;
+}
+
+interface BausteinBasis {
+  /**
+   * Fester technischer Name. Bruecke zwischen Formular, Datenpunkt, PDF-Layout
+   * und Auswertung -- bleibt ueber alle Versionen gleich.
+   */
+  schluessel: string;
+  beschriftung: string;
+  hilfetext?: string;
+  sichtbarWenn?: Bedingung;
+}
+
+interface EingabeBasis extends BausteinBasis {
+  /** true = immer, Bedingung = nur wenn sie zutrifft. */
+  pflicht?: boolean | Bedingung;
+  /** Nie in externe PDF-Layouts (Datenminimierung gegenueber dem Amt). */
+  intern?: boolean;
+  vorausfuellen?: Vorausfuellung;
+  pruefungen?: Vergleichspruefung[];
+}
+
+export interface AbschnittBaustein extends BausteinBasis {
+  typ: "abschnitt";
+  kinder: Baustein[];
+}
+export interface HinweisBaustein extends BausteinBasis {
+  typ: "hinweis";
+  ton?: "info" | "warnung";
+}
+/** Nur lesend, frisch aus der Quelle gelesen, nie gespeichert. */
+export interface AnzeigeBaustein extends BausteinBasis {
+  typ: "anzeige";
+  quelle: Datenquelle;
+}
+export interface TextBaustein extends EingabeBasis {
+  typ: "kurztext" | "langtext";
+  maxLaenge?: number;
+}
+export interface ZahlBaustein extends EingabeBasis {
+  typ: "zahl";
+  min?: number;
+  max?: number;
+  nachkommastellen?: number;
+  einheit?: string;
+}
+export interface DatumBaustein extends EingabeBasis {
+  typ: "datum";
+  nichtInZukunft?: boolean;
+}
+export interface UhrzeitBaustein extends EingabeBasis {
+  typ: "uhrzeit";
+}
+export interface JaNeinBaustein extends EingabeBasis {
+  typ: "ja_nein";
+}
+export interface AuswahlBaustein extends EingabeBasis {
+  typ: "auswahl" | "mehrfachauswahl";
+  optionen: Option[];
+}
+export interface SkalaBaustein extends EingabeBasis {
+  typ: "skala";
+  min: number;
+  max: number;
+  labelMin?: string;
+  labelMax?: string;
+}
+/** Auswahl von Mitarbeitenden (gespeichert: Benutzer-IDs). */
+export interface MitarbeitendeBaustein extends EingabeBasis {
+  typ: "mitarbeitende";
+}
+/** Nur lesend; wird beim Abschliessen mitgespeichert, damit eine spaetere Formelaenderung nichts rueckwirkend aendert. */
+export interface BerechnungBaustein extends BausteinBasis {
+  typ: "berechnung";
+  ausdruck: Ausdruck;
+  einheit?: string;
+  nachkommastellen?: number;
+}
+
+export type EingabeBaustein =
+  | TextBaustein
+  | ZahlBaustein
+  | DatumBaustein
+  | UhrzeitBaustein
+  | JaNeinBaustein
+  | AuswahlBaustein
+  | SkalaBaustein
+  | MitarbeitendeBaustein;
+
+export type Baustein = AbschnittBaustein | HinweisBaustein | AnzeigeBaustein | BerechnungBaustein | EingabeBaustein;
+export type BausteinTyp = Baustein["typ"];
+
+export interface FormularDefinition {
+  bausteine: Baustein[];
+  /**
+   * Datumsfeld, nach dem das Protokoll in der Akte einsortiert wird ("Nacht
+   * vom", "Datum des Besuchs"). Ohne Angabe gilt der Tag des Anlegens.
+   */
+  bezugsdatumFeld?: string;
+}
+
+/** Ein gespeicherter Wert. Datum "JJJJ-MM-TT", Uhrzeit "HH:MM", Mehrfach/Mitarbeitende als Liste. */
+export type FeldWert = string | number | boolean | string[];
+export type FeldWerte = Record<string, FeldWert | null | undefined>;
+
+/** Speicherform je Bausteintyp -- entspricht den typisierten Spalten von protokoll_wert. */
+export type Datentyp = "text" | "zahl" | "datum" | "zeit" | "bool" | "liste";
+
+export function datentypVon(typ: BausteinTyp): Datentyp | null {
+  switch (typ) {
+    case "kurztext":
+    case "langtext":
+    case "auswahl":
+      return "text";
+    case "zahl":
+    case "skala":
+    case "berechnung":
+      return "zahl";
+    case "datum":
+      return "datum";
+    case "uhrzeit":
+      return "zeit";
+    case "ja_nein":
+      return "bool";
+    case "mehrfachauswahl":
+    case "mitarbeitende":
+      return "liste";
+    default:
+      return null;
+  }
+}
+
+export const BAUSTEIN_LABEL: Record<BausteinTyp, string> = {
+  abschnitt: "Abschnitt",
+  hinweis: "Hinweistext",
+  anzeige: "Vorausgefüllte Anzeige",
+  kurztext: "Kurztext",
+  langtext: "Langtext",
+  zahl: "Zahl",
+  datum: "Datum",
+  uhrzeit: "Uhrzeit",
+  ja_nein: "Ja/Nein",
+  auswahl: "Einfachauswahl",
+  mehrfachauswahl: "Mehrfachauswahl",
+  skala: "Skala",
+  mitarbeitende: "Mitarbeitende",
+  berechnung: "Berechnung",
+};
+
+// ---------------------------------------------------------------------------
+// Hilfen
+// ---------------------------------------------------------------------------
+
+/** Alle Bausteine in Formularreihenfolge, Abschnitte vor ihren Kindern. */
+export function alleBausteine(def: FormularDefinition): Baustein[] {
+  const out: Baustein[] = [];
+  const lauf = (liste: Baustein[]) => {
+    for (const b of liste) {
+      out.push(b);
+      if (b.typ === "abschnitt") lauf(b.kinder);
+    }
+  };
+  lauf(def.bausteine);
+  return out;
+}
+
+export function istEingabe(b: Baustein): b is EingabeBaustein {
+  return datentypVon(b.typ) !== null && b.typ !== "berechnung";
+}
+
+/** Bausteine, die einen Datenpunkt erzeugen (Eingaben und Berechnungen). */
+export function speichernderBaustein(b: Baustein): b is EingabeBaustein | BerechnungBaustein {
+  return datentypVon(b.typ) !== null;
+}
+
+function istLeer(w: FeldWert | null | undefined): boolean {
+  return w === null || w === undefined || w === "" || (Array.isArray(w) && w.length === 0);
+}
+
+const DATUM_RE = /^\d{4}-\d{2}-\d{2}$/;
+const UHRZEIT_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function gueltigesDatum(s: string): boolean {
+  if (!DATUM_RE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+function minutenVon(uhrzeit: string): number {
+  const [h, m] = uhrzeit.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function tageVon(datum: string): number {
+  return Math.round(new Date(`${datum}T00:00:00Z`).getTime() / 86_400_000);
+}
+
+/** Vergleichbarer Zahlwert fuer groesser/kleiner: Zahl, Datum (Tage) oder Uhrzeit (Minuten). */
+function vergleichswert(w: FeldWert | null | undefined): number | null {
+  if (typeof w === "number") return w;
+  if (typeof w === "string") {
+    if (DATUM_RE.test(w)) return tageVon(w);
+    if (UHRZEIT_RE.test(w)) return minutenVon(w);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Auswertung
+// ---------------------------------------------------------------------------
+
+export function bedingungErfuellt(b: Bedingung, werte: FeldWerte): boolean {
+  if ("alle" in b) return b.alle.every((x) => bedingungErfuellt(x, werte));
+  if ("eine" in b) return b.eine.some((x) => bedingungErfuellt(x, werte));
+  const w = werte[b.feld];
+  switch (b.op) {
+    case "leer":
+      return istLeer(w);
+    case "nicht_leer":
+      return !istLeer(w);
+    case "ist":
+      return !istLeer(w) && w === b.wert;
+    case "ist_nicht":
+      return istLeer(w) || w !== b.wert;
+    case "eine_von":
+      return Array.isArray(b.wert) && typeof w === "string" && b.wert.includes(w);
+    case "enthaelt":
+      return Array.isArray(w) && typeof b.wert === "string" && w.includes(b.wert);
+    case "groesser":
+    case "kleiner":
+    case "mindestens":
+    case "hoechstens": {
+      const links = vergleichswert(w);
+      const rechts = vergleichswert(b.wert as FeldWert);
+      if (links === null || rechts === null) return false;
+      return vergleiche(links, b.op, rechts);
+    }
+  }
+}
+
+function vergleiche(a: number, op: "groesser" | "kleiner" | "mindestens" | "hoechstens", b: number): boolean {
+  switch (op) {
+    case "groesser":
+      return a > b;
+    case "kleiner":
+      return a < b;
+    case "mindestens":
+      return a >= b;
+    case "hoechstens":
+      return a <= b;
+  }
+}
+
+/** null, wenn ein benoetigtes Feld leer ist -- ein halb ausgefuelltes Formular rechnet nicht mit 0 weiter. */
+export function berechneAusdruck(a: Ausdruck, werte: FeldWerte): number | null {
+  if (typeof a === "number") return a;
+  if ("feld" in a) {
+    const w = werte[a.feld];
+    if (typeof w === "number") return w;
+    if (typeof w === "boolean") return w ? 1 : 0;
+    if (Array.isArray(w)) return w.length;
+    return null;
+  }
+  if ("op" in a) {
+    const x = berechneAusdruck(a.a, werte);
+    const y = berechneAusdruck(a.b, werte);
+    if (x === null || y === null) return null;
+    switch (a.op) {
+      case "+":
+        return x + y;
+      case "-":
+        return x - y;
+      case "*":
+        return x * y;
+      case "/":
+        return y === 0 ? null : x / y;
+    }
+  }
+  if ("wenn" in a) return bedingungErfuellt(a.wenn, werte) ? berechneAusdruck(a.dann, werte) : berechneAusdruck(a.sonst, werte);
+  switch (a.fn) {
+    case "dauer_minuten": {
+      const von = werte[a.von];
+      const bis = werte[a.bis];
+      if (typeof von !== "string" || typeof bis !== "string" || !UHRZEIT_RE.test(von) || !UHRZEIT_RE.test(bis)) return null;
+      return (minutenVon(bis) - minutenVon(von) + 1440) % 1440;
+    }
+    case "tage_zwischen": {
+      const von = werte[a.von];
+      const bis = werte[a.bis];
+      if (typeof von !== "string" || typeof bis !== "string" || !gueltigesDatum(von) || !gueltigesDatum(bis)) return null;
+      return tageVon(bis) - tageVon(von);
+    }
+    case "anzahl":
+      return a.args.map((x) => berechneAusdruck(x, werte)).filter((x) => x !== null).length;
+    default: {
+      // summe/mittelwert/min/max ueberspringen leere Felder: "Summe der
+      // eingetragenen Betraege" soll schon rechnen, bevor alle Zeilen gefuellt sind.
+      const zahlen = a.args.map((x) => berechneAusdruck(x, werte)).filter((x): x is number => x !== null);
+      if (zahlen.length === 0) return null;
+      if (a.fn === "summe") return zahlen.reduce((s, z) => s + z, 0);
+      if (a.fn === "mittelwert") return zahlen.reduce((s, z) => s + z, 0) / zahlen.length;
+      if (a.fn === "min") return Math.min(...zahlen);
+      return Math.max(...zahlen);
+    }
+  }
+}
+
+function runde(z: number, stellen = 2): number {
+  const f = 10 ** stellen;
+  return Math.round(z * f) / f;
+}
+
+export interface Auswertung {
+  /** Schluessel aller sichtbaren Bausteine. */
+  sichtbar: Set<string>;
+  /** Pflicht nach aktuellem Stand (nur sichtbare Eingaben). */
+  pflicht: Set<string>;
+  /** Eingaben (sichtbar) plus berechnete Werte -- genau das, was gespeichert wird. */
+  werte: Record<string, FeldWert>;
+}
+
+/**
+ * Wertet Sichtbarkeit, Berechnungen und Pflicht in Formularreihenfolge aus.
+ *
+ * Ein verborgenes Feld zaehlt fuer nachfolgende Bedingungen als LEER -- sonst
+ * koennte ein verworfener Wert noch einen anderen Abschnitt einblenden.
+ * Ein verborgener Abschnitt verbirgt alle seine Kinder.
+ */
+export function werteAus(def: FormularDefinition, eingabe: FeldWerte): Auswertung {
+  const sichtbar = new Set<string>();
+  const pflicht = new Set<string>();
+  const werte: Record<string, FeldWert> = {};
+
+  const lauf = (liste: Baustein[], elternSichtbar: boolean) => {
+    for (const b of liste) {
+      const ist = elternSichtbar && (!b.sichtbarWenn || bedingungErfuellt(b.sichtbarWenn, werte));
+      if (ist) sichtbar.add(b.schluessel);
+      if (b.typ === "abschnitt") {
+        lauf(b.kinder, ist);
+        continue;
+      }
+      if (!ist) continue;
+      if (b.typ === "berechnung") {
+        const z = berechneAusdruck(b.ausdruck, werte);
+        if (z !== null && Number.isFinite(z)) werte[b.schluessel] = runde(z, b.nachkommastellen ?? 2);
+        continue;
+      }
+      if (!istEingabe(b)) continue;
+      const w = eingabe[b.schluessel];
+      if (!istLeer(w)) werte[b.schluessel] = w as FeldWert;
+    }
+  };
+  lauf(def.bausteine, true);
+  // Pflicht erst mit ALLEN Werten: eine Pflicht-Bedingung darf sich auch auf ein
+  // weiter unten stehendes Feld beziehen ("Grund" wird Pflicht, wenn unten
+  // "nicht angetroffen" angekreuzt ist).
+  for (const b of alleBausteine(def)) {
+    if (!istEingabe(b) || !sichtbar.has(b.schluessel)) continue;
+    const p = b.pflicht;
+    if (p === true || (p && typeof p === "object" && bedingungErfuellt(p, werte))) pflicht.add(b.schluessel);
+  }
+  return { sichtbar, pflicht, werte };
+}
+
+export interface FeldFehler {
+  schluessel: string;
+  meldung: string;
+}
+
+/**
+ * Prueft, ob ein Wert ueberhaupt zum Feldtyp passt. Gilt fuer Entwurf UND
+ * Abschluss -- ein Entwurf darf unvollstaendig sein, aber nie falsch getypt
+ * (sonst landet in einer Zahlenspalte ein Text).
+ */
+export function typFehler(b: EingabeBaustein, w: FeldWert, optionen: { erlaubeAusgeblendet?: string[] } = {}): string | null {
+  switch (b.typ) {
+    case "kurztext":
+    case "langtext":
+      if (typeof w !== "string") return "Bitte einen Text eingeben.";
+      if (b.maxLaenge && w.length > b.maxLaenge) return `Höchstens ${b.maxLaenge} Zeichen.`;
+      if (b.typ === "kurztext" && w.includes("\n")) return "Bitte nur eine Zeile.";
+      return null;
+    case "zahl":
+    case "skala": {
+      if (typeof w !== "number" || !Number.isFinite(w)) return "Bitte eine Zahl eingeben.";
+      const min = b.min;
+      const max = b.max;
+      if (min !== undefined && w < min) return `Mindestens ${min}.`;
+      if (max !== undefined && w > max) return `Höchstens ${max}.`;
+      if (b.typ === "skala" && !Number.isInteger(w)) return "Bitte einen Wert der Skala wählen.";
+      if (b.typ === "zahl" && b.nachkommastellen !== undefined && runde(w, b.nachkommastellen) !== w) {
+        return b.nachkommastellen === 0 ? "Bitte eine ganze Zahl." : `Höchstens ${b.nachkommastellen} Nachkommastellen.`;
+      }
+      return null;
+    }
+    case "datum":
+      return typeof w === "string" && gueltigesDatum(w) ? null : "Bitte ein gültiges Datum eingeben.";
+    case "uhrzeit":
+      return typeof w === "string" && UHRZEIT_RE.test(w) ? null : "Bitte eine Uhrzeit (HH:MM) eingeben.";
+    case "ja_nein":
+      return typeof w === "boolean" ? null : "Bitte Ja oder Nein wählen.";
+    case "auswahl": {
+      if (typeof w !== "string") return "Bitte eine Option wählen.";
+      const o = b.optionen.find((x) => x.wert === w);
+      if (!o || (o.ausgeblendet && !optionen.erlaubeAusgeblendet?.includes(w))) return "Diese Option gibt es nicht.";
+      return null;
+    }
+    case "mehrfachauswahl": {
+      if (!Array.isArray(w) || w.some((x) => typeof x !== "string")) return "Bitte Optionen wählen.";
+      if (new Set(w).size !== w.length) return "Eine Option ist doppelt gewählt.";
+      for (const x of w) {
+        const o = b.optionen.find((y) => y.wert === x);
+        if (!o || (o.ausgeblendet && !optionen.erlaubeAusgeblendet?.includes(x))) return "Diese Option gibt es nicht.";
+      }
+      return null;
+    }
+    case "mitarbeitende":
+      if (!Array.isArray(w) || w.some((x) => typeof x !== "string" || !UUID_RE.test(x))) return "Bitte Mitarbeitende auswählen.";
+      return new Set(w).size === w.length ? null : "Eine Person ist doppelt gewählt.";
+  }
+}
+
+/**
+ * Vollstaendige Pruefung fuer das Abschliessen: Typ, Pflicht, Datum nicht in
+ * der Zukunft, Vergleiche mit anderen Feldern. Nur sichtbare Felder zaehlen.
+ */
+export function pruefeWerte(
+  def: FormularDefinition,
+  eingabe: FeldWerte,
+  kontext: { heute: string; erlaubeAusgeblendet?: Record<string, string[]> }
+): FeldFehler[] {
+  const { sichtbar, pflicht, werte } = werteAus(def, eingabe);
+  const fehler: FeldFehler[] = [];
+  for (const b of alleBausteine(def)) {
+    if (!istEingabe(b) || !sichtbar.has(b.schluessel)) continue;
+    const w = werte[b.schluessel];
+    if (w === undefined) {
+      if (pflicht.has(b.schluessel)) fehler.push({ schluessel: b.schluessel, meldung: "Bitte ausfüllen." });
+      continue;
+    }
+    const tf = typFehler(b, w, { erlaubeAusgeblendet: kontext.erlaubeAusgeblendet?.[b.schluessel] });
+    if (tf) {
+      fehler.push({ schluessel: b.schluessel, meldung: tf });
+      continue;
+    }
+    if (b.typ === "datum" && b.nichtInZukunft && typeof w === "string" && w > kontext.heute) {
+      fehler.push({ schluessel: b.schluessel, meldung: "Das Datum darf nicht in der Zukunft liegen." });
+      continue;
+    }
+    for (const p of b.pruefungen ?? []) {
+      const links = vergleichswert(w);
+      const rechts = vergleichswert(werte[p.feld]);
+      if (links === null || rechts === null) continue;
+      if (!vergleiche(links, p.op, rechts)) {
+        fehler.push({ schluessel: b.schluessel, meldung: p.meldung });
+        break;
+      }
+    }
+  }
+  return fehler;
+}
+
+// ---------------------------------------------------------------------------
+// Pruefung der Definition selbst
+// ---------------------------------------------------------------------------
+
+const SCHLUESSEL_RE = /^[a-z][a-z0-9_]{0,62}$/;
+
+/**
+ * Prueft eine Formulardefinition auf Widersprueche, bevor sie gespeichert
+ * wird: doppelte Schluessel, Verweise auf unbekannte Felder, Identitaetsquellen
+ * als "festgehalten". Liefert eine Liste lesbarer Fehler (leer = in Ordnung).
+ */
+export function pruefeDefinition(def: FormularDefinition): string[] {
+  const fehler: string[] = [];
+  if (!def || !Array.isArray(def.bausteine)) return ["Die Definition hat keine Bausteine."];
+  const alle = alleBausteine(def);
+  const typen = new Map<string, BausteinTyp>();
+  for (const b of alle) {
+    if (!SCHLUESSEL_RE.test(b.schluessel)) fehler.push(`Ungültiger Feldschlüssel „${b.schluessel}“.`);
+    if (typen.has(b.schluessel)) fehler.push(`Feldschlüssel „${b.schluessel}“ kommt doppelt vor.`);
+    typen.set(b.schluessel, b.typ);
+    if (!b.beschriftung?.trim() && b.typ !== "hinweis") fehler.push(`„${b.schluessel}“ hat keine Beschriftung.`);
+  }
+  const position = new Map(alle.map((b, i) => [b.schluessel, i]));
+  // Sichtbarkeit und Berechnung werden in Formularreihenfolge ausgewertet
+  // (werteAus); ein Verweis nach UNTEN wuerde dort immer "leer" sehen. Darum
+  // wird er hier abgelehnt, statt still falsch zu rechnen.
+  let nurNachOben: number | null = null;
+  const feldBekannt = (s: string, wo: string) => {
+    const t = typen.get(s);
+    if (!t || datentypVon(t) === null) fehler.push(`${wo} verweist auf „${s}“, das kein Datenfeld ist.`);
+    else if (nurNachOben !== null && (position.get(s) ?? 0) >= nurNachOben) {
+      fehler.push(`${wo} darf sich nur auf weiter oben stehende Felder beziehen („${s}“).`);
+    }
+  };
+  const bedingungPruefen = (bd: Bedingung, wo: string) => {
+    if ("alle" in bd) bd.alle.forEach((x) => bedingungPruefen(x, wo));
+    else if ("eine" in bd) bd.eine.forEach((x) => bedingungPruefen(x, wo));
+    else feldBekannt(bd.feld, wo);
+  };
+  const ausdruckPruefen = (a: Ausdruck, wo: string) => {
+    if (typeof a === "number") return;
+    if ("feld" in a) return feldBekannt(a.feld, wo);
+    if ("op" in a) {
+      ausdruckPruefen(a.a, wo);
+      ausdruckPruefen(a.b, wo);
+      return;
+    }
+    if ("wenn" in a) {
+      bedingungPruefen(a.wenn, wo);
+      ausdruckPruefen(a.dann, wo);
+      ausdruckPruefen(a.sonst, wo);
+      return;
+    }
+    if (a.fn === "dauer_minuten" || a.fn === "tage_zwischen") {
+      feldBekannt(a.von, wo);
+      feldBekannt(a.bis, wo);
+      return;
+    }
+    a.args.forEach((x) => ausdruckPruefen(x, wo));
+  };
+  if (def.bezugsdatumFeld !== undefined && typen.get(def.bezugsdatumFeld) !== "datum") {
+    fehler.push(`Das Bezugsdatum „${def.bezugsdatumFeld}“ ist kein Datumsfeld.`);
+  }
+  alle.forEach((b, i) => {
+    const wo = `„${b.beschriftung || b.schluessel}“`;
+    nurNachOben = i;
+    if (b.sichtbarWenn) bedingungPruefen(b.sichtbarWenn, wo);
+    if (b.typ === "berechnung") ausdruckPruefen(b.ausdruck, wo);
+    nurNachOben = null;
+    if (b.typ === "anzeige" && !(b.quelle in DATENQUELLEN)) fehler.push(`${wo}: unbekannte Datenquelle.`);
+    if (istEingabe(b)) {
+      if (b.pflicht && typeof b.pflicht === "object") bedingungPruefen(b.pflicht, wo);
+      for (const p of b.pruefungen ?? []) feldBekannt(p.feld, wo);
+      if (b.vorausfuellen) {
+        const q = DATENQUELLEN[b.vorausfuellen.quelle as Datenquelle];
+        if (!q) fehler.push(`${wo}: unbekannte Datenquelle.`);
+        else if (q.identitaet) fehler.push(`${wo}: ${q.label} darf nur angezeigt, nicht gespeichert werden.`);
+      }
+      if ((b.typ === "auswahl" || b.typ === "mehrfachauswahl") && b.optionen.length === 0) fehler.push(`${wo} hat keine Optionen.`);
+      if ((b.typ === "auswahl" || b.typ === "mehrfachauswahl") && new Set(b.optionen.map((o) => o.wert)).size !== b.optionen.length) {
+        fehler.push(`${wo}: eine Option kommt doppelt vor.`);
+      }
+      if (b.typ === "skala" && !(Number.isInteger(b.min) && Number.isInteger(b.max) && b.min < b.max)) fehler.push(`${wo}: ungültige Skala.`);
+    }
+  });
+  return fehler;
+}
+
+// ---------------------------------------------------------------------------
+// DTOs
+// ---------------------------------------------------------------------------
+
+export type ProtokollWertQuelle = "eingabe" | "vorschlag" | "vorschlag_geaendert" | "festgehalten" | "berechnet";
+
+export const PROTOKOLL_QUELLE_LABEL: Record<ProtokollWertQuelle, string> = {
+  eingabe: "eingegeben",
+  vorschlag: "vorausgefüllt",
+  vorschlag_geaendert: "Vorschlag geändert",
+  festgehalten: "festgehalten",
+  berechnet: "berechnet",
+};
+
+export interface FormularVorlageDto {
+  schluessel: string;
+  name: string;
+  beschreibung: string;
+  /** Schon in diesem Traeger uebernommen? */
+  uebernommen: boolean;
+}
+
+export interface FormularDto {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  bezug: "klient";
+  archiviert: boolean;
+  /** Juengste veroeffentlichte Version -- mit ihr werden neue Protokolle angelegt. */
+  aktuelleVersion: { id: string; nummer: number; definition: FormularDefinition } | null;
+  anzahlProtokolle: number;
+}
+
+export interface ProtokollKurzDto {
+  id: string;
+  formularId: string;
+  formularName: string;
+  versionNummer: number;
+  klientId: string;
+  klientName: string;
+  autorName: string | null;
+  bezugsdatum: string;
+  abgeschlossen: boolean;
+  abgeschlossenAm: string | null;
+  anzahlAenderungen: number;
+}
+
+export interface ProtokollDto extends ProtokollKurzDto {
+  autorId: string;
+  definition: FormularDefinition;
+  werte: Record<string, FeldWert>;
+  quellen: Record<string, ProtokollWertQuelle>;
+  /** Frisch aus dem Bezug gelesene Anzeigewerte (nie gespeichert). */
+  anzeige: Record<string, string | null>;
+  /** Namen zu Benutzer-IDs in Mitarbeitende-Feldern. */
+  personen: Record<string, string>;
+  /** Entwurf: nur Autor:in. Abgeschlossen: Autor:in oder Recht protokolle.korrigieren-fremde. */
+  bearbeitbar: boolean;
+  /** Gibt es inzwischen eine neuere veroeffentlichte Version dieses Formulars? */
+  neuereVersion: boolean;
+}
+
+export interface ProtokollAenderungDto {
+  id: string;
+  feldSchluessel: string;
+  feldBeschriftung: string;
+  wertAlt: FeldWert | null;
+  wertNeu: FeldWert | null;
+  grund: string;
+  geaendertAm: string;
+  geaendertVonName: string | null;
+}
+
+export interface ProtokolleRechteDto {
+  ansehen: boolean;
+  ausfuellen: boolean;
+  formulareVerwalten: boolean;
 }

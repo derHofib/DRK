@@ -55,9 +55,10 @@ import {
 import { dateiZuBase64 } from "../datei";
 import { formatBetrag, formatDatum, heuteBerlin } from "../format";
 import { HilfeplanTab } from "./klient/HilfeplanTab";
+import { ProtokolleTab } from "./klient/ProtokolleTab";
 import { TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
-type Tab = "ueberblick" | "tagesberichte" | "hilfeplan" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
+type Tab = "ueberblick" | "tagesberichte" | "protokolle" | "hilfeplan" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
 
 const eingabeFeldStil = {
   padding: "6px 8px",
@@ -314,6 +315,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           [
             ["ueberblick", "Überblick", undefined],
             ["tagesberichte", "Tagesberichte", berichte.length],
+            ["protokolle", "Protokolle", undefined],
             ["hilfeplan", "Hilfeplan", undefined],
             ["kassenbuch", "Kassenbuch", undefined],
             ["kostenuebernahmen", "Kostenübernahmen", undefined],
@@ -371,6 +373,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
             onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
           />
         )}
+        {tab === "protokolle" && <ProtokolleTab klientId={klientId} archiviert={!!klient?.archiviertAm} />}
         {tab === "hilfeplan" && <HilfeplanTab klientId={klientId} onBerichtOeffnen={() => setTab("tagesberichte")} />}
         {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
         {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
