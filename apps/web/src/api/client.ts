@@ -565,6 +565,7 @@ export const api = {
   protokollPdfExporte: (protokollId: string) => request<PdfExportAngebotDto[]>(`/protokolle/${protokollId}/pdf-exporte`),
   protokollPdf: (protokollId: string, exportId: string, empfaenger: string | null) =>
     pdfAnfordern(`/protokolle/${protokollId}/pdf`, { exportId, empfaenger }),
+  sammelPdf: (eintraege: { protokollId: string; exportId: string }[]) => pdfAnfordern("/protokolle/sammel-pdf", { eintraege }),
   einstellungenRechte: () => request<EinstellungenRechteDto>("/mandant/me/einstellungen-rechte"),
 
   // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)

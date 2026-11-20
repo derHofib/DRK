@@ -12,6 +12,7 @@
  *  - Klientenakte und Tagesbericht bieten nur Klienten-Formulare an
  *  - Zusammengesetzter FK: kein Protokoll auf einen fremden Standort
  */
+import { PDFDocument } from "pdf-lib";
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
@@ -346,6 +347,74 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
 
     // Klient:in Pflicht: ohne geht nicht.
     expect((await als(betreuerA).post("/protokolle", { formularId: pflichtId })).status).toBe(400);
+  });
+
+  it("Sammel-PDF: mehrere Dokumente in einer Datei, nur interne Exporte, alles oder nichts", async () => {
+    const pdfPost = (token: string, url: string, body: object) =>
+      http()
+        .post(url)
+        .set("Authorization", `Bearer ${token}`)
+        .send(body)
+        .buffer(true)
+        .parse((res, cb) => {
+          const teile: Buffer[] = [];
+          res.on("data", (t: Buffer) => teile.push(t));
+          res.on("end", () => cb(null, Buffer.concat(teile)));
+        });
+    const standard = async (protokollId: string) =>
+      (await als(betreuerA).get(`/protokolle/${protokollId}/pdf-exporte`)).body.find((a: { istStandard: boolean }) => a.istStandard).id as string;
+    const erzeugt = async () =>
+      (await admin.query("SELECT count(*)::int AS n FROM pdf_export_erzeugt WHERE mandant_id = $1", [mandantA])).rows[0].n as number;
+
+    // Zwei abgeschlossene Dokumente verschiedener Formulare und Zuordnungen.
+    const team = (await als(betreuerA).post("/protokolle", { formularId: teamId, standortId: standorte.park })).body.id;
+    expect((await als(betreuerA).post(`/protokolle/${team}/abschliessen`, { werte: { inhalt: "Sammel A" } })).status).toBe(201);
+    const fahrt = (await als(betreuerA).post("/protokolle", { formularId: fahrzeugId })).body.id;
+    expect((await als(betreuerA).post(`/protokolle/${fahrt}/abschliessen`, { werte: { inhalt: "Sammel B" } })).status).toBe(201);
+    const entwurf = (await als(betreuerA).post("/protokolle", { formularId: fahrzeugId })).body.id;
+
+    const einzeln = async (id: string) => {
+      const r = await pdfPost(betreuerA, `/protokolle/${id}/pdf`, { exportId: await standard(id) });
+      expect(r.status).toBe(201);
+      return (await PDFDocument.load(r.body as Buffer)).getPageCount();
+    };
+    const seitenEinzeln = (await einzeln(team)) + (await einzeln(fahrt));
+
+    const vorher = await erzeugt();
+    const eintraege = [
+      { protokollId: team, exportId: await standard(team) },
+      { protokollId: fahrt, exportId: await standard(fahrt) },
+    ];
+    const sammel = await pdfPost(betreuerA, "/protokolle/sammel-pdf", { eintraege });
+    expect(sammel.status).toBe(201);
+    expect(sammel.headers["content-type"]).toBe("application/pdf");
+    expect((await PDFDocument.load(sammel.body as Buffer)).getPageCount()).toBe(seitenEinzeln);
+    expect(await erzeugt()).toBe(vorher + 2);
+
+    // Externer Export: nicht im Stapel, und dann wird auch nichts protokolliert.
+    const brief = await als(leitungA).post(`/formulare/${teamId}/pdf-exporte`, { name: "An das Amt", vorlage: "brief" });
+    expect(brief.status).toBe(201);
+    const extern = await als(leitungA).put(`/pdf-exporte/${brief.body.id}`, {
+      name: "An das Amt",
+      zielgruppe: "extern",
+      logoId: null,
+      gestaltung: brief.body.gestaltung,
+    });
+    expect(extern.status).toBe(200);
+    const mitExtern = await pdfPost(leitungA, "/protokolle/sammel-pdf", {
+      eintraege: [eintraege[1], { protokollId: team, exportId: brief.body.id }],
+    });
+    expect(mitExtern.status).toBe(400);
+    expect(await erzeugt()).toBe(vorher + 2);
+
+    // Entwurf, doppelt, fremder Export, nicht sichtbares Dokument, leer.
+    expect((await pdfPost(betreuerA, "/protokolle/sammel-pdf", { eintraege: [eintraege[0], { protokollId: entwurf, exportId: eintraege[1].exportId }] })).status).toBe(400);
+    expect((await pdfPost(betreuerA, "/protokolle/sammel-pdf", { eintraege: [eintraege[0], eintraege[0]] })).status).toBe(400);
+    expect((await pdfPost(betreuerA, "/protokolle/sammel-pdf", { eintraege: [{ protokollId: team, exportId: eintraege[1].exportId }] })).status).toBe(404);
+    expect((await pdfPost(eingeschraenktA, "/protokolle/sammel-pdf", { eintraege: [eintraege[0]] })).status).toBe(404);
+    expect((await pdfPost(leitungB, "/protokolle/sammel-pdf", { eintraege: [eintraege[1]] })).status).toBe(404);
+    expect((await pdfPost(betreuerA, "/protokolle/sammel-pdf", { eintraege: [] })).status).toBe(400);
+    expect(await erzeugt()).toBe(vorher + 2);
   });
 
   it("Datenbank: Trigger und Fremdschluessel halten Zuordnung und Traeger, auch am Service vorbei", async () => {

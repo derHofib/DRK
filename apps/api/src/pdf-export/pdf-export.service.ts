@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import {
   beispielDaten,
@@ -422,44 +423,87 @@ export class PdfExportService {
     const p = await this.protokolle.detail(protokollId);
     if (!p.abgeschlossen) throw new BadRequestException("Ein PDF gibt es erst, wenn das Protokoll abgeschlossen ist.");
     const extern = await this.rechte.hatRecht("protokolle", "pdf-extern");
-    const { mandantId, benutzerId } = requireTenantContext();
+    return this.db.withTenant((c) => this.erzeugenIn(c, p, exportId, empfaenger, extern));
+  }
+
+  /**
+   * Mehrere Dokumente in eine PDF-Datei (Konzept dokumentation-formulare,
+   * Bild 4): je Dokument ein Export seines Formulars, hintereinander, jeder
+   * mit eigenem Design und eigener Seitenzaehlung.
+   *
+   * Nur interne Exporte: ein externer braucht einen Empfaenger und gehoert
+   * einzeln aus dem Dokument erzeugt -- im Stapel wuerde ein Bericht ans Amt
+   * zu leicht mit etwas anderem zusammen verschickt. Alles in einer
+   * Transaktion: scheitert ein Dokument, wird auch keins der anderen als
+   * erzeugt protokolliert, denn ausgeliefert wird dann ja nichts.
+   */
+  async sammelErzeugen(eintraege: { protokollId: string; exportId: string }[]): Promise<{ pdf: Uint8Array; dateiname: string }> {
+    const protokolle: ProtokollDto[] = [];
+    for (const e of eintraege) {
+      const p = await this.protokolle.detail(e.protokollId);
+      if (!p.abgeschlossen) throw new BadRequestException(`„${p.formularName}“ vom ${datumDe(p.bezugsdatum)} ist noch ein Entwurf.`);
+      protokolle.push(p);
+    }
     return this.db.withTenant(async (c) => {
-      const { rows } = await c.query<VersionZeile>(`${EXPORT_AUSWAHL} WHERE e.id = $1`, [exportId]);
-      const r = rows[0];
-      // 404 statt 403 fuer fremde Formulare: verraet nichts.
-      if (!r || r.formular_id !== p.formularId || r.stillgelegt_am) throw new NotFoundException("PDF-Export nicht gefunden.");
-      if (r.zielgruppe === "extern" && !extern) throw new ForbiddenException("Keine Berechtigung, externe PDFs zu erzeugen.");
-      const g = pdfGestaltungMitVorgaben(r.gestaltung);
-      const kontext = await ladeKontext(c, { benutzerId, logoId: r.logo_id, standortId: p.standortId, klientId: p.klientId, bezugsdatum: p.bezugsdatum });
-      const nr = pruefnummer([r.version_id, p.id, JSON.stringify(p.werte)]);
-      const pdf = await pdfExportRendern({
-        gestaltung: g,
-        zielgruppe: r.zielgruppe,
-        traegerfarbe: kontext.akzentfarbe,
-        logo: kontext.logo,
-        formular: { name: p.formularName, version: p.versionNummer, definition: p.definition },
-        werte: p.werte as FeldWerte,
-        anzeige: p.anzeige,
-        personen: p.personen,
-        platzhalter: {
-          ...kontext.platzhalter,
-          ...kontext.klient,
-          "formular.name": p.formularName,
-          "formular.version": String(p.versionNummer),
-          "protokoll.datum": datumDe(p.bezugsdatum),
-          "protokoll.abgeschlossen_von": p.autorName,
-          pruefnummer: nr,
-        },
-        empfaenger: g.anschriftfeld ? empfaenger : null,
-      });
-      await c.query(
-        `INSERT INTO pdf_export_erzeugt (mandant_id, pdf_export_version_id, protokoll_id, standort_id, empfaenger, sha256, erzeugt_von)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [mandantId, r.version_id, p.id, kontext.standortId, g.anschriftfeld ? empfaenger : null, createHash("sha256").update(pdf).digest("hex"), benutzerId]
-      );
-      const datei = `${p.formularName} ${p.bezugsdatum} ${r.name}`.replace(/[^\p{L}\p{N} ._-]+/gu, "").replace(/\s+/g, "-");
-      return { pdf, dateiname: `${datei}.pdf` };
+      const gesamt = await PDFDocument.create();
+      for (const [i, e] of eintraege.entries()) {
+        const { pdf } = await this.erzeugenIn(c, protokolle[i], e.exportId, null, false, true);
+        const teil = await PDFDocument.load(pdf);
+        for (const seite of await gesamt.copyPages(teil, teil.getPageIndices())) gesamt.addPage(seite);
+      }
+      gesamt.setTitle(`Dokumentation ${heuteBerlin()}`);
+      return { pdf: await gesamt.save(), dateiname: `Dokumentation-${heuteBerlin()}-${eintraege.length}-Dokumente.pdf` };
     });
+  }
+
+  /** `extern`: darf diese Person externe Exporte erzeugen? */
+  private async erzeugenIn(
+    c: PoolClient,
+    p: ProtokollDto,
+    exportId: string,
+    empfaenger: string | null,
+    extern: boolean,
+    sammel = false
+  ): Promise<{ pdf: Uint8Array; dateiname: string }> {
+    const { mandantId, benutzerId } = requireTenantContext();
+    const { rows } = await c.query<VersionZeile>(`${EXPORT_AUSWAHL} WHERE e.id = $1`, [exportId]);
+    const r = rows[0];
+    // 404 statt 403 fuer fremde Formulare: verraet nichts.
+    if (!r || r.formular_id !== p.formularId || r.stillgelegt_am) throw new NotFoundException("PDF-Export nicht gefunden.");
+    if (r.zielgruppe === "extern" && sammel) {
+      throw new BadRequestException(`„${r.name}“ ist ein Export für Externe – bitte einzeln aus dem Dokument erzeugen.`);
+    }
+    if (r.zielgruppe === "extern" && !extern) throw new ForbiddenException("Keine Berechtigung, externe PDFs zu erzeugen.");
+    const g = pdfGestaltungMitVorgaben(r.gestaltung);
+    const kontext = await ladeKontext(c, { benutzerId, logoId: r.logo_id, standortId: p.standortId, klientId: p.klientId, bezugsdatum: p.bezugsdatum });
+    const nr = pruefnummer([r.version_id, p.id, JSON.stringify(p.werte)]);
+    const pdf = await pdfExportRendern({
+      gestaltung: g,
+      zielgruppe: r.zielgruppe,
+      traegerfarbe: kontext.akzentfarbe,
+      logo: kontext.logo,
+      formular: { name: p.formularName, version: p.versionNummer, definition: p.definition },
+      werte: p.werte as FeldWerte,
+      anzeige: p.anzeige,
+      personen: p.personen,
+      platzhalter: {
+        ...kontext.platzhalter,
+        ...kontext.klient,
+        "formular.name": p.formularName,
+        "formular.version": String(p.versionNummer),
+        "protokoll.datum": datumDe(p.bezugsdatum),
+        "protokoll.abgeschlossen_von": p.autorName,
+        pruefnummer: nr,
+      },
+      empfaenger: g.anschriftfeld ? empfaenger : null,
+    });
+    await c.query(
+      `INSERT INTO pdf_export_erzeugt (mandant_id, pdf_export_version_id, protokoll_id, standort_id, empfaenger, sha256, erzeugt_von)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [mandantId, r.version_id, p.id, kontext.standortId, g.anschriftfeld ? empfaenger : null, createHash("sha256").update(pdf).digest("hex"), benutzerId]
+    );
+    const datei = `${p.formularName} ${p.bezugsdatum} ${r.name}`.replace(/[^\p{L}\p{N} ._-]+/gu, "").replace(/\s+/g, "-");
+    return { pdf, dateiname: `${datei}.pdf` };
   }
 }
 

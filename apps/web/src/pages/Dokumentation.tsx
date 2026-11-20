@@ -8,10 +8,21 @@ import {
   type ProtokolleRechteDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
-import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
+import {
+  Filterleiste,
+  OptionenFilter,
+  trifftSuche,
+} from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { IFehler, ILeerTagesberichte, INeu, IStandort } from "../components/icons";
+import {
+  IFehler,
+  IHerunterladen,
+  ILeerTagesberichte,
+  INeu,
+  IStandort,
+} from "../components/icons";
+import { SammelPdf } from "./dokumentation/SammelPdf";
 import { formatDatum } from "../format";
 import { ProtokollDetail } from "./klient/ProtokolleTab";
 import { Tagesberichte } from "./Tagesberichte";
@@ -21,14 +32,25 @@ import { zuordnungText } from "./dokumentation/zuordnung";
  * Was links gewaehlt ist: die Tagesberichte (eigene Tabelle, eigene Logik),
  * alle Protokolle, ein einzelnes Formular oder die eigenen Entwuerfe.
  */
-type Wahl = { art: "tagesberichte" } | { art: "alle" } | { art: "entwuerfe" } | { art: "formular"; id: string };
+type Wahl =
+  | { art: "tagesberichte" }
+  | { art: "alle" }
+  | { art: "entwuerfe" }
+  | { art: "formular"; id: string };
 const WAHL_SCHLUESSEL = "zv-dokumentation-wahl";
 
 function wahlLesen(): Wahl {
   try {
     const roh = sessionStorage.getItem(WAHL_SCHLUESSEL);
     const w = roh ? (JSON.parse(roh) as Wahl) : null;
-    if (w && (w.art === "alle" || w.art === "entwuerfe" || w.art === "tagesberichte" || (w.art === "formular" && typeof w.id === "string"))) return w;
+    if (
+      w &&
+      (w.art === "alle" ||
+        w.art === "entwuerfe" ||
+        w.art === "tagesberichte" ||
+        (w.art === "formular" && typeof w.id === "string"))
+    )
+      return w;
   } catch {
     // ohne Speicher oder kaputter Wert: Tagesberichte wie bisher
   }
@@ -51,7 +73,9 @@ const GRUPPEN: { titel: string; zuordnungen: FormularZuordnung[] }[] = [
  */
 export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
   // Ein Sprung "Tagesbericht für … schreiben" landet immer bei den Tagesberichten.
-  const [wahl, setWahlRoh] = useState<Wahl>(() => (startKlientId ? { art: "tagesberichte" } : wahlLesen()));
+  const [wahl, setWahlRoh] = useState<Wahl>(() =>
+    startKlientId ? { art: "tagesberichte" } : wahlLesen(),
+  );
   const [liste, setListe] = useState<ProtokollKurzDto[] | null>(null);
   const [angebot, setAngebot] = useState<DokumentationsAngebotDto[]>([]);
   const [rechte, setRechte] = useState<ProtokolleRechteDto | null>(null);
@@ -72,7 +96,13 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
     api
       .protokolle()
       .then(setListe)
-      .catch((err) => setFehler(err instanceof Error ? err.message : "Protokolle konnten nicht geladen werden."));
+      .catch((err) =>
+        setFehler(
+          err instanceof Error
+            ? err.message
+            : "Protokolle konnten nicht geladen werden.",
+        ),
+      );
   }
   useEffect(() => {
     laden();
@@ -80,7 +110,11 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
       .protokolleRechte()
       .then((r) => {
         setRechte(r);
-        if (r.ausfuellen) api.dokumentationsAngebot().then(setAngebot).catch(() => setAngebot([]));
+        if (r.ausfuellen)
+          api
+            .dokumentationsAngebot()
+            .then(setAngebot)
+            .catch(() => setAngebot([]));
       })
       .catch(() => setRechte(null));
   }, []);
@@ -88,10 +122,24 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
   // Die Formularspalte zeigt, was es gibt: Formulare mit Dokumenten plus die,
   // die man gerade ausfuellen kann. Zuordnung jeweils die der neuesten Version.
   const formulare = useMemo(() => {
-    const je = new Map<string, { id: string; name: string; zuordnung: FormularZuordnung; anzahl: number }>();
-    for (const a of angebot) je.set(a.id, { id: a.id, name: a.name, zuordnung: a.zuordnung, anzahl: 0 });
+    const je = new Map<
+      string,
+      { id: string; name: string; zuordnung: FormularZuordnung; anzahl: number }
+    >();
+    for (const a of angebot)
+      je.set(a.id, {
+        id: a.id,
+        name: a.name,
+        zuordnung: a.zuordnung,
+        anzahl: 0,
+      });
     for (const p of liste ?? []) {
-      const f = je.get(p.formularId) ?? { id: p.formularId, name: p.formularName, zuordnung: p.zuordnung, anzahl: 0 };
+      const f = je.get(p.formularId) ?? {
+        id: p.formularId,
+        name: p.formularName,
+        zuordnung: p.zuordnung,
+        anzahl: 0,
+      };
       f.anzahl += 1;
       je.set(p.formularId, f);
     }
@@ -111,14 +159,21 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
     );
   }
 
-  const gewaehltesFormular = wahl.art === "formular" ? formulare.find((f) => f.id === wahl.id) : undefined;
+  const gewaehltesFormular =
+    wahl.art === "formular"
+      ? formulare.find((f) => f.id === wahl.id)
+      : undefined;
 
   return (
     <div>
       <div className="zv-seiten-kopf">
         <h2>Dokumentation</h2>
         {rechte?.ausfuellen && (
-          <button type="button" className="zv-btn" onClick={() => setAusfuellenOffen(true)}>
+          <button
+            type="button"
+            className="zv-btn"
+            onClick={() => setAusfuellenOffen(true)}
+          >
             <INeu />
             Formular ausfüllen
           </button>
@@ -132,10 +187,21 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
       )}
       <div className="zv-doku">
         <nav className="zv-doku-formulare" aria-label="Formulare">
-          <WahlKnopf aktiv={wahl.art === "tagesberichte"} onClick={() => setWahl({ art: "tagesberichte" })} label="Tagesberichte" />
-          <WahlKnopf aktiv={wahl.art === "alle"} onClick={() => setWahl({ art: "alle" })} label="Alle Protokolle" anzahl={liste?.length} />
+          <WahlKnopf
+            aktiv={wahl.art === "tagesberichte"}
+            onClick={() => setWahl({ art: "tagesberichte" })}
+            label="Tagesberichte"
+          />
+          <WahlKnopf
+            aktiv={wahl.art === "alle"}
+            onClick={() => setWahl({ art: "alle" })}
+            label="Alle Protokolle"
+            anzahl={liste?.length}
+          />
           {GRUPPEN.map((g) => {
-            const inGruppe = formulare.filter((f) => g.zuordnungen.includes(f.zuordnung));
+            const inGruppe = formulare.filter((f) =>
+              g.zuordnungen.includes(f.zuordnung),
+            );
             if (inGruppe.length === 0) return null;
             return (
               <div key={g.titel} role="group" aria-label={g.titel}>
@@ -208,11 +274,34 @@ export function Dokumentation({ startKlientId }: { startKlientId?: string }) {
   );
 }
 
-function WahlKnopf({ aktiv, onClick, label, anzahl, hervorheben }: { aktiv: boolean; onClick: () => void; label: string; anzahl?: number; hervorheben?: boolean }) {
+function WahlKnopf({
+  aktiv,
+  onClick,
+  label,
+  anzahl,
+  hervorheben,
+}: {
+  aktiv: boolean;
+  onClick: () => void;
+  label: string;
+  anzahl?: number;
+  hervorheben?: boolean;
+}) {
   return (
-    <button type="button" className={aktiv ? "active" : ""} aria-current={aktiv ? "true" : undefined} onClick={onClick}>
+    <button
+      type="button"
+      className={aktiv ? "active" : ""}
+      aria-current={aktiv ? "true" : undefined}
+      onClick={onClick}
+    >
       <span>{label}</span>
-      {anzahl !== undefined && <span className={hervorheben ? "zv-pill zv-pill-frist" : "zv-doku-anzahl"}>{anzahl}</span>}
+      {anzahl !== undefined && (
+        <span
+          className={hervorheben ? "zv-pill zv-pill-frist" : "zv-doku-anzahl"}
+        >
+          {anzahl}
+        </span>
+      )}
     </button>
   );
 }
@@ -230,20 +319,59 @@ function ProtokollListe({
 }) {
   const [suche, setSuche] = useState("");
   const [zuordnung, setZuordnung] = useState("");
+  // Mehrfachauswahl fuer das Sammel-PDF (Konzept Bild 4). Nur abgeschlossene
+  // Dokumente: ein Entwurf hat noch kein PDF.
+  const [auswahl, setAuswahl] = useState<Set<string>>(new Set());
+  // Beim Oeffnen festgehalten: der Dialog soll nicht mit jedem Rendern neu laden.
+  const [sammel, setSammel] = useState<ProtokollKurzDto[] | null>(null);
   const sichtbar = useMemo(
     () =>
       (liste ?? [])
         .filter(filter)
-        .filter((p) => !zuordnung || (zuordnung === "klient" ? p.klientId !== null : zuordnung === "standort" ? p.standortId !== null : p.klientId === null && p.standortId === null))
-        .filter((p) => trifftSuche(suche, [p.formularName, p.klientName, p.standortName, p.autorName])),
-    [liste, filter, suche, zuordnung]
+        .filter(
+          (p) =>
+            !zuordnung ||
+            (zuordnung === "klient"
+              ? p.klientId !== null
+              : zuordnung === "standort"
+                ? p.standortId !== null
+                : p.klientId === null && p.standortId === null),
+        )
+        .filter((p) =>
+          trifftSuche(suche, [
+            p.formularName,
+            p.klientName,
+            p.standortName,
+            p.autorName,
+          ]),
+        ),
+    [liste, filter, suche, zuordnung],
   );
   const vorher = (liste ?? []).filter(filter).length;
+  // Gewaehlt bleibt nur, was gerade sichtbar ist -- sonst landet nach einem
+  // Filterwechsel ein unsichtbares Dokument im PDF.
+  const gewaehlt = sichtbar.filter((p) => auswahl.has(p.id));
+  const waehlbar = sichtbar.filter((p) => p.abgeschlossen);
+  const alleGewaehlt =
+    waehlbar.length > 0 && gewaehlt.length === waehlbar.length;
+  function umschalten(id: string) {
+    setAuswahl((alt) => {
+      const neu = new Set(alt);
+      if (neu.has(id)) neu.delete(id);
+      else neu.add(id);
+      return neu;
+    });
+  }
   return (
     <div>
       <Filterleiste
         ariaLabel="Protokolle filtern"
-        suche={{ wert: suche, onChange: setSuche, placeholder: "Formular, Klient:in, Standort, Person …", ariaLabel: "Protokolle durchsuchen" }}
+        suche={{
+          wert: suche,
+          onChange: setSuche,
+          placeholder: "Formular, Klient:in, Standort, Person …",
+          ariaLabel: "Protokolle durchsuchen",
+        }}
         aktiv={suche !== "" || zuordnung !== ""}
         onZuruecksetzen={() => {
           setSuche("");
@@ -262,11 +390,61 @@ function ProtokollListe({
           onWaehlen={setZuordnung}
         />
       </Filterleiste>
+      {gewaehlt.length > 0 && (
+        <div className="zv-doku-auswahl" role="region" aria-label="Auswahl">
+          <span>
+            <strong>{gewaehlt.length}</strong> ausgewählt
+          </span>
+          <button
+            type="button"
+            className="zv-btn"
+            onClick={() => setSammel(gewaehlt)}
+          >
+            <IHerunterladen />
+            Als PDF …
+          </button>
+          <button
+            type="button"
+            className="zv-btn zv-btn-still"
+            onClick={() => setAuswahl(new Set())}
+          >
+            Auswahl aufheben
+          </button>
+        </div>
+      )}
+      {sammel && (
+        <SammelPdf dokumente={sammel} onClose={() => setSammel(null)} />
+      )}
       {liste === null ? null : sichtbar.length === 0 ? (
-        <Leerzustand icon={ILeerTagesberichte}>{vorher === 0 ? leerText : "Keine Protokolle für diese Suche."}</Leerzustand>
+        <Leerzustand icon={ILeerTagesberichte}>
+          {vorher === 0 ? leerText : "Keine Protokolle für diese Suche."}
+        </Leerzustand>
       ) : (
-        <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "0.9fr 1.6fr 1.8fr 1.3fr 1fr" } as CSSProperties}>
+        <div
+          className="zv-karten-liste zv-doku-liste"
+          style={
+            {
+              "--zv-liste-spalten":
+                "var(--zv-space-6) 0.9fr 1.6fr 1.8fr 1.3fr 1fr",
+            } as CSSProperties
+          }
+        >
           <div className="zv-liste-kopf">
+            <span className="zv-doku-waehlen">
+              <input
+                type="checkbox"
+                aria-label="Alle abgeschlossenen auswählen"
+                checked={alleGewaehlt}
+                disabled={waehlbar.length === 0}
+                onChange={() =>
+                  setAuswahl(
+                    alleGewaehlt
+                      ? new Set()
+                      : new Set(waehlbar.map((p) => p.id)),
+                  )
+                }
+              />
+            </span>
             <span>Datum</span>
             <span>Formular</span>
             <span>Zugeordnet zu</span>
@@ -287,6 +465,23 @@ function ProtokollListe({
                 }
               }}
             >
+              {/* Eigener Klickbereich: das Haekchen oeffnet nicht das Dokument. */}
+              <span
+                className="zv-doku-waehlen"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`${p.formularName} vom ${formatDatum(p.bezugsdatum)} auswählen`}
+                  title={
+                    p.abgeschlossen ? undefined : "Entwürfe haben noch kein PDF"
+                  }
+                  checked={auswahl.has(p.id)}
+                  disabled={!p.abgeschlossen}
+                  onChange={() => umschalten(p.id)}
+                />
+              </span>
               <span className="zv-liste-zelle" data-label="Datum">
                 {formatDatum(p.bezugsdatum)}
               </span>
@@ -341,7 +536,9 @@ function FormularAusfuellen({
   onAngelegt: (protokollId: string) => void;
 }) {
   const [suche, setSuche] = useState("");
-  const [gewaehlt, setGewaehlt] = useState<DokumentationsAngebotDto | null>(null);
+  const [gewaehlt, setGewaehlt] = useState<DokumentationsAngebotDto | null>(
+    null,
+  );
   const [klienten, setKlienten] = useState<KlientListEintragDto[] | null>(null);
   const [klientId, setKlientId] = useState("");
   const [ohneKlient, setOhneKlient] = useState(false);
@@ -349,12 +546,21 @@ function FormularAusfuellen({
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
 
-  const brauchtKlienten = gewaehlt && (gewaehlt.zuordnung === "klient" || gewaehlt.zuordnung === "klient_wahlweise");
+  const brauchtKlienten =
+    gewaehlt &&
+    (gewaehlt.zuordnung === "klient" ||
+      gewaehlt.zuordnung === "klient_wahlweise");
   useEffect(() => {
-    if (brauchtKlienten && klienten === null) api.klientenListe().then(setKlienten).catch(() => setKlienten([]));
+    if (brauchtKlienten && klienten === null)
+      api
+        .klientenListe()
+        .then(setKlienten)
+        .catch(() => setKlienten([]));
   }, [brauchtKlienten, klienten]);
 
-  const treffer = angebot.filter((a) => trifftSuche(suche, [a.name, a.beschreibung]));
+  const treffer = angebot.filter((a) =>
+    trifftSuche(suche, [a.name, a.beschreibung]),
+  );
   const zuletzt = [...angebot]
     .filter((a) => a.zuletztAm)
     .sort((a, b) => (b.zuletztAm ?? "").localeCompare(a.zuletztAm ?? ""))
@@ -374,7 +580,8 @@ function FormularAusfuellen({
     (gewaehlt.zuordnung === "ohne" ||
       (gewaehlt.zuordnung === "standort" && !!standortId) ||
       (gewaehlt.zuordnung === "klient" && !!klientId) ||
-      (gewaehlt.zuordnung === "klient_wahlweise" && (ohneKlient || !!klientId)));
+      (gewaehlt.zuordnung === "klient_wahlweise" &&
+        (ohneKlient || !!klientId)));
 
   async function weiter() {
     if (!gewaehlt || !bereit) return;
@@ -382,12 +589,21 @@ function FormularAusfuellen({
     setFehler(null);
     try {
       const p = await api.dokumentAnlegen(gewaehlt.id, {
-        klientId: (gewaehlt.zuordnung === "klient" || gewaehlt.zuordnung === "klient_wahlweise") && !ohneKlient ? klientId : null,
+        klientId:
+          (gewaehlt.zuordnung === "klient" ||
+            gewaehlt.zuordnung === "klient_wahlweise") &&
+          !ohneKlient
+            ? klientId
+            : null,
         standortId: gewaehlt.zuordnung === "standort" ? standortId : null,
       });
       onAngelegt(p.id);
     } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Das Formular konnte nicht angelegt werden.");
+      setFehler(
+        err instanceof Error
+          ? err.message
+          : "Das Formular konnte nicht angelegt werden.",
+      );
       setLaeuft(false);
     }
   }
@@ -401,7 +617,9 @@ function FormularAusfuellen({
       onClick={() => waehlen(a)}
     >
       <span>{a.name}</span>
-      <span className="zv-sub">{a.zuordnung === "klient" ? "" : ZUORDNUNG_LABEL[a.zuordnung]}</span>
+      <span className="zv-sub">
+        {a.zuordnung === "klient" ? "" : ZUORDNUNG_LABEL[a.zuordnung]}
+      </span>
     </button>
   );
 
@@ -413,7 +631,14 @@ function FormularAusfuellen({
             <label htmlFor="doku-suche" className="zv-sr-only">
               Formular suchen
             </label>
-            <input id="doku-suche" type="search" placeholder="Formular suchen …" value={suche} onChange={(e) => setSuche(e.target.value)} autoFocus />
+            <input
+              id="doku-suche"
+              type="search"
+              placeholder="Formular suchen …"
+              value={suche}
+              onChange={(e) => setSuche(e.target.value)}
+              autoFocus
+            />
           </div>
           <div className="zv-doku-formulare zv-doku-formulare-flach">
             {!suche && zuletzt.length > 0 && (
@@ -423,8 +648,12 @@ function FormularAusfuellen({
               </div>
             )}
             {GRUPPEN.map((g) => {
-              const inGruppe = treffer.filter((a) => g.zuordnungen.includes(a.zuordnung));
-              const mitTagesbericht = g.zuordnungen.includes("klient") && trifftSuche(suche, ["Tagesbericht"]);
+              const inGruppe = treffer.filter((a) =>
+                g.zuordnungen.includes(a.zuordnung),
+              );
+              const mitTagesbericht =
+                g.zuordnungen.includes("klient") &&
+                trifftSuche(suche, ["Tagesbericht"]);
               if (inGruppe.length === 0 && !mitTagesbericht) return null;
               return (
                 <div key={g.titel} role="group" aria-label={g.titel}>
@@ -448,7 +677,8 @@ function FormularAusfuellen({
             <>
               <h3>{gewaehlt.name}</h3>
               <p className="zv-sub">
-                Version {gewaehlt.versionNummer} · {ZUORDNUNG_LABEL[gewaehlt.zuordnung]}
+                Version {gewaehlt.versionNummer} ·{" "}
+                {ZUORDNUNG_LABEL[gewaehlt.zuordnung]}
               </p>
               {gewaehlt.beschreibung && <p>{gewaehlt.beschreibung}</p>}
               {fehler && (
@@ -460,7 +690,11 @@ function FormularAusfuellen({
               {gewaehlt.zuordnung === "standort" && (
                 <div className="zv-field">
                   <label htmlFor="doku-standort">Standort</label>
-                  <select id="doku-standort" value={standortId} onChange={(e) => setStandortId(e.target.value)}>
+                  <select
+                    id="doku-standort"
+                    value={standortId}
+                    onChange={(e) => setStandortId(e.target.value)}
+                  >
                     <option value="" disabled>
                       Standort wählen
                     </option>
@@ -470,37 +704,69 @@ function FormularAusfuellen({
                       </option>
                     ))}
                   </select>
-                  <p className="zv-sub">Nur Standorte, für die das Formular zugelassen ist und die du sehen darfst.</p>
+                  <p className="zv-sub">
+                    Nur Standorte, für die das Formular zugelassen ist und die
+                    du sehen darfst.
+                  </p>
                 </div>
               )}
               {brauchtKlienten && (
                 <div className="zv-field">
-                  <label htmlFor="doku-klient">Klient:in{gewaehlt.zuordnung === "klient_wahlweise" ? " (wahlweise)" : ""}</label>
-                  <select id="doku-klient" value={klientId} disabled={ohneKlient || klienten === null} onChange={(e) => setKlientId(e.target.value)}>
+                  <label htmlFor="doku-klient">
+                    Klient:in
+                    {gewaehlt.zuordnung === "klient_wahlweise"
+                      ? " (wahlweise)"
+                      : ""}
+                  </label>
+                  <select
+                    id="doku-klient"
+                    value={klientId}
+                    disabled={ohneKlient || klienten === null}
+                    onChange={(e) => setKlientId(e.target.value)}
+                  >
                     <option value="" disabled>
                       {klienten === null ? "Wird geladen…" : "Klient:in wählen"}
                     </option>
                     {(klienten ?? []).map((k) => (
                       <option key={k.id} value={k.id}>
                         {k.vorname} {k.nachname}
-                        {k.aktuellesZimmer ? ` · ${k.aktuellesZimmer.standortName}` : ""}
+                        {k.aktuellesZimmer
+                          ? ` · ${k.aktuellesZimmer.standortName}`
+                          : ""}
                       </option>
                     ))}
                   </select>
                   {gewaehlt.zuordnung === "klient_wahlweise" && (
                     <label className="zv-checkbox-zeile">
-                      <input type="checkbox" checked={ohneKlient} onChange={(e) => setOhneKlient(e.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={ohneKlient}
+                        onChange={(e) => setOhneKlient(e.target.checked)}
+                      />
                       Ohne Klient:in ausfüllen
                     </label>
                   )}
                 </div>
               )}
-              {gewaehlt.zuordnung === "ohne" && <p className="zv-sub">Dieses Formular gehört zu niemandem. Es geht direkt los.</p>}
+              {gewaehlt.zuordnung === "ohne" && (
+                <p className="zv-sub">
+                  Dieses Formular gehört zu niemandem. Es geht direkt los.
+                </p>
+              )}
               <div className="zv-aktionen-reihe zv-doku-aktionen">
-                <button type="button" className="zv-btn zv-btn-sekundaer" onClick={onClose}>
+                <button
+                  type="button"
+                  className="zv-btn zv-btn-sekundaer"
+                  onClick={onClose}
+                >
                   Abbrechen
                 </button>
-                <button type="button" className="zv-btn" disabled={!bereit || laeuft} onClick={() => void weiter()}>
+                <button
+                  type="button"
+                  className="zv-btn"
+                  disabled={!bereit || laeuft}
+                  onClick={() => void weiter()}
+                >
                   {laeuft ? "Wird angelegt…" : "Weiter zum Formular"}
                 </button>
               </div>

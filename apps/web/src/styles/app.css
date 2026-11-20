@@ -9408,6 +9408,55 @@ button.zv-achtung-eintrag:hover {
   min-width: 0;
 }
 
+/* Mehrfachauswahl fuer das Sammel-PDF (Konzept Bild 4). */
+.zv-doku-waehlen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zv-doku-waehlen input {
+  width: var(--zv-space-5);
+  height: var(--zv-space-5);
+  margin: 0;
+  accent-color: var(--zv-accent);
+  cursor: pointer;
+}
+
+.zv-doku-waehlen input:disabled {
+  cursor: not-allowed;
+}
+
+.zv-doku-auswahl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+}
+
+.zv-doku-auswahl > span {
+  margin-right: auto;
+}
+
+.zv-sammel-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--zv-space-3);
+  align-items: center;
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-sammel-zeile .zv-field {
+  margin: 0;
+  min-width: 0;
+}
+
 /* Im Dialog: Liste links, Auswahl rechts; die Liste scrollt fuer sich. */
 .zv-doku-ausfuellen {
   display: grid;
@@ -9433,6 +9482,22 @@ button.zv-achtung-eintrag:hover {
  * sich scrollt -- eine 240-px-Spalte liesse den Dokumenten keinen Platz.
  */
 @media (max-width: 760px) {
+  /* Karten statt Tabelle: das Haekchen sitzt oben rechts auf der Karte. */
+  .zv-doku-liste .zv-info-karte {
+    position: relative;
+    padding-right: var(--zv-space-7);
+  }
+
+  .zv-doku-liste .zv-info-karte .zv-doku-waehlen {
+    position: absolute;
+    top: var(--zv-space-3);
+    right: var(--zv-space-3);
+  }
+
+  .zv-sammel-zeile {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .zv-doku {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--zv-space-3);
