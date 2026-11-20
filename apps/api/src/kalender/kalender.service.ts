@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type { PoolClient } from "pg";
 import { terminStundenHindernis, terminMinuten } from "@zimmerakte/shared";
 import type {
+  TerminKontaktDto,
   Leistungsart,
   TerminAnlegenEingabe,
   TerminAntwort,
@@ -13,7 +14,7 @@ import type {
   TerminTeilnehmerEingabe,
 } from "@zimmerakte/shared";
 import { KlientNamen } from "../common/klient-namen";
-import { pruefeKontakt } from "../common/kontakt-pruefung";
+import { pruefeKontakt, pruefeTerminKlient } from "../common/kontakt-pruefung";
 import { aktuellerTeilnehmer, requireTenantContext, type Teilnehmer } from "../common/tenant-context";
 import { DatabaseService } from "../database/database.service";
 import { StundenKalenderService } from "../stunden/stunden-kalender.service";
@@ -109,6 +110,37 @@ export class KalenderService {
     });
   }
 
+  /**
+   * Fuer den Termin-Dialog der Mitarbeitenden. Klient:innen-Sitzungen bekommen
+   * eine leere Liste: sie laden nur Mitarbeitende aus ihren Chats ein.
+   */
+  async teilnehmerAuswahl(): Promise<TerminKontaktDto[]> {
+    const ich = aktuellerTeilnehmer();
+    if (ich.art === "klient") return [];
+    return this.db.withTenant(async (client) => {
+      const { rows: benutzer } = await client.query<{ id: string; name: string }>(
+        "SELECT id, name FROM benutzer WHERE aktiv AND id <> $1 ORDER BY name, id",
+        [ich.id]
+      );
+      const { rows: klienten } = await client.query<{ id: string; vorname: string; nachname: string; hat_zugang: boolean }>(
+        `SELECT k.id, k.vorname, k.nachname, EXISTS (SELECT 1 FROM klient_zugang z WHERE z.klient_id = k.id AND z.aktiv) AS hat_zugang
+         FROM klient k
+         WHERE k.archiviert_am IS NULL AND k.anonymisiert_am IS NULL
+         ORDER BY k.nachname, k.vorname, k.id`
+      );
+      // Dieselbe Sichtbarkeit wie pruefeTerminKlient: wer die Klient:in nicht
+      // in der Klientenliste saehe, bekommt sie hier gar nicht angeboten.
+      const sichtbarkeit = new KlientNamen(client, ich);
+      const ergebnis: TerminKontaktDto[] = benutzer.map((b) => ({ art: "benutzer", id: b.id, name: b.name, direktChatId: null, hatZugang: true }));
+      for (const k of klienten) {
+        if (await sichtbarkeit.darfVollstaendigSehen(k.id)) {
+          ergebnis.push({ art: "klient", id: k.id, name: `${k.vorname} ${k.nachname}`, direktChatId: null, hatZugang: k.hat_zugang });
+        }
+      }
+      return ergebnis;
+    });
+  }
+
   async einzeln(id: string): Promise<TerminDto> {
     const ich = aktuellerTeilnehmer();
     return this.db.withTenant((client) => this.ladeEinzeln(client, ich, id));
@@ -143,7 +175,10 @@ export class KalenderService {
         await this.pruefeGemeinsamenChat(client, ich.id, t.benutzerId);
       }
     } else {
-      for (const t of eingeladen) await pruefeKontakt(client, ich.id, t);
+      for (const t of eingeladen) {
+        if ("klientId" in t) await pruefeTerminKlient(client, ich.id, t.klientId);
+        else await pruefeKontakt(client, ich.id, t);
+      }
     }
     if (eingabe.stundenErfassen) {
       await this.stunden.verlangeVormerkbar({

@@ -10,7 +10,7 @@ import {
   terminStundenLeistungsart,
 } from "@zimmerakte/shared";
 import { lokalesDatum, terminTag } from "../format";
-import { IFehler, ISpeichern } from "./icons";
+import { IFehler, IInfo, ISpeichern } from "./icons";
 import { KontaktAuswahl, kontaktEingabe, kontaktSchluessel } from "./chat/KontaktAuswahl";
 import { Datumsfeld, Zeitraumfeld } from "./Datumsfeld";
 
@@ -47,8 +47,12 @@ export function TerminFormular({
   standardDatum?: string;
   /** Beginn "HH:MM" fuer neue Termine (Klick in eine Stunde der Wochenansicht); Ende eine Stunde spaeter. */
   standardUhrzeit?: string;
-  /** Wenn gesetzt, kann der Termin gleich Teilnehmenden zugewiesen werden (nur beim Anlegen). */
-  kontakte?: ChatKontaktDto[];
+  /**
+   * Wenn gesetzt, kann der Termin gleich Teilnehmenden zugewiesen werden (nur
+   * beim Anlegen). Mit `hatZugang` (Termin-Auswahl der Mitarbeitenden) stehen
+   * Klient:innen und Mitarbeitende in getrennten Listen.
+   */
+  kontakte?: (ChatKontaktDto & { hatZugang?: boolean })[];
   mitBeschreibung?: boolean;
   absendenLabel: string;
   wirdGesendet: boolean;
@@ -69,7 +73,7 @@ export function TerminFormular({
   const [endDatum, setEndDatum] = useState(initial ? terminTag(initial.ende, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [von, setVon] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.beginn) : (standardUhrzeit ?? "09:00"));
   const [bis, setBis] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.ende) : standardUhrzeit ? eineStundeSpaeter(standardUhrzeit) : "10:00");
-  const [auswahl, setAuswahl] = useState<Map<string, ChatKontaktDto>>(new Map());
+  const [auswahl, setAuswahl] = useState<Map<string, ChatKontaktDto & { hatZugang?: boolean }>>(new Map());
   const [eingabeFehler, setEingabeFehler] = useState<string | null>(null);
   const mitStunden = !!stunden && stunden.funktionAn && stunden.darfBuchen && (!initial || initial.stunden !== null);
   const [stundenGewuenscht, setStundenGewuenscht] = useState(initial ? (initial.stunden?.vorgemerkt ?? false) : (stunden?.vorauswahl ?? false));
@@ -115,6 +119,16 @@ export function TerminFormular({
   }
 
   const anzeigeFehler = eingabeFehler ?? fehler;
+
+  function umschalten(k: ChatKontaktDto) {
+    setAuswahl((alt) => {
+      const neu = new Map(alt);
+      const s = kontaktSchluessel(k);
+      if (neu.has(s)) neu.delete(s);
+      else neu.set(s, k);
+      return neu;
+    });
+  }
 
   return (
     <form onSubmit={absenden} noValidate={false}>
@@ -193,25 +207,14 @@ export function TerminFormular({
           <textarea id="termin-beschreibung" rows={3} value={beschreibung} onChange={(e) => setBeschreibung(e.target.value)} maxLength={5000} />
         </div>
       )}
-      {kontakte && (
+      {kontakte && kontakte.some((k) => k.hatZugang !== undefined) ? (
+        <TeilnehmerGetrennt kontakte={kontakte} auswahl={auswahl} onToggle={umschalten} />
+      ) : kontakte ? (
         <div className="zv-field">
           <span className="zv-feldtitel">Teilnehmende (optional)</span>
-          <KontaktAuswahl
-            idPraefix="termin"
-            kontakte={kontakte}
-            ausgewaehlt={new Set(auswahl.keys())}
-            onToggle={(k) =>
-              setAuswahl((alt) => {
-                const neu = new Map(alt);
-                const s = kontaktSchluessel(k);
-                if (neu.has(s)) neu.delete(s);
-                else neu.set(s, k);
-                return neu;
-              })
-            }
-          />
+          <KontaktAuswahl idPraefix="termin" kontakte={kontakte} ausgewaehlt={new Set(auswahl.keys())} onToggle={umschalten} />
         </div>
-      )}
+      ) : null}
       {mitStunden && (
         <StundenKasten
           aktiv={stundenAktiv}
@@ -228,6 +231,64 @@ export function TerminFormular({
         {wirdGesendet ? "Speichert…" : absendenLabel}
       </button>
     </form>
+  );
+}
+
+/**
+ * Klient:innen und Mitarbeitende getrennt (Rueckmeldung „Termine Kalender“,
+ * Konzept termine-klienten 2.1): Klient:innen stehen hier auch ohne Zugang,
+ * damit ein Termin mit ihnen als Betreuungszeit zaehlen kann. Wer keinen
+ * Zugang hat, sieht die Einladung nicht selbst -- das sagt der Hinweis, statt
+ * eine Benachrichtigung vorzutaeuschen, die es nicht gibt.
+ */
+function TeilnehmerGetrennt({
+  kontakte,
+  auswahl,
+  onToggle,
+}: {
+  kontakte: (ChatKontaktDto & { hatZugang?: boolean })[];
+  auswahl: Map<string, ChatKontaktDto & { hatZugang?: boolean }>;
+  onToggle: (k: ChatKontaktDto) => void;
+}) {
+  const klienten = kontakte.filter((k) => k.art === "klient");
+  const mitarbeitende = kontakte.filter((k) => k.art === "benutzer");
+  const zugang = new Map(kontakte.map((k) => [kontaktSchluessel(k), k.hatZugang]));
+  const gewaehlt = new Set(auswahl.keys());
+  const ohneZugang = [...auswahl.values()].filter((k) => k.art === "klient" && k.hatZugang === false).map((k) => k.name);
+  return (
+    <>
+      <div className="zv-field">
+        <span className="zv-feldtitel">Klient:innen (optional)</span>
+        <KontaktAuswahl
+          idPraefix="termin-klient"
+          suchLabel="Klient:in suchen"
+          kontakte={klienten}
+          ausgewaehlt={gewaehlt}
+          onToggle={onToggle}
+          zusatz={(k) =>
+            zugang.get(kontaktSchluessel(k)) ? (
+              <span className="zv-pill zv-pill-ok">Einladung in der App</span>
+            ) : (
+              <span className="zv-pill zv-pill-frist">ohne Zugang</span>
+            )
+          }
+        />
+        {ohneZugang.length > 0 && (
+          <div className="zv-hinweis zv-hinweis-info" role="status" style={{ marginTop: "var(--zv-space-2)" }}>
+            <IInfo />
+            <span>
+              <strong>{namenListe(ohneZugang)}</strong> {ohneZugang.length === 1 ? "hat" : "haben"} keinen Zugang und{" "}
+              {ohneZugang.length === 1 ? "sieht" : "sehen"} die Einladung nicht selbst. Gib den Termin bitte persönlich weiter, zum Beispiel
+              mit der Kalenderdatei aus dem Termin.
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="zv-field">
+        <span className="zv-feldtitel">Mitarbeitende (optional)</span>
+        <KontaktAuswahl idPraefix="termin-team" kontakte={mitarbeitende} ausgewaehlt={gewaehlt} onToggle={onToggle} zusatz={() => null} />
+      </div>
+    </>
   );
 }
 

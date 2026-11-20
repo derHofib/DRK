@@ -39,6 +39,11 @@ export class KalenderController {
     return this.kalender.liste(von, bis);
   }
 
+  @Get("teilnehmer-auswahl")
+  async teilnehmerAuswahl() {
+    return this.kalender.teilnehmerAuswahl();
+  }
+
   @Get("termine/:id")
   async einzeln(@Param("id") id: string) {
     return this.kalender.einzeln(id);

@@ -132,17 +132,18 @@ function auswahlText(labels: string[]): string {
 
 /**
  * `kontakteLaden`: woher die waehlbaren Teilnehmenden kommen. Mitarbeitende
- * nutzen die Voreinstellung (/chat/kontakte); fuer Klient:innen liefert
+ * nutzen die Voreinstellung (/kalender/teilnehmer-auswahl: Klient:innen auch
+ * ohne Zugang, Rueckmeldung „Termine Kalender“); fuer Klient:innen liefert
  * dieser Endpunkt bewusst nichts -- sie koennen nur Personen eintragen, mit
  * denen sie einen gemeinsamen Chat haben (KlientShell leitet sie daraus ab).
  */
 export function Kalender({
   titel = "Kalender",
-  kontakteLaden = () => api.chatKontakte(),
+  kontakteLaden = () => api.terminKontakte(),
   mitAbwesenheiten = true,
 }: {
   titel?: string;
-  kontakteLaden?: () => Promise<ChatKontaktDto[]>;
+  kontakteLaden?: () => Promise<(ChatKontaktDto & { hatZugang?: boolean })[]>;
   /** Klient:innen sehen keine Abwesenheiten des Teams (die API laesst sie gar nicht erst zu). */
   mitAbwesenheiten?: boolean;
 }) {
@@ -834,12 +835,12 @@ function NeuerTermin({
 }: {
   standardDatum: string;
   standardUhrzeit?: string;
-  kontakteLaden: () => Promise<ChatKontaktDto[]>;
+  kontakteLaden: () => Promise<(ChatKontaktDto & { hatZugang?: boolean })[]>;
   stunden: KalenderStundenEinstellungenDto | null;
   onClose: () => void;
   onAngelegt: (t: TerminDto) => void;
 }) {
-  const [kontakte, setKontakte] = useState<ChatKontaktDto[] | null>(null);
+  const [kontakte, setKontakte] = useState<(ChatKontaktDto & { hatZugang?: boolean })[] | null>(null);
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
 
