@@ -115,6 +115,12 @@ export class StandortService {
    * zugeordnete Zimmer hat -- das Deaktivieren bedeutet nur "kein neues
    * Zimmer mehr hier anlegen", nicht "alles hier verschwindet". Bestehende
    * Zimmer und ihre Belegungen bleiben unangetastet sichtbar.
+   *
+   * Das Recht "standorte.bearbeiten" allein reicht nicht: eine auf Haus A
+   * beschraenkte Leitung hat es auch, darf aber Haus B weder umbenennen noch
+   * deaktivieren. Deshalb dieselbe Schranke wie in uebersicht() -- 404 statt
+   * 403, damit ein nicht zugeordneter Standort nicht von einem fremden zu
+   * unterscheiden ist.
    */
   async aktualisieren(
     id: string,
@@ -123,7 +129,11 @@ export class StandortService {
     if (!(await this.rechte.hatRecht("standorte", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen eine Einrichtung bearbeiten.");
     }
+    const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
+      if (!(await standortIstErlaubt(client, benutzerId, id))) {
+        throw new NotFoundException("Standort nicht gefunden.");
+      }
       const { rows } = await client.query<StandortDto>(
         `UPDATE standort
          SET name = COALESCE($1, name), adresse = COALESCE($2, adresse), aktiv = COALESCE($3, aktiv)
