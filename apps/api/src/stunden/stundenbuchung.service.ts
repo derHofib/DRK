@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import type { Leistungsart, StundenbuchungDto, StundenSummeDto } from "@zimmerakte/shared";
+import type { Leistungsart, StundenbuchungDto, StundenHerkunft, StundenSummeDto } from "@zimmerakte/shared";
 import { STUNDENBUCHUNG_MINUTEN_MAX } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
 import { heuteBerlin } from "../common/heute";
@@ -10,6 +10,7 @@ import { KlientNamen } from "../common/klient-namen";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, klientIstArchiviert, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { buchbarkeitsFehler } from "./stunden-pruefung";
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -26,6 +27,7 @@ export interface StundenbuchungAnlegenEingabe {
 export interface StundenFilter {
   klientId?: string;
   mitarbeiterId?: string;
+  herkunft?: StundenHerkunft;
   von?: string;
   bis?: string;
 }
@@ -48,12 +50,27 @@ export function stundenFingerabdruck(input: StundenbuchungAnlegenEingabe & { mit
 const AUSWAHL = `
   SELECT s.id, s.klient_id, k.vorname, k.nachname, s.mitarbeiter_id, m.name AS mitarbeiter_name,
          s.datum, s.minuten, s.leistungsart, s.notiz, s.gebucht_von, g.name AS gebucht_von_name, s.erstellt_am,
-         s.storniert, s.storno_grund, sv.name AS storno_von_name, s.storniert_am
+         s.storniert, s.storno_grund, sv.name AS storno_von_name, s.storniert_am, s.storno_automatisch,
+         s.termin_id, t.titel AS termin_titel,
+         (s.termin_id IS NOT NULL AND NOT s.storniert AND EXISTS (
+            SELECT 1 FROM stundenbuchung a
+            WHERE a.termin_id = s.termin_id AND a.mitarbeiter_id = s.mitarbeiter_id AND a.klient_id = s.klient_id
+              AND a.storno_automatisch AND a.id <> s.id
+         )) AS automatisch_neu_gebucht,
+         (NOT s.storniert AND EXISTS (
+            SELECT 1 FROM stundenbuchung d
+            WHERE d.mitarbeiter_id = s.mitarbeiter_id AND d.klient_id = s.klient_id AND d.datum = s.datum
+              AND NOT d.storniert AND (d.termin_id IS NULL) <> (s.termin_id IS NULL)
+         )) AS moeglicherweise_doppelt
   FROM stundenbuchung s
   JOIN klient k ON k.id = s.klient_id
   JOIN benutzer m ON m.id = s.mitarbeiter_id
   LEFT JOIN benutzer g ON g.id = s.gebucht_von
   LEFT JOIN benutzer sv ON sv.id = s.storniert_von
+  -- Termine sieht per RLS nur, wer beteiligt ist (termin_sichtbar, 0053): fuer
+  -- alle anderen bleibt termin_titel NULL. Die Leitung sieht so die HERKUNFT
+  -- einer Buchung, aber nicht den Termin selbst -- keine Luecke in der Policy.
+  LEFT JOIN termin t ON t.id = s.termin_id
 `;
 
 @Injectable()
@@ -99,7 +116,8 @@ export class StundenbuchungService {
       bedingungen.push("NOT s.storniert");
       const { rows } = await client.query(
         `SELECT s.klient_id, k.vorname, k.nachname, to_char(s.datum, 'YYYY-MM') AS monat,
-                sum(s.minuten)::int AS minuten, count(*)::int AS anzahl
+                sum(s.minuten)::int AS minuten, count(*)::int AS anzahl,
+                COALESCE(sum(s.minuten) FILTER (WHERE s.termin_id IS NOT NULL), 0)::int AS minuten_kalender
          FROM stundenbuchung s JOIN klient k ON k.id = s.klient_id
          WHERE ${bedingungen.join(" AND ")}
          GROUP BY s.klient_id, k.vorname, k.nachname, monat
@@ -113,6 +131,7 @@ export class StundenbuchungService {
           klientName: await namen.name(r.klient_id, r.vorname, r.nachname),
           monat: r.monat,
           minuten: r.minuten,
+          minutenKalender: r.minuten_kalender,
           anzahl: r.anzahl,
         }))
       );
@@ -146,35 +165,8 @@ export class StundenbuchungService {
           if (vorhanden) return { buchung: vorhanden, wiederholt: true };
         }
 
-        // klientIstErlaubt() sagt fuer Personen OHNE Standort-Einschraenkung
-        // immer "ja", auch zu einer ID, die es im Mandanten nicht gibt. Der
-        // Fremdschluessel allein schuetzt nicht: seine Pruefung laeuft an RLS
-        // vorbei, ein Mandant koennte so auf die Klient:in eines anderen
-        // verweisen. Erst die Abfrage hier -- durch RLS gefiltert -- stellt
-        // fest, dass die Klient:in zu DIESEM Mandanten gehoert.
-        const { rows: klient } = await client.query("SELECT 1 FROM klient WHERE id = $1", [input.klientId]);
-        if (klient.length === 0 || !(await klientIstErlaubt(client, benutzerId, input.klientId))) {
-          throw new NotFoundException("Klient nicht gefunden.");
-        }
-        if (await klientIstArchiviert(client, input.klientId)) {
-          throw new BadRequestException("Dieser Klient ist archiviert und kann nicht mehr bearbeitet werden.");
-        }
-        // RLS blendet Mitarbeitende fremder Traeger aus; deaktivierte Konten
-        // leisten nichts mehr.
-        const { rows: mitarbeiter } = await client.query("SELECT aktiv FROM benutzer WHERE id = $1", [mitarbeiterId]);
-        if (mitarbeiter.length === 0) throw new NotFoundException("Mitarbeiter:in nicht gefunden.");
-        if (!mitarbeiter[0].aktiv) throw new BadRequestException("Dieses Konto ist deaktiviert.");
-
-        // Niemand leistet mehr als 24 Stunden am Tag. Die Summe haengt an der
-        // Person, nicht an der Klientin: zwei Klient:innen zur selben Zeit
-        // sind fachlich moeglich (Gruppenangebot), 25 Stunden an einem Tag nicht.
-        const { rows: summe } = await client.query(
-          "SELECT COALESCE(sum(minuten), 0)::int AS minuten FROM stundenbuchung WHERE mitarbeiter_id = $1 AND datum = $2 AND NOT storniert",
-          [mitarbeiterId, input.datum]
-        );
-        if (summe[0].minuten + input.minuten > STUNDENBUCHUNG_MINUTEN_MAX) {
-          throw new BadRequestException("An diesem Tag wären für diese Person mehr als 24 Stunden gebucht.");
-        }
+        const fehler = await buchbarkeitsFehler(client, benutzerId, mitarbeiterId, input.klientId, input.datum, input.minuten);
+        if (fehler) throw fehler.status === 404 ? new NotFoundException(fehler.meldung) : new BadRequestException(fehler.meldung);
 
         const { rows } = await client.query(
           `INSERT INTO stundenbuchung (mandant_id, klient_id, mitarbeiter_id, datum, minuten, leistungsart, notiz, gebucht_von,
@@ -255,6 +247,7 @@ export class StundenbuchungService {
       params.push(filter.mitarbeiterId);
       bedingungen.push(`s.mitarbeiter_id = $${params.length}`);
     }
+    if (filter.herkunft) bedingungen.push(filter.herkunft === "kalender" ? "s.termin_id IS NOT NULL" : "s.termin_id IS NULL");
     if (filter.von) {
       params.push(filter.von);
       bedingungen.push(`s.datum >= $${params.length}`);
@@ -311,5 +304,10 @@ function zuDto(r: Record<string, any>, klientName: string, benutzerId: string, d
     stornoVonName: r.storno_von_name,
     stornoAm: r.storniert_am ? new Date(r.storniert_am).toISOString() : null,
     stornierbar: !r.storniert && (eigene || darfFremdeStornieren),
+    terminId: r.termin_id ?? null,
+    terminTitel: r.termin_titel ?? null,
+    stornoAutomatisch: r.storno_automatisch,
+    automatischNeuGebucht: r.automatisch_neu_gebucht,
+    moeglicherweiseDoppelt: r.moeglicherweise_doppelt,
   };
 }

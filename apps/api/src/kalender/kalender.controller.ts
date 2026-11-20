@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { z } from "zod";
 import { TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { KalenderService } from "./kalender.service";
-import { terminAnlegenSchema, terminArtSchema } from "./termin.schemas";
+import { leistungsartSchema, terminAnlegenSchema, terminArtSchema } from "./termin.schemas";
 
 const aendernSchema = z
   .object({
@@ -14,11 +14,14 @@ const aendernSchema = z
     ende: z.string().optional(),
     ganztaegig: z.boolean().optional(),
     art: terminArtSchema.optional(),
+    stundenErfassen: z.boolean().optional(),
+    stundenLeistungsart: leistungsartSchema.nullable().optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, "Mindestens ein Feld muss angegeben werden.");
 
-const antwortSchema = z.object({ antwort: z.enum(["offen", "zugesagt", "abgelehnt"]) });
+const antwortSchema = z.object({ antwort: z.enum(["offen", "zugesagt", "abgelehnt"]), stundenErfassen: z.boolean().optional() });
+const stundenSchema = z.object({ erfassen: z.boolean() }).strict();
 
 const zeitraumSchema = z.object({
   von: z.string({ required_error: "„von“ ist erforderlich." }),
@@ -69,7 +72,15 @@ export class KalenderController {
   @Post("termine/:id/antwort")
   @HttpCode(200)
   async antworten(@Param("id") id: string, @Body() body: unknown) {
-    return this.kalender.antworten(id, antwortSchema.parse(body).antwort);
+    const { antwort, stundenErfassen } = antwortSchema.parse(body);
+    return this.kalender.antworten(id, antwort, stundenErfassen);
+  }
+
+  /** Eigene Vormerkung "Als Betreuungszeit erfassen" (migrations/0080). */
+  @Post("termine/:id/stunden")
+  @HttpCode(200)
+  async stunden(@Param("id") id: string, @Body() body: unknown) {
+    return this.kalender.stundenVormerken(id, stundenSchema.parse(body).erfassen);
   }
 
   @Post("termine/:id/uebernehmen")

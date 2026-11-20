@@ -43,6 +43,10 @@ export interface MandantDto {
    * (migrations/0073)? Standard false.
    */
   rueckmeldungWeitergabe: boolean;
+  /** Duerfen Kalendertermine als Betreuungszeit gebucht werden (migrations/0080)? */
+  terminStundenErlaubt: boolean;
+  /** Voreinstellung des Hakens fuer Konten, die selbst nichts gewaehlt haben. */
+  terminStundenVorauswahl: boolean;
 }
 
 export type RueckmeldungArt = "idee" | "fehler";
@@ -123,6 +127,8 @@ export interface EinstellungenRechteDto {
   datenschutz: boolean;
   /** Formulare für Protokolle -- protokolle.formulare-verwalten. */
   formulare: boolean;
+  /** Stunden aus dem Kalender -- stunden.einstellungen-verwalten. */
+  stunden: boolean;
 }
 
 export interface RueckmeldungBerechtigungDto {
@@ -1036,6 +1042,34 @@ export interface TerminDto {
   /** null = ich bin nicht eingetragen (z. B. nur ueber einen Chat sichtbar) -- dann hilft "uebernehmen". */
   meineAntwort: TerminAntwort | null;
   teilnehmer: TerminTeilnehmerDto[];
+  /** Leistungsart fuer Kalenderbuchungen; null = automatisch (siehe terminStundenLeistungsart). */
+  stundenLeistungsart: Leistungsart | null;
+  /** Nur fuer die eigene Teilnahme als Mitarbeiter:in; null fuer Klient:innen und Nicht-Eingetragene. */
+  stunden: TerminStundenDto | null;
+}
+
+/** Stunden aus dem Kalender (migrations/0080), aus Sicht der angemeldeten Person. */
+export interface TerminStundenDto {
+  /** Eigener Haken "Als Betreuungszeit erfassen". */
+  vorgemerkt: boolean;
+  /** Warum der Termin so nicht buchbar ist (ganztaegig, keine Klient:in, ...); null = buchbar. */
+  hindernis: string | null;
+  /** Dauer, die gebucht wird bzw. wurde. */
+  minuten: number | null;
+  /** Eigene Buchungen aus diesem Termin, auch stornierte (neueste zuerst). */
+  buchungen: TerminStundenBuchungDto[];
+}
+
+export interface TerminStundenBuchungDto {
+  id: string;
+  klientName: string;
+  datum: string;
+  minuten: number;
+  leistungsart: Leistungsart;
+  erstelltAm: string;
+  storniert: boolean;
+  stornoGrund: string | null;
+  stornoAutomatisch: boolean;
 }
 
 export type TerminTeilnehmerEingabe = { benutzerId: string } | { klientId: string };
@@ -1049,6 +1083,9 @@ export interface TerminAnlegenEingabe {
   ganztaegig?: boolean;
   art?: TerminArt;
   teilnehmer?: TerminTeilnehmerEingabe[];
+  /** Eigene Vormerkung "Als Betreuungszeit erfassen" (migrations/0080). */
+  stundenErfassen?: boolean;
+  stundenLeistungsart?: Leistungsart | null;
 }
 
 /**
@@ -1426,7 +1463,19 @@ export interface StundenbuchungDto {
   stornoAm: string | null;
   /** Darf die angemeldete Person diese Buchung stornieren? */
   stornierbar: boolean;
+  /** Herkunft: Kalendertermin (migrations/0080); null = von Hand gebucht. */
+  terminId: string | null;
+  /** Titel des Termins -- nur, wenn die angemeldete Person den Termin sehen darf. */
+  terminTitel: string | null;
+  /** Von der Anwendung storniert, weil sich der Termin geaendert hat oder abgesagt wurde. */
+  stornoAutomatisch: boolean;
+  /** Ersetzt eine automatisch stornierte Buchung desselben Termins. */
+  automatischNeuGebucht: boolean;
+  /** Gleiche Person, Klient:in und Tag einmal aus dem Kalender und einmal von Hand. */
+  moeglicherweiseDoppelt: boolean;
 }
+
+export type StundenHerkunft = "manuell" | "kalender";
 
 export interface StundenSummeDto {
   klientId: string;
@@ -1434,7 +1483,74 @@ export interface StundenSummeDto {
   /** "JJJJ-MM" */
   monat: string;
   minuten: number;
+  /** davon aus Kalenderterminen */
+  minutenKalender: number;
   anzahl: number;
+}
+
+/** Eigene Vormerkung, die (noch) nicht gebucht ist. */
+export interface StundenVormerkungDto {
+  terminId: string;
+  titel: string;
+  beginn: string;
+  ende: string;
+  minuten: number;
+  klientNamen: string[];
+  /** "geplant": Termin noch nicht vorbei. "nicht-gebucht": vorbei, aber aus einem Grund nicht buchbar. */
+  status: "geplant" | "nicht-gebucht";
+  grund: string | null;
+}
+
+export interface KalenderStundenEinstellungenDto {
+  /** Traeger-Schalter */
+  funktionAn: boolean;
+  /** Recht stunden.buchen */
+  darfBuchen: boolean;
+  /** Recht stunden.einstellungen-verwalten */
+  darfTraegerAendern: boolean;
+  traegerVorauswahl: boolean;
+  /** null = folgt dem Traeger */
+  eigeneVorauswahl: boolean | null;
+  eigeneVorauswahlZusage: boolean | null;
+  /** Wirksam (eigene Wahl oder Traeger) */
+  vorauswahl: boolean;
+  vorauswahlZusage: boolean;
+}
+
+/** Tag in Europe/Berlin -- wie heuteBerlin() in der API. */
+export function berlinTag(d: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(d);
+}
+
+/**
+ * Warum ein Termin nicht als Betreuungszeit gebucht werden kann; null = buchbar.
+ * Gemeinsam fuer API (Pruefung, Buchung) und Oberflaeche (Kasten im Dialog),
+ * damit beide dieselbe Regel kennen.
+ */
+export function terminStundenHindernis(t: { ganztaegig: boolean; beginn: string | Date; ende: string | Date; klientAnzahl: number }): string | null {
+  if (t.klientAnzahl === 0) {
+    return "Nur Termine mit einer Klient:in zählen als Betreuungszeit. Trage unter Teilnehmende eine Klient:in ein.";
+  }
+  if (t.ganztaegig) return "Ganztägige Termine haben keine Dauer. Stunden bitte unter „Stunden“ buchen.";
+  const beginn = new Date(t.beginn);
+  const ende = new Date(t.ende);
+  const minuten = terminMinuten(beginn, ende);
+  if (!(minuten >= 1)) return "Der Termin hat keine Dauer. Trage Von und Bis ein.";
+  // Eine Buchung hat genau einen Tag (0072). Ende um 24:00 gehoert noch zum Tag.
+  if (minuten > STUNDENBUCHUNG_MINUTEN_MAX || berlinTag(beginn) !== berlinTag(new Date(ende.getTime() - 1))) {
+    return "Termine über Mitternacht lassen sich nicht als Betreuungszeit erfassen. Stunden bitte unter „Stunden“ buchen.";
+  }
+  return null;
+}
+
+/** Ganze Minuten, abgerundet -- Sekunden kommen aus dem Formular nie, aus der API vielleicht. */
+export function terminMinuten(beginn: Date, ende: Date): number {
+  return Math.floor((ende.getTime() - beginn.getTime()) / 60_000);
+}
+
+/** Gesetzte Leistungsart oder automatisch: eine Klient:in Einzelbetreuung, mehrere Gruppenangebot. */
+export function terminStundenLeistungsart(gesetzt: Leistungsart | null | undefined, klientAnzahl: number): Leistungsart {
+  return gesetzt ?? (klientAnzahl > 1 ? "gruppenangebot" : "einzelbetreuung");
 }
 
 /** 90 -> "1:30 h" -- Minuten als Stunden:Minuten, wie auf einem Leistungsnachweis. */

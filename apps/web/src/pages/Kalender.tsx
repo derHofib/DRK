@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { AbwesenheitDto, AbwesenheitRechteDto, ChatKontaktDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
-import { TERMIN_ANTWORT_LABEL } from "@zimmerakte/shared";
+import type { AbwesenheitDto, AbwesenheitRechteDto, ChatKontaktDto, KalenderStundenEinstellungenDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
+import { LEISTUNGSART_LABEL, TERMIN_ANTWORT_LABEL, formatMinutenAlsStunden, terminStundenLeistungsart } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
 import { FilterMehrfachAuswahl, FilterPille } from "../components/Filterleiste";
 import { Filterleiste } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { TerminFormular } from "../components/TerminFormular";
-import { IBearbeiten, IDarstellung, IFehler, IHerunterladen, ILeerKalender, INeu, IPerson, IStornieren, ITag, IVor, IZurueckPfeil } from "../components/icons";
+import { IBearbeiten, IDarstellung, IFehler, IHerunterladen, IInfo, ILeerKalender, INeu, IPerson, IStornieren, IStunden, ITag, IVor, IZurueckPfeil } from "../components/icons";
 import { AbwesenheitDetail, AbwesenheitEintragen, AbwesenheitsZeile, ArtDreieck } from "../kalender/Abwesenheiten";
 import {
   KALENDER_ARTEN,
@@ -163,6 +163,9 @@ export function Kalender({
   // Beginn fuer "Neuer Termin", wenn er per Klick in eine Stunde des Zeitrasters geoeffnet wurde.
   const [neuUhrzeit, setNeuUhrzeit] = useState<string | undefined>(undefined);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Stunden aus dem Kalender (migrations/0080) -- nur fuer Mitarbeitende;
+  // die Klient:innen-Ansicht ist die einzige ohne Abwesenheiten.
+  const [stundenEinst, setStundenEinst] = useState<KalenderStundenEinstellungenDto | null>(null);
   // Tagesvorschau im Jahresueberblick: welcher Tag, und wie weit unter der
   // Kastenoberkante sie haengt (Unterkante der Tageszelle).
   const [vorschau, setVorschau] = useState<{ tag: string; oben: number; scrollen: boolean } | null>(null);
@@ -195,6 +198,10 @@ export function Kalender({
   }, [ladeVon, ladeBis, mitAbwesenheiten]);
 
   useEffect(laden, [laden]);
+
+  useEffect(() => {
+    if (mitAbwesenheiten) api.stundenKalenderEinstellungen().then(setStundenEinst).catch(() => setStundenEinst(null));
+  }, [mitAbwesenheiten]);
 
   useEffect(() => {
     if (mitAbwesenheiten) api.abwesenheitRechte().then(setAbwRechte).catch(() => {});
@@ -630,7 +637,10 @@ export function Kalender({
                       )}
                       <span className="zv-kal-zeit">{formatTerminUhrzeit(t)}</span>
                       <span className="zv-kal-termin-text">
-                        <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
+                        <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>
+                          {t.stunden?.vorgemerkt && !t.abgesagtAm && <IStunden className="zv-kal-stunden-marke" role="img" aria-hidden={false} aria-label="Als Betreuungszeit vorgemerkt" />}
+                          {t.titel}
+                        </strong>
                         <span>
                           {t.art !== "termin" && <span className={`zv-art-marke zv-art-${t.art}`}>{KALENDER_ART_LABEL[t.art]}</span>}
                           {t.erstelltVon.name}
@@ -701,6 +711,7 @@ export function Kalender({
           standardDatum={gewaehlt}
           standardUhrzeit={neuUhrzeit}
           kontakteLaden={kontakteLaden}
+          stunden={stundenEinst}
           onClose={() => setNeuOffen(false)}
           onAngelegt={(t) => {
             setNeuOffen(false);
@@ -732,7 +743,7 @@ export function Kalender({
           }}
         />
       )}
-      {detail && <TerminDetail termin={detail} onClose={() => setDetailId(null)} onGeaendert={ersetzen} />}
+      {detail && <TerminDetail termin={detail} stunden={stundenEinst} onClose={() => setDetailId(null)} onGeaendert={ersetzen} />}
     </div>
   );
 }
@@ -817,12 +828,14 @@ function NeuerTermin({
   standardDatum,
   standardUhrzeit,
   kontakteLaden,
+  stunden,
   onClose,
   onAngelegt,
 }: {
   standardDatum: string;
   standardUhrzeit?: string;
   kontakteLaden: () => Promise<ChatKontaktDto[]>;
+  stunden: KalenderStundenEinstellungenDto | null;
   onClose: () => void;
   onAngelegt: (t: TerminDto) => void;
 }) {
@@ -851,14 +864,37 @@ function NeuerTermin({
       {kontakte === null ? (
         <p className="zv-sub">Wird geladen…</p>
       ) : (
-        <TerminFormular standardDatum={standardDatum} standardUhrzeit={standardUhrzeit} kontakte={kontakte} mitBeschreibung absendenLabel="Termin anlegen" wirdGesendet={laeuft} fehler={fehler} onAbsenden={absenden} />
+        <TerminFormular
+          standardDatum={standardDatum}
+          standardUhrzeit={standardUhrzeit}
+          kontakte={kontakte}
+          mitBeschreibung
+          absendenLabel="Termin anlegen"
+          wirdGesendet={laeuft}
+          fehler={fehler}
+          onAbsenden={absenden}
+          stunden={stunden}
+        />
       )}
     </Modal>
   );
 }
 
-function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onClose: () => void; onGeaendert: (t: TerminDto) => void }) {
+function TerminDetail({
+  termin,
+  stunden,
+  onClose,
+  onGeaendert,
+}: {
+  termin: TerminDto;
+  stunden: KalenderStundenEinstellungenDto | null;
+  onClose: () => void;
+  onGeaendert: (t: TerminDto) => void;
+}) {
   const [bearbeiten, setBearbeiten] = useState(false);
+  // Haken neben "Zusagen" fuer Eingeladene, vorbelegt aus der eigenen Voreinstellung (Konzept 3.2).
+  const stundenMoeglich = !!stunden?.funktionAn && !!stunden.darfBuchen && !!termin.stunden && !termin.stunden.hindernis;
+  const [zusageMitStunden, setZusageMitStunden] = useState(stunden?.vorauswahlZusage ?? false);
   const [absagenFrage, setAbsagenFrage] = useState(false);
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -887,9 +923,20 @@ function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onC
           absendenLabel="Änderungen speichern"
           wirdGesendet={laeuft}
           fehler={fehler}
+          stunden={stunden}
           onAbsenden={async (e) => {
             const ok = await aktion(
-              () => api.terminAendern(termin.id, { titel: e.titel, beschreibung: e.beschreibung ?? null, ort: e.ort ?? null, beginn: e.beginn, ende: e.ende, ganztaegig: e.ganztaegig, art: e.art }),
+              () =>
+                api.terminAendern(termin.id, {
+                  titel: e.titel,
+                  beschreibung: e.beschreibung ?? null,
+                  ort: e.ort ?? null,
+                  beginn: e.beginn,
+                  ende: e.ende,
+                  ganztaegig: e.ganztaegig,
+                  art: e.art,
+                  ...(e.stundenErfassen !== undefined ? { stundenErfassen: e.stundenErfassen, stundenLeistungsart: e.stundenLeistungsart ?? null } : {}),
+                }),
               "Termin konnte nicht gespeichert werden."
             );
             if (ok) setBearbeiten(false);
@@ -928,6 +975,10 @@ function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onC
         <dd>{termin.erstelltVon.name}</dd>
       </dl>
 
+      {termin.stunden && stunden?.funktionAn && stunden.darfBuchen && (
+        <TerminStunden termin={termin} laeuft={laeuft} onVormerken={(v) => void aktion(() => api.terminStundenVormerken(termin.id, v), "Vormerkung fehlgeschlagen.")} />
+      )}
+
       <h3 className="zv-etagen-kopf">Teilnehmende ({termin.teilnehmer.length})</h3>
       <ul className="zv-kontaktliste">
         {termin.teilnehmer.map((t) => (
@@ -941,9 +992,22 @@ function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onC
       <div className="zv-aktionszeile" style={{ marginTop: "var(--zv-space-4)" }}>
         {!abgesagt && termin.meineAntwort !== null && (
           <>
-            <button type="button" className="zv-btn" disabled={laeuft || termin.meineAntwort === "zugesagt"} onClick={() => void aktion(() => api.terminAntworten(termin.id, "zugesagt"), "Zusage fehlgeschlagen.")}>
+            <button
+              type="button"
+              className="zv-btn"
+              disabled={laeuft || termin.meineAntwort === "zugesagt"}
+              onClick={() =>
+                void aktion(() => api.terminAntworten(termin.id, "zugesagt", stundenMoeglich ? zusageMitStunden : undefined), "Zusage fehlgeschlagen.")
+              }
+            >
               Zusagen
             </button>
+            {stundenMoeglich && termin.meineAntwort !== "zugesagt" && (
+              <label className="zv-checkbox-zeile">
+                <input type="checkbox" checked={zusageMitStunden} onChange={(e) => setZusageMitStunden(e.target.checked)} />
+                Als Betreuungszeit erfassen
+              </label>
+            )}
             <button type="button" className="zv-btn zv-btn-sekundaer" disabled={laeuft || termin.meineAntwort === "abgelehnt"} onClick={() => void aktion(() => api.terminAntworten(termin.id, "abgelehnt"), "Absage fehlgeschlagen.")}>
               Ablehnen
             </button>
@@ -984,5 +1048,55 @@ function TerminDetail({ termin, onClose, onGeaendert }: { termin: TerminDto; onC
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Abschnitt "Stunden" im Termindetail: nur die EIGENE Vormerkung und die
+ * eigenen Buchungen -- ueber fremde sagt der Termin nichts. Abgleichen gibt es
+ * nicht als Knopf: nach einer Aenderung storniert die Anwendung die alte
+ * Buchung und bucht neu (Entscheidung vom 20.11.2026), beides bleibt sichtbar.
+ */
+function TerminStunden({ termin, laeuft, onVormerken }: { termin: TerminDto; laeuft: boolean; onVormerken: (v: boolean) => void }) {
+  const s = termin.stunden!;
+  const gueltig = s.buchungen.filter((b) => !b.storniert);
+  const automatisch = s.buchungen.filter((b) => b.stornoAutomatisch);
+  const vorbei = new Date(termin.ende).getTime() <= Date.now();
+  const klientAnzahl = termin.teilnehmer.filter((t) => t.art === "klient" && t.antwort !== "abgelehnt").length;
+  const leistung = LEISTUNGSART_LABEL[terminStundenLeistungsart(termin.stundenLeistungsart, klientAnzahl)];
+  const abgesagt = !!termin.abgesagtAm;
+  return (
+    <section className="zv-termin-stunden">
+      <h3 className="zv-etagen-kopf">Stunden</h3>
+      {gueltig.length > 0 ? (
+        <div className="zv-hinweis zv-hinweis-info">
+          <IInfo />
+          <span>
+            Gebucht: {gueltig.map((b) => `${formatMinutenAlsStunden(b.minuten)} ${LEISTUNGSART_LABEL[b.leistungsart]} für ${b.klientName}`).join(", ")}.
+            {automatisch.length > 0 && " Automatisch neu gebucht, weil der Termin geändert wurde."}
+          </span>
+        </div>
+      ) : automatisch.length > 0 ? (
+        <div className="zv-hinweis zv-hinweis-info">
+          <IInfo />
+          <span>Die Buchung wurde automatisch storniert ({automatisch[0].stornoGrund}).</span>
+        </div>
+      ) : s.buchungen.length > 0 ? (
+        <p className="zv-sub">Die Buchung aus diesem Termin wurde storniert ({s.buchungen[0].stornoGrund}).</p>
+      ) : s.vorgemerkt && !s.hindernis && !abgesagt ? (
+        <p className="zv-sub">
+          Vorgemerkt: {formatMinutenAlsStunden(s.minuten ?? 0)} {leistung}
+          {vorbei ? ". Nicht gebucht – Grund siehe „Stunden“." : ", gebucht wird nach dem Ende des Termins."}
+        </p>
+      ) : (
+        <p className="zv-sub">{s.hindernis ?? "Nicht als Betreuungszeit vorgemerkt."}</p>
+      )}
+      {!abgesagt && termin.meineAntwort !== "abgelehnt" && !s.hindernis && (
+        <label className="zv-checkbox-zeile">
+          <input type="checkbox" checked={s.vorgemerkt} disabled={laeuft} onChange={(e) => onVormerken(e.target.checked)} />
+          Als Betreuungszeit erfassen
+        </label>
+      )}
+    </section>
   );
 }

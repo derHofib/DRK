@@ -116,6 +116,9 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "stunden", aktion: "buchen" },
   { modul: "stunden", aktion: "fuer-andere-buchen" },
   { modul: "stunden", aktion: "stornieren", sensibel: true },
+  // Traeger-Schalter "Stunden aus dem Kalender" (migrations/0080): ob
+  // Kalendertermine ueberhaupt als Betreuungszeit einfliessen duerfen.
+  { modul: "stunden", aktion: "einstellungen-verwalten" },
 
   // Abwesenheiten im Kalender (migrations/0074). Eintragen und stornieren
   // darf jede:r fuer sich selbst ohne Recht. "art-sehen" zeigt den GRUND

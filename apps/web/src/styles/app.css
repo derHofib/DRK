@@ -8973,3 +8973,102 @@ button.zv-achtung-eintrag:hover {
 .zv-formular-einstellungen span.zv-sub {
   margin: 0;
 }
+
+/* ==================================================================
+   Stunden aus dem Kalender (migrations/0080)
+   ================================================================== */
+
+/* Nebenbefund aus dem Konzept: .zv-field label (0,1,1) schlug
+   .zv-kontakt-zeile (0,1,0) und machte jede Teilnehmendenzeile im
+   Termindialog zu display:block -- Kaestchen, Name und "Klient:in" standen
+   untereinander. Die doppelte Klasse gewinnt, ohne !important. */
+.zv-field label.zv-kontakt-zeile {
+  display: flex;
+  margin-bottom: 0;
+  font-size: var(--zv-text-m);
+  font-weight: normal;
+  color: var(--zv-text);
+}
+
+.zv-stunden-kasten {
+  margin-bottom: var(--zv-space-4);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface-2);
+}
+
+.zv-stunden-kasten .zv-field {
+  margin: var(--zv-space-3) 0 0;
+}
+
+.zv-stunden-kasten-text {
+  margin: var(--zv-space-2) 0 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  line-height: var(--zv-leading-normal);
+}
+
+.zv-stunden-kasten-text strong {
+  color: var(--zv-text);
+}
+
+/* Gesperrt mit Grund: die Zeile bleibt lesbar, nur der Haken ist aus. */
+.zv-stunden-kasten-gesperrt .zv-checkbox-zeile {
+  cursor: not-allowed;
+  color: var(--zv-text-muted);
+}
+
+.zv-termin-stunden {
+  margin: var(--zv-space-4) 0 var(--zv-space-3);
+}
+
+.zv-kal-stunden-marke {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  margin-right: var(--zv-space-1);
+  vertical-align: -2px;
+}
+
+.zv-stunden-vormerkungen {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border: 1px dashed var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+}
+
+.zv-stunden-vormerkungen > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--zv-text-muted);
+}
+
+.zv-stunden-vormerkungen .zv-sub {
+  margin: var(--zv-space-1) 0 0;
+}
+
+.zv-stunden-notiz {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-stunden-herkunft {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-stunden-herkunft svg {
+  flex-shrink: 0;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}

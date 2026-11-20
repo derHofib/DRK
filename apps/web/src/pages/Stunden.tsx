@@ -2,12 +2,15 @@ import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "
 import {
   LEISTUNGSARTEN,
   LEISTUNGSART_LABEL,
+  berlinTag,
   formatMinutenAlsStunden,
   type BenutzerListEintragDto,
   type KlientListEintragDto,
   type Leistungsart,
   type StundenbuchungDto,
+  type StundenHerkunft,
   type StundenSummeDto,
+  type StundenVormerkungDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { formatDatum, heuteBerlin } from "../format";
@@ -16,11 +19,26 @@ import { FilterAuswahl, FilterPille } from "../components/Filterleiste";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
-import { IFehler, IFilterLoeschen, IKalender, IKlienten, ILeerStunden, INeu, IPerson, ISpeichern, IStornieren, ISuche } from "../components/icons";
+import {
+  IFehler,
+  IFilterLoeschen,
+  IKalender,
+  IKlienten,
+  ILeerStunden,
+  INeu,
+  IPerson,
+  ISpeichern,
+  IStornieren,
+  IStunden,
+  ISuche,
+  IVerknuepft,
+} from "../components/icons";
 import { SCHNELLWAHL_LABEL, zeitraumFuer, type Schnellwahl } from "./tagesberichte-filter";
 import { Datumsfeld } from "../components/Datumsfeld";
 import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
 import { zeitraumKurz } from "../components/datumsfeld-logik";
+
+const HERKUNFT_LABEL: Record<StundenHerkunft, string> = { manuell: "Von Hand", kalender: "Aus dem Kalender" };
 
 const MONATSNAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
@@ -53,13 +71,20 @@ export function Stunden() {
   const [klientFilter, setKlientFilter] = useState("");
   const [mitarbeiterFilter, setMitarbeiterFilter] = useState("");
   const [suche, setSuche] = useState("");
+  const [herkunft, setHerkunft] = useState<StundenHerkunft | "">("");
+  const [vormerkungen, setVormerkungen] = useState<StundenVormerkungDto[]>([]);
 
+  // Die Liste zuerst: GET /stundenbuchungen zieht vorher die Kalenderbuchungen
+  // nach (Konzept 3.3), erst danach stimmen Summen und Vormerkungen.
   function laden() {
-    const filter = { von, bis, klientId: klientFilter || undefined, mitarbeiterId: mitarbeiterFilter || undefined };
-    Promise.all([api.stundenListe(filter), api.stundenSummen(filter)])
-      .then(([liste, summe]) => {
+    const filter = { von, bis, klientId: klientFilter || undefined, mitarbeiterId: mitarbeiterFilter || undefined, herkunft: herkunft || undefined };
+    api
+      .stundenListe(filter)
+      .then(async (liste) => {
+        const [summe, vorgemerkt] = await Promise.all([api.stundenSummen(filter), api.stundenVormerkungen().catch(() => [])]);
         setBuchungen(liste);
         setSummen(summe);
+        setVormerkungen(vorgemerkt);
         setFehler(null);
       })
       .catch((err) => setFehler(err.message));
@@ -75,7 +100,7 @@ export function Stunden() {
     if (von && bis && von > bis) return;
     if (rechte && !rechte.ansehen) return;
     laden();
-  }, [von, bis, klientFilter, mitarbeiterFilter, rechte]);
+  }, [von, bis, klientFilter, mitarbeiterFilter, herkunft, rechte]);
 
   function schnellwahlWaehlen(wahl: Schnellwahl) {
     const z = zeitraumFuer(wahl);
@@ -89,20 +114,24 @@ export function Stunden() {
     const q = suche.trim().toLocaleLowerCase("de");
     if (!q) return buchungen;
     return buchungen.filter((b) =>
-      [b.klientName, b.mitarbeiterName ?? "", b.notiz ?? "", LEISTUNGSART_LABEL[b.leistungsart]].some((f) => f.toLocaleLowerCase("de").includes(q))
+      [b.klientName, b.mitarbeiterName ?? "", b.notiz ?? "", b.terminTitel ?? "", LEISTUNGSART_LABEL[b.leistungsart]].some((f) => f.toLocaleLowerCase("de").includes(q))
     );
   }, [buchungen, suche]);
 
   const gesamtMinuten = summen.reduce((s, x) => s + x.minuten, 0);
+  const mitKalender = summen.some((x) => x.minutenKalender > 0);
+  const geplant = vormerkungen.filter((v) => v.status === "geplant" && !v.grund);
+  const nichtGebucht = vormerkungen.filter((v) => v.status === "nicht-gebucht" || v.grund);
   const klientText = klienten.find((k) => k.id === klientFilter);
   const mitarbeiterText = mitarbeitende.find((m) => m.id === mitarbeiterFilter);
   const zeitraumText = schnellwahl
     ? SCHNELLWAHL_LABEL[schnellwahl]
     : zeitraumKurz(von, bis) || null;
-  const filterAktiv = Boolean(klientFilter || mitarbeiterFilter || suche.trim() || schnellwahl !== "monat");
+  const filterAktiv = Boolean(klientFilter || mitarbeiterFilter || herkunft || suche.trim() || schnellwahl !== "monat");
 
   function alleZuruecksetzen() {
     schnellwahlWaehlen("monat");
+    setHerkunft("");
     setKlientFilter("");
     setMitarbeiterFilter("");
     setSuche("");
@@ -241,6 +270,19 @@ export function Stunden() {
           )}
         </FilterPille>
 
+        <FilterPille icon={<IVerknuepft />} label="Herkunft" wert={herkunft ? `: ${HERKUNFT_LABEL[herkunft]}` : null} onEntfernen={() => setHerkunft("")}>
+          {(schliessen) => (
+            <FilterAuswahl
+              optionen={(["manuell", "kalender"] as StundenHerkunft[]).map((h) => ({ wert: h, label: HERKUNFT_LABEL[h] }))}
+              gewaehlt={herkunft || null}
+              onWaehlen={(h) => {
+                setHerkunft(h as StundenHerkunft);
+                schliessen();
+              }}
+            />
+          )}
+        </FilterPille>
+
         <span className="zv-filter-trenner" aria-hidden="true" />
 
         <button type="button" className="zv-icon-btn" aria-label="Alle Filter zurücksetzen" title="Alle Filter zurücksetzen" disabled={!filterAktiv} onClick={alleZuruecksetzen}>
@@ -255,16 +297,39 @@ export function Stunden() {
         </div>
       )}
 
+      {(geplant.length > 0 || nichtGebucht.length > 0) && (
+        <section className="zv-stunden-vormerkungen" aria-label="Vorgemerkte Termine">
+          <IStunden />
+          <div>
+            {geplant.length > 0 && (
+              <>
+                <strong>
+                  {geplant.length === 1 ? "1 Termin vorgemerkt" : `${geplant.length} Termine vorgemerkt`} ·{" "}
+                  {formatMinutenAlsStunden(geplant.reduce((s, v) => s + v.minuten * Math.max(1, v.klientNamen.length), 0))}
+                </strong>
+                <p className="zv-sub">Werden nach dem Terminende automatisch gebucht. Nur für dich sichtbar, bis sie gebucht sind; zählen noch nicht zum Saldo.</p>
+              </>
+            )}
+            {nichtGebucht.map((v) => (
+              <p key={v.terminId} className="zv-sub">
+                <strong>{v.titel}</strong> ({formatDatum(berlinTag(new Date(v.beginn)))}): {v.grund ?? "Nicht gebucht."}
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
+
       {summen.length > 0 && (
         <section aria-label="Stundensaldo" style={{ marginBottom: "var(--zv-space-4)" }}>
           <h3 className="zv-gruppe-kopf">
             Saldo im Zeitraum: <strong>{formatMinutenAlsStunden(gesamtMinuten)}</strong>
           </h3>
-          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": "1.4fr 1.2fr 1fr 0.8fr" } as CSSProperties}>
+          <div className="zv-karten-liste" style={{ "--zv-liste-spalten": mitKalender ? "1.4fr 1.2fr 1fr 1fr 0.8fr" : "1.4fr 1.2fr 1fr 0.8fr" } as CSSProperties}>
             <div className="zv-liste-kopf">
               <span>Klient:in</span>
               <span>Monat</span>
               <span>Stunden</span>
+              {mitKalender && <span>davon aus Kalender</span>}
               <span>Buchungen</span>
             </div>
             {summen.map((s) => (
@@ -276,6 +341,11 @@ export function Stunden() {
                 <span className="zv-liste-zelle" data-label="Stunden">
                   <strong>{formatMinutenAlsStunden(s.minuten)}</strong>
                 </span>
+                {mitKalender && (
+                  <span className="zv-liste-zelle" data-label="davon aus Kalender">
+                    {formatMinutenAlsStunden(s.minutenKalender)}
+                  </span>
+                )}
                 <span className="zv-liste-zelle" data-label="Buchungen">
                   {s.anzahl}
                 </span>
@@ -331,12 +401,34 @@ export function Stunden() {
               <span className="zv-liste-zelle" data-label="Dauer">
                 <strong style={b.storniert ? { textDecoration: "line-through" } : undefined}>{formatMinutenAlsStunden(b.minuten)}</strong>
               </span>
-              <span className="zv-liste-zelle" data-label="Notiz">
-                {b.notiz}
+              <span className="zv-liste-zelle zv-stunden-notiz" data-label="Notiz">
+                {b.terminId ? (
+                  // Die Notiz einer Kalenderbuchung ist der Termintitel beim Buchen;
+                  // wer den Termin sehen darf, sieht den heutigen Titel.
+                  <span className="zv-stunden-herkunft">
+                    <IKalender />
+                    Kalender: {b.terminTitel ?? b.notiz ?? "Termin"}
+                  </span>
+                ) : (
+                  b.notiz
+                )}
+                {b.automatischNeuGebucht && (
+                  <span className="zv-pill zv-pill-offen" title="Automatisch neu gebucht, weil der Termin nach der ersten Buchung geändert wurde. Die alte Buchung steht storniert daneben.">
+                    <span className="zv-pill-text">Automatisch neu gebucht</span>
+                  </span>
+                )}
+                {b.moeglicherweiseDoppelt && (
+                  <span className="zv-pill zv-pill-offen" title="Am selben Tag gibt es für diese Person und Klient:in eine Buchung aus dem Kalender und eine von Hand.">
+                    <span className="zv-pill-text">Möglicherweise doppelt</span>
+                  </span>
+                )}
                 {b.storniert && (
-                  <span className="zv-pill zv-pill-danger" title={b.stornoAm ? `Storniert am ${formatDatum(b.stornoAm.slice(0, 10))}` : undefined}>
+                  <span
+                    className="zv-pill zv-pill-danger"
+                    title={`${b.stornoAutomatisch ? "Automatisch storniert" : "Storniert"}: ${b.stornoGrund ?? ""}${b.stornoAm ? ` (am ${formatDatum(berlinTag(new Date(b.stornoAm)))})` : ""}`}
+                  >
                     <span className="zv-pill-text">
-                      Storniert{b.stornoVonName ? ` von ${b.stornoVonName}` : ""}: {b.stornoGrund}
+                      {b.stornoAutomatisch ? "Automatisch storniert" : `Storniert${b.stornoVonName ? ` von ${b.stornoVonName}` : ""}`}: {b.stornoGrund}
                     </span>
                   </span>
                 )}
