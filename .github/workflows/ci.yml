@@ -2,7 +2,7 @@ name: CI
 
 # Ziel: unter einer Minute Wanduhr bis alles grün (Stand vorher ~3 min, der
 # api-tests-Job allein). Die Hebel, jeweils mit Grund an Ort und Stelle:
-#  - API-Suite parallel: zwei Runner (Shards) mit je vier Jest-Workern, jeder
+#  - API-Suite parallel: drei Runner (Shards) mit je vier Jest-Workern, jeder
 #    Worker mit eigener Datenbank (apps/api/test/global-setup.ts).
 #  - PostgreSQL des Runner-Images statt Service-Container (spart den Pull).
 #  - Docker-Builds mit Schicht-Cache und als zwei parallele Jobs.
@@ -39,14 +39,17 @@ env:
 
 jobs:
   api-tests:
-    name: api-tests (${{ matrix.shard }}/2)
+    name: api-tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     strategy:
       # Beide Hälften immer zu Ende laufen lassen: sonst sieht man bei einem
       # Fehler in Shard 1 nicht, ob Shard 2 auch etwas hat.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # Drei statt zwei: Jests Aufteilung geht nach Dateipfad, nicht nach
+        # Laufzeit; bei zwei Hälften landeten die schweren Chat-Specs zusammen
+        # (gemessen 18 s gegen 32 s).
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -97,7 +100,7 @@ jobs:
       # Vier Worker = vier vCPUs des Runners; jeder bekommt eine eigene Kopie
       # der eben migrierten Datenbank (global-setup.ts).
       - name: API-Testsuite (gegen echte PostgreSQL, kein Mock)
-        run: pnpm --filter @zimmerakte/api exec jest --shard=${{ matrix.shard }}/2 --maxWorkers=4
+        run: pnpm --filter @zimmerakte/api exec jest --shard=${{ matrix.shard }}/3 --maxWorkers=4
 
   web-build:
     runs-on: ubuntu-latest
@@ -120,10 +123,14 @@ jobs:
       # Die API-Tests transpilieren ohne Typprüfung (apps/api/tsconfig.jest.json).
       # Hier wird sie nachgeholt -- über src, scripts UND test, also strenger
       # als der nest build im Docker-Image, der die Testdateien nicht sieht.
-      - name: API-Typprüfung (inkl. Testdateien)
-        run: pnpm --filter @zimmerakte/api exec tsc --noEmit -p tsconfig.json
-
-      - run: pnpm --filter @zimmerakte/web build
+      # Läuft gleichzeitig mit dem Web-Build (beide nur CPU, der Runner hat
+      # vier Kerne); "wait" auf die PID reicht den Exit-Code weiter.
+      - name: API-Typprüfung (inkl. Testdateien) und Web-Build
+        run: |
+          pnpm --filter @zimmerakte/api exec tsc --noEmit -p tsconfig.json &
+          typpruefung=$!
+          pnpm --filter @zimmerakte/web build
+          wait $typpruefung
 
       # Hersteller-MCP-Server der Rueckmeldungen: keine Abhaengigkeiten, nur Node.
       - name: Rueckmeldungs-MCP-Server
