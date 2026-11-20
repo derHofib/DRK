@@ -15,6 +15,7 @@ import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds, standortIstErlaubt } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { genehmigtePlaetzeLesen, kontakteLesen, vereinbarungenLesen } from "./standort-kontakt-vereinbarung.service";
 
 export interface StandortDto {
   id: string;
@@ -414,6 +415,7 @@ export class StandortService {
   async steckbrief(id: string): Promise<StandortSteckbriefDto> {
     const { benutzerId } = requireTenantContext();
     const darfBearbeiten = await this.rechte.hatRecht("standorte", "bearbeiten");
+    const darfVereinbarungen = await this.rechte.hatRecht("standorte", "vereinbarungen");
     return this.db.withTenant(async (client) => {
       if (!(await standortIstErlaubt(client, benutzerId, id))) {
         throw new NotFoundException("Standort nicht gefunden.");
@@ -430,7 +432,7 @@ export class StandortService {
       const { rows: teamRows } = await client.query(TEAM_SQL, [id]);
       const eingerichtet = Number(r.plaetze_eingerichtet);
       const belegt = Number(r.plaetze_belegt);
-      return {
+      const steckbrief: StandortSteckbriefDto = {
         id: r.id,
         aktiv: r.aktiv,
         adresse: r.adresse,
@@ -441,7 +443,13 @@ export class StandortService {
         leitung: leitung.get(id) ?? [],
         team: { anzahl: Number(teamRows[0].anzahl) },
         fehlendeAngaben: fehlendeAngaben(r),
+        kontakte: await kontakteLesen(client, id),
+        genehmigtePlaetze: await genehmigtePlaetzeLesen(client, id),
+        darfVereinbarungen,
       };
+      // Wie Kostenstelle/IK: ohne Recht fehlt das Feld, statt leer zu sein.
+      if (darfVereinbarungen) steckbrief.vereinbarungen = await vereinbarungenLesen(client, id);
+      return steckbrief;
     });
   }
 

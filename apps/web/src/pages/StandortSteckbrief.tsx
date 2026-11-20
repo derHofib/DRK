@@ -5,6 +5,9 @@ import {
   STANDORT_BARRIEREFREIHEIT_LABEL,
   STANDORT_BETREUUNGSUMFANG_LABEL,
   STANDORT_FEHLENDE_ANGABE_LABEL,
+  STANDORT_KONTAKT_NOTFALL_ROLLEN,
+  STANDORT_KONTAKT_ROLLE_LABEL,
+  STANDORT_VEREINBARUNG_ART_LABEL,
   type StandortAenderungDto,
   type StandortAngabenDto,
   type StandortFehlendeAngabe,
@@ -32,6 +35,7 @@ import {
   IZurueck,
 } from "../components/icons";
 import { formatDatum } from "../format";
+import { KontakteVorOrt, telLink, Vereinbarungen } from "./StandortKontakteVereinbarungen";
 
 /**
  * Standort-Steckbrief (Konzept standort-daten, Phase 1). Eigene Seite im
@@ -46,7 +50,7 @@ import { formatDatum } from "../format";
  * hier nur, was es nirgends sonst gibt.
  */
 
-type Reiter = "ueberblick" | "angaben";
+type Reiter = "ueberblick" | "angaben" | "kontakte" | "vereinbarungen";
 
 type GruppeId = "grunddaten" | "anschrift" | "erreichbarkeit" | "lage" | "verwaltung" | "hinweise";
 
@@ -148,10 +152,6 @@ function angebotsformText(a: StandortAngabenDto): string | null {
   return recht ? `${STANDORT_ANGEBOTSFORM_LABEL[a.angebotsform]} (${recht})` : STANDORT_ANGEBOTSFORM_LABEL[a.angebotsform];
 }
 
-function telLink(nummer: string): string {
-  return `tel:${nummer.replace(/[^\d+]/g, "")}`;
-}
-
 function anzeigeWert(feld: Feld, a: StandortAngabenDto): string {
   const wert = a[feld.key];
   if (wert === null || wert === undefined || wert === "") return "–";
@@ -230,7 +230,16 @@ export function StandortSteckbrief({
   const reiterListe: ReiterEintrag<Reiter>[] = [
     { wert: "ueberblick", label: "Überblick" },
     { wert: "angaben", label: "Angaben", zaehler: daten?.fehlendeAngaben.length || undefined },
+    { wert: "kontakte", label: "Kontakte vor Ort", zaehler: daten?.kontakte.length || undefined },
   ];
+  // Ohne Recht fehlt das Feld im JSON -- dann gibt es auch den Reiter nicht.
+  if (daten?.vereinbarungen) {
+    reiterListe.push({
+      wert: "vereinbarungen",
+      label: "Vereinbarungen",
+      zaehler: daten.vereinbarungen.filter((v) => v.status === "endet_bald").length || undefined,
+    });
+  }
 
   return (
     <div className="zv-akte zv-steckbrief">
@@ -302,14 +311,19 @@ export function StandortSteckbrief({
                 onKopieren={() => anschriftKopieren(a)}
                 onBearbeiten={daten.darfBearbeiten ? gruppeBearbeiten : undefined}
                 onOrganigramm={onOrganigramm}
+                onReiter={setReiter}
               />
-            ) : (
+            ) : reiter === "angaben" ? (
               <Angaben
                 gruppen={gruppen}
                 angaben={a}
                 darfBearbeiten={daten.darfBearbeiten}
                 onBearbeiten={setBearbeiteteGruppe}
               />
+            ) : reiter === "kontakte" ? (
+              <KontakteVorOrt standortId={daten.id} kontakte={daten.kontakte} darfBearbeiten={daten.darfBearbeiten} onGeaendert={laden} />
+            ) : (
+              <Vereinbarungen standortId={daten.id} vereinbarungen={daten.vereinbarungen ?? []} onGeaendert={nachAenderung} />
             )}
           </div>
 
@@ -356,6 +370,7 @@ function Ueberblick({
   onKopieren,
   onBearbeiten,
   onOrganigramm,
+  onReiter,
 }: {
   daten: StandortSteckbriefDto;
   angaben: StandortAngabenDto;
@@ -363,11 +378,21 @@ function Ueberblick({
   onKopieren: () => void;
   onBearbeiten?: (g: GruppeId) => void;
   onOrganigramm?: () => void;
+  onReiter: (r: Reiter) => void;
 }) {
   const blick: [string, ReactNode][] = [
     ["Angebotsform", a.angebotsform ? STANDORT_ANGEBOTSFORM_LABEL[a.angebotsform] : null],
     ["Rechtsgrundlage", a.angebotsform ? STANDORT_ANGEBOTSFORM_RECHTSGRUNDLAGE[a.angebotsform] : null],
-    ["Plätze", `${daten.plaetze.belegt} belegt · ${daten.plaetze.eingerichtet} eingerichtet`],
+    [
+      "Plätze",
+      [
+        `${daten.plaetze.belegt} belegt`,
+        `${daten.plaetze.eingerichtet} eingerichtet`,
+        daten.genehmigtePlaetze !== null ? `${daten.genehmigtePlaetze} genehmigt` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ],
     ["Betreuung", a.betreuungsumfang ? STANDORT_BETREUUNGSUMFANG_LABEL[a.betreuungsumfang] : null],
     ["In Betrieb seit", a.inBetriebSeit ? formatDatum(a.inBetriebSeit) : null],
     [
@@ -384,12 +409,38 @@ function Ueberblick({
   if ("kostenstelle" in a) blick.push(["Kostenstelle", a.kostenstelle]);
   if ("ikNummer" in a) blick.push(["IK-Nummer", a.ikNummer]);
 
-  const achtung = daten.fehlendeAngaben.map((f) => ({
-    schluessel: f,
-    titel: `Angabe fehlt: ${STANDORT_FEHLENDE_ANGABE_LABEL[f]}`,
-    meta: `Angaben › ${GRUPPEN.find((g) => g.id === FEHLT_IN_GRUPPE[f])!.titel}`,
-    gruppe: FEHLT_IN_GRUPPE[f],
-  }));
+  const achtung: { schluessel: string; titel: string; meta: string; onKlick?: () => void }[] = [];
+  // Inaktive Standorte: keine Fristen-Hinweise mehr (Konzept, Randfaelle).
+  if (daten.aktiv) {
+    for (const v of daten.vereinbarungen ?? []) {
+      if (v.status !== "endet_bald") continue;
+      achtung.push({
+        schluessel: v.id,
+        titel: `${STANDORT_VEREINBARUNG_ART_LABEL[v.art]} endet ${v.endetInTagen === 0 ? "heute" : `in ${v.endetInTagen} Tagen`}`,
+        meta: `${v.partner} · bis ${formatDatum(v.gueltigBis!)}`,
+        onKlick: () => onReiter("vereinbarungen"),
+      });
+    }
+    // Hinweis, keine Sperre: die Belegung bleibt moeglich (Konzept, Randfaelle).
+    if (daten.genehmigtePlaetze !== null && daten.plaetze.eingerichtet > daten.genehmigtePlaetze) {
+      achtung.push({
+        schluessel: "plaetze",
+        titel: "Mehr Plätze eingerichtet als genehmigt",
+        meta: `${daten.plaetze.eingerichtet} eingerichtet, ${daten.genehmigtePlaetze} genehmigt`,
+        onKlick: daten.vereinbarungen ? () => onReiter("vereinbarungen") : undefined,
+      });
+    }
+  }
+  for (const f of daten.fehlendeAngaben) {
+    achtung.push({
+      schluessel: f,
+      titel: `Angabe fehlt: ${STANDORT_FEHLENDE_ANGABE_LABEL[f]}`,
+      meta: `Angaben › ${GRUPPEN.find((g) => g.id === FEHLT_IN_GRUPPE[f])!.titel}`,
+      onKlick: onBearbeiten ? () => onBearbeiten(FEHLT_IN_GRUPPE[f]) : undefined,
+    });
+  }
+
+  const notfallKontakte = daten.kontakte.filter((k) => k.telefon && STANDORT_KONTAKT_NOTFALL_ROLLEN.includes(k.rolle));
 
   const notfallNummern = [
     a.bereitschaftTelefon ? { label: "Bereitschaft anrufen", nummer: a.bereitschaftTelefon, haupt: true } : null,
@@ -401,7 +452,7 @@ function Ueberblick({
       <div className="zv-ueberblick-haupt">
         {/* Nur in schmaler Ansicht (Handy, siehe app.css): wer nachts den
             Steckbrief oeffnet, sucht eine Nummer, keine Tabelle. */}
-        {notfallNummern.length > 0 && (
+        {(notfallNummern.length > 0 || notfallKontakte.length > 0) && (
           <section className="zv-steckbrief-notfall" aria-label="Im Notfall">
             <div className="zv-abschnittskopf">
               <h3>Im Notfall</h3>
@@ -413,6 +464,12 @@ function Ueberblick({
               </a>
             ))}
             {a.bereitschaftHinweis && <p className="zv-sub">{a.bereitschaftHinweis}</p>}
+            {notfallKontakte.map((k) => (
+              <a key={k.id} className="zv-btn zv-btn-block zv-btn-sekundaer" href={telLink(k.telefon!)}>
+                <ITelefonat />
+                {STANDORT_KONTAKT_ROLLE_LABEL[k.rolle]}: {k.name}
+              </a>
+            ))}
           </section>
         )}
 
@@ -494,6 +551,35 @@ function Ueberblick({
             </li>
           </ul>
         </section>
+
+        <section className="zv-steckbrief-kontakte-kurz" aria-label="Kontakte vor Ort">
+          <div className="zv-abschnittskopf">
+            <h3>Kontakte vor Ort</h3>
+            <button type="button" className="zv-link-btn" onClick={() => onReiter("kontakte")}>
+              {daten.kontakte.length > 0 ? "Alle anzeigen" : onBearbeiten ? "Eintragen" : "Ansehen"}
+            </button>
+          </div>
+          {daten.kontakte.length === 0 ? (
+            <p className="zv-sub">Noch keine Hausverwaltung, Notdienste oder Praxen eingetragen.</p>
+          ) : (
+            <dl className="zv-kennwerte">
+              {daten.kontakte.map((k) => (
+                <div key={k.id}>
+                  <dt>{STANDORT_KONTAKT_ROLLE_LABEL[k.rolle]}</dt>
+                  <dd>
+                    {k.name}
+                    {k.telefon && (
+                      <>
+                        {" · "}
+                        <a href={telLink(k.telefon)}>{k.telefon}</a>
+                      </>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </section>
       </div>
 
       <div className="zv-ueberblick-rand">
@@ -521,8 +607,8 @@ function Ueberblick({
             <ul className="zv-achtung-liste">
               {achtung.map((e) => (
                 <li key={e.schluessel}>
-                  {onBearbeiten ? (
-                    <button type="button" className="zv-achtung-eintrag" onClick={() => onBearbeiten(e.gruppe)}>
+                  {e.onKlick ? (
+                    <button type="button" className="zv-achtung-eintrag" onClick={e.onKlick}>
                       <span className="zv-todo-titel">{e.titel}</span>
                       <span className="zv-todo-meta">{e.meta}</span>
                     </button>
