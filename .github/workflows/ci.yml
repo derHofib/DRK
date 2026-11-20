@@ -42,8 +42,8 @@ jobs:
     name: api-tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     strategy:
-      # Beide Hälften immer zu Ende laufen lassen: sonst sieht man bei einem
-      # Fehler in Shard 1 nicht, ob Shard 2 auch etwas hat.
+      # Alle Shards immer zu Ende laufen lassen: sonst sieht man bei einem
+      # Fehler in einem Shard nicht, ob die anderen auch etwas haben.
       fail-fast: false
       matrix:
         # Drei statt zwei: Jests Aufteilung geht nach Dateipfad, nicht nach
@@ -53,34 +53,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Das Runner-Image bringt PostgreSQL mit; es nur zu starten dauert ~2 s,
-      # ein Service-Container kostete jedes Mal ~12 s (Image ziehen, Health-
-      # Check). Produktion läuft auf 16 -- hat das Image eine andere Version,
-      # weicht der Schritt auf den Container postgres:16 aus, statt still
-      # gegen eine andere Hauptversion zu testen.
-      - name: PostgreSQL 16 starten
+      # Im Hintergrund, damit Node-Einrichtung und Installation nicht darauf
+      # warten (gemessen ~9 s). Warum Runner-PostgreSQL statt Service-
+      # Container: siehe das Skript.
+      - name: PostgreSQL 16 starten (im Hintergrund)
         run: |
-          if [ -x /usr/lib/postgresql/16/bin/postgres ]; then
-            sudo systemctl start postgresql.service
-            sudo -u postgres psql -v ON_ERROR_STOP=1 -q \
-              -c "CREATE ROLE zimmerakte_admin LOGIN SUPERUSER PASSWORD 'ci_only_not_secret'" \
-              -c "CREATE DATABASE zimmerakte OWNER zimmerakte_admin" \
-              -c "ALTER SYSTEM SET fsync = off" \
-              -c "ALTER SYSTEM SET synchronous_commit = off" \
-              -c "ALTER SYSTEM SET full_page_writes = off" \
-              -c "SELECT pg_reload_conf()"
-          else
-            echo "Kein PostgreSQL 16 im Runner-Image -- weiche auf postgres:16 aus."
-            docker run -d -p 5432:5432 \
-              -e POSTGRES_USER=zimmerakte_admin \
-              -e POSTGRES_PASSWORD=ci_only_not_secret \
-              -e POSTGRES_DB=zimmerakte \
-              postgres:16 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
-            for i in $(seq 1 30); do pg_isready -h localhost -q && break; sleep 1; done
-          fi
-          version=$(psql "$MIGRATIONS_DATABASE_URL" -Atc "SHOW server_version_num")
-          echo "PostgreSQL $version"
-          test "${version:0:2}" = "16"
+          # if/else statt "; echo $?": die Step-Shell läuft mit -e, ein Fehler
+          # beendete sonst die Subshell, bevor der Exit-Code geschrieben ist.
+          # Erst vollständig schreiben, dann umbenennen: die Umleitung legt die
+          # Datei sofort leer an, der Warteschritt sähe sie sonst zu früh.
+          (
+            if .github/scripts/postgres-16-starten.sh > "$RUNNER_TEMP/pg.log" 2>&1; then echo 0; else echo $?; fi > "$RUNNER_TEMP/pg.exit.tmp"
+            mv "$RUNNER_TEMP/pg.exit.tmp" "$RUNNER_TEMP/pg.exit"
+          ) &
 
       # Keine "version:" hier -- liest pnpm@10.33.0 aus dem
       # "packageManager"-Feld in package.json, damit lokale Entwicklung, CI
@@ -95,7 +80,9 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter "@zimmerakte/api..."
 
       - name: Migrationen anwenden
-        run: pnpm --filter @zimmerakte/api migrate
+        run: |
+          .github/scripts/postgres-abwarten.sh
+          pnpm --filter @zimmerakte/api migrate
 
       # Vier Worker = vier vCPUs des Runners; jeder bekommt eine eigene Kopie
       # der eben migrierten Datenbank (global-setup.ts).
