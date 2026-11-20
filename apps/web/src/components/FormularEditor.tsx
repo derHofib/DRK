@@ -24,6 +24,7 @@ import {
 } from "@zimmerakte/shared";
 import { ProtokollEingabe } from "./ProtokollFormular";
 import { IBestaetigen, ILoeschen, INeu, ISperre, IVerborgen, IVerschiebenHoch, IVerschiebenRunter, ISichtbar } from "./icons";
+import { Datumsfeld } from "./Datumsfeld";
 
 /**
  * Formular-Editor (Konzept Formulare, Abschnitt 5): links der Bausteinkasten,
@@ -1101,12 +1102,21 @@ function BedingungsZeile({ zeile, felder, onAendern, onEntfernen }: { zeile: Bla
           ))}
         </select>
       );
+    } else if (f.typ === "datum") {
+      wertEingabe = (
+        <Datumsfeld
+          aria-label="Wert"
+          groesse="kompakt"
+          value={zeile.wert === undefined ? "" : String(zeile.wert)}
+          onChange={(v) => onAendern({ ...zeile, wert: v })}
+        />
+      );
     } else {
       const zahl = datentypVon(f.typ) === "zahl";
       wertEingabe = (
         <input
           aria-label="Wert"
-          type={zahl ? "number" : f.typ === "datum" ? "date" : f.typ === "uhrzeit" ? "time" : "text"}
+          type={zahl ? "number" : f.typ === "uhrzeit" ? "time" : "text"}
           value={zeile.wert === undefined ? "" : String(zeile.wert)}
           onChange={(e) => onAendern({ ...zeile, wert: zahl ? Number(e.target.value) : e.target.value })}
         />

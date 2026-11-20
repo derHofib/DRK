@@ -12,7 +12,7 @@ import type {
 } from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
-import { formatDatum } from "../format";
+import { formatDatum, heuteBerlin } from "../format";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
 import { AufgabeZeile } from "../components/AufgabeZeile";
 import { GrundAbfrage } from "../components/GrundAbfrage";
@@ -45,6 +45,7 @@ import {
   IWarteliste,
   IZuklappen,
 } from "../components/icons";
+import { Datumsfeld, Zeitraumfeld } from "../components/Datumsfeld";
 
 /** Sentinel-Wert im Standort-Select fuer "einen neuen Standort anlegen". */
 const NEUER_STANDORT = "__neu__";
@@ -933,7 +934,7 @@ export function Zimmer({
                             <option value="normal">Normal</option>
                             <option value="hoch">Hoch</option>
                           </select>
-                          <input name="faelligAm" type="date" aria-label="Fälligkeit" />
+                          <Datumsfeld name="faelligAm" aria-label="Fälligkeit" groesse="kompakt" schnellwahl="faelligkeit" />
                           <select name="zugewiesenAn" defaultValue="" aria-label="Zuweisen an">
                             <option value="">Niemand</option>
                             {benutzerListe.map((b) => (
@@ -1137,13 +1138,7 @@ export function Zimmer({
             )}
             <div className="zv-field">
               <label htmlFor="zuweisung-einzug">Einzugsdatum</label>
-              <input
-                id="zuweisung-einzug"
-                name="einzug"
-                type="date"
-                required
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
+              <Datumsfeld id="zuweisung-einzug" name="einzug" required defaultValue={heuteBerlin()} schnellwahl="heute" />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IEinziehen />
@@ -1209,14 +1204,7 @@ export function Zimmer({
             </p>
             <div className="zv-field">
               <label htmlFor="auszug-datum">Auszugsdatum</label>
-              <input
-                id="auszug-datum"
-                name="auszug"
-                type="date"
-                required
-                autoFocus
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
+              <Datumsfeld id="auszug-datum" name="auszug" required autoFocus defaultValue={heuteBerlin()} schnellwahl="heute" />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
@@ -1239,26 +1227,13 @@ export function Zimmer({
               Nutzen, wenn sich ein Einzug oder Auszug verzögert oder sich geändert hat.
             </p>
             <div className="zv-field-row">
-              <div className="zv-field">
-                <label htmlFor="belegung-bearbeiten-einzug">Einzugsdatum</label>
-                <input
-                  id="belegung-bearbeiten-einzug"
-                  name="einzug"
-                  type="date"
-                  required
-                  autoFocus
-                  defaultValue={bearbeiteteBelegung.einzug}
-                />
-              </div>
-              <div className="zv-field">
-                <label htmlFor="belegung-bearbeiten-auszug">Auszugsdatum (optional)</label>
-                <input
-                  id="belegung-bearbeiten-auszug"
-                  name="auszug"
-                  type="date"
-                  defaultValue={bearbeiteteBelegung.auszug ?? ""}
-                />
-              </div>
+              <Zeitraumfeld
+                von={{ id: "belegung-bearbeiten-einzug", name: "einzug", label: "Einzugsdatum", required: true }}
+                bis={{ id: "belegung-bearbeiten-auszug", name: "auszug", label: "Auszugsdatum (optional)" }}
+                defaultVon={bearbeiteteBelegung.einzug}
+                defaultBis={bearbeiteteBelegung.auszug ?? ""}
+                autoFocus
+              />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <ISpeichern />

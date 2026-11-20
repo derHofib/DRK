@@ -14,6 +14,7 @@ import {
   ISpeichern,
 } from "../../components/icons";
 import { formatDatum } from "../../format";
+import { Datumsfeld, Zeitraumfeld } from "../../components/Datumsfeld";
 
 /**
  * Hilfeplan mit Zielen je Klient. Der Fortschritt eines Ziels wird nicht
@@ -81,17 +82,13 @@ export function HilfeplanTab({ klientId, onBerichtOeffnen }: { klientId: string;
       {planFormular && (
         <form className="zv-inline-form" onSubmit={planAnlegen}>
           <div className="zv-field-row">
+            <Zeitraumfeld
+              von={{ id: "hp-von", name: "von", label: "Von", required: true }}
+              bis={{ id: "hp-bis", name: "bis", label: "Bis (optional)" }}
+            />
             <div className="zv-field">
-              <label>Von</label>
-              <input name="von" type="date" required />
-            </div>
-            <div className="zv-field">
-              <label>Bis (optional)</label>
-              <input name="bis" type="date" />
-            </div>
-            <div className="zv-field">
-              <label>Nächstes Hilfeplangespräch (optional)</label>
-              <input name="gespraech" type="date" />
+              <label htmlFor="hp-gespraech">Nächstes Hilfeplangespräch (optional)</label>
+              <Datumsfeld id="hp-gespraech" name="gespraech" schnellwahl="faelligkeit" />
             </div>
           </div>
           <div className="zv-field">
@@ -187,7 +184,13 @@ function PlanKarte({
         <div className="zv-hilfeplan-gespraech">
           {gespraechBearbeiten ? (
             <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={gespraechSpeichern}>
-              <input name="gespraech" type="date" defaultValue={plan.naechstesGespraech ?? ""} />
+              <Datumsfeld
+                name="gespraech"
+                defaultValue={plan.naechstesGespraech ?? ""}
+                aria-label="Nächstes Hilfeplangespräch"
+                groesse="kompakt"
+                schnellwahl="faelligkeit"
+              />
               <button className="zv-link-btn" type="submit">
                 <ISpeichern />
                 Speichern
@@ -227,8 +230,8 @@ function PlanKarte({
               <input name="titel" required maxLength={300} />
             </div>
             <div className="zv-field">
-              <label>Fällig am (optional)</label>
-              <input name="faellig" type="date" />
+              <label htmlFor={`hp-ziel-faellig-${plan.id}`}>Fällig am (optional)</label>
+              <Datumsfeld id={`hp-ziel-faellig-${plan.id}`} name="faellig" schnellwahl="faelligkeit" />
             </div>
           </div>
           <div className="zv-field">

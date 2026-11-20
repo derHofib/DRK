@@ -6,6 +6,7 @@ import { heuteBerlin } from "../format";
 import { AngehefteteFormulare, useAngehefteteFormulare } from "./AngehefteteFormulare";
 import { Modal } from "./Modal";
 import { IFehler, IInfo, ISpeichern } from "./icons";
+import { Datumsfeld } from "./Datumsfeld";
 
 /**
  * Das eine Fenster "Neuer Tagesbericht" -- fuer die Seite Tagesberichte
@@ -125,7 +126,7 @@ export function NeuerTagesberichtFenster({
           )}
           <div className="zv-field">
             <label htmlFor="ntb-datum">Datum</label>
-            <input id="ntb-datum" name="datum" type="date" required max={heute} defaultValue={heute} autoFocus={!klienten} />
+            <Datumsfeld id="ntb-datum" name="datum" required max={heute} defaultValue={heute} autoFocus={!klienten} schnellwahl="heute-gestern" />
           </div>
         </div>
 

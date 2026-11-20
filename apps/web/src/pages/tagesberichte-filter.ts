@@ -1,11 +1,12 @@
 import type { TagesberichtDto } from "@zimmerakte/shared";
 import { lokalesDatum } from "../format";
 
-export type Schnellwahl = "alle" | "heute" | "woche" | "letzte7" | "monat" | "vormonat";
+export type Schnellwahl = "alle" | "heute" | "gestern" | "woche" | "letzte7" | "monat" | "vormonat";
 
 export const SCHNELLWAHL_LABEL: Record<Schnellwahl, string> = {
   alle: "Alle",
   heute: "Heute",
+  gestern: "Gestern",
   woche: "Aktuelle Woche",
   letzte7: "Letzte 7 Tage",
   monat: "Dieser Monat",
@@ -34,6 +35,8 @@ export function zeitraumFuer(wahl: Schnellwahl, jetzt: Date = new Date()): { von
       return { von: "", bis: "" };
     case "heute":
       return { von: tag(0), bis: tag(0) };
+    case "gestern":
+      return { von: tag(-1), bis: tag(-1) };
     case "letzte7":
       return { von: tag(-6), bis: tag(0) };
     case "woche": {

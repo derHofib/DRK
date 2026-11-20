@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 41 + 3 * 7 + 8 + 1 + 4 + 3 + 6;
+const ERWARTETE_PAARE = 41 + 3 * 7 + 8 + 1 + 4 + 3 + 6 + 18;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -221,10 +221,24 @@ async function messePaare(page) {
       function pruefe(label, el, schwelle, farbeAttr) {
         if (!el) return;
         const st = getComputedStyle(el);
-        const vg = farbeAttr === "border" ? st.borderTopColor : st.color;
+        // "schatten": Rahmen als inset-Schatten (Kalender "heute"); "flaeche":
+        // eigene Flaeche gegen die Umgebung (gewaehlter Tag im Popover);
+        // "outline": Fokus-Umrandung -- gemessen am ECHT fokussierten
+        // Element. Fehlt die Regel, ist outline-style "none" und die Messung
+        // zaehlt als 0:1 statt still zu entfallen.
+        if (farbeAttr === "outline" && st.outlineStyle === "none") {
+          ergebnisse.push({ label: label + " (keine Umrandung!)", wert: 0, schwelle });
+          return;
+        }
+        const vg =
+          farbeAttr === "border" ? st.borderTopColor
+          : farbeAttr === "schatten" ? (st.boxShadow.match(/^([a-z-]+\\([^)]*\\)|#[0-9a-f]+)/i) || [])[1]
+          : farbeAttr === "flaeche" ? st.backgroundColor
+          : farbeAttr === "outline" ? st.outlineColor
+          : st.color;
         const hg = hintergrundVon(el.parentElement || el);
         const eigen = parseFarbe(st.backgroundColor);
-        const wirkHg = eigen && eigen.a > 0.99 ? st.backgroundColor : hg;
+        const wirkHg = eigen && eigen.a > 0.99 && farbeAttr !== "flaeche" && farbeAttr !== "outline" ? st.backgroundColor : hg;
         const k = kontrast(vg, wirkHg);
         if (k !== null) ergebnisse.push({ label, wert: k, schwelle });
       }
@@ -313,6 +327,28 @@ async function messePaare(page) {
       pruefe("Verlauf: Symbol Entscheidung", q(".zv-pruef-verlauf-entscheidung"), 3);
       pruefe("Verlauf: Artmarke auf Flaeche", q(".zv-pruef-verlauf-art"), 4.5);
       pruefe("Neuer Eintrag: gewaehlte Art", q(".zv-pruef-eintrag-art"), 4.5);
+      // Datumsfeld-Kalender (Datumsfeld.tsx): alle Tageszustaende mit den
+      // echten Klassen auf der echten Popover-Flaeche.
+      pruefe("Kalender: normaler Tag", q(".zv-pruef-kal-normal"), 4.5);
+      pruefe("Kalender: Wochenende", q(".zv-pruef-kal-we"), 4.5);
+      pruefe("Kalender: ausserhalb des Monats", q(".zv-pruef-kal-aussen"), 4.5);
+      pruefe("Kalender: gesperrt (min/max)", q(".zv-pruef-kal-gesperrt"), 4.5);
+      pruefe("Kalender: heute (Text)", q(".zv-pruef-kal-heute"), 4.5);
+      pruefe("Kalender: heute (Rahmen, Nicht-Text)", q(".zv-pruef-kal-heute"), 3, "schatten");
+      pruefe("Kalender: gewaehlt (Text auf Akzent)", q(".zv-pruef-kal-gewaehlt"), 4.5);
+      pruefe("Kalender: gewaehlte Flaeche gegen Popover", q(".zv-pruef-kal-gewaehlt"), 3, "flaeche");
+      pruefe("Kalender: im Bereich", q(".zv-pruef-kal-bereich"), 4.5);
+      pruefe("Kalender: Hover", q(".zv-pruef-kal-hover"), 4.5);
+      pruefe("Kalender: Wochentag-Kopf", q(".zv-pruef-kal-kopf"), 4.5);
+      pruefe("Kalender: Wochenend-Kopf", q(".zv-pruef-kal-kopf-we"), 4.5);
+      pruefe("Kalender: Schnellwahl-Chip aktiv", q(".zv-pruef-kal-chip"), 4.5);
+      pruefe("Zeitraum-Filter: Schnellwahl aktiv", q(".zv-pruef-kal-schnell"), 4.5);
+      pruefe("Monatsfeld: Wert", q(".zv-pruef-kal-monat"), 4.5);
+      pruefe("Datumsfeld: Fehlermeldung", q(".zv-pruef-kal-fehler"), 4.5);
+      pruefe("Datumsfeld: Feldrand", q(".zv-pruef-kal-feld"), 3, "border");
+      const fokusTag = q(".zv-pruef-kal-fokus");
+      if (fokusTag) fokusTag.focus();
+      pruefe("Kalender: Fokus-Umrandung", fokusTag, 3, "outline");
       return ergebnisse;
     `
     )
@@ -427,6 +463,30 @@ ${["bg", "surface", "s2"].map((f) => `
     <span class="zv-verlauf-art zv-pruef-verlauf-art">Telefonat</span>
     <button class="zv-eintrag-art zv-verlauf-telefonat active zv-pruef-eintrag-art">Telefonat</button>
   </div>
+</div>
+<div class="zv-dkal-popover" style="position:static">
+  <div class="zv-dkal">
+    <table class="zv-dkal-raster"><thead><tr><th class="zv-pruef-kal-kopf">Mo</th><th class="we zv-pruef-kal-kopf-we">So</th></tr></thead>
+    <tbody><tr>
+      <td><button class="zv-dkal-tag zv-pruef-kal-normal">2</button></td>
+      <td><button class="zv-dkal-tag we zv-pruef-kal-we">7</button></td>
+      <td><button class="zv-dkal-tag aussen zv-pruef-kal-aussen">31</button></td>
+      <td><button class="zv-dkal-tag gesperrt zv-pruef-kal-gesperrt">21</button></td>
+      <td><button class="zv-dkal-tag heute zv-pruef-kal-heute">20</button></td>
+      <td><button class="zv-dkal-tag gewaehlt zv-pruef-kal-gewaehlt">9</button></td>
+      <td><button class="zv-dkal-tag imbereich zv-pruef-kal-bereich">10</button></td>
+    </tr><tr>
+      <!-- Hover laesst sich ohne Maus nicht ausloesen; die Flaeche ist die
+           der :hover-Regel in datumsfeld.css (--zv-surface-3). -->
+      <td><button class="zv-dkal-tag zv-pruef-kal-hover" style="background:var(--zv-surface-3)">3</button></td>
+      <td><button class="zv-dkal-tag zv-pruef-kal-fokus" tabindex="0">4</button></td>
+    </tr></tbody></table>
+    <div class="zv-dkal-fuss"><button class="zv-datum-chip an zv-pruef-kal-chip">Heute</button></div>
+  </div>
+  <div class="zv-zeitraumwahl-schnell"><button aria-selected="true" class="zv-pruef-kal-schnell">Letzter Monat</button></div>
+  <div class="zv-monatsfeld"><button class="zv-monatsfeld-wert zv-pruef-kal-monat">Oktober 2026</button></div>
+  <div class="zv-datum zv-pruef-kal-feld"><input class="zv-datum-text" value="20.11.2026"></div>
+  <div class="zv-datum-fehler zv-pruef-kal-fehler">Den 31. November 2026 gibt es nicht.</div>
 </div>`;
 
 async function main() {

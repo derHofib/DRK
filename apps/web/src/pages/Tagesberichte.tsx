@@ -37,6 +37,9 @@ import { FilterAuswahl, FilterPille } from "../components/Filterleiste";
 import { AktionsMenue } from "../components/AktionsMenue";
 import { ExportMenue } from "../components/ExportMenue";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
+import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
+import { zeitraumKurz } from "../components/datumsfeld-logik";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 /**
  * Zeile eines Tagesberichts -- wird sowohl vom allgemeinen Menuepunkt hier
@@ -138,12 +141,13 @@ export function TagesberichtZeile({
       <span className="zv-liste-zelle" data-label="Bericht">
         {bearbeiten ? (
           <form onSubmit={speichern} style={{ display: "grid", gap: 8 }}>
-            <input
-              type="date"
+            <Datumsfeld
               value={bearbeiten.datum}
               max={heuteBerlin()}
-              onChange={(e) => setBearbeiten({ ...bearbeiten, datum: e.target.value })}
+              onChange={(v) => setBearbeiten({ ...bearbeiten, datum: v })}
               aria-label="Datum des Tagesberichts"
+              groesse="kompakt"
+              schnellwahl="heute-gestern"
             />
             <textarea
               value={bearbeiten.text}
@@ -414,7 +418,7 @@ export function Tagesberichte({
   );
   const zeitraumText = schnellwahl
     ? SCHNELLWAHL_LABEL[schnellwahl]
-    : [von && formatDatum(von), bis && formatDatum(bis)].filter(Boolean).join(" – ") || null;
+    : zeitraumKurz(von, bis) || null;
   const klientText = klienten.find((k) => k.id === klientFilter);
   function alleZuruecksetzen() {
     schnellwahlWaehlen("alle");
@@ -538,48 +542,27 @@ export function Tagesberichte({
         <FilterPille
           icon={<IKalender />}
           label="Zeitraum"
+          breit
           wert={von || bis ? (zeitraumText ? `: ${zeitraumText}` : "") : null}
           onEntfernen={() => schnellwahlWaehlen("alle")}
         >
           {(schliessen) => (
-            <>
-              <FilterAuswahl
-                optionen={(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => ({ wert: w, label: SCHNELLWAHL_LABEL[w] }))}
-                gewaehlt={schnellwahl}
-                onWaehlen={(w) => {
-                  schnellwahlWaehlen(w);
-                  schliessen();
-                }}
-              />
-              <div className="zv-filter-datumsfelder">
-                <div className="zv-field">
-                  <label htmlFor="tb-von">Von</label>
-                  <input
-                    id="tb-von"
-                    type="date"
-                    value={von}
-                    max={bis || undefined}
-                    onChange={(e) => {
-                      setSchnellwahl(null);
-                      setVon(e.target.value);
-                    }}
-                  />
-                </div>
-                <div className="zv-field">
-                  <label htmlFor="tb-bis">Bis</label>
-                  <input
-                    id="tb-bis"
-                    type="date"
-                    value={bis}
-                    min={von || undefined}
-                    onChange={(e) => {
-                      setSchnellwahl(null);
-                      setBis(e.target.value);
-                    }}
-                  />
-                </div>
-              </div>
-            </>
+            <ZeitraumAuswahl
+              idPraefix="tb"
+              schnellwahl={schnellwahl}
+              von={von}
+              bis={bis}
+              onSchnellwahl={(w) => {
+                schnellwahlWaehlen(w);
+                schliessen();
+              }}
+              onUebernehmen={(v, b) => {
+                setSchnellwahl(null);
+                setVon(v);
+                setBis(b);
+                schliessen();
+              }}
+            />
           )}
         </FilterPille>
 

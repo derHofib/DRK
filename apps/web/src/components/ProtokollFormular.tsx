@@ -13,6 +13,7 @@ import {
 } from "@zimmerakte/shared";
 import { formatDatum } from "../format";
 import { IAbbrechen, IInfo } from "./icons";
+import { Datumsfeld } from "./Datumsfeld";
 
 export interface PersonAuswahl {
   id: string;
@@ -235,13 +236,13 @@ function EingabeFeld({
       break;
     case "datum":
       eingabe = (
-        <input
+        <Datumsfeld
           id={id}
           {...aria}
-          type="date"
           max={b.nichtInZukunft ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin" }).format(new Date()) : undefined}
           value={typeof wert === "string" ? wert : ""}
-          onChange={(e) => onAendern(e.target.value || null)}
+          onChange={(v) => onAendern(v || null)}
+          schnellwahl={b.nichtInZukunft ? "heute-gestern" : "heute"}
         />
       );
       break;

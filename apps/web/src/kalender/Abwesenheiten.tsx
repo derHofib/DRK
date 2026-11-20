@@ -7,6 +7,7 @@ import { IFehler, IStornieren } from "../components/icons";
 import { formatDatum } from "../format";
 import { personFarbStil } from "../personFarbe";
 import { ABWESENHEIT_ARTEN, KALENDER_ART_LABEL, abwesenheitArt, type KalenderArt } from "./eintraege";
+import { Zeitraumfeld } from "../components/Datumsfeld";
 
 /** Dreieck in der Farbe einer Art -- dieselbe Form wie die Statusecke der Tageszelle, damit die Legende sie erklaert. */
 export function ArtDreieck({ art }: { art: KalenderArt }) {
@@ -211,23 +212,17 @@ export function AbwesenheitEintragen({
           </div>
         </fieldset>
         <div className="zv-field-row">
-          <div className="zv-field">
-            <label htmlFor="abw-von">Erster Tag</label>
-            <input
-              id="abw-von"
-              type="date"
-              value={von}
-              onChange={(e) => {
-                setVon(e.target.value);
-                if (bis < e.target.value) setBis(e.target.value);
-              }}
-              required
-            />
-          </div>
-          <div className="zv-field">
-            <label htmlFor="abw-bis">Letzter Tag</label>
-            <input id="abw-bis" type="date" value={bis} min={von} onChange={(e) => setBis(e.target.value)} required />
-          </div>
+          <Zeitraumfeld
+            von={{ id: "abw-von", label: "Erster Tag", required: true }}
+            bis={{ id: "abw-bis", label: "Letzter Tag", required: true }}
+            wertVon={von}
+            wertBis={bis}
+            onChange={(v, b) => {
+              setVon(v);
+              // Wie vorher: ein Ende vor dem Anfang wird zum Anfang.
+              setBis(!b || (v && b < v) ? v : b);
+            }}
+          />
         </div>
         <div className="zv-field">
           <label htmlFor="abw-notiz">Notiz (optional, keine Diagnose)</label>

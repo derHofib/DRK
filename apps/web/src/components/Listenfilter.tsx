@@ -1,10 +1,11 @@
 import { ReactNode, useState } from "react";
-import { formatDatum } from "../format";
 import { SCHNELLWAHL_LABEL, type Schnellwahl, zeitraumFuer } from "../pages/tagesberichte-filter";
 import type { ListenExport } from "../export/listenExport";
 import { AktionsMenue } from "./AktionsMenue";
 import { ExportMenue } from "./ExportMenue";
 import { FilterAuswahl, FilterMehrfachAuswahl, FilterPille } from "./Filterleiste";
+import { ZeitraumAuswahl } from "./ZeitraumAuswahl";
+import { zeitraumKurz } from "./datumsfeld-logik";
 import { IFilterLoeschen, IKalender, INeu, ISortierung, IStandort, ISuche } from "./icons";
 
 /**
@@ -202,7 +203,7 @@ export function useZeitraum() {
   }
   const text = schnellwahl
     ? SCHNELLWAHL_LABEL[schnellwahl]
-    : [von && formatDatum(von), bis && formatDatum(bis)].filter(Boolean).join(" – ") || null;
+    : zeitraumKurz(von, bis) || null;
   return {
     schnellwahl,
     von,
@@ -215,6 +216,11 @@ export function useZeitraum() {
     setBis: (v: string) => {
       setSchnellwahl(null);
       setBis(v);
+    },
+    setzen: (v: string, b: string) => {
+      setSchnellwahl(null);
+      setVon(v);
+      setBis(b);
     },
     text,
     aktiv: Boolean(von || bis),
@@ -229,42 +235,25 @@ export function ZeitraumFilter({ zeitraum, idPrefix, label = "Zeitraum" }: { zei
     <FilterPille
       icon={<IKalender />}
       label={label}
+      breit
       wert={zeitraum.aktiv ? (zeitraum.text ? `: ${zeitraum.text}` : "") : null}
       onEntfernen={() => zeitraum.waehlen("alle")}
     >
       {(schliessen) => (
-        <>
-          <FilterAuswahl
-            optionen={(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => ({ wert: w, label: SCHNELLWAHL_LABEL[w] }))}
-            gewaehlt={zeitraum.schnellwahl}
-            onWaehlen={(w) => {
-              zeitraum.waehlen(w);
-              schliessen();
-            }}
-          />
-          <div className="zv-filter-datumsfelder">
-            <div className="zv-field">
-              <label htmlFor={`${idPrefix}-von`}>Von</label>
-              <input
-                id={`${idPrefix}-von`}
-                type="date"
-                value={zeitraum.von}
-                max={zeitraum.bis || undefined}
-                onChange={(e) => zeitraum.setVon(e.target.value)}
-              />
-            </div>
-            <div className="zv-field">
-              <label htmlFor={`${idPrefix}-bis`}>Bis</label>
-              <input
-                id={`${idPrefix}-bis`}
-                type="date"
-                value={zeitraum.bis}
-                min={zeitraum.von || undefined}
-                onChange={(e) => zeitraum.setBis(e.target.value)}
-              />
-            </div>
-          </div>
-        </>
+        <ZeitraumAuswahl
+          idPraefix={idPrefix}
+          schnellwahl={zeitraum.schnellwahl}
+          von={zeitraum.von}
+          bis={zeitraum.bis}
+          onSchnellwahl={(w) => {
+            zeitraum.waehlen(w);
+            schliessen();
+          }}
+          onUebernehmen={(v, b) => {
+            zeitraum.setzen(v, b);
+            schliessen();
+          }}
+        />
       )}
     </FilterPille>
   );

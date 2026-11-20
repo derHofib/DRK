@@ -2,7 +2,7 @@ import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
-import { formatDatum } from "../format";
+import { formatDatum, heuteBerlin } from "../format";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
 import type { KlientenAnsicht } from "../navigation";
 import { GrundAbfrage } from "../components/GrundAbfrage";
@@ -29,6 +29,7 @@ import {
 } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
 import type { ProtokollSprung } from "../components/ProtokollSprung";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 
 // Die Ansicht wird jetzt ausschliesslich ueber die Navigation gewaehlt
@@ -362,8 +363,8 @@ export function Klienten({
             </div>
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Geburtsdatum</label>
-                <input name="geburtsdatum" type="date" required />
+                <label htmlFor="klient-neu-geburtsdatum">Geburtsdatum</label>
+                <Datumsfeld id="klient-neu-geburtsdatum" name="geburtsdatum" required max={heuteBerlin()} ohneKalender />
               </div>
               <div className="zv-field">
                 <label>Aktenzeichen</label>
@@ -660,8 +661,8 @@ export function Klienten({
             </div>
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Geburtsdatum</label>
-                <input name="geburtsdatum" type="date" />
+                <label htmlFor="anwaerter-neu-geburtsdatum">Geburtsdatum</label>
+                <Datumsfeld id="anwaerter-neu-geburtsdatum" name="geburtsdatum" max={heuteBerlin()} ohneKalender />
               </div>
               <div className="zv-field">
                 <label>Anfragende Stelle</label>
@@ -711,8 +712,14 @@ export function Klienten({
             </div>
             <div className="zv-field-row">
               <div className="zv-field">
-                <label>Geburtsdatum</label>
-                <input name="geburtsdatum" type="date" defaultValue={anwaerterBearbeitenEintrag.geburtsdatum ?? ""} />
+                <label htmlFor="anwaerter-bearbeiten-geburtsdatum">Geburtsdatum</label>
+                <Datumsfeld
+                  id="anwaerter-bearbeiten-geburtsdatum"
+                  name="geburtsdatum"
+                  defaultValue={anwaerterBearbeitenEintrag.geburtsdatum ?? ""}
+                  max={heuteBerlin()}
+                  ohneKalender
+                />
               </div>
               <div className="zv-field">
                 <label>Anfragende Stelle</label>

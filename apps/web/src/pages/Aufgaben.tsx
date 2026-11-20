@@ -7,6 +7,7 @@ import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenf
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { IFehler, ILeerAufgaben, INeu, IPerson, IPrioritaetHoch, ISpeichern } from "../components/icons";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 /**
  * Sonntag der laufenden Woche (ISO-Woche startet Montag) -- alles bis
@@ -285,7 +286,7 @@ export function Aufgaben() {
               </div>
               <div className="zv-field">
                 <label htmlFor="aufgabe-faelligkeit">Fälligkeit (optional)</label>
-                <input id="aufgabe-faelligkeit" name="faelligAm" type="date" />
+                <Datumsfeld id="aufgabe-faelligkeit" name="faelligAm" schnellwahl="faelligkeit" />
               </div>
             </div>
             <div className="zv-field">
