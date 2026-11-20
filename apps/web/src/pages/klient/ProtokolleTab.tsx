@@ -33,11 +33,26 @@ import { formatDatum, formatUhrzeit } from "../../format";
  * derselbe Auswerter laeuft auf dem Server, der beim Abschliessen verbindlich
  * prueft.
  */
-export function ProtokolleTab({ klientId, archiviert }: { klientId: string; archiviert: boolean }) {
+/** Ruecksprung an die Stelle, von der aus ein Protokoll geoeffnet wurde. */
+export interface Ruecksprung {
+  label: string;
+  onKlick: () => void;
+}
+
+export function ProtokolleTab({
+  klientId,
+  archiviert,
+  start,
+}: {
+  klientId: string;
+  archiviert: boolean;
+  /** Aus einem Tagesbericht geoeffnet: gleich dieses Protokoll zeigen, mit Weg zurueck. */
+  start?: { protokollId: string; ruecksprung: Ruecksprung };
+}) {
   const [rechte, setRechte] = useState<ProtokolleRechteDto | null>(null);
   const [liste, setListe] = useState<ProtokollKurzDto[]>([]);
   const [formulare, setFormulare] = useState<FormularAngebotDto[]>([]);
-  const [offen, setOffen] = useState<string | null>(null);
+  const [offen, setOffen] = useState<string | null>(start?.protokollId ?? null);
   const [auswahlOffen, setAuswahlOffen] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -69,6 +84,7 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
     return (
       <ProtokollDetail
         id={offen}
+        ruecksprung={offen === start?.protokollId ? start.ruecksprung : undefined}
         onZurueck={() => {
           setOffen(null);
           laden();
@@ -167,7 +183,7 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
 
 type Modus = "lesen" | "bearbeiten" | "korrigieren";
 
-export function ProtokollDetail({ id, onZurueck }: { id: string; onZurueck: () => void }) {
+export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; onZurueck: () => void; ruecksprung?: Ruecksprung }) {
   const [p, setP] = useState<ProtokollDto | null>(null);
   const [werte, setWerte] = useState<FeldWerte>({});
   const [modus, setModus] = useState<Modus>("lesen");
@@ -293,10 +309,22 @@ export function ProtokollDetail({ id, onZurueck }: { id: string; onZurueck: () =
 
   return (
     <div className="zv-protokoll-detail">
-      <button type="button" className="zv-link-btn" onClick={onZurueck}>
-        <IZurueck />
-        Alle Protokolle
-      </button>
+      {ruecksprung ? (
+        <div className="zv-protokoll-ruecksprung">
+          <button type="button" className="zv-link-btn zv-protokoll-zurueck-tagesbericht" onClick={ruecksprung.onKlick}>
+            <IZurueck />
+            {ruecksprung.label}
+          </button>
+          <button type="button" className="zv-link-btn" onClick={onZurueck}>
+            Alle Protokolle
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="zv-link-btn" onClick={onZurueck}>
+          <IZurueck />
+          Alle Protokolle
+        </button>
+      )}
 
       <div className="zv-protokoll-kopf">
         <div>

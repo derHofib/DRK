@@ -21,7 +21,7 @@ if (!slug || !email || !passwort) {
   console.error("Nutzung: node akte-pruefung.mjs <slug> <email> <passwort> [bilderOrdner]");
   process.exit(2);
 }
-const BASIS = "http://localhost:5173";
+const BASIS = process.env.BASIS_URL ?? "http://localhost:5173";
 const browser = await chromium.launch(process.env.CHROMIUM_PFAD ? { executablePath: process.env.CHROMIUM_PFAD } : {});
 const page = await browser.newPage({ viewport: { width: 1780, height: 1000 } });
 const fehler = [];

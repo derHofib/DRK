@@ -393,9 +393,22 @@ function Knoepfe<T extends string | number | boolean>({
 }
 
 /**
+ * Typen, deren Wert nie umbrechen darf: ein Datum, das zeichenweise
+ * untereinander steht ("0 4 . 1 1 ."), war der Ausloeser der Rueckmeldung
+ * "Ansicht Protokolle". Lieber eine Zeile, die in die naechste Zeile rutscht.
+ */
+const EINZEILIG = new Set<Baustein["typ"]>(["datum", "uhrzeit", "zahl", "skala", "berechnung"]);
+
+/**
  * Lesende Ansicht eines Protokolls: Beschriftung, Wert und woher der Wert
  * kommt (vorausgefuellt, festgehalten, berechnet). Verborgene Felder fehlen,
  * so wie sie auch nicht gespeichert sind.
+ *
+ * Zwei Spalten statt drei: die Herkunfts-Plakette steht in der Wertzelle
+ * hinter dem Wert. Als eigene auto-Spalte hat sie dem Wert im schmalen
+ * Fenster bis auf 36 px Platz genommen (Konzept protokoll-ansicht, 2.).
+ * Ob gestapelt oder zweispaltig, entscheidet die Breite der Ansicht selbst
+ * (Container-Abfrage in app.css), nicht die Fensterbreite.
  */
 export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen }: Gemeinsam) {
   const auswertung = useMemo(() => werteAus(definition, werte), [definition, werte]);
@@ -412,24 +425,30 @@ export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen
     if (b.typ === "hinweis") return null;
     if (b.typ === "anzeige") {
       const w = anzeige[b.schluessel];
+      const datum = b.quelle === "klient.geburtsdatum";
       return (
         <div key={b.schluessel} className="zv-protokoll-zeile">
           <span className="zv-protokoll-label">{b.beschriftung}</span>
-          <span>{w ? (b.quelle === "klient.geburtsdatum" ? formatDatum(w) : w) : "–"}</span>
-          <span />
+          <span className="zv-protokoll-wertzelle">
+            <span className={`zv-protokoll-wert${datum ? " zv-protokoll-wert-einzeilig" : ""}`}>{w ? (datum ? formatDatum(w) : w) : "–"}</span>
+          </span>
         </div>
       );
     }
     const w = werte[b.schluessel];
     const q = quellen?.[b.schluessel];
+    // Fliesstext in einer 60-%-Spalte liest sich schlecht: Langtext immer ueber die volle Breite.
+    const voll = b.typ === "langtext";
     return (
-      <div key={b.schluessel} className="zv-protokoll-zeile">
+      <div key={b.schluessel} className={`zv-protokoll-zeile${voll ? " zv-protokoll-zeile-voll" : ""}`}>
         <span className="zv-protokoll-label">
           {b.beschriftung}
           {"intern" in b && b.intern && <span className="zv-pill zv-protokoll-pill">intern</span>}
         </span>
-        <span className="zv-protokoll-wert">{wertAlsText(b, w, personen)}</span>
-        <span>{q && q !== "eingabe" && !leer(w) && <span className={`zv-pill${q === "vorschlag_geaendert" ? " zv-pill-frist" : ""}`}>{PROTOKOLL_QUELLE_LABEL[q]}</span>}</span>
+        <span className="zv-protokoll-wertzelle">
+          <span className={`zv-protokoll-wert${EINZEILIG.has(b.typ) ? " zv-protokoll-wert-einzeilig" : ""}`}>{wertAlsText(b, w, personen)}</span>
+          {q && q !== "eingabe" && !leer(w) && <span className={`zv-pill${q === "vorschlag_geaendert" ? " zv-pill-frist" : ""}`}>{PROTOKOLL_QUELLE_LABEL[q]}</span>}
+        </span>
       </div>
     );
   };

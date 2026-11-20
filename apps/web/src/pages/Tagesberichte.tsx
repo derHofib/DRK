@@ -1,4 +1,4 @@
-import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { KlientListEintragDto, ProtokollDto, TagDto, TagesberichtAenderungDto, TagesberichtDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { dateiZuBase64 } from "../datei";
@@ -7,6 +7,7 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { NeuerTagesberichtFenster } from "../components/NeuerTagesbericht";
 import { ProtokollAnsicht } from "../components/ProtokollFormular";
+import { useProtokollSprung } from "../components/ProtokollSprung";
 import {
   SCHNELLWAHL_LABEL,
   SORTIERUNG_LABEL,
@@ -25,6 +26,7 @@ import {
   IKlienten,
   ILeerTagesberichte,
   INeu,
+  IOrdnerOffen,
   IPerson,
   ISortierung,
   ISpeichern,
@@ -51,6 +53,7 @@ export function TagesberichtZeile({
   onTagHinzufuegen,
   onDokumentHinzufuegen,
   onGeaendert,
+  markiert = false,
 }: {
   bericht: TagesberichtDto;
   zeigeKlient: boolean;
@@ -59,7 +62,13 @@ export function TagesberichtZeile({
   onDokumentHinzufuegen: (base64: string, dateiname: string, mimeType: string) => void;
   /** Nach erfolgreichem Bearbeiten: Liste neu laden. */
   onGeaendert: () => void;
+  /** Ruecksprung aus einem Protokoll: diesen Bericht in den Blick holen und hervorheben. */
+  markiert?: boolean;
 }) {
+  const zeileRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (markiert) zeileRef.current?.scrollIntoView({ block: "center" });
+  }, [markiert]);
   const [neuerTag, setNeuerTag] = useState("");
   const [bearbeiten, setBearbeiten] = useState<{ text: string; datum: string } | null>(null);
   const [bearbeitenFehler, setBearbeitenFehler] = useState<string | null>(null);
@@ -119,7 +128,7 @@ export function TagesberichtZeile({
   }
 
   return (
-    <div className="zv-info-karte">
+    <div ref={zeileRef} className={`zv-info-karte${markiert ? " zv-tagesbericht-markiert" : ""}`}>
       <span className="zv-liste-zelle-titel">{zeigeKlient ? bericht.klientName : formatDatum(bericht.datum)}</span>
       {zeigeKlient && (
         <span className="zv-liste-zelle" data-label="Datum">
@@ -155,9 +164,9 @@ export function TagesberichtZeile({
         ) : (
           <>
             {/* Ohne Freitext ist das Formular der Bericht und steht oben. */}
-            {bericht.text ? bericht.text : <TagesberichtProtokolle protokolle={bericht.protokolle} />}
+            {bericht.text ? bericht.text : <TagesberichtProtokolle bericht={bericht} />}
             {bericht.autorName && <div className="zv-sub-inline">Verfasst von {bericht.autorName}</div>}
-            {bericht.text && <TagesberichtProtokolle protokolle={bericht.protokolle} />}
+            {bericht.text && <TagesberichtProtokolle bericht={bericht} />}
             <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
               {bericht.bearbeitbar && (
                 <button
@@ -743,13 +752,18 @@ export function berichtFormularTexte(b: TagesberichtDto): string[] {
 
 /**
  * Protokolle, die zusammen mit dem Tagesbericht abgeschlossen wurden
- * (angeheftete Formulare). Lesen hier, korrigieren in der Klientenakte unter
- * Protokolle -- dort gibt es Grund und Historie.
+ * (angeheftete Formulare). In der Akte oeffnen sie im selben Panel unter
+ * Protokolle (dort auch Korrigieren und Historie); ausserhalb der Akte in
+ * einem breiten Lesefenster mit Sprung in die Akte (Konzept
+ * protokoll-ansicht, Varianten A und B).
  */
-export function TagesberichtProtokolle({ protokolle }: { protokolle: TagesberichtDto["protokolle"] }) {
+export function TagesberichtProtokolle({ bericht }: { bericht: TagesberichtDto }) {
+  const protokolle = bericht.protokolle;
+  const sprung = useProtokollSprung();
   const [offen, setOffen] = useState<ProtokollDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
   if (!protokolle?.length) return null;
+  const ziel = (protokollId: string) => ({ protokollId, klientId: bericht.klientId, berichtId: bericht.id, berichtDatum: bericht.datum });
   return (
     <div className="zv-tagesbericht-protokolle">
       {protokolle.map((p) => (
@@ -759,6 +773,10 @@ export function TagesberichtProtokolle({ protokolle }: { protokolle: Tagesberich
             className="zv-pill zv-pill-info zv-tagesbericht-protokoll"
             onClick={() => {
               setFehler(null);
+              if (sprung.imSelbenPanel) {
+                sprung.imSelbenPanel(ziel(p.id));
+                return;
+              }
               api
                 .protokoll(p.id)
                 .then(setOffen)
@@ -773,10 +791,24 @@ export function TagesberichtProtokolle({ protokolle }: { protokolle: Tagesberich
       ))}
       {fehler && <span className="zv-feld-fehler">{fehler}</span>}
       {offen && (
-        <Modal titel={offen.formularName} onClose={() => setOffen(null)}>
-          <p className="zv-protokoll-meta zv-protokoll-modal-text">
-            Gehört zu diesem Tagesbericht. Korrigieren lässt es sich in der Klientenakte unter Protokolle.
-          </p>
+        <Modal titel={offen.formularName} breit onClose={() => setOffen(null)}>
+          <div className="zv-protokoll-herkunft">
+            <span className="zv-protokoll-meta">Gehört zum Tagesbericht vom {formatDatum(bericht.datum)}{bericht.klientName ? ` · ${bericht.klientName}` : ""}.</span>
+            {sprung.inAkteOeffnen && (
+              <button
+                type="button"
+                className="zv-btn zv-btn-sekundaer"
+                onClick={() => {
+                  const s = ziel(offen.id);
+                  setOffen(null);
+                  sprung.inAkteOeffnen?.(s);
+                }}
+              >
+                <IOrdnerOffen />
+                In der Akte öffnen
+              </button>
+            )}
+          </div>
           <ProtokollAnsicht definition={offen.definition} werte={offen.werte} anzeige={offen.anzeige} quellen={offen.quellen} personen={offen.personen} />
         </Modal>
       )}
