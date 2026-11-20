@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import type { BenutzerListEintragDto, DelegationDto, DelegationEffektiverStatus, RechtRegistryEintragDto } from "@zimmerakte/shared";
+import type { BenutzerListEintragDto, DelegationDto, DelegationEffektiverStatus, RechtRegistryEintragDto, StandortDto } from "@zimmerakte/shared";
 import { DELEGATION_EFFEKTIVER_STATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
 import { formatDatum } from "../format";
@@ -38,6 +38,9 @@ export function Vertretung() {
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
   const [registry, setRegistry] = useState<RechtRegistryEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
+  // Fuer "Standorte" im Antrag: alle Standorte des Traegers, aus denen nur
+  // die eigenen angeboten werden (Migration 0084).
+  const [standorte, setStandorte] = useState<StandortDto[]>([]);
 
   const [neuOffen, setNeuOffen] = useState(false);
   const [umfang, setUmfang] = useState<"alle" | "auswahl">("alle");
@@ -77,7 +80,21 @@ export function Vertretung() {
     setUmfang("alle");
     setNeuOffen(true);
     if (registry.length === 0) api.rechteRegistry().then(setRegistry).catch(() => {});
+    if (standorte.length === 0) api.standorteListe().then(setStandorte).catch(() => {});
   }
+
+  // Man gibt nur weiter, was man selbst sieht (der Server prueft dasselbe).
+  // Eigene Standorte sind vorbelegt; wer alle sieht (Leitung), muss bewusst
+  // waehlen -- sonst wuerde aus einer Urlaubsvertretung still eine
+  // traegerweite Sicht.
+  const eigeneSicht = benutzerListe.find((b) => b.id === benutzerId)?.sicht ?? null;
+  const standortWahl: { id: string; name: string; vorbelegt: boolean }[] = !eigeneSicht
+    ? []
+    : eigeneSicht.alle
+      ? standorte.filter((s) => s.aktiv).map((s) => ({ id: s.id, name: s.name, vorbelegt: false }))
+      : eigeneSicht.eintraege
+          .filter((e) => e.herkunft !== "vertretung")
+          .map((e) => ({ id: e.standortId, name: e.standortName, vorbelegt: true }));
 
   async function anlegen(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -100,6 +117,7 @@ export function Vertretung() {
         umfang: umfangWert,
         sensibleRechteEingeschlossen: form.get("sensibleRechteEingeschlossen") === "on",
         rechte,
+        standortIds: form.getAll("standortIds").map(String),
       });
       setNeuOffen(false);
       setUmfang("alle");
@@ -193,6 +211,11 @@ export function Vertretung() {
                 <span className="zv-liste-zelle" data-label="Umfang">
                   {d.umfang === "alle" ? "Alle Rechte" : "Ausgewählte Rechte"}
                   {d.sensibleRechteEingeschlossen && <span className="zv-sub-inline">inkl. sensibler Rechte</span>}
+                  {d.standorte.length > 0 && (
+                    <span className="zv-sub-inline" style={{ display: "block", marginLeft: 0 }}>
+                      + {d.standorte.map((s) => s.name).join(", ")}
+                    </span>
+                  )}
                 </span>
                 <span className="zv-liste-zelle" data-label="Status">
                   <span className={`zv-pill ${STATUS_PILL[d.effektiverStatus]}`}>
@@ -282,6 +305,23 @@ export function Vertretung() {
                   </div>
                 )}
               </div>
+            )}
+            {standortWahl.length > 0 && (
+              <fieldset className="zv-vertretung-standorte">
+                <legend>Standorte</legend>
+                <p className="zv-sub">Während der Vertretung sieht deine Vertretung zusätzlich die Klient:innen und die Dokumentation von:</p>
+                {standortWahl.map((s) => (
+                  <label key={s.id} className="zv-checkbox-zeile">
+                    <input type="checkbox" name="standortIds" value={s.id} defaultChecked={s.vorbelegt} />
+                    {s.name}
+                  </label>
+                ))}
+                <p className="zv-sub">
+                  {eigeneSicht?.alle
+                    ? "Du siehst alle Standorte. Damit daraus keine trägerweite Sicht wird, ist nichts vorbelegt. Ohne Haken gibt die Vertretung nur Rechte weiter."
+                    : "Vorbelegt mit deinen Standorten. Mehr, als du selbst siehst, lässt sich nicht weitergeben."}
+                </p>
+              </fieldset>
             )}
             <label className="zv-checkbox-zeile" style={{ marginTop: 8 }}>
               <input type="checkbox" name="sensibleRechteEingeschlossen" />

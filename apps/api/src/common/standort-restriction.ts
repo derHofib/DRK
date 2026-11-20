@@ -1,25 +1,27 @@
 import { PoolClient } from "pg";
 
 /**
- * null  = keine Einschraenkung (Standardfall, z.B. Leitung) -- der Benutzer
+ * null  = keine Einschraenkung (z.B. Leitung, Vollzugriff) -- der Benutzer
  *         sieht alle Standorte seines Mandanten.
- * uuid[] = genau diese Standorte, nicht mehr.
+ * uuid[] = genau diese Standorte, nicht mehr. Leer = gar keinen.
  *
- * Der Unterschied "keine Zeile in benutzer_standort" vs. "auf nichts
- * eingeschraenkt" ist in RLS allein nicht sauber abbildbar (eine leere
- * IN-Liste ist nicht dasselbe wie "keine Bedingung") -- deshalb wird das
- * hier einmal zentral aufgeloest und von jedem Service benutzt, der
- * standortbezogene Daten filtert (siehe zimmer.service.ts, klient.service.ts).
+ * Die Regel selbst steht in der Datenbank (sichtbare_standorte(), Migration
+ * 0084): feste Sicht aus benutzer_standort, sonst -- wenn der Traeger es
+ * eingeschaltet hat -- die Einrichtungen aus dem Rang, dazu Standorte aus
+ * einer laufenden Vertretung. Hier wird sie nur abgefragt, damit jeder
+ * Service, der standortbezogene Daten filtert (zimmer.service.ts,
+ * klient.service.ts, ...), und die Chat-Funktionen dieselbe Antwort bekommen.
+ * Eine zweite Nachbildung in TypeScript wuerde frueher oder spaeter
+ * auseinanderlaufen.
  */
 export async function ermittleErlaubteStandortIds(
   client: PoolClient,
   benutzerId: string
 ): Promise<string[] | null> {
-  const { rows } = await client.query<{ standort_id: string }>(
-    "SELECT standort_id FROM benutzer_standort WHERE benutzer_id = $1",
-    [benutzerId]
-  );
-  return rows.length === 0 ? null : rows.map((r) => r.standort_id);
+  const { rows } = await client.query<{ ids: string[] | null }>("SELECT sichtbare_standorte($1) AS ids", [
+    benutzerId,
+  ]);
+  return rows[0]?.ids ?? null;
 }
 
 /**

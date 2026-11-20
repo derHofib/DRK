@@ -10,6 +10,7 @@ const anlegenSchema = z.object({
   umfang: z.enum(["alle", "auswahl"]),
   sensibleRechteEingeschlossen: z.boolean().optional(),
   rechte: z.array(z.object({ modul: z.string().min(1), aktion: z.string().min(1) })).optional(),
+  standortIds: z.array(z.string().uuid()).max(100).optional(),
 });
 
 /**

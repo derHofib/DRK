@@ -68,6 +68,7 @@ import type {
   BenutzerListEintragDto,
   DashboardDto,
   DelegationDto,
+  StandortSichtVorschauDto,
   HilfeplanDto,
   HzlRhythmus,
   KassenbuchungDto,
@@ -600,6 +601,10 @@ export const api = {
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
   // Das eigene Konto (Name, Positionen) -- fuer den Benutzerblock der Seitenleiste.
   benutzerIch: () => request<BenutzerListEintragDto>("/benutzer/ich"),
+  // Standortregel (Migration 0084): Vorschau "wer sieht danach weniger" und Umschalten.
+  standortSichtVorschau: () => request<StandortSichtVorschauDto>("/benutzer/standort-sicht/vorschau"),
+  standortRegelSetzen: (ausRang: boolean) =>
+    request<StandortSichtVorschauDto>("/benutzer/standort-sicht/regel", { method: "PUT", body: JSON.stringify({ ausRang }) }),
   benutzerAnlegen: (payload: { name: string; email: string; passwort: string }) =>
     request<BenutzerListEintragDto>("/benutzer", { method: "POST", body: JSON.stringify(payload) }),
   passwortResetErstellen: (benutzerId: string) =>
@@ -1083,6 +1088,7 @@ export const api = {
     umfang: "alle" | "auswahl";
     sensibleRechteEingeschlossen?: boolean;
     rechte?: { modul: string; aktion: string }[];
+    standortIds?: string[];
   }) => request<DelegationDto>("/delegationen", { method: "POST", body: JSON.stringify(payload) }),
   delegationGenehmigen: (id: string) => request<DelegationDto>(`/delegationen/${id}/genehmigen`, { method: "PATCH" }),
   delegationWiderrufen: (id: string) => request<DelegationDto>(`/delegationen/${id}/widerrufen`, { method: "PATCH" }),

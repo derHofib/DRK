@@ -5,6 +5,7 @@ import { requireTenantContext } from "../common/tenant-context";
 import { isPgError } from "../common/pg-error";
 import { istDelegierbar } from "../rechte/registry";
 import { AuditService } from "../audit/audit.service";
+import { ladeStandortSicht } from "../common/standort-sicht";
 
 // Custom-SQLSTATE aus delegation_vier_augen_pruefen() (migrations/0046) --
 // kein Standard-Code, siehe dort. Greift in der Praxis nur als
@@ -28,6 +29,7 @@ export interface DelegationDto {
   sensibleRechteEingeschlossen: boolean;
   status: DelegationStatus;
   effektiverStatus: DelegationEffektiverStatus;
+  standorte: { id: string; name: string }[];
 }
 
 /**
@@ -61,8 +63,15 @@ function zuDto(r: any): DelegationDto {
     sensibleRechteEingeschlossen: r.sensible_rechte_eingeschlossen,
     status: r.status,
     effektiverStatus: effektiverStatus(r.status, r.von, r.bis),
+    standorte: r.standorte ?? [],
   };
 }
+
+const STANDORTE_SPALTE = `COALESCE((
+  SELECT json_agg(json_build_object('id', st.id, 'name', st.name) ORDER BY st.name)
+  FROM delegation_standort ds JOIN standort st ON st.id = ds.standort_id
+  WHERE ds.delegation_id = d.id
+), '[]') AS standorte`;
 
 export interface DelegationAnlegenInput {
   vertreterBenutzerId: string;
@@ -71,6 +80,8 @@ export interface DelegationAnlegenInput {
   umfang: "alle" | "auswahl";
   sensibleRechteEingeschlossen?: boolean;
   rechte?: { modul: string; aktion: string }[];
+  /** Standorte, die der Vertreter waehrend der Vertretung zusaetzlich sieht (0084). */
+  standortIds?: string[];
 }
 
 @Injectable()
@@ -93,7 +104,8 @@ export class DelegationService {
       const { rows } = await client.query(
         `SELECT d.id, d.vertretener_benutzer_id, vb.name AS vertretener_name,
                 d.vertreter_benutzer_id, vr.name AS vertreter_name,
-                d.von, d.bis, d.umfang, d.sensible_rechte_eingeschlossen, d.status
+                d.von, d.bis, d.umfang, d.sensible_rechte_eingeschlossen, d.status,
+                ${STANDORTE_SPALTE}
          FROM delegation d
          JOIN benutzer vb ON vb.id = d.vertretener_benutzer_id
          JOIN benutzer vr ON vr.id = d.vertreter_benutzer_id
@@ -147,6 +159,23 @@ export class DelegationService {
     return this.db.withTenant(async (client) => {
       await this.pruefeBenutzerErlaubt(client, input.vertreterBenutzerId);
 
+      // Man gibt nur weiter, was man selbst sieht -- wie bei den Rechten.
+      // Gemessen an der EIGENEN Sicht ohne geliehene Standorte: eine
+      // Vertretung, die man gerade selbst hat, wird nicht weitergereicht
+      // (keine Kette, gleiche Regel wie delegierteAufloesung()).
+      const standortIds = [...new Set(input.standortIds ?? [])];
+      if (standortIds.length > 0) {
+        const { rows: vorhanden } = await client.query("SELECT id FROM standort WHERE id = ANY($1)", [standortIds]);
+        if (vorhanden.length !== standortIds.length) {
+          throw new NotFoundException("Mindestens ein Standort wurde nicht gefunden.");
+        }
+        const eigene = (await ladeStandortSicht(client, [ctx.benutzerId])).get(ctx.benutzerId)!;
+        const eigeneIds = new Set(eigene.eintraege.filter((e) => e.herkunft !== "vertretung").map((e) => e.standortId));
+        if (!eigene.alle && standortIds.some((id) => !eigeneIds.has(id))) {
+          throw new ForbiddenException("Du kannst nur Standorte weitergeben, die du selbst siehst.");
+        }
+      }
+
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO delegation (mandant_id, vertretener_benutzer_id, vertreter_benutzer_id, von, bis, umfang, sensible_rechte_eingeschlossen, status, erstellt_von)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'beantragt', $2)
@@ -162,6 +191,13 @@ export class DelegationService {
         ]
       );
       const delegationId = rows[0].id;
+
+      for (const standortId of standortIds) {
+        await client.query(
+          "INSERT INTO delegation_standort (mandant_id, delegation_id, standort_id) VALUES ($1, $2, $3)",
+          [ctx.mandantId, delegationId, standortId]
+        );
+      }
 
       if (input.umfang === "auswahl") {
         for (const r of input.rechte!) {
@@ -184,6 +220,7 @@ export class DelegationService {
           umfang: input.umfang,
           sensibleRechteEingeschlossen: input.sensibleRechteEingeschlossen ?? false,
           rechte: input.umfang === "auswahl" ? input.rechte : undefined,
+          standortIds,
         },
       });
 
@@ -311,7 +348,8 @@ export class DelegationService {
     const { rows } = await client.query(
       `SELECT d.id, d.vertretener_benutzer_id, vb.name AS vertretener_name,
               d.vertreter_benutzer_id, vr.name AS vertreter_name,
-              d.von, d.bis, d.umfang, d.sensible_rechte_eingeschlossen, d.status
+              d.von, d.bis, d.umfang, d.sensible_rechte_eingeschlossen, d.status,
+              ${STANDORTE_SPALTE}
        FROM delegation d
        JOIN benutzer vb ON vb.id = d.vertretener_benutzer_id
        JOIN benutzer vr ON vr.id = d.vertreter_benutzer_id

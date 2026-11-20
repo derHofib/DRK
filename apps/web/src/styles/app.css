@@ -368,6 +368,251 @@
   white-space: nowrap;
 }
 
+/* Standort unter dem Namen (Migration 0084, Konzept standort-sichtbarkeit).
+   Unten statt im Traeger-Kasten oben: es ist eine Angabe ueber die Person,
+   und dort steht ihr Name; der Kasten oben ist fuer alle gleich. */
+.zv-benutzerblock[data-mit-standort] {
+  align-items: flex-start;
+}
+
+.zv-sicht-zeile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-meta);
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-sicht-zeile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-sicht-zeile svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  color: var(--zv-accent);
+}
+
+.zv-sicht-zeile:hover span {
+  text-decoration: underline;
+}
+
+.zv-sicht-zeile:focus-visible {
+  outline: 2px solid var(--zv-ring);
+  outline-offset: 2px;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-sicht-zeile-keiner,
+.zv-sicht-zeile-keiner svg {
+  color: var(--zv-achtung-text);
+}
+
+.zv-sicht-pille {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  width: max-content;
+  max-width: 100%;
+  margin-top: var(--zv-space-1);
+  padding: 1px var(--zv-space-2);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-size: var(--zv-text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-sicht-pille svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+/* Punkt an der Kachel: nur im eingeklappten Menueband, wo die Pille fehlt. */
+.zv-benutzer-kachel {
+  position: relative;
+}
+
+.zv-benutzer-kachel-punkt {
+  display: none;
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--zv-accent);
+  border: 2px solid var(--zv-bg);
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-benutzer-kachel-punkt {
+  display: block;
+}
+
+/* "Deine Sicht": am Desktop ein Aufklapper neben dem Namensblock. Fixiert
+   statt in der Seitenleiste verankert, weil dieselbe Komponente am Handy
+   (Seitenleiste ausgeblendet) als Blatt von unten erscheint, siehe unten. */
+.zv-sicht-scrim {
+  display: none;
+}
+
+.zv-sicht-blatt {
+  position: fixed;
+  left: calc(var(--zv-sidebar-breite) + var(--zv-space-3));
+  bottom: var(--zv-space-6);
+  z-index: 45;
+  width: 320px;
+  max-width: calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-5));
+  padding: var(--zv-space-4);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-3);
+  outline: none;
+}
+
+.zv-sicht-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-sicht-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-sicht-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zv-sicht-liste li {
+  display: flex;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) 0;
+  border-top: 1px solid var(--zv-haarlinie);
+}
+
+.zv-sicht-liste li:first-child {
+  border-top: 0;
+}
+
+.zv-sicht-liste li > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--zv-accent);
+}
+
+.zv-sicht-liste li > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.zv-sicht-liste .zv-link-btn {
+  padding: 0;
+  justify-content: flex-start;
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+}
+
+.zv-sicht-liste span {
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-meta);
+}
+
+.zv-sicht-text {
+  margin: var(--zv-space-2) 0 0;
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-meta);
+}
+
+/* Handy-Kopfzeile: Standort statt Traeger, Traeger klein darueber. */
+.zv-topbar-ort {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.zv-topbar .zv-topbar-ort small {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-xs);
+}
+
+.zv-topbar-ort small svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+.zv-topbar-ort button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zv-text);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.zv-topbar-ort button svg {
+  flex: none;
+  color: var(--zv-accent);
+}
+
+@media (max-width: 640px) {
+  .zv-sicht-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: var(--zv-scrim);
+  }
+
+  .zv-sicht-blatt {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 80dvh;
+    overflow-y: auto;
+    border-radius: var(--zv-radius-l) var(--zv-radius-l) 0 0;
+    padding-bottom: calc(var(--zv-space-5) + env(safe-area-inset-bottom));
+  }
+}
+
 /* "Klienten" mit aufklappbarem Unterpunkt "Anwärter" (Shell.tsx). Nur im
    ausgeklappten Menueband sichtbar -- siehe Regel bei
    data-eingeklappt="true" unten; im eingeklappten Zustand bleibt Anwärter
@@ -9936,6 +10181,82 @@ button.zv-achtung-eintrag:hover {
   flex: none;
   min-height: 0;
   padding: 0;
+}
+
+/* Mitarbeitende: Spalte "Sieht" und Vorschau der Standortregel (Migration 0084). */
+.zv-sicht-zelle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+
+.zv-sicht-zelle .zv-pill svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  margin-right: var(--zv-space-1);
+}
+
+.zv-regel-vorschau {
+  align-items: flex-start;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-regel-vorschau-inhalt {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-regel-vorschau-inhalt p {
+  margin: var(--zv-space-1) 0 0;
+}
+
+.zv-regel-vorschau-liste {
+  display: grid;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-3);
+}
+
+.zv-regel-vorschau-liste > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--zv-space-3);
+}
+
+.zv-regel-vorschau-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-top: var(--zv-space-3);
+}
+
+@media (max-width: 640px) {
+  .zv-regel-vorschau-liste > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding-bottom: var(--zv-space-2);
+  }
+}
+
+/* Vertretung beantragen: Standorte, die mitgegeben werden (Migration 0084). */
+.zv-vertretung-standorte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  margin: var(--zv-space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.zv-vertretung-standorte legend {
+  padding: 0;
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-vertretung-standorte .zv-sub {
+  margin: var(--zv-space-1) 0;
 }
 
 /* ------------------------------------------------------------------
