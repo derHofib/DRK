@@ -31,6 +31,7 @@ import { RueckmeldungModule } from "./rueckmeldung/rueckmeldung.module";
 import { StundenbuchungModule } from "./stunden/stundenbuchung.module";
 import { ProtokollModule } from "./protokolle/protokoll.module";
 import { VerlaufModule } from "./verlauf/verlauf.module";
+import { PdfExportModule } from "./pdf-export/pdf-export.module";
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { VerlaufModule } from "./verlauf/verlauf.module";
     StundenbuchungModule,
     ProtokollModule,
     VerlaufModule,
+    PdfExportModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

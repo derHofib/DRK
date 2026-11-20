@@ -53,6 +53,8 @@ const MITARBEITER_RECHTE: readonly RechtEintrag[] = [
   // Spiegel von Migration 0075.
   { modul: "protokolle", aktion: "ansehen", scope: "einrichtung" },
   { modul: "protokolle", aktion: "ausfuellen", scope: "einrichtung" },
+  // Spiegel von Migration 0082.
+  { modul: "protokolle", aktion: "pdf-extern", scope: "einrichtung" },
   // Spiegel von Migration 0078.
   { modul: "verlauf", aktion: "ansehen", scope: "einrichtung" },
   { modul: "verlauf", aktion: "anlegen", scope: "einrichtung" },

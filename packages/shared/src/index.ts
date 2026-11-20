@@ -3001,3 +3001,543 @@ export interface VerlaufDto {
   /** true, wenn mehr Zeilen existieren als geliefert (Obergrenze). */
   gekuerzt: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// PDF-Exporte je Formular (Migration 0082, Konzept formular-pdf Fassung 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Grundform der Seite. "akte": kompakter Kopf, Titel, Felder -- fuer die
+ * Ablage. "brief": DIN 5008 Form B mit Ruecksendezeile, Anschriftfeld fuer
+ * den Fensterumschlag und Infospalte rechts (wie der "Briefkopf fuer BEW").
+ * Die Geometrie der Bereiche ist fest in mm; einstellbar ist, was darin
+ * steht. Freies Verschieben mit der Maus gibt es bewusst nicht: sonst
+ * passen Fensterumschlag und Seitenumbruch nicht mehr zusammen.
+ */
+export type PdfVorlage = "akte" | "brief";
+export type PdfZielgruppe = "intern" | "extern";
+export type PdfSchrift = "nunito" | "liberation-sans" | "liberation-serif";
+export type PdfFeldstil = "liste" | "kaesten" | "kompakt";
+export type PdfLeereFelder = "ausblenden" | "strich" | "platz";
+export type PdfUeberschriften = "farbig" | "schwarz" | "balken";
+export type PdfLogoPosition = "links" | "mitte" | "rechts";
+
+export const PDF_VORLAGE_LABEL: Record<PdfVorlage, string> = {
+  akte: "Akte (kompakter Kopf)",
+  brief: "Brief nach DIN 5008 (Anschriftfeld, Infospalte)",
+};
+export const PDF_ZIELGRUPPE_LABEL: Record<PdfZielgruppe, string> = { intern: "intern", extern: "extern" };
+export const PDF_SCHRIFT_LABEL: Record<PdfSchrift, { name: string; hinweis: string }> = {
+  nunito: { name: "Nunito Sans", hinweis: "wie Zimmerakte" },
+  "liberation-sans": { name: "Liberation Sans", hinweis: "gleiche Maße wie Arial" },
+  "liberation-serif": { name: "Liberation Serif", hinweis: "gleiche Maße wie Times New Roman" },
+};
+export const PDF_FELDSTIL_LABEL: Record<PdfFeldstil, { name: string; hinweis: string }> = {
+  liste: { name: "Liste mit Linien", hinweis: "Beschriftung links, Wert rechts. Gut für Berichte und Akte." },
+  kaesten: { name: "Kästchen wie ein Papierformular", hinweis: "Jedes Feld in einem Rahmen, kurze Felder nebeneinander." },
+  kompakt: { name: "Kompakt in zwei Spalten", hinweis: "Kurze Felder nebeneinander, lange über die ganze Breite. Spart Seiten." },
+};
+export const PDF_LEERE_FELDER_LABEL: Record<PdfLeereFelder, string> = {
+  ausblenden: "ausblenden",
+  strich: "mit „–“ zeigen",
+  platz: "Platz zum Ausfüllen",
+};
+export const PDF_UEBERSCHRIFTEN_LABEL: Record<PdfUeberschriften, string> = {
+  farbig: "Großbuchstaben farbig",
+  schwarz: "fett schwarz",
+  balken: "mit Farbbalken",
+};
+
+/** Kleinste Schrift im PDF (Fußzeile). Darunter wird es auf Papier und in Kopien unlesbar. */
+export const PDF_MIN_SCHRIFTGROESSE = 7;
+
+export interface PdfGestaltung {
+  vorlage: PdfVorlage;
+  /** "alle" = alle sichtbaren Felder; sonst Auswahl per Feldschluessel (Reihenfolge wie im Formular). */
+  felder: "alle" | string[];
+  /** Akte: Ueberschrift. Brief: Betreff. Platzhalter erlaubt. */
+  titel: string;
+  unterTitel: string;
+  /** Nur Brief; "" = keine. */
+  anrede: string;
+  einleitung: string;
+  gruss: string;
+  unterschrift: "linie" | "name" | "keine";
+  logoPosition: PdfLogoPosition;
+  /** mm */
+  logoHoehe: number;
+  /** Text neben dem Logo, z. B. "**{traeger.name}**". */
+  textNebenLogo: string;
+  trennstrich: boolean;
+  /** Akte: Block rechts oben (Standort). */
+  textRechts: string;
+  /** Brief: Zeile ueber dem Anschriftfeld; "" = aus. */
+  ruecksendezeile: string;
+  anschriftfeld: boolean;
+  /** Brief: rechtsbuendig ueber dem Betreff; "" = aus. */
+  datumszeile: string;
+  /** Brief: Spalte rechts auf der ersten Seite; "" = aus. Leerzeile = Absatz, **Zeile** = fett. */
+  infospalte: string;
+  fusszeileLinks: string;
+  fusszeileRechts: string;
+  /** mm; Logo auf Folgeseiten. */
+  folgeseitenLogoHoehe: number;
+  schrift: PdfSchrift;
+  groesseText: number;
+  groesseUeberschrift: number;
+  groesseFuss: number;
+  /** "#rrggbb" oder null = Traegerfarbe. Linien exakt, Ueberschriften druckfest abgedunkelt. */
+  farbe: string | null;
+  feldstil: PdfFeldstil;
+  leereFelder: PdfLeereFelder;
+  ueberschriften: PdfUeberschriften;
+  jaNein: "wort" | "kreuz";
+}
+
+const PDF_GEMEINSAM = {
+  felder: "alle" as const,
+  folgeseitenLogoHoehe: 9,
+  groesseFuss: 7,
+  farbe: null,
+  feldstil: "liste" as const,
+  ueberschriften: "farbig" as const,
+  jaNein: "wort" as const,
+};
+
+/** Zimmerakte-Vorgaben je Grundform. Ein neuer Export und '{}' in der Datenbank bekommen diese Werte. */
+export function pdfGestaltungVorgabe(vorlage: PdfVorlage): PdfGestaltung {
+  if (vorlage === "brief") {
+    return {
+      ...PDF_GEMEINSAM,
+      vorlage,
+      titel: "{formular.name} vom {protokoll.datum}",
+      unterTitel: "Klient:in: {klient.name}, geb. {klient.geburtsdatum}",
+      anrede: "Sehr geehrte Damen und Herren,",
+      einleitung: "",
+      gruss: "Mit freundlichen Grüßen",
+      unterschrift: "name",
+      logoPosition: "rechts",
+      logoHoehe: 13,
+      textNebenLogo: "**{traeger.name}**",
+      trennstrich: true,
+      textRechts: "",
+      ruecksendezeile: "{traeger.name} · {traeger.hauptsitz}",
+      anschriftfeld: true,
+      datumszeile: "{ort}, den {datum}",
+      infospalte: [
+        "**{traeger.name}**",
+        "",
+        "{standort.name}",
+        "{standort.angebotsform}",
+        "{standort.strasse}",
+        "{standort.plz_ort}",
+        "Tel. {standort.telefon}",
+        "{standort.email}",
+        "{traeger.website}",
+        "",
+        "**Bearbeitet von**",
+        "{benutzer.name}",
+        "",
+        "**Geschäftsführung**",
+        "{traeger.geschaeftsfuehrung}",
+        "",
+        "**Handelsregister**",
+        "{traeger.registergericht}",
+        "{traeger.registernummer}",
+        "",
+        "**Steuernummer**",
+        "{traeger.steuernummer}",
+        "",
+        "**Bankverbindung**",
+        "{traeger.bank}",
+        "{traeger.iban}",
+        "{traeger.bic}",
+      ].join("\n"),
+      fusszeileLinks: "",
+      fusszeileRechts: "Seite {seite}/{seiten}",
+      schrift: "liberation-sans",
+      groesseText: 10,
+      groesseUeberschrift: 11,
+      leereFelder: "ausblenden",
+    };
+  }
+  return {
+    ...PDF_GEMEINSAM,
+    vorlage,
+    titel: "{formular.name}",
+    unterTitel: "{klient.name} · {protokoll.datum} · Version {formular.version}",
+    anrede: "",
+    einleitung: "",
+    gruss: "",
+    unterschrift: "keine",
+    logoPosition: "links",
+    logoHoehe: 9,
+    textNebenLogo: "",
+    trennstrich: false,
+    textRechts: "**{standort.name}**\n{standort.anschrift}",
+    ruecksendezeile: "",
+    anschriftfeld: false,
+    datumszeile: "",
+    infospalte: "",
+    fusszeileLinks: "Intern – nicht zur Weitergabe · {formular.name} V{formular.version} · erstellt {datum} von {benutzer.name} · Prüfnr. {pruefnummer}",
+    fusszeileRechts: "Seite {seite} von {seiten}",
+    schrift: "nunito",
+    groesseText: 9.5,
+    groesseUeberschrift: 12,
+    leereFelder: "strich",
+  };
+}
+
+/**
+ * Gespeicherte Gestaltung (evtl. aelter oder '{}') auf die volle Form
+ * bringen: was fehlt oder nicht passt, kommt aus der Vorgabe der Grundform.
+ * Geprueft wird die Form ausfuehrlich beim Speichern (zod im Controller);
+ * hier reicht die Typpruefung je Feld, damit eine alte Version immer rendert.
+ */
+export function pdfGestaltungMitVorgaben(roh: unknown): PdfGestaltung {
+  const r = (roh && typeof roh === "object" ? roh : {}) as Record<string, unknown>;
+  const vorlage: PdfVorlage = r.vorlage === "brief" ? "brief" : "akte";
+  const v = pdfGestaltungVorgabe(vorlage);
+  const out = { ...v } as Record<string, unknown>;
+  for (const [k, vorgabe] of Object.entries(v)) {
+    const w = r[k];
+    if (w === undefined) continue;
+    if (k === "felder") {
+      if (w === "alle" || (Array.isArray(w) && w.every((x) => typeof x === "string"))) out[k] = w;
+    } else if (k === "farbe") {
+      if (w === null || (typeof w === "string" && /^#[0-9a-f]{6}$/i.test(w))) out[k] = w;
+    } else if (typeof w === typeof vorgabe) {
+      out[k] = w;
+    }
+  }
+  const g = out as unknown as PdfGestaltung;
+  if (!(g.schrift in PDF_SCHRIFT_LABEL)) g.schrift = v.schrift;
+  if (!(g.feldstil in PDF_FELDSTIL_LABEL)) g.feldstil = v.feldstil;
+  if (!(g.leereFelder in PDF_LEERE_FELDER_LABEL)) g.leereFelder = v.leereFelder;
+  if (!(g.ueberschriften in PDF_UEBERSCHRIFTEN_LABEL)) g.ueberschriften = v.ueberschriften;
+  g.groesseFuss = Math.max(PDF_MIN_SCHRIFTGROESSE, g.groesseFuss);
+  g.groesseText = Math.max(PDF_MIN_SCHRIFTGROESSE, g.groesseText);
+  return g;
+}
+
+/** Platzhalter fuer Kopf, Infospalte, Fusszeile und Texte. Formularfelder kommen als {feld.<schluessel>} dazu. */
+export const PDF_PLATZHALTER: { gruppe: string; schluessel: string; beispiel: string }[] = [
+  { gruppe: "Träger", schluessel: "traeger.name", beispiel: "DRK Schöneberg-Wilmersdorf hilft gGmbH" },
+  { gruppe: "Träger", schluessel: "traeger.hauptsitz", beispiel: "Kranzer Str. 6/7, 14199 Berlin" },
+  { gruppe: "Träger", schluessel: "traeger.telefon", beispiel: "030 1234 567" },
+  { gruppe: "Träger", schluessel: "traeger.email", beispiel: "info@beispiel.de" },
+  { gruppe: "Träger", schluessel: "traeger.website", beispiel: "www.beispiel.de" },
+  { gruppe: "Träger", schluessel: "traeger.geschaeftsfuehrung", beispiel: "Clemens Trautermann" },
+  { gruppe: "Träger", schluessel: "traeger.registergericht", beispiel: "Amtsgericht Charlottenburg" },
+  { gruppe: "Träger", schluessel: "traeger.registernummer", beispiel: "HRB 204212 B" },
+  { gruppe: "Träger", schluessel: "traeger.steuernummer", beispiel: "27 / 027 / 30480" },
+  { gruppe: "Träger", schluessel: "traeger.bank", beispiel: "Berliner Sparkasse" },
+  { gruppe: "Träger", schluessel: "traeger.iban", beispiel: "DE97 1005 0000 0190 8076 87" },
+  { gruppe: "Träger", schluessel: "traeger.bic", beispiel: "BELADEBEXXX" },
+  { gruppe: "Standort", schluessel: "standort.name", beispiel: "Manfred-Klein-Haus" },
+  { gruppe: "Standort", schluessel: "standort.angebotsform", beispiel: "Betreutes Einzelwohnen" },
+  { gruppe: "Standort", schluessel: "standort.strasse", beispiel: "Dickensweg 25–39" },
+  { gruppe: "Standort", schluessel: "standort.plz_ort", beispiel: "14055 Berlin" },
+  { gruppe: "Standort", schluessel: "standort.anschrift", beispiel: "Dickensweg 25–39, 14055 Berlin" },
+  { gruppe: "Standort", schluessel: "standort.telefon", beispiel: "030 2332 1961 150" },
+  { gruppe: "Standort", schluessel: "standort.email", beispiel: "bew@beispiel.de" },
+  { gruppe: "Standort", schluessel: "standort.ik", beispiel: "260123456" },
+  { gruppe: "Standort", schluessel: "standort.kostenstelle", beispiel: "4711" },
+  { gruppe: "Klient:in", schluessel: "klient.name", beispiel: "Klaus Muster" },
+  { gruppe: "Klient:in", schluessel: "klient.geburtsdatum", beispiel: "12.03.1978" },
+  { gruppe: "Klient:in", schluessel: "klient.aktenzeichen", beispiel: "BEW-2026-014" },
+  { gruppe: "Dokument", schluessel: "formular.name", beispiel: "Hausbesuch" },
+  { gruppe: "Dokument", schluessel: "formular.version", beispiel: "2" },
+  { gruppe: "Dokument", schluessel: "protokoll.datum", beispiel: "18.11.2026" },
+  { gruppe: "Dokument", schluessel: "protokoll.abgeschlossen_von", beispiel: "Anna Berger" },
+  { gruppe: "Dokument", schluessel: "datum", beispiel: "20.11.2026" },
+  { gruppe: "Dokument", schluessel: "ort", beispiel: "Berlin" },
+  { gruppe: "Dokument", schluessel: "benutzer.name", beispiel: "Anna Berger" },
+  { gruppe: "Dokument", schluessel: "seite", beispiel: "1" },
+  { gruppe: "Dokument", schluessel: "seiten", beispiel: "2" },
+  { gruppe: "Dokument", schluessel: "pruefnummer", beispiel: "7F3A-91C2" },
+];
+
+const PLATZHALTER_RE = /\{([a-z][a-z0-9_.]*)\}/g;
+
+/**
+ * Text mit Platzhaltern zeilenweise fuellen. Eine Zeile, in der ein
+ * Platzhalter leer bleibt, entfaellt ganz -- sonst stuende "Tel. " ohne
+ * Nummer in der Infospalte. Leerzeilen bleiben (Absatz), doppelte
+ * Leerzeilen und Leerzeilen am Rand werden zusammengezogen.
+ * "**Zeile**" = fett.
+ */
+export function pdfTextZeilen(
+  text: string,
+  werte: Record<string, string | null | undefined>
+): { text: string; fett: boolean }[] {
+  const out: { text: string; fett: boolean }[] = [];
+  for (const roh of text.split("\n")) {
+    let leer = false;
+    const zeile = roh.replace(PLATZHALTER_RE, (_, k: string) => {
+      const w = werte[k];
+      if (w === null || w === undefined || String(w).trim() === "") {
+        leer = true;
+        return "";
+      }
+      return String(w);
+    });
+    if (leer) continue;
+    const t = zeile.trim();
+    if (t === "") {
+      if (out.length > 0 && out[out.length - 1].text !== "") out.push({ text: "", fett: false });
+      continue;
+    }
+    const fett = /^\*\*.*\*\*$/.test(t);
+    out.push({ text: fett ? t.slice(2, -2).trim() : t, fett });
+  }
+  // Eine Zwischenueberschrift ("**Bankverbindung**") ohne Inhalt darunter entfaellt.
+  const ohne = out.filter(
+    (z, i) => !(z.fett && i > 0 && out[i - 1].text === "" && (out[i + 1] === undefined || out[i + 1].text === ""))
+  );
+  const fertig: { text: string; fett: boolean }[] = [];
+  for (const z of ohne) {
+    if (z.text === "" && (fertig.length === 0 || fertig[fertig.length - 1].text === "")) continue;
+    fertig.push(z);
+  }
+  while (fertig.length > 0 && fertig[fertig.length - 1].text === "") fertig.pop();
+  return fertig;
+}
+
+/** Text in einer Zeile (Titel, Betreff): Platzhalter fuellen, leere einfach weglassen. */
+export function pdfTextEinzeilig(text: string, werte: Record<string, string | null | undefined>): string {
+  return text
+    .replace(PLATZHALTER_RE, (_, k: string) => {
+      const w = werte[k];
+      return w === null || w === undefined ? "" : String(w);
+    })
+    .replace(/\s+·\s+(·\s+)+/g, " · ")
+    .replace(/^\s*·\s*|\s*·\s*$/g, "")
+    .trim();
+}
+
+// --- Druckfarbe -----------------------------------------------------------
+
+function kanalLinear(v: number): number {
+  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+function kanalSrgb(v: number): number {
+  return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+}
+
+function hexZuRgb(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) throw new Error(`Kein gültiger Hex-Farbwert: ${hex}`);
+  const n = parseInt(m[1], 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+/** Relative Leuchtdichte nach WCAG 2.x. */
+export function relativeLeuchtdichte(hex: string): number {
+  const [r, g, b] = hexZuRgb(hex).map(kanalLinear);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Kontrast einer Farbe auf weissem Papier (WCAG-Formel). */
+export function kontrastAufWeiss(hex: string): number {
+  return 1.05 / (relativeLeuchtdichte(hex) + 0.05);
+}
+
+/**
+ * Helligkeit fuer farbige Ueberschriften auf Papier. Fest, nicht vom Traeger
+ * waehlbar -- dasselbe Prinzip wie CLAUDE.md Regel 7: Kontrast haengt nur an
+ * der Helligkeit, und die gehoert nicht der Farbwahl. Bei L = 0.45 liegt
+ * jeder Farbton auf Weiss bei rund 7 : 1, auch Knallgelb.
+ */
+export const PDF_UEBERSCHRIFT_HELLIGKEIT = 0.45;
+
+/**
+ * Farbton und (soweit druckbar) Buntheit der gewaehlten Farbe, Helligkeit
+ * fest. Liegt die Farbe bei dieser Helligkeit ausserhalb von sRGB, wird die
+ * Buntheit schrittweise verringert statt Kanaele abzuschneiden -- Abschneiden
+ * veraendert die Helligkeit und damit genau den Kontrast, um den es geht.
+ */
+export function druckUeberschriftFarbe(hex: string): string {
+  const [r0, g0, b0] = hexZuRgb(hex).map(kanalLinear);
+  const l_ = Math.cbrt(0.4122214708 * r0 + 0.5363325363 * g0 + 0.0514459929 * b0);
+  const m_ = Math.cbrt(0.2119034982 * r0 + 0.6806995451 * g0 + 0.1073969566 * b0);
+  const s_ = Math.cbrt(0.0883024619 * r0 + 0.2817188376 * g0 + 0.6299787005 * b0);
+  const a0 = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+  const b0_ = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+  const h = Math.atan2(b0_, a0);
+  const L = PDF_UEBERSCHRIFT_HELLIGKEIT;
+  for (let c = Math.hypot(a0, b0_); c >= 0; c -= 0.005) {
+    const a = c * Math.cos(h);
+    const b = c * Math.sin(h);
+    const l3 = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3);
+    const m3 = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3);
+    const s3 = Math.pow(L - 0.0894841775 * a - 1.291485548 * b, 3);
+    const rgb = [
+      4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+      -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+      -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
+    ];
+    if (rgb.every((x) => x >= -0.0005 && x <= 1.0005)) {
+      return (
+        "#" +
+        rgb
+          .map((x) => Math.round(Math.min(1, Math.max(0, kanalSrgb(Math.min(1, Math.max(0, x))))) * 255).toString(16).padStart(2, "0"))
+          .join("")
+      );
+    }
+  }
+  return "#4a4a4a";
+}
+
+// --- DTOs -----------------------------------------------------------------
+
+export interface PdfExportDto {
+  id: string;
+  formularId: string;
+  name: string;
+  zielgruppe: PdfZielgruppe;
+  istStandard: boolean;
+  stillgelegt: boolean;
+  kopiertAus: string | null;
+  versionNummer: number;
+  logoId: string | null;
+  gestaltung: PdfGestaltung;
+  gespeichertAm: string;
+  gespeichertVonName: string | null;
+  anzahlErzeugt: number;
+  zuletztErzeugtAm: string | null;
+}
+
+/** Was "Als PDF" in der Akte anbietet: nur Exporte, die die Person nutzen darf. */
+export interface PdfExportAngebotDto {
+  id: string;
+  name: string;
+  zielgruppe: PdfZielgruppe;
+  istStandard: boolean;
+  /** Brief mit Anschriftfeld: Empfaenger wird beim Erzeugen abgefragt. */
+  mitAnschriftfeld: boolean;
+  /** Vorschlag fuer den Empfaenger aus der Kostenuebernahme (nur der Amtsname). */
+  empfaengerVorschlag: string | null;
+}
+
+export interface TraegerAngabenDto {
+  name: string | null;
+  hauptsitz: string | null;
+  telefon: string | null;
+  email: string | null;
+  website: string | null;
+  geschaeftsfuehrung: string | null;
+  registergericht: string | null;
+  registernummer: string | null;
+  steuernummer: string | null;
+  bank: string | null;
+  iban: string | null;
+  bic: string | null;
+}
+
+export interface TraegerDateiDto {
+  id: string;
+  art: "logo";
+  name: string;
+  mime: string;
+  groesse: number;
+  hochgeladenAm: string;
+  /** In wie vielen Exportversionen benutzt (dann nicht loeschbar). */
+  benutzt: number;
+}
+
+export interface DokumentAngabenRechteDto {
+  /** Traegerangaben und Logos aendern (mandanten.branding-bearbeiten). */
+  bearbeiten: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Beispieldaten fuer Vorschauen (Reiter „Ansichten“, PDF-Exporte)
+// ---------------------------------------------------------------------------
+
+export const BEISPIEL_PERSON = { id: "00000000-0000-4000-8000-00000000beef", name: "A. Beispiel" };
+
+const BEISPIEL_ANZEIGE: Record<keyof typeof DATENQUELLEN, string> = {
+  "klient.name": "Mira Beispiel",
+  "klient.vorname": "Mira",
+  "klient.nachname": "Beispiel",
+  "klient.initialen": "M. B.",
+  "klient.geburtsdatum": "2004-05-06",
+  "klient.alter": "22",
+  "klient.aktenzeichen": "AZ-0000",
+  "klient.amt": "Jugendamt",
+  "klient.bezugsbetreuung": "A. Beispiel",
+  "belegung.standort": "Haus Beispiel",
+  "belegung.zimmer": "4",
+  "belegung.wohnung": "Haus Beispiel, Zimmer 4",
+  "ausfuellende.name": "A. Beispiel",
+  "zeit.heute": "",
+  "zeit.jetzt": "",
+};
+
+function beispielHeute(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Beispieldaten aus den Feldtypen, fuer die Vorschau in „Ansichten“. Ja/Nein
+ * steht auf Ja, damit bedingte Abschnitte (meist „wenn Vorfall = Ja“) sichtbar
+ * werden -- die Vorschau soll moeglichst viel vom Formular zeigen. Gespeichert
+ * wird nichts davon.
+ */
+export function beispielDaten(def: FormularDefinition): {
+  werte: FeldWerte;
+  anzeige: Record<string, string | null>;
+  personen: Record<string, string>;
+} {
+  const werte: FeldWerte = {};
+  const anzeige: Record<string, string | null> = {};
+  for (const b of alleBausteine(def)) {
+    if (b.typ === "anzeige") {
+      anzeige[b.schluessel] = b.quelle === "zeit.heute" ? beispielHeute() : b.quelle === "zeit.jetzt" ? "06:00" : BEISPIEL_ANZEIGE[b.quelle];
+      continue;
+    }
+    if (!istEingabe(b)) continue;
+    let w: FeldWert | null = null;
+    switch (b.typ) {
+      case "kurztext":
+        w = "Beispiel";
+        break;
+      case "langtext":
+        w = "Beispieltext: so sieht eine längere Angabe aus.";
+        break;
+      case "zahl": {
+        const min = b.min ?? 0;
+        const max = b.max ?? Math.max(min + 10, 10);
+        w = Math.round((min + max) / 2);
+        break;
+      }
+      case "datum":
+        w = beispielHeute();
+        break;
+      case "uhrzeit":
+        w = "06:00";
+        break;
+      case "ja_nein":
+        w = true;
+        break;
+      case "auswahl": {
+        const o = b.optionen.find((x) => !x.ausgeblendet);
+        w = o ? o.wert : null;
+        break;
+      }
+      case "mehrfachauswahl":
+        w = b.optionen.filter((x) => !x.ausgeblendet).slice(0, 2).map((x) => x.wert);
+        break;
+      case "skala":
+        w = Math.round((b.min + b.max) / 2);
+        break;
+      case "mitarbeitende":
+        w = [BEISPIEL_PERSON.id];
+        break;
+    }
+    if (w !== null) werte[b.schluessel] = w;
+  }
+  return { werte, anzeige, personen: { [BEISPIEL_PERSON.id]: BEISPIEL_PERSON.name } };
+}

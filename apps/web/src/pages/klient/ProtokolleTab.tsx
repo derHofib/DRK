@@ -12,11 +12,13 @@ import {
 import { api, ApiFehler } from "../../api/client";
 import { Leerzustand } from "../../components/Leerzustand";
 import { Modal } from "../../components/Modal";
+import { PdfExportDialog } from "../../components/PdfExportDialog";
 import { ProtokollAnsicht, ProtokollEingabe, verworfeneAngaben, wertAlsText, type PersonAuswahl } from "../../components/ProtokollFormular";
 import {
   IBearbeiten,
   IBestaetigen,
   IFehler,
+  IHerunterladen,
   IInfo,
   ILeerTagesberichte,
   ILoeschen,
@@ -195,6 +197,7 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
   const [historie, setHistorie] = useState<ProtokollAenderungDto[]>([]);
   const [personen, setPersonen] = useState<PersonAuswahl[]>([]);
   const [verwerfenOffen, setVerwerfenOffen] = useState(false);
+  const [pdfOffen, setPdfOffen] = useState(false);
   const geaendert = useRef(false);
 
   const uebernehmen = useCallback((neu: ProtokollDto) => {
@@ -337,6 +340,12 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
         </div>
         <div className="zv-protokoll-kopf-aktionen">
           <span className={`zv-pill${p.abgeschlossen ? " zv-pill-ok" : " zv-pill-frist"}`}>{p.abgeschlossen ? "abgeschlossen" : "Entwurf"}</span>
+          {p.abgeschlossen && modus === "lesen" && (
+            <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setPdfOffen(true)}>
+              <IHerunterladen />
+              Als PDF
+            </button>
+          )}
           {p.abgeschlossen && p.bearbeitbar && modus === "lesen" && (
             <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setModus("korrigieren")}>
               <IBearbeiten />
@@ -439,6 +448,8 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
           </button>
         </Modal>
       )}
+
+      {pdfOffen && <PdfExportDialog p={p} onClose={() => setPdfOffen(false)} />}
 
       {p.abgeschlossen && historie.length > 0 && (
         <section className="zv-protokoll-historie">
