@@ -427,6 +427,10 @@
      Formularen auf der vollen (Konzept Datumsfeld, 3.4). */
   --zv-steuer-hoehe: 40px;
   --zv-steuer-hoehe-kompakt: 36px;
+  /* Tageszelle im Kalender (Datumsfeld.tsx): so hoch wie ein kompaktes
+     Steuerelement, damit ein Tag mit der Maus so leicht zu treffen ist wie
+     ein Knopf. Sieben davon ergeben die Breite eines Monatsblatts. */
+  --zv-dkal-zelle: 36px;
 
   /* Die Familiennamen sind nicht frei gewaehlt -- sie muessen zu den
      @font-face-Regeln in schrift.css passen (@fontsource-variable/

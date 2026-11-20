@@ -42,7 +42,8 @@ import {
 import { SignaturePad } from "../components/SignaturePad";
 import { Filterleiste, OptionenFilter, StandortFilter, ZeitraumFilter, trifftSuche, useZeitraum } from "../components/Listenfilter";
 import type { UebergabeStart } from "./HzlUebergabe";
-import { formatBetrag, formatDatum, kontextzeile } from "../format";
+import { formatBetrag, formatDatum, heuteBerlin, kontextzeile } from "../format";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 type JournalFilter = "alle" | "einnahmen" | "ausgaben" | "stornos";
 const JOURNAL_FILTER_LABEL: Record<JournalFilter, string> = {
@@ -697,8 +698,8 @@ export function Kassenbuch({
                 </div>
               )}
               <div className="zv-field">
-                <label>Datum</label>
-                <input name="datum" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                <label htmlFor="kb-buchung-datum">Datum</label>
+                <Datumsfeld id="kb-buchung-datum" name="datum" required defaultValue={heuteBerlin()} schnellwahl="heute-gestern" />
               </div>
             </div>
 

@@ -1,5 +1,6 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IAbbrechen, IAufklappen, IBestaetigen, ISuche } from "./icons";
+import { useSchwebendSchliessen } from "./schwebend";
 
 /**
  * Baustein der Filterleiste: ein Knopf, der ein kleines Popover oeffnet.
@@ -17,6 +18,7 @@ export function FilterPille({
   wert,
   onEntfernen,
   startOffen,
+  breit,
   children,
 }: {
   icon: ReactNode;
@@ -25,6 +27,8 @@ export function FilterPille({
   wert: string | null;
   onEntfernen?: () => void;
   startOffen?: boolean;
+  /** Popover so breit wie sein Inhalt (Zeitraum mit Kalender) statt fest 300 px. */
+  breit?: boolean;
   /** Inhalt des Popovers; bekommt eine Funktion zum Schliessen. */
   children: (schliessen: () => void) => ReactNode;
 }) {
@@ -35,7 +39,9 @@ export function FilterPille({
 
   function oeffnen() {
     const r = knopf.current!.getBoundingClientRect();
-    const breite = 300;
+    // Ein breites Popover kennt seine Breite erst nach dem Rendern; bis dahin
+    // die 300 px annehmen, der Layout-Effekt unten rueckt es dann nach.
+    const breite = popover.current?.offsetWidth ?? 300;
     setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - breite - 8)) });
   }
 
@@ -45,36 +51,25 @@ export function FilterPille({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useLayoutEffect(() => {
+    if (!pos || !breit || !popover.current) return;
+    const r = knopf.current!.getBoundingClientRect();
+    const links = Math.max(8, Math.min(r.left, window.innerWidth - popover.current.offsetWidth - 8));
+    if (Math.abs(links - pos.left) > 0.5) setPos({ top: pos.top, left: links });
+  });
+
+  useSchwebendSchliessen(offen, [popover, knopf], () => setPos(null), oeffnen);
+
   useEffect(() => {
     if (!offen) return;
-    const zu = () => setPos(null);
-    function aussen(e: MouseEvent) {
-      const t = e.target as Node;
-      if (!popover.current?.contains(t) && !knopf.current?.contains(t)) zu();
-    }
     function taste(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        zu();
+        setPos(null);
         knopf.current?.focus();
       }
     }
-    // Seitenscroll schliesst; Scrollen der Leiste selbst (waagerecht auf dem
-    // Handy) verschiebt nur den Knopf -- das Popover folgt ihm.
-    function scroll(e: Event) {
-      if (popover.current?.contains(e.target as Node)) return;
-      if (e.target === document) return zu();
-      oeffnen();
-    }
-    document.addEventListener("mousedown", aussen);
     document.addEventListener("keydown", taste);
-    window.addEventListener("resize", zu);
-    window.addEventListener("scroll", scroll, true);
-    return () => {
-      document.removeEventListener("mousedown", aussen);
-      document.removeEventListener("keydown", taste);
-      window.removeEventListener("resize", zu);
-      window.removeEventListener("scroll", scroll, true);
-    };
+    return () => document.removeEventListener("keydown", taste);
   }, [offen]);
 
   return (
@@ -102,7 +97,13 @@ export function FilterPille({
         )}
       </span>
       {pos && (
-        <div ref={popover} role="dialog" aria-label={label} className="zv-filter-popover" style={{ top: pos.top, left: pos.left }}>
+        <div
+          ref={popover}
+          role="dialog"
+          aria-label={label}
+          className={`zv-filter-popover${breit ? " zv-filter-popover-breit" : ""}`}
+          style={{ top: pos.top, left: pos.left }}
+        >
           {children(() => setPos(null))}
         </div>
       )}

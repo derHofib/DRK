@@ -18,6 +18,7 @@ import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { IFehler, IFilterLoeschen, IKalender, IKlienten, ILeerStunden, INeu, IPerson, ISpeichern, IStornieren, ISuche } from "../components/icons";
 import { SCHNELLWAHL_LABEL, zeitraumFuer, type Schnellwahl } from "./tagesberichte-filter";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 const MONATSNAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
@@ -455,7 +456,7 @@ function BuchungsFormular({
           </div>
           <div className="zv-field">
             <label htmlFor="std-datum">Datum</label>
-            <input id="std-datum" name="datum" type="date" required max={heute} defaultValue={heute} />
+            <Datumsfeld id="std-datum" name="datum" required max={heute} defaultValue={heute} schnellwahl="heute-gestern" />
           </div>
         </div>
         <div className="zv-field-row">
