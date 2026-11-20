@@ -43,6 +43,7 @@ import { formatDatum, formatUhrzeit } from "../format";
 import { FormularUebersicht } from "./formulare/FormularUebersicht";
 import { aufbauVersionen, FormularAufbau, VersionWahl } from "./formulare/FormularAufbau";
 import { FormularAnsichten } from "./formulare/FormularAnsichten";
+import { FormularPdfExporte } from "./formulare/FormularPdfExporte";
 
 /**
  * Formulare selbst bauen (Rueckmeldung "Formulare", Konzept
@@ -337,7 +338,7 @@ function NeuesFormular({ onClose, onAngelegt }: { onClose: () => void; onAngeleg
 // Ein Formular: Aufbau, Einstellungen, Versionen
 // ---------------------------------------------------------------------------
 
-type Reiter = "uebersicht" | "aufbau" | "ansichten" | "einstellungen" | "versionen";
+type Reiter = "uebersicht" | "aufbau" | "ansichten" | "pdf" | "einstellungen" | "versionen";
 
 function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: StandortDto[]; onZurueck: () => void }) {
   const [d, setD] = useState<FormularDetailDto | null>(null);
@@ -557,6 +558,7 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
           { wert: "uebersicht", label: "Übersicht" },
           { wert: "aufbau", label: "Aufbau" },
           { wert: "ansichten", label: "Ansichten" },
+          { wert: "pdf", label: "PDF-Exporte" },
           { wert: "einstellungen", label: "Einstellungen" },
           { wert: "versionen", label: "Versionen" },
         ]}
@@ -596,6 +598,8 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
         ))}
 
       {reiter === "ansichten" && <FormularAnsichten key={d.id} d={d} kennzahlen={kennzahlen} />}
+
+      {reiter === "pdf" && <FormularPdfExporte key={d.id} d={d} />}
 
       {reiter === "einstellungen" && (
         <Einstellungen

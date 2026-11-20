@@ -124,6 +124,11 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
       await admin.query("ALTER TABLE protokoll_wert DISABLE TRIGGER protokoll_wert_protokoll");
       for (const m of mandanten) {
         for (const t of [
+          "pdf_export_erzeugt",
+          "pdf_export_version",
+          "pdf_export",
+          "traeger_datei",
+          "traeger_angaben",
           "protokoll_aenderung",
           "protokoll_wert",
           "protokoll",
@@ -300,6 +305,29 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
     expect(volleListe.sort()).toEqual([linden.body.id, parkDoku].sort());
     // Fremder Traeger sieht nichts.
     expect((await als(leitungB).get(`/protokolle/${parkDoku}`)).status).toBe(404);
+
+    // PDF-Export (Migration 0082) kommt mit einem Dokument ohne Klient:in
+    // zurecht: kein Amt als Empfaengervorschlag, Briefkopf vom Standort.
+    const angebot = await als(betreuerA).get(`/protokolle/${parkDoku}/pdf-exporte`);
+    expect(angebot.status).toBe(200);
+    expect(angebot.body.length).toBeGreaterThan(0);
+    expect(angebot.body.every((a: { empfaengerVorschlag: string | null }) => a.empfaengerVorschlag === null)).toBe(true);
+    const exportId = angebot.body.find((a: { istStandard: boolean }) => a.istStandard).id;
+    const pdf = await http()
+      .post(`/protokolle/${parkDoku}/pdf`)
+      .set("Authorization", `Bearer ${betreuerA}`)
+      .send({ exportId })
+      .buffer(true)
+      .parse((res, cb) => {
+        const teile: Buffer[] = [];
+        res.on("data", (t: Buffer) => teile.push(t));
+        res.on("end", () => cb(null, Buffer.concat(teile)));
+      });
+    expect(pdf.status).toBe(201);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe("%PDF-");
+    const erzeugt = await admin.query("SELECT standort_id FROM pdf_export_erzeugt WHERE protokoll_id = $1", [parkDoku]);
+    expect(erzeugt.rows).toEqual([{ standort_id: standorte.park }]);
   });
 
   it("ohne Zuordnung und Klient:in wahlweise", async () => {

@@ -9496,3 +9496,379 @@ button.zv-achtung-eintrag:hover {
   flex-direction: column;
   gap: 2px;
 }
+
+/* ==================================================================
+   PDF-Exporte je Formular (FormularPdfExporte.tsx, Migration 0082)
+   ================================================================== */
+.zv-pe-kopf {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-pe-kopf .zv-sub {
+  max-width: 72ch;
+  margin: 0;
+}
+.zv-pe-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--zv-space-4);
+  align-items: start;
+}
+.zv-pe-zwischen {
+  margin: var(--zv-space-6) 0 var(--zv-space-1);
+  font-size: var(--zv-text-abschnitt);
+}
+.zv-pe-karte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+.zv-pe-karte h3 {
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-pe-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+.zv-pe-fakten {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-blatt {
+  display: flex;
+  justify-content: center;
+  padding: var(--zv-space-4);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface-2);
+  cursor: pointer;
+}
+.zv-pe-blatt:focus-visible {
+  outline: 2px solid var(--zv-ring);
+  outline-offset: 2px;
+}
+/* Skizze einer A4-Seite: bewusst Papierweiss/Tinte auch im dunklen Design --
+   es geht um das Aussehen auf Papier (gleiche Tokens wie das Unterschriftsfeld). */
+.zv-pe-skizze {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  width: 120px;
+  aspect-ratio: 210 / 297;
+  padding: var(--zv-space-3);
+  background: var(--zv-signature-paper);
+  box-shadow: var(--zv-shadow-1);
+}
+.zv-pe-skizze > span {
+  display: block;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-ink);
+  opacity: 0.18;
+}
+.zv-pe-skizze-logo {
+  width: 30%;
+  height: 8px;
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-skizze-logo-mitte {
+  align-self: center;
+}
+.zv-pe-skizze-logo-rechts {
+  align-self: flex-end;
+}
+.zv-pe-skizze .zv-pe-skizze-titel {
+  width: 55%;
+  height: 5px;
+  margin: var(--zv-space-1) 0;
+  background: var(--zv-accent);
+  opacity: 1;
+}
+.zv-pe-skizze-zeile {
+  height: 2px;
+  width: 100%;
+}
+.zv-pe-skizze-brief .zv-pe-skizze-zeile {
+  width: 68%;
+}
+.zv-pe-skizze-anschrift {
+  width: 40%;
+  height: 22px;
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-skizze .zv-pe-skizze-info {
+  position: absolute;
+  right: var(--zv-space-3);
+  top: 28%;
+  width: 22%;
+  height: 50%;
+}
+.zv-pe-skizze .zv-pe-skizze-fuss {
+  position: absolute;
+  left: var(--zv-space-3);
+  right: var(--zv-space-3);
+  bottom: var(--zv-space-2);
+  height: 2px;
+}
+.zv-pe-angaben {
+  align-self: stretch;
+}
+.zv-pe-neu {
+  display: grid;
+  gap: var(--zv-space-3);
+}
+.zv-pe-wahl {
+  display: flex;
+  gap: var(--zv-space-3);
+  align-items: flex-start;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  cursor: pointer;
+}
+.zv-pe-wahl.active {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+.zv-pe-wahl > span {
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-wahl strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  align-items: center;
+}
+.zv-pe-zwei {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-3);
+}
+.zv-pe-drei {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zv-space-2);
+}
+
+/* Editor: Einstellungen | Vorschau | Platzhalter */
+.zv-pe-editor-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-pe-editor-kopf .zv-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-spalten {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(220px, 280px);
+  gap: var(--zv-space-4);
+  align-items: start;
+}
+.zv-pe-einstellungen {
+  padding: var(--zv-space-2) var(--zv-space-4);
+}
+.zv-pe-abschnitt {
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-pe-abschnitt:last-child {
+  border-bottom: none;
+}
+.zv-pe-abschnitt > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) 0;
+  cursor: pointer;
+  font-weight: var(--zv-weight-semibold);
+  list-style: none;
+}
+.zv-pe-abschnitt > summary::-webkit-details-marker {
+  display: none;
+}
+.zv-pe-abschnitt > summary .zv-sub-inline {
+  font-weight: var(--zv-weight-medium);
+  text-align: right;
+}
+.zv-pe-abschnitt-inhalt {
+  display: grid;
+  gap: var(--zv-space-3);
+  padding-bottom: var(--zv-space-4);
+}
+.zv-pe-abschnitt-inhalt .zv-field {
+  margin: 0;
+}
+.zv-pe-label {
+  display: block;
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-sekundaer);
+  margin-bottom: var(--zv-space-1);
+}
+.zv-pe-mono {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-s);
+}
+.zv-pe-felder {
+  display: grid;
+  gap: var(--zv-space-1);
+  max-height: 320px;
+  overflow: auto;
+}
+.zv-field .zv-pe-farbe {
+  width: 64px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+}
+.zv-pe-vorschau {
+  display: grid;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-pe-vorschau-leiste {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-3);
+}
+.zv-pe-papier {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-l);
+  background: var(--zv-surface-2);
+}
+.zv-pe-papier iframe {
+  width: 100%;
+  height: 78vh;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-paper);
+}
+.zv-pe-platzhalter ul {
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-platzhalter li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+.zv-pe-platzhalter li button {
+  padding: 0 var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+  cursor: copy;
+  font: inherit;
+}
+.zv-pe-platzhalter code {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-xs);
+  overflow-wrap: anywhere;
+}
+.zv-pe-platzhalter .zv-sub-inline {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1280px) {
+  .zv-pe-spalten {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  }
+  .zv-pe-platzhalter {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
+  .zv-pe-kopf,
+  .zv-pe-editor-kopf {
+    flex-direction: column;
+  }
+  .zv-pe-spalten,
+  .zv-pe-zwei {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Einstellungen › Angaben für Dokumente */
+.zv-dok-angaben {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--zv-space-3);
+}
+.zv-dok-angaben .zv-field {
+  margin: 0;
+}
+.zv-dok-angaben-breit {
+  grid-column: 1 / -1;
+}
+.zv-dok-logos {
+  margin: var(--zv-space-3) 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--zv-space-2);
+}
+.zv-dok-logos li {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-dok-logo-bild {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 96px;
+  height: 44px;
+  padding: var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-paper);
+}
+.zv-dok-logo-bild img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.zv-dok-logo-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.zv-dok-logo-text strong {
+  overflow-wrap: anywhere;
+}
+/* .zv-field input (volle Breite, 40 px) soll Kaestchen in den Abschnitten nicht aufblaehen. */
+.zv-pe-abschnitt-inhalt .zv-checkbox-zeile input[type="checkbox"] {
+  flex: none;
+  min-height: 0;
+  padding: 0;
+}

@@ -1,4 +1,11 @@
 import type {
+  PdfExportAngebotDto,
+  PdfExportDto,
+  PdfGestaltung,
+  PdfVorlage,
+  PdfZielgruppe,
+  TraegerAngabenDto,
+  TraegerDateiDto,
   FeldWerte,
   KlientEintragAenderungDto,
   KlientEintragAnlegenDto,
@@ -313,6 +320,30 @@ async function dateiHerunterladen(path: string, dateiname: string): Promise<void
   URL.revokeObjectURL(url);
 }
 
+// POST mit JSON, Antwort ein PDF (Vorschau im Export-Editor, Export aus der
+// Akte). Fehler kommen weiter als JSON und werden lesbar weitergereicht.
+async function pdfAnfordern(path: string, body: unknown): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401 && token) sitzungBeenden();
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ message: res.statusText }));
+    throw new ApiFehler(b.message ?? `PDF konnte nicht erzeugt werden (${res.status})`, res.status);
+  }
+  return res.blob();
+}
+
+export interface PdfExportSpeichernEingabe {
+  name: string;
+  zielgruppe: PdfZielgruppe;
+  logoId: string | null;
+  gestaltung: PdfGestaltung;
+}
+
 export interface ChatUngelesenDto {
   ungelesen: number;
   offeneAnfragen?: number;
@@ -491,6 +522,49 @@ export const api = {
   protokollKorrigieren: (id: string, werte: FeldWerte, grund: string) =>
     request<ProtokollDto>(`/protokolle/${id}/korrektur`, { method: "POST", body: JSON.stringify({ werte, grund }) }),
   protokollEntwurfLoeschen: (id: string) => request<{ ok: true }>(`/protokolle/${id}`, { method: "DELETE" }),
+  // PDF-Exporte je Formular (Migration 0082)
+  pdfExportRechte: () => request<{ angabenBearbeiten: boolean; gestalten: boolean; extern: boolean }>("/pdf-exporte/rechte"),
+  dokumentAngaben: () => request<TraegerAngabenDto>("/dokument-angaben"),
+  dokumentAngabenSpeichern: (a: TraegerAngabenDto) =>
+    request<TraegerAngabenDto>("/dokument-angaben", { method: "PUT", body: JSON.stringify(a) }),
+  traegerDateien: () => request<TraegerDateiDto[]>("/traeger-dateien"),
+  traegerDateiUrl: (id: string) => blobUrl(`/traeger-dateien/${id}`),
+  traegerDateiLoeschen: (id: string) => request<{ geloescht: true }>(`/traeger-dateien/${id}`, { method: "DELETE" }),
+  logoHochladen: async (datei: File): Promise<TraegerDateiDto> => {
+    const token = getToken();
+    const res = await fetch("/api/traeger-dateien/logo", {
+      method: "POST",
+      headers: {
+        "Content-Type": datei.type || "application/octet-stream",
+        "X-Dateiname": encodeURIComponent(datei.name),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: datei,
+    });
+    if (res.status === 401 && token) sitzungBeenden();
+    if (!res.ok) {
+      if (res.status === 413) throw new Error("Die Datei ist zu groß (höchstens 5 MB).");
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(body.message ?? `Upload fehlgeschlagen (${res.status})`);
+    }
+    return res.json() as Promise<TraegerDateiDto>;
+  },
+  pdfExporte: (formularId: string) => request<PdfExportDto[]>(`/formulare/${formularId}/pdf-exporte`),
+  pdfExport: (id: string) => request<PdfExportDto>(`/pdf-exporte/${id}`),
+  pdfExportAnlegen: (formularId: string, e: { name: string; vorlage?: PdfVorlage; kopieVon?: string }) =>
+    request<PdfExportDto>(`/formulare/${formularId}/pdf-exporte`, { method: "POST", body: JSON.stringify(e) }),
+  pdfExportSpeichern: (id: string, e: PdfExportSpeichernEingabe) =>
+    request<PdfExportDto>(`/pdf-exporte/${id}`, { method: "PUT", body: JSON.stringify(e) }),
+  pdfExportAlsStandard: (id: string) => request<PdfExportDto>(`/pdf-exporte/${id}/standard`, { method: "POST" }),
+  pdfExportStilllegen: (id: string, stillgelegt: boolean) =>
+    request<PdfExportDto>(`/pdf-exporte/${id}/stilllegen`, { method: "POST", body: JSON.stringify({ stillgelegt }) }),
+  pdfExportVorschau: (
+    formularId: string,
+    e: PdfExportSpeichernEingabe & { protokollId?: string | null; standortId?: string | null; empfaenger?: string | null }
+  ) => pdfAnfordern(`/formulare/${formularId}/pdf-exporte/vorschau`, e),
+  protokollPdfExporte: (protokollId: string) => request<PdfExportAngebotDto[]>(`/protokolle/${protokollId}/pdf-exporte`),
+  protokollPdf: (protokollId: string, exportId: string, empfaenger: string | null) =>
+    pdfAnfordern(`/protokolle/${protokollId}/pdf`, { exportId, empfaenger }),
   einstellungenRechte: () => request<EinstellungenRechteDto>("/mandant/me/einstellungen-rechte"),
 
   // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)
