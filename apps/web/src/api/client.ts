@@ -24,6 +24,7 @@ import type {
   ProtokollDto,
   ProtokolleRechteDto,
   ProtokollKurzDto,
+  DokumentationsAngebotDto,
   AnwaerterDto,
   EinstellungenRechteDto,
   RueckmeldungBerechtigungDto,
@@ -496,7 +497,7 @@ export const api = {
   formularVeroeffentlichen: (id: string) => request<FormularDetailDto>(`/formulare/${id}/veroeffentlichen`, { method: "POST" }),
   formularEinstellungen: (
     id: string,
-    e: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[] }
+    e: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[]; aufDokumentation: boolean }
   ) => request<FormularDetailDto>(`/formulare/${id}/einstellungen`, { method: "PUT", body: JSON.stringify(e) }),
   formularArchivieren: (id: string, archiviert: boolean) =>
     request<FormularDetailDto>(`/formulare/${id}/archivieren`, { method: "POST", body: JSON.stringify({ archiviert }) }),
@@ -511,6 +512,10 @@ export const api = {
   protokollHistorie: (id: string) => request<ProtokollAenderungDto[]>(`/protokolle/${id}/historie`),
   protokollAnlegen: (formularId: string, klientId: string) =>
     request<ProtokollDto>("/protokolle", { method: "POST", body: JSON.stringify({ formularId, klientId }) }),
+  /** Seite Dokumentation: Klient:in, Standort oder nichts -- je nach Zuordnung des Formulars. */
+  dokumentAnlegen: (formularId: string, bezug: { klientId?: string | null; standortId?: string | null }) =>
+    request<ProtokollDto>("/protokolle", { method: "POST", body: JSON.stringify({ formularId, ...bezug }) }),
+  dokumentationsAngebot: () => request<DokumentationsAngebotDto[]>("/formulare/dokumentation"),
   protokollEntwurfSpeichern: (id: string, werte: FeldWerte) =>
     request<ProtokollDto>(`/protokolle/${id}/entwurf`, { method: "PUT", body: JSON.stringify({ werte }) }),
   protokollAbschliessen: (id: string, werte: FeldWerte) =>
@@ -561,6 +566,7 @@ export const api = {
   protokollPdfExporte: (protokollId: string) => request<PdfExportAngebotDto[]>(`/protokolle/${protokollId}/pdf-exporte`),
   protokollPdf: (protokollId: string, exportId: string, empfaenger: string | null) =>
     pdfAnfordern(`/protokolle/${protokollId}/pdf`, { exportId, empfaenger }),
+  sammelPdf: (eintraege: { protokollId: string; exportId: string }[]) => pdfAnfordern("/protokolle/sammel-pdf", { eintraege }),
   einstellungenRechte: () => request<EinstellungenRechteDto>("/mandant/me/einstellungen-rechte"),
 
   // Rueckmeldungen (Idee/Fehler melden, Freigabe durch die Geschaeftsfuehrung)
