@@ -1857,6 +1857,43 @@ export const DATENQUELLEN = {
 
 export type Datenquelle = keyof typeof DATENQUELLEN;
 
+/** Quellen, die eine Klient:in voraussetzen (Klientendaten und ihre Belegung). */
+export function quelleBrauchtKlient(q: string): boolean {
+  return q.startsWith("klient.") || q.startsWith("belegung.");
+}
+
+/**
+ * Wozu ein ausgefuelltes Formular gehoert (Rueckmeldung „Dokumentation“,
+ * Konzept dokumentation-formulare, Bild 3A). Steht in der Definition und ist
+ * damit Teil der Version: sie aendert, was beim Ausfuellen gefragt wird, und
+ * ein bereits ausgefuelltes Dokument behaelt seine Zuordnung. Ohne Angabe
+ * "klient" -- so verhalten sich alle Formulare von vor Migration 0083.
+ */
+export type FormularZuordnung = "klient" | "klient_wahlweise" | "standort" | "ohne";
+
+export const ZUORDNUNG_LABEL: Record<FormularZuordnung, string> = {
+  klient: "Zu einer Klient:in",
+  klient_wahlweise: "Klient:in wahlweise",
+  standort: "Zu einem Standort",
+  ohne: "Ohne Zuordnung",
+};
+
+export const ZUORDNUNG_ERKLAERUNG: Record<FormularZuordnung, string> = {
+  klient: "Pflicht. Erscheint in der Akte unter Dokumentation.",
+  klient_wahlweise: "Beim Ausfüllen wählbar, mit oder ohne Klient:in.",
+  standort: "Teambesprechung, Brandschutz, Hausbegehung. Gehört zu einem Standort.",
+  ohne: "Fahrzeugcheck, Schulungsnachweis. Nur auf der Seite Dokumentation.",
+};
+
+export function zuordnungVon(def: Pick<FormularDefinition, "zuordnung"> | null | undefined): FormularZuordnung {
+  return def?.zuordnung ?? "klient";
+}
+
+/** Darf ein Dokument dieser Zuordnung Klientendaten anzeigen oder vorausfuellen? */
+export function zuordnungKenntKlient(z: FormularZuordnung): boolean {
+  return z === "klient" || z === "klient_wahlweise";
+}
+
 /**
  * "festgehalten": nur lesend, der Stand beim Abschliessen wird gespeichert.
  * "vorschlag": vorausgefuellt, darf geaendert werden.
@@ -2024,6 +2061,8 @@ export interface FormularDefinition {
    * vom", "Datum des Besuchs"). Ohne Angabe gilt der Tag des Anlegens.
    */
   bezugsdatumFeld?: string;
+  /** Ohne Angabe "klient". Siehe FormularZuordnung. */
+  zuordnung?: FormularZuordnung;
 }
 
 /** Ein gespeicherter Wert. Datum "JJJJ-MM-TT", Uhrzeit "HH:MM", Mehrfach/Mitarbeitende als Liste. */
@@ -2502,6 +2541,9 @@ export function pruefeDefinition(def: FormularDefinition): string[] {
     }
     a.args.forEach((x) => ausdruckPruefen(x, wo));
   };
+  const zuordnung = def.zuordnung ?? "klient";
+  if (!(zuordnung in ZUORDNUNG_LABEL)) fehler.push("Unbekannte Zuordnung.");
+  const ohneKlient = !zuordnungKenntKlient(zuordnung);
   if (def.bezugsdatumFeld !== undefined && typen.get(def.bezugsdatumFeld) !== "datum") {
     fehler.push(`Das Bezugsdatum „${def.bezugsdatumFeld}“ ist kein Datumsfeld.`);
   }
@@ -2512,6 +2554,14 @@ export function pruefeDefinition(def: FormularDefinition): string[] {
     if (b.typ === "berechnung") ausdruckPruefen(b.ausdruck, wo);
     nurNachOben = null;
     if (b.typ === "anzeige" && !(b.quelle in DATENQUELLEN)) fehler.push(`${wo}: unbekannte Datenquelle.`);
+    // Ein Standort-Dokument oder eines ohne Zuordnung hat keine Klient:in --
+    // ein Feld "Name der Klient:in" bliebe immer leer und taeuschte etwas vor.
+    if (ohneKlient && b.typ === "anzeige" && quelleBrauchtKlient(b.quelle)) {
+      fehler.push(`${wo}: zeigt Klientendaten, das Formular ist aber „${ZUORDNUNG_LABEL[zuordnung]}“.`);
+    }
+    if (ohneKlient && istEingabe(b) && b.vorausfuellen && quelleBrauchtKlient(b.vorausfuellen.quelle)) {
+      fehler.push(`${wo}: wird aus Klientendaten vorausgefüllt, das Formular ist aber „${ZUORDNUNG_LABEL[zuordnung]}“.`);
+    }
     if (istEingabe(b)) {
       if (b.pflicht && typeof b.pflicht === "object") bedingungPruefen(b.pflicht, wo);
       for (const p of b.pruefungen ?? []) feldBekannt(p.feld, wo);
@@ -2549,8 +2599,13 @@ export interface ProtokollKurzDto {
   formularId: string;
   formularName: string;
   versionNummer: number;
-  klientId: string;
-  klientName: string;
+  /** Zuordnung der Version, mit der das Protokoll ausgefuellt wurde. */
+  zuordnung: FormularZuordnung;
+  /** null bei Standort-Dokumenten und solchen ohne Zuordnung (Migration 0083). */
+  klientId: string | null;
+  klientName: string | null;
+  standortId: string | null;
+  standortName: string | null;
   autorName: string | null;
   bezugsdatum: string;
   abgeschlossen: boolean;
@@ -2655,6 +2710,10 @@ export interface FormularVerwaltungDto {
   anzahlProtokolle: number;
   /** Abgeschlossene Protokolle der letzten 30 Tage (alle Versionen). */
   anzahl30Tage: number;
+  /** Auf der Seite Dokumentation zum Ausfuellen anbieten (Migration 0083). */
+  aufDokumentation: boolean;
+  /** Zuordnung der veroeffentlichten Version, sonst des Entwurfs. */
+  zuordnung: FormularZuordnung;
 }
 
 export interface FormularVersionInfoDto {
@@ -2690,7 +2749,7 @@ export interface FormularKennzahlenDto {
    * Die letzten abgeschlossenen Protokolle -- nur solche, deren Klient:in man
    * sehen darf, und nur mit Initialen (Konzept Frage 3).
    */
-  letzte: { id: string; klientId: string; abgeschlossenAm: string; klientInitialen: string; standortName: string | null; versionNummer: number }[];
+  letzte: { id: string; klientId: string | null; abgeschlossenAm: string; klientInitialen: string | null; standortName: string | null; versionNummer: number }[];
   /** Je Version und Feldschluessel: in wie vielen abgeschlossenen Protokollen ein Wert steht. */
   felder: Record<string, Record<string, number>>;
 }
@@ -2703,6 +2762,22 @@ export interface FormularDetailDto extends FormularVerwaltungDto {
   frueher: FormularDefinition[];
   /** Offene Protokoll-Entwuerfe auf der bisherigen Version (bleiben dort beim Veroeffentlichen). */
   offeneEntwuerfe: number;
+}
+
+/**
+ * Ein Formular auf der Seite Dokumentation (Knopf „Formular ausfüllen“).
+ * Ohne Vorbelegung: die haengt an der Klient:in, die erst danach gewaehlt wird.
+ */
+export interface DokumentationsAngebotDto {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  versionNummer: number;
+  zuordnung: FormularZuordnung;
+  /** Nur bei "standort": wo die Person dieses Formular ausfuellen darf. */
+  standorte: { id: string; name: string }[];
+  /** Letztes eigenes Protokoll mit diesem Formular, fuer „Zuletzt von dir“. */
+  zuletztAm: string | null;
 }
 
 /** Ein Formular, das an einer Stelle zum Ausfuellen angeboten wird -- mit Vorbelegung fuer eine Klient:in. */

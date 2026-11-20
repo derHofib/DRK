@@ -1,3 +1,4 @@
+import { zuordnungText } from "../dokumentation/zuordnung";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   alleBausteine,
@@ -330,7 +331,7 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
         <div>
           <h3>{p.formularName}</h3>
           <p className="zv-protokoll-meta">
-            {formatDatum(p.bezugsdatum)} · {p.autorName ?? "–"}
+            {formatDatum(p.bezugsdatum)} · {zuordnungText(p)} · {p.autorName ?? "–"}
             {p.abgeschlossenAm && ` · abgeschlossen ${formatDatum(p.abgeschlossenAm.slice(0, 10))}, ${formatUhrzeit(p.abgeschlossenAm)}`} · Formular
             Version {p.versionNummer}
           </p>

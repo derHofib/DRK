@@ -4,6 +4,12 @@ import {
   BAUSTEIN_LABEL,
   bedingungAlsSatz,
   DATENQUELLEN,
+  ZUORDNUNG_ERKLAERUNG,
+  ZUORDNUNG_LABEL,
+  quelleBrauchtKlient,
+  zuordnungKenntKlient,
+  zuordnungVon,
+  type FormularZuordnung,
   datentypVon,
   istEingabe,
   pruefeVeroeffentlichung,
@@ -367,10 +373,60 @@ export function FormularEditor({
             onVerlegen={verlegen}
           />
         ) : (
-          <p className="zv-sub">Wählen Sie in der Mitte einen Baustein, um ihn zu bearbeiten.</p>
+          <>
+            <ZuordnungWahl definition={definition} gesperrt={frueher.length > 0} onAendern={onAendern} />
+            <p className="zv-sub">Wählen Sie in der Mitte einen Baustein, um ihn zu bearbeiten.</p>
+          </>
         )}
       </aside>
     </div>
+  );
+}
+
+/**
+ * Wozu ein ausgefuelltes Formular gehoert (Konzept dokumentation-formulare,
+ * Bild 3A). Steht hier im Aufbau statt in den Einstellungen, weil es Teil der
+ * VERSION ist: es aendert, was beim Ausfuellen gefragt wird, und gilt erst ab
+ * der naechsten Veroeffentlichung -- bereits ausgefuellte Dokumente behalten ihre.
+ */
+function ZuordnungWahl({
+  definition,
+  gesperrt,
+  onAendern,
+}: {
+  definition: FormularDefinition;
+  gesperrt: boolean;
+  onAendern: (neu: FormularDefinition) => void;
+}) {
+  const aktuell = zuordnungVon(definition);
+  return (
+    <fieldset className="zv-fe-zuordnung">
+      <legend>Zuordnung</legend>
+      <p className="zv-sub">Wozu gehört ein ausgefülltes Dokument?</p>
+      {(Object.keys(ZUORDNUNG_LABEL) as FormularZuordnung[]).map((z) => (
+        <label key={z} className="zv-checkbox-zeile zv-fe-zuordnung-wahl">
+          <input
+            type="radio"
+            name="zv-fe-zuordnung"
+            checked={aktuell === z}
+            onChange={() => {
+              const neu = { ...definition };
+              if (z === "klient") delete neu.zuordnung;
+              else neu.zuordnung = z;
+              onAendern(neu);
+            }}
+          />
+          <span>
+            <strong>{ZUORDNUNG_LABEL[z]}</strong>
+            <span className="zv-sub">{ZUORDNUNG_ERKLAERUNG[z]}</span>
+          </span>
+        </label>
+      ))}
+      {gesperrt && <p className="zv-protokoll-hilfe">Gilt ab der nächsten veröffentlichten Version. Bereits ausgefüllte Dokumente behalten ihre Zuordnung.</p>}
+      {!zuordnungKenntKlient(aktuell) && (
+        <p className="zv-protokoll-hilfe">Ohne Klient:in gibt es keine Klienten- und Belegungsdaten zum Anzeigen oder Vorausfüllen.</p>
+      )}
+    </fieldset>
   );
 }
 
@@ -679,6 +735,8 @@ function Eigenschaften({
             {(Object.keys(DATENQUELLEN) as Datenquelle[])
               // Identitaet (Name, Geburtsdatum ...) nur als Anzeige-Baustein, nie als gespeicherte Kopie (pruefeDefinition).
               .filter((q) => !DATENQUELLEN[q].identitaet)
+              // Ohne Klient:in blieben Klientenquellen immer leer (pruefeDefinition lehnt sie ab).
+              .filter((q) => zuordnungKenntKlient(zuordnungVon(definition)) || !quelleBrauchtKlient(q) || b.vorausfuellen?.quelle === q)
               .map((q) => (
                 <option key={q} value={q}>
                   {DATENQUELLEN[q].label}
@@ -750,11 +808,13 @@ function TypEinstellungen({
         <div className="zv-field">
           <label htmlFor={id("quelle")}>Zeigt an</label>
           <select id={id("quelle")} value={b.quelle} onChange={(e) => onAendern({ ...b, quelle: e.target.value as Datenquelle })}>
-            {(Object.keys(DATENQUELLEN) as Datenquelle[]).map((q) => (
-              <option key={q} value={q}>
-                {DATENQUELLEN[q].label}
-              </option>
-            ))}
+            {(Object.keys(DATENQUELLEN) as Datenquelle[])
+              .filter((q) => zuordnungKenntKlient(zuordnungVon(definition)) || !quelleBrauchtKlient(q) || b.quelle === q)
+              .map((q) => (
+                <option key={q} value={q}>
+                  {DATENQUELLEN[q].label}
+                </option>
+              ))}
           </select>
           <p className="zv-protokoll-hilfe">Wird beim Öffnen frisch gelesen und nie im Protokoll gespeichert.</p>
         </div>
