@@ -1,38 +1,83 @@
 name: CI
 
+# Ziel: unter einer Minute Wanduhr bis alles grün (Stand vorher ~3 min, der
+# api-tests-Job allein). Die Hebel, jeweils mit Grund an Ort und Stelle:
+#  - API-Suite parallel: zwei Runner (Shards) mit je vier Jest-Workern, jeder
+#    Worker mit eigener Datenbank (apps/api/test/global-setup.ts).
+#  - PostgreSQL des Runner-Images statt Service-Container (spart den Pull).
+#  - Docker-Builds mit Schicht-Cache und als zwei parallele Jobs.
+#  - Vorinstalliertes Chrome statt Playwright-Download für die Kontrastmatrix.
+# Abgedeckt bleibt alles wie vorher: dieselben 910 API-Tests, die
+# Kontrastmatrix, beide Images gebaut UND gestartet.
+
 on:
+  # Nur der Hauptbranch bei push; Feature-Branches prüft der pull_request-Lauf.
+  # Vorher lief jeder PR-Stand doppelt (push + pull_request = 6 Checks statt
+  # 3), und bei mehreren parallel arbeitenden Threads drängelten sich die
+  # Jobs um das Runner-Kontingent.
   push:
+    branches: [claude/zimmer-verwalter-modul-omh2tu]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Ein neuer Push auf denselben PR macht den alten Lauf wertlos. Auf dem
+  # Hauptbranch dagegen soll jeder Merge seinen eigenen Lauf zu Ende bringen.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MIGRATIONS_DATABASE_URL: postgresql://zimmerakte_admin:ci_only_not_secret@localhost:5432/zimmerakte
+  # zimmerakte_app wird von der Migration selbst mit diesem Dev-Default
+  # angelegt (siehe migrations/0002_app_role.sql) -- kann hier nicht
+  # frei gewaehlt werden, ohne die Migration zu aendern.
+  APP_DATABASE_URL: postgresql://zimmerakte_app:dev_only_change_me_too@localhost:5432/zimmerakte
+  JWT_SECRET: ci_only_test_secret_needs_32plus_chars
+  # 32 zufaellige Bytes, base64 -- nur fuer CI-Testlaeufe, kein echtes
+  # Geheimnis (siehe common/geheimnis.ts).
+  TOTP_ENCRYPTION_KEY: dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE=
 
 jobs:
   api-tests:
+    name: api-tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: zimmerakte_admin
-          POSTGRES_PASSWORD: ci_only_not_secret
-          POSTGRES_DB: zimmerakte
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      MIGRATIONS_DATABASE_URL: postgresql://zimmerakte_admin:ci_only_not_secret@localhost:5432/zimmerakte
-      # zimmerakte_app wird von der Migration selbst mit diesem Dev-Default
-      # angelegt (siehe migrations/0002_app_role.sql) -- kann hier nicht
-      # frei gewaehlt werden, ohne die Migration zu aendern.
-      APP_DATABASE_URL: postgresql://zimmerakte_app:dev_only_change_me_too@localhost:5432/zimmerakte
-      JWT_SECRET: ci_only_test_secret_needs_32plus_chars
-      # 32 zufaellige Bytes, base64 -- nur fuer CI-Testlaeufe, kein echtes
-      # Geheimnis (siehe common/geheimnis.ts).
-      TOTP_ENCRYPTION_KEY: dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE=
+    strategy:
+      # Beide Hälften immer zu Ende laufen lassen: sonst sieht man bei einem
+      # Fehler in Shard 1 nicht, ob Shard 2 auch etwas hat.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
+
+      # Das Runner-Image bringt PostgreSQL mit; es nur zu starten dauert ~2 s,
+      # ein Service-Container kostete jedes Mal ~12 s (Image ziehen, Health-
+      # Check). Produktion läuft auf 16 -- hat das Image eine andere Version,
+      # weicht der Schritt auf den Container postgres:16 aus, statt still
+      # gegen eine andere Hauptversion zu testen.
+      - name: PostgreSQL 16 starten
+        run: |
+          if [ -x /usr/lib/postgresql/16/bin/postgres ]; then
+            sudo systemctl start postgresql.service
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -q \
+              -c "CREATE ROLE zimmerakte_admin LOGIN SUPERUSER PASSWORD 'ci_only_not_secret'" \
+              -c "CREATE DATABASE zimmerakte OWNER zimmerakte_admin" \
+              -c "ALTER SYSTEM SET fsync = off" \
+              -c "ALTER SYSTEM SET synchronous_commit = off" \
+              -c "ALTER SYSTEM SET full_page_writes = off" \
+              -c "SELECT pg_reload_conf()"
+          else
+            echo "Kein PostgreSQL 16 im Runner-Image -- weiche auf postgres:16 aus."
+            docker run -d -p 5432:5432 \
+              -e POSTGRES_USER=zimmerakte_admin \
+              -e POSTGRES_PASSWORD=ci_only_not_secret \
+              -e POSTGRES_DB=zimmerakte \
+              postgres:16 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+            for i in $(seq 1 30); do pg_isready -h localhost -q && break; sleep 1; done
+          fi
+          version=$(psql "$MIGRATIONS_DATABASE_URL" -Atc "SHOW server_version_num")
+          echo "PostgreSQL $version"
+          test "${version:0:2}" = "16"
 
       # Keine "version:" hier -- liest pnpm@10.33.0 aus dem
       # "packageManager"-Feld in package.json, damit lokale Entwicklung, CI
@@ -44,17 +89,15 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --filter "@zimmerakte/api..."
 
       - name: Migrationen anwenden
         run: pnpm --filter @zimmerakte/api migrate
 
+      # Vier Worker = vier vCPUs des Runners; jeder bekommt eine eigene Kopie
+      # der eben migrierten Datenbank (global-setup.ts).
       - name: API-Testsuite (gegen echte PostgreSQL, kein Mock)
-        run: pnpm --filter @zimmerakte/api test
-
-      # Hersteller-MCP-Server der Rueckmeldungen: keine Abhaengigkeiten, nur Node.
-      - name: Rueckmeldungs-MCP-Server
-        run: node --test tools/rueckmeldung-mcp/index.test.mjs
+        run: pnpm --filter @zimmerakte/api exec jest --shard=${{ matrix.shard }}/2 --maxWorkers=4
 
   web-build:
     runs-on: ubuntu-latest
@@ -73,16 +116,32 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @zimmerakte/shared build
+
+      # Die API-Tests transpilieren ohne Typprüfung (apps/api/tsconfig.jest.json).
+      # Hier wird sie nachgeholt -- über src, scripts UND test, also strenger
+      # als der nest build im Docker-Image, der die Testdateien nicht sieht.
+      - name: API-Typprüfung (inkl. Testdateien)
+        run: pnpm --filter @zimmerakte/api exec tsc --noEmit -p tsconfig.json
+
       - run: pnpm --filter @zimmerakte/web build
+
+      # Hersteller-MCP-Server der Rueckmeldungen: keine Abhaengigkeiten, nur Node.
+      - name: Rueckmeldungs-MCP-Server
+        run: node --test tools/rueckmeldung-mcp/index.test.mjs
 
       # Der eigentliche Regressionsschutz des Farbsystems: 9 Paletten x 2
       # Themes x 19 Farbpaare, gemessen an echten Elementen im echten
       # Chromium. Braucht bewusst keine Datenbank -- deshalb laeuft das
       # hier und nicht im api-tests-Job.
-      - name: Chromium fuer die Designpruefung
-        run: pnpm --filter @zimmerakte/web exec playwright install --with-deps chromium
+      #
+      # Mit dem Chrome des Runner-Images (CHROMIUM_PFAD, siehe starteBrowser()
+      # im Skript) statt "playwright install --with-deps chromium": das kostete
+      # ~30 s je Lauf. Kontrast hängt an berechneten Farben und Blink-Layout,
+      # beides identisch zwischen Chrome und Chromium.
       - name: Kontrastmatrix (hell und dunkel, alle Paletten)
         working-directory: apps/web
+        env:
+          CHROMIUM_PFAD: /usr/bin/google-chrome
         run: |
           pnpm exec vite preview --port 4173 &
           for i in $(seq 1 20); do
@@ -91,18 +150,18 @@ jobs:
           done
           node scripts/design-pruefung.mjs
 
-  docker-build:
+  # Die beiden Images als eigene Jobs: vorher liefen Bau API, Bau Web und
+  # beide Starttests nacheinander (~2 min). Der Schicht-Cache (type=gha) hält
+  # die Installationsschicht, solange pnpm-lock.yaml unverändert ist -- siehe
+  # die Manifest-zuerst-Reihenfolge in den Dockerfiles.
+  docker-api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: API-Image bauen
-        run: docker build -f apps/api/Dockerfile -t zimmerakte-api:ci .
-
-      - name: Web-Image bauen
-        run: docker build -f apps/web/Dockerfile -t zimmerakte-web:ci .
-
-      - name: API-Image tatsächlich starten und gegen eine echte Postgres testen
+      # Zuerst und im Hintergrund: Postgres zieht und startet, während das
+      # Image baut.
+      - name: Postgres-Container vorab starten
         run: |
           docker network create zimmerakte-ci
           docker run -d --name pg --network zimmerakte-ci \
@@ -110,9 +169,24 @@ jobs:
             -e POSTGRES_PASSWORD=ci_only_not_secret \
             -e POSTGRES_DB=zimmerakte \
             postgres:16
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: API-Image bauen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          tags: zimmerakte-api:ci
+          load: true
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: API-Image tatsächlich starten und gegen eine echte Postgres testen
+        run: |
           for i in $(seq 1 30); do
             docker exec pg pg_isready -U zimmerakte_admin -d zimmerakte && break
-            sleep 2
+            sleep 1
           done
 
           docker run --rm --network zimmerakte-ci \
@@ -126,32 +200,50 @@ jobs:
             -e TOTP_ENCRYPTION_KEY=dGhpc19pc19hX2Rldl9vbmx5X2tleV8zMmJ5dGVzITE= \
             zimmerakte-api:ci
 
-          for i in $(seq 1 15); do
-            curl -sf -o /dev/null http://localhost:3000/mandant/me && break
-            sleep 2
+          for i in $(seq 1 30); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/mandant/me || true)
+            test "$status" = "401" && break
+            sleep 1
           done
           status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/mandant/me)
           echo "GET /mandant/me ohne Token: $status"
-          test "$status" = "401"
+          test "$status" = "401" || { docker logs api; exit 1; }
+
+  docker-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Web-Image bauen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          tags: zimmerakte-web:ci
+          load: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
 
       - name: Web-Image tatsächlich starten und die Startseite abrufen
         run: |
-          # WICHTIG: muss im selben Docker-Netzwerk wie der API-Container
-          # laufen. nginx.conf verweist mit einem statischen Hostnamen
-          # ("proxy_pass http://api:3000/") auf ihn -- ohne eigenen
-          # "resolver" loest nginx diesen Namen einmalig beim Start auf.
-          # Ohne "--network zimmerakte-ci" landet der Container stattdessen
-          # auf dem Standard-Bridge-Netzwerk, das gar keine
-          # namensbasierte DNS-Aufloesung kennt: "api" ist unauflösbar,
-          # nginx bricht die Konfigurationspruefung ab und beendet sich
-          # sofort wieder -- Port 80 wird nie erreichbar, jeder curl-Versuch
-          # scheitert dauerhaft mit "Verbindung abgelehnt", kein Timing-
-          # Problem, das ein Retry beheben koennte.
+          # WICHTIG: nginx.conf verweist mit einem statischen Hostnamen
+          # ("proxy_pass http://api:3000/") auf die API -- ohne eigenen
+          # "resolver" loest nginx diesen Namen einmalig beim Start auf und
+          # beendet sich sofort, wenn er unauflösbar ist (Port 80 wird nie
+          # erreichbar, kein Timing-Problem, das ein Retry beheben koennte).
+          # Seit das API-Image in einem eigenen Job baut, steht unter dem
+          # Namen "api" ein Platzhalter-Container im selben Netzwerk: geprüft
+          # wird hier, dass nginx mit der echten Konfiguration startet und
+          # die Startseite ausliefert. Dass die API selbst läuft, prüft der
+          # Job docker-api.
+          docker network create zimmerakte-ci
+          docker run -d --name api --network zimmerakte-ci busybox:1.36 sleep 600
           docker run -d --name web --network zimmerakte-ci -p 8080:80 zimmerakte-web:ci
 
-          # Trotzdem mit Retry statt festem sleep, fuer den Fall, dass
-          # nginx selbst (jetzt mit gueltiger Konfiguration) auf einem
+          # Retry statt festem sleep, fuer den Fall, dass nginx auf einem
           # ausgelasteten Runner etwas Anlaufzeit braucht.
-          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 15 --retry-delay 2 --retry-all-errors http://localhost:8080/)
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 15 --retry-delay 1 --retry-all-errors http://localhost:8080/)
           echo "GET / : $status"
-          test "$status" = "200"
+          test "$status" = "200" || { docker logs web; exit 1; }

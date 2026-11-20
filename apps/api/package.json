@@ -8,7 +8,8 @@
     "start:dev": "nest start --watch",
     "migrate": "tsx scripts/migrate.ts",
     "rueckmeldung-token": "tsx scripts/rueckmeldung-token.ts",
-    "test": "jest --runInBand",
+    "test": "jest",
+    "test:seriell": "jest --runInBand",
     "test:watch": "jest --runInBand --watch"
   },
   "dependencies": {

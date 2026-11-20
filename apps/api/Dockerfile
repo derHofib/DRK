@@ -13,8 +13,19 @@
 FROM node:20-alpine AS build
 RUN corepack enable
 WORKDIR /repo
+# Erst nur die Manifeste, dann installieren, dann den Quellcode: so bleibt
+# die Installationsschicht im Build-Cache gültig, solange sich pnpm-lock.yaml
+# und die package.json-Dateien nicht ändern -- der Normalfall. Vorher kam
+# "COPY . ." zuerst, und jede Codeänderung installierte alles neu (in der CI
+# der größte Einzelposten des Docker-Jobs). Gefiltert auf dieses Paket samt
+# seiner Workspace-Abhängigkeiten ("...") -- das API-Image braucht weder
+# vite und playwright aus apps/web.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter "@zimmerakte/api..."
 COPY . .
-RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @zimmerakte/api build
 # @zimmerakte/shared liefert fuer Vite, tsx und Jest rohes TypeScript aus
 # (src/index.ts). Node selbst laedt .ts unter node_modules nicht
@@ -31,8 +42,9 @@ FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN addgroup -S zimmerakte && adduser -S zimmerakte -G zimmerakte
-COPY --from=build /deploy/api ./
-RUN chown -R zimmerakte:zimmerakte /app
+# --chown statt nachträglichem "chown -R": gleiches Ergebnis, aber ohne eine
+# zweite Kopie aller Dateien in einer eigenen Schicht.
+COPY --from=build --chown=zimmerakte:zimmerakte /deploy/api ./
 USER zimmerakte
 
 EXPOSE 3000

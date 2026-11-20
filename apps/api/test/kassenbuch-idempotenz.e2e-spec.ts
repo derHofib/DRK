@@ -195,7 +195,7 @@ describe("Kassenbuch: Idempotenz fuer die Offline-Warteschlange", () => {
       for (let i = 0; i < 100 && !wartetAmIndex; i++) {
         await new Promise((r) => setTimeout(r, 50));
         const { rows } = await admin.query(
-          "SELECT 1 FROM pg_stat_activity WHERE usename = 'zimmerakte_app' AND wait_event_type = 'Lock' AND query LIKE 'INSERT INTO kassenbuchung %'"
+          "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND usename = 'zimmerakte_app' AND wait_event_type = 'Lock' AND query LIKE 'INSERT INTO kassenbuchung %'"
         );
         wartetAmIndex = rows.length > 0;
       }
