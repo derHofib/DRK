@@ -68,6 +68,7 @@ import { ProtokolleTab } from "./klient/ProtokolleTab";
 import { ProtokollSprungKontext, type ProtokollSprung } from "../components/ProtokollSprung";
 import { VerlaufTab, verlaufArtLabel, verlaufKlasse } from "./klient/VerlaufTab";
 import { berichtFormularTexte, TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
+import { Monatsfeld } from "../components/Datumsfeld";
 
 type Tab = "ueberblick" | "verlauf" | "dokumentation" | "hilfeplan" | "finanzen" | "akte";
 type DokuTeil = "tagesberichte" | "protokolle";
@@ -2097,13 +2098,18 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
   return (
     <div>
       <div className="zv-werkzeugzeile">
-        <label htmlFor="kb-abschluss-monat">Monatsabschluss für</label>
-        <input
+        <label htmlFor="kb-abschluss-monat" id="kb-abschluss-monat-label">
+          Monatsabschluss für
+        </label>
+        {/* Zukuenftige Monate gesperrt (es gibt noch nichts abzuschliessen),
+            der laufende erlaubt: ein vorlaeufiger Abschluss zur Monatsmitte
+            wird fuer Amtsnachfragen gebraucht. */}
+        <Monatsfeld
           id="kb-abschluss-monat"
-          type="month"
-          className="zv-field-inline zv-eingabe-kompakt"
+          aria-labelledby="kb-abschluss-monat-label"
           value={abschlussMonat}
-          onChange={(e) => setAbschlussMonat(e.target.value)}
+          max={heuteBerlin().slice(0, 7)}
+          onChange={setAbschlussMonat}
         />
         <button type="button" className="zv-btn zv-btn-sekundaer zv-btn-klein" onClick={monatsabschlussHerunterladen} disabled={abschlussLaeuft || !abschlussMonat}>
           <IHerunterladen />
