@@ -5,6 +5,11 @@
  * durchkommen. Die Bereichsleitung (unrestricted) liefert die Gegenprobe:
  * dieselbe Anfrage klappt dort, der 404 beim eingeschraenkten Konto liegt
  * also wirklich an der Standort-Schranke und nicht an einem Tippfehler.
+ *
+ * Dieselbe Schranke gilt fuer PATCH /standorte/:id: bis 20.11.2026 pruefte
+ * aktualisieren() nur das Recht "standorte.bearbeiten", nicht den Standort --
+ * eine auf Haus 1 beschraenkte Leitung konnte Haus 2 umbenennen und
+ * deaktivieren.
  */
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
@@ -136,5 +141,37 @@ describe("Standort-Uebersicht", () => {
 
   it("lehnt eine ungueltige ID mit 400 ab", async () => {
     expect((await get(tokenBereichsleitung, "kein-uuid")).status).toBe(400);
+  });
+
+  describe("PATCH /standorte/:id (Bearbeiten)", () => {
+    const patch = (token: string, id: string, body: object) =>
+      request(app.getHttpServer()).patch(`/standorte/${id}`).set("Authorization", `Bearer ${token}`).send(body);
+    const stand = async (id: string) =>
+      (await admin.query<{ name: string; aktiv: boolean }>("SELECT name, aktiv FROM standort WHERE id = $1", [id])).rows[0];
+
+    it("verweigert der eingeschraenkten Leitung einen nicht zugeordneten Standort (404) und aendert nichts", async () => {
+      const umbenennen = await patch(tokenEinrichtungsleitungS1, standort2Id, { name: "Gekapert" });
+      expect(umbenennen.status).toBe(404);
+      const deaktivieren = await patch(tokenEinrichtungsleitungS1, standort2Id, { aktiv: false });
+      expect(deaktivieren.status).toBe(404);
+      expect(await stand(standort2Id)).toEqual({ name: "Haus 2", aktiv: true });
+    });
+
+    it("erlaubt der eingeschraenkten Leitung den eigenen Standort", async () => {
+      const res = await patch(tokenEinrichtungsleitungS1, standort1Id, { adresse: "Str. 1a" });
+      expect(res.status).toBe(200);
+      expect(res.body.adresse).toBe("Str. 1a");
+    });
+
+    it("Gegenprobe: die uneingeschraenkte Bereichsleitung darf Standort 2 bearbeiten", async () => {
+      const res = await patch(tokenBereichsleitung, standort2Id, { adresse: "Str. 2a" });
+      expect(res.status).toBe(200);
+      expect((await stand(standort2Id)).name).toBe("Haus 2");
+    });
+
+    it("aendert keinen Standort eines fremden Mandanten (RLS) und lehnt ungueltige IDs mit 400 ab", async () => {
+      expect((await patch(tokenBereichsleitung, fremderStandortId, { name: "x" })).status).toBe(404);
+      expect((await patch(tokenBereichsleitung, "kein-uuid", { name: "x" })).status).toBe(400);
+    });
   });
 });
