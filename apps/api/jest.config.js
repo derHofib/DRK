@@ -4,7 +4,9 @@ module.exports = {
   testEnvironment: "node",
   testMatch: ["<rootDir>/test/**/*.e2e-spec.ts"],
   transform: {
-    "^.+\\.ts$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.json" }],
+    // Transpilieren ohne Typprüfung (siehe tsconfig.jest.json, warum das
+    // sicher ist).
+    "^.+\\.ts$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.jest.json" }],
     // otplib zieht (transitiv) @scure/base und @noble/hashes nach, die
     // reines ESM ausliefern (kein "type": "module" gesetzt, aber
     // "export const ..."-Syntax) -- ohne diesen Eintrag stolpert Jests
@@ -21,4 +23,6 @@ module.exports = {
   // Ausnahme fuer otplib & Co. weiter unten im Pfad wird nie erreicht.
   transformIgnorePatterns: ["node_modules/\\.pnpm/(?!(otplib@|@otplib\\+|@noble\\+|@scure\\+))"],
   setupFiles: ["<rootDir>/test/setup-env.ts"],
+  // Je Worker eine eigene Datenbank (Kopie der migrierten), siehe dort.
+  globalSetup: "<rootDir>/test/global-setup.ts",
 };
