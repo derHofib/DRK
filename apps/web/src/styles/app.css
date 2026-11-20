@@ -9071,4 +9071,205 @@ button.zv-achtung-eintrag:hover {
   flex-shrink: 0;
   width: var(--zv-icon-s);
   height: var(--zv-icon-s);
+   Standorte und Standort-Steckbrief (Konzept standort-daten, Phase 1).
+   Der Steckbrief nutzt Kopf, Reiter, Ueberblick und Angaben der
+   Klientenakte (.zv-akte, .zv-ueberblick, .zv-stammdaten) -- hier steht
+   nur, was es dort nicht gibt.
+   ================================================================== */
+.zv-standorte-kopf .zv-sub {
+  margin: 0;
+}
+.zv-standorte-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+}
+/* Der Name ist der eigentliche Knopf (Tastatur, Screenreader); die ganze
+   Zeile ist nur die grosse Klickflaeche dazu. */
+.zv-standort-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zv-standort-name svg {
+  flex: none;
+  color: var(--zv-text-muted);
+}
+.zv-standort-angebot {
+  display: block;
+  margin-top: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: normal;
+  color: var(--zv-text-muted);
+}
+.zv-standort-plaetze {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zv-standort-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1);
+}
+/* Inaktive Standorte treten zurueck, bleiben aber lesbar (Reaktivieren im
+   Steckbrief). Bewusst Textfarbe statt Deckkraft: die Kontrastmatrix misst
+   Farben, eine halbtransparente Zeile faellt dort durch. */
+.zv-standort-inaktiv .zv-standort-name {
+  color: var(--zv-text-muted);
+}
+.zv-standort-pfeil {
+  color: var(--zv-text-muted);
+}
+.zv-standorte-fuss {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-3) 0 0;
+}
+.zv-standorte-fuss svg {
+  flex: none;
+}
+
+.zv-steckbrief-zurueck {
+  margin-bottom: var(--zv-space-3);
+}
+.zv-steckbrief .zv-initialen-kachel svg {
+  width: 22px;
+  height: 22px;
+}
+.zv-steckbrief-wichtig {
+  font-weight: var(--zv-weight-semibold);
+}
+.zv-steckbrief-mehrzeilig {
+  white-space: pre-wrap;
+}
+/* Gedaempft statt Fristfarbe: die Fristfarbe ist nur auf ihrem eigenen
+   Tag-Hintergrund in der Kontrastmatrix gemessen. Gezaehlt wird die Luecke
+   ohnehin unter "Braucht Aufmerksamkeit". */
+.zv-steckbrief-unvollstaendig {
+  color: var(--zv-text-muted);
+  font-style: italic;
+}
+/* Zwei Klassen wie .zv-ueberblick-rand .zv-kennwerte, damit die
+   Container-Regel dort (zwei Spalten) hier nicht greift: Anschrift und
+   Zugang sind Saetze, keine Kennwerte. */
+.zv-ueberblick-rand .zv-steckbrief-lage-liste,
+.zv-steckbrief .zv-steckbrief-lage-liste {
+  grid-template-columns: minmax(0, 1fr);
+}
+.zv-steckbrief-codehinweis {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-3) 0 0;
+}
+.zv-steckbrief-codehinweis svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Reihenfolge in der einspaltigen Fassung (Handy, schmales Fenster): wer
+   den Steckbrief unterwegs oeffnet, sucht eine Nummer -- deshalb zuerst
+   "Im Notfall", dann Anschrift und Leitung, die Verwaltungssicht danach.
+   Breit greifen wieder die beiden Spalten aus .zv-ueberblick. */
+.zv-steckbrief-notfall { order: 1; }
+.zv-steckbrief-achtung { order: 2; }
+.zv-steckbrief-lage { order: 3; }
+.zv-steckbrief-leitung { order: 4; }
+.zv-steckbrief-erreichbarkeit { order: 5; }
+.zv-steckbrief-blick { order: 6; }
+.zv-steckbrief-notfall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+.zv-steckbrief-notfall .zv-sub {
+  margin: 0;
+}
+/* Breit stehen Bereitschaft und Buero ohnehin oben unter Erreichbarkeit;
+   zwei grosse Anrufknoepfe waeren dort nur Wiederholung. */
+@container akte (min-width: 700px) {
+  .zv-steckbrief-notfall {
+    display: none;
+  }
+}
+
+/* Angaben: Bezeichnung links, Wert rechts; schmal untereinander. */
+.zv-angaben-liste {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: var(--zv-space-2) var(--zv-space-3);
+  margin: 0;
+  font-size: var(--zv-text-m);
+}
+.zv-angaben-liste > div {
+  display: contents;
+}
+.zv-angaben-liste dt {
+  color: var(--zv-text-muted);
+}
+.zv-angaben-liste dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@container akte (max-width: 520px) {
+  .zv-angaben-liste {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+  .zv-angaben-liste dd {
+    margin-bottom: var(--zv-space-2);
+  }
+}
+
+/* Bearbeiten-Dialog einer Gruppe: zwei Spalten, wo Platz ist. */
+.zv-angaben-formular {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--zv-space-4);
+}
+@media (min-width: 700px) {
+  .zv-angaben-formular {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .zv-angaben-voll {
+    grid-column: 1 / -1;
+  }
+}
+.zv-angaben-feldhinweis {
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-angaben-formular .zv-sub {
+  margin: var(--zv-space-1) 0 0;
+}
+/* Zweispaltig steht wieder die feste Reihenfolge der Akte: links
+   Erreichbarkeit vor Leitung, rechts Auf einen Blick vor Lage. Ohne das
+   griffe die Handy-Reihenfolge oben auch innerhalb der Spalten. */
+@container akte (min-width: 1000px) {
+  .zv-steckbrief-ueberblick section {
+    order: 0;
+  }
+  .zv-steckbrief-ueberblick .zv-steckbrief-leitung {
+    order: 1;
+  }
+  .zv-steckbrief-ueberblick .zv-steckbrief-lage {
+    order: 1;
+  }
+}
+/* Nummern und Adressen sind Links (tel:, mailto:) -- in der Akzentfarbe
+   wie in der Profilkarte, nicht im Browser-Blau/-Lila. */
+.zv-steckbrief dd a {
+  color: var(--zv-accent-strong);
+}
+.zv-steckbrief-notfall a.zv-btn {
+  text-decoration: none;
 }

@@ -53,6 +53,8 @@ export interface ZimmerListEintrag {
   etage: string;
   standortId: string;
   standortName: string;
+  /** Eigene Wohnanschrift (Einzelwohnen); null = Anschrift des Standorts. */
+  anschrift: string | null;
   kapazitaet: number;
   status: Zimmerstatus;
   bewohner: ZimmerBewohnerEintrag[];
@@ -117,7 +119,7 @@ export class ZimmerService {
     const { rows: zimmerRows } = await client.query(
       `
       SELECT
-        z.id, z.nummer, z.etage, z.standort_id, s.name AS standort_name, z.kapazitaet,
+        z.id, z.nummer, z.etage, z.standort_id, s.name AS standort_name, z.anschrift, z.kapazitaet,
         ka.id AS antrag_id, ka.alte_kapazitaet, ka.neue_kapazitaet, ka.beantragt_am, ka.beantragt_von,
         kab.name AS antrag_beantragt_von_name
       FROM zimmer z
@@ -149,6 +151,7 @@ export class ZimmerService {
         etage: r.etage,
         standortId: r.standort_id,
         standortName: r.standort_name,
+        anschrift: r.anschrift,
         kapazitaet: r.kapazitaet,
         status,
         bewohner,
@@ -229,7 +232,7 @@ export class ZimmerService {
     return liste[0];
   }
 
-  async anlegen(input: { standortId: string; nummer: string; etage?: string; kapazitaet?: number }) {
+  async anlegen(input: { standortId: string; nummer: string; etage?: string; kapazitaet?: number; anschrift?: string | null }) {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer anlegen.");
@@ -241,10 +244,10 @@ export class ZimmerService {
           throw new NotFoundException("Standort nicht gefunden.");
         }
         const { rows } = await client.query(
-          `INSERT INTO zimmer (mandant_id, standort_id, nummer, etage, kapazitaet)
-           VALUES ($1, $2, $3, COALESCE($4, 'EG'), COALESCE($5, 1))
-           RETURNING id, nummer, etage, standort_id, kapazitaet`,
-          [ctx.mandantId, input.standortId, input.nummer, input.etage ?? null, input.kapazitaet ?? null]
+          `INSERT INTO zimmer (mandant_id, standort_id, nummer, etage, kapazitaet, anschrift)
+           VALUES ($1, $2, $3, COALESCE($4, 'EG'), COALESCE($5, 1), $6)
+           RETURNING id, nummer, etage, standort_id, kapazitaet, anschrift`,
+          [ctx.mandantId, input.standortId, input.nummer, input.etage ?? null, input.kapazitaet ?? null, input.anschrift?.trim() || null]
         );
         return rows[0];
       });
@@ -276,7 +279,7 @@ export class ZimmerService {
     return rows[0].standort_id;
   }
 
-  async aktualisieren(id: string, input: { nummer: string; etage?: string }) {
+  async aktualisieren(id: string, input: { nummer: string; etage?: string; anschrift?: string | null }) {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("zimmer", "bearbeiten"))) {
       throw new ForbiddenException("Nur Bereichs- oder Einrichtungsleitung dürfen Zimmer bearbeiten.");
@@ -287,9 +290,11 @@ export class ZimmerService {
           throw new NotFoundException("Zimmer nicht gefunden.");
         }
         const { rows } = await client.query(
-          `UPDATE zimmer SET nummer = $1, etage = COALESCE($2, etage) WHERE id = $3
-           RETURNING id, nummer, etage, standort_id`,
-          [input.nummer, input.etage ?? null, id]
+          `UPDATE zimmer SET nummer = $1, etage = COALESCE($2, etage),
+             anschrift = CASE WHEN $4 THEN $5 ELSE anschrift END
+           WHERE id = $3
+           RETURNING id, nummer, etage, standort_id, anschrift`,
+          [input.nummer, input.etage ?? null, id, input.anschrift !== undefined, input.anschrift?.trim() || null]
         );
         return rows[0];
       });
