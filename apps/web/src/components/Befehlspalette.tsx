@@ -2,7 +2,7 @@ import { KeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useS
 import type { SucheErgebnisDto, SucheGruppe, SucheTrefferDto } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { formatBetrag } from "../format";
-import { IFehler, IKassenbuch, IKlienten, IMitarbeitende, INeu, ISuche, IZimmer, type IconKomponente } from "./icons";
+import { IFehler, IKassenbuch, IKlienten, IMitarbeitende, INeu, ISuche, ITelefonat, IZimmer, type IconKomponente } from "./icons";
 
 /** Ein Eintrag, der ohne Server auskommt (Menue, Aktionen). */
 export interface Befehl {
@@ -111,6 +111,7 @@ export function Befehlspalette({
   aktionen,
   onTreffer,
   tagesberichtFuer,
+  telefonatFuer,
 }: {
   offen: boolean;
   /** Erhoeht sich bei jedem Oeffnen -- setzt Suchtext und Auswahl auch bei erneutem Oeffnen zurueck. */
@@ -121,6 +122,8 @@ export function Befehlspalette({
   onTreffer: (t: SucheTrefferDto) => void;
   /** Aktion "Tagesbericht für … schreiben" zu einem Klient:innen-Treffer. */
   tagesberichtFuer: (t: SucheTrefferDto) => void;
+  /** Aktion "Telefonat mit … erfassen"; fehlt ohne Recht, Verlaufseintraege anzulegen. */
+  telefonatFuer?: (t: SucheTrefferDto) => void;
 }) {
   const [q, setQ] = useState("");
   const [ergebnis, setErgebnis] = useState<SucheErgebnisDto | null>(null);
@@ -240,6 +243,16 @@ export function Befehlspalette({
           icon: INeu,
           ausfuehren: () => tagesberichtFuer(k),
         });
+        // "Telefon klingelt, ich bin gerade woanders" (Konzept chronik, 5):
+        // Name tippen, Enter, und das Fenster steht schon auf Telefonat.
+        if (telefonatFuer) {
+          aktionsZeilen.push({
+            schluessel: `telefonat:${k.id}`,
+            titel: `Telefonat zu ${k.titel} erfassen`,
+            icon: ITelefonat,
+            ausfuehren: () => telefonatFuer(k),
+          });
+        }
       }
       if (aktionsZeilen.length > 0) liste.push({ label: "Aktionen", zeilen: aktionsZeilen });
     } else {
@@ -255,7 +268,7 @@ export function Befehlspalette({
     }
     return liste;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abgefragt, begriff, ergebnis, zuletzt, navigation, aktionen, treffer, tagesberichtFuer]);
+  }, [abgefragt, begriff, ergebnis, zuletzt, navigation, aktionen, treffer, tagesberichtFuer, telefonatFuer]);
 
   const flach = abschnitte.flatMap((a) => a.zeilen);
   useEffect(() => setAktiv(0), [q, ergebnis]);

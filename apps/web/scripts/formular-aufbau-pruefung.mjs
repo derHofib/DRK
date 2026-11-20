@@ -61,7 +61,7 @@ const listenZeile = page.locator(".zv-info-karte", { hasText: formularName });
 pruefe(/\d/.test(await listenZeile.locator("[data-label='Letzte 30 Tage']").innerText()), "Liste: Spalte „30 Tage“ hat eine Zahl");
 await listenZeile.click();
 
-const reiter = page.getByRole("navigation", { name: "Bereiche des Formulars" });
+const reiter = page.getByRole("tablist", { name: "Bereiche des Formulars" });
 const breiteAnteil = (selektor) =>
   page.evaluate((s) => {
     const el = document.querySelector(s);
@@ -90,7 +90,7 @@ pruefe(anteilUebersicht > 0.95, `Übersicht nutzt die volle Breite (${(anteilUeb
 await bild(page, "1-uebersicht", true);
 
 // ===== 3 Aufbau =====
-await reiter.getByRole("button", { name: "Aufbau" }).click();
+await reiter.getByRole("tab", { name: "Aufbau" }).click();
 // Mit Entwurf oeffnet der Aufbau im Editor; die veroeffentlichte Version waehlen.
 const versionKnoepfe = page.locator(".zv-fa-wahl .zv-segmented button");
 await versionKnoepfe.first().waitFor();
@@ -125,7 +125,7 @@ pruefe(anteilAufbau > 0.95, `Aufbau nutzt die volle Breite (${(anteilAufbau * 10
 await bild(page, "2-aufbau");
 
 // ===== 4 Ansichten =====
-await reiter.getByRole("button", { name: "Ansichten" }).click();
+await reiter.getByRole("tab", { name: "Ansichten" }).click();
 await page.locator(".zv-fv").waitFor();
 pruefe((await page.locator(".zv-fv-liste button:disabled").count()) === 2, "Ansichten: PDF-Einträge gesperrt („später“)");
 await page.locator(".zv-fv-liste button", { hasText: "Ausfüllen am Handy" }).click();
@@ -153,7 +153,7 @@ const anteilAnsichten = await breiteAnteil(".zv-fv");
 pruefe(anteilAnsichten > 0.95, `Ansichten nutzen die volle Breite (${(anteilAnsichten * 100).toFixed(0)} %)`);
 
 // ===== 5 Einstellungen =====
-await reiter.getByRole("button", { name: "Einstellungen" }).click();
+await reiter.getByRole("tab", { name: "Einstellungen" }).click();
 await page.locator(".zv-fe-spalten").waitFor();
 const spaltenLage = await page.evaluate(() => {
   const [a, b] = [...document.querySelectorAll(".zv-fe-spalte")].map((e) => e.getBoundingClientRect());
@@ -171,7 +171,7 @@ pruefe(anteilEinstellungen > 0.95, `Einstellungen nutzen die volle Breite (${(an
 await bild(page, "5-einstellungen");
 
 // ===== Versionen: „Ansehen“ springt in den Aufbau mit der Version =====
-await reiter.getByRole("button", { name: "Versionen" }).click();
+await reiter.getByRole("tab", { name: "Versionen" }).click();
 await page.locator(".zv-formular-versions-knoepfe button", { hasText: "Ansehen" }).last().click();
 pruefe((await reiter.locator("button.active").innerText()).trim() === "Aufbau", "Versionen › Ansehen öffnet den Aufbau");
 pruefe((await page.locator(".zv-fa-wahl .zv-segmented button.active").innerText()).trim() === "1", "… mit der gewählten Version 1");
@@ -180,7 +180,7 @@ pruefe((await page.locator(".zv-fa-wahl .zv-segmented button.active").innerText(
 for (const breite of [1780, 1280, 390]) {
   await page.setViewportSize({ width: breite, height: 900 });
   for (const r of ["Übersicht", "Aufbau", "Ansichten", "Einstellungen", "Versionen"]) {
-    const knopf = reiter.getByRole("button", { name: r });
+    const knopf = reiter.getByRole("tab", { name: r });
     await knopf.scrollIntoViewIfNeeded();
     await knopf.click();
     await page.waitForTimeout(250);

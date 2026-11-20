@@ -150,7 +150,10 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "standorte", label: "Standorte", icon: IStandort },
-  { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
+  // Interner Wert bleibt "tagesberichte" (gemerkte Menue-Reihenfolgen und
+  // Spruenge zeigen darauf); sichtbar heisst der Punkt seit dem Verlauf
+  // "Dokumentation" und umfasst Tagesberichte und Protokolle.
+  { wert: "tagesberichte", label: "Dokumentation", icon: ITagesberichte },
   { wert: "stunden", label: "Stunden", icon: IStunden },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },

@@ -49,7 +49,8 @@ import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { Befehl, Befehlspalette, zuletztLoeschen, zuletztMerken } from "../components/Befehlspalette";
-import { Tagesberichte } from "./Tagesberichte";
+import { NeuerEintragFenster } from "../components/NeuerEintrag";
+import { Dokumentation } from "./Dokumentation";
 import { Stunden } from "./Stunden";
 import { Aufgaben } from "./Aufgaben";
 import { Vertretung } from "./Vertretung";
@@ -71,14 +72,14 @@ import { nimmMaskiertenScreenshot, type MaskierterScreenshot } from "../rueckmel
  * Fest statt aus der einstellbaren Reihenfolge abgeleitet -- die gilt jetzt
  * je Gruppe, und eine Leiste, deren Inhalt davon abhaengt, in welcher
  * Gruppe man etwas nach oben geschoben hat, waere nicht vorhersagbar. Die
- * Sidebar zeigt weiterhin immer alle. "Bericht" ist die Kurzform von
- * Tagesberichte, damit das Wort in eine Leiste mit fuenf Feldern passt.
+ * Sidebar zeigt weiterhin immer alle. "Doku" ist die Kurzform von
+ * Dokumentation, damit das Wort in eine Leiste mit fuenf Feldern passt.
  */
 const MOBIL_DIREKT: { wert: HauptReiter; label: string }[] = [
   { wert: "dashboard", label: "Heute" },
   { wert: "klienten", label: "Klienten" },
   { wert: "nachrichten", label: "Nachrichten" },
-  { wert: "tagesberichte", label: "Bericht" },
+  { wert: "tagesberichte", label: "Doku" },
 ];
 
 /** "Anna Beispiel" -> "AB"; ein einzelnes Wort -> dessen erste zwei Buchstaben. */
@@ -473,6 +474,16 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   // frisch statt umzuschalten. (Per Browserpruefung nicht reproduzierbar --
   // Vorsorge, keine gemessene Korrektur.)
   const [paletteNr, setPaletteNr] = useState(0);
+  // "Telefonat erfassen" aus der Palette: das Fenster steht hier, nicht in
+  // der Akte -- wer gerade woanders ist, soll dort bleiben koennen.
+  const [darfVerlaufAnlegen, setDarfVerlaufAnlegen] = useState(false);
+  const [telefonatKlient, setTelefonatKlient] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    api
+      .verlaufRechte()
+      .then((r) => setDarfVerlaufAnlegen(r.anlegen))
+      .catch(() => setDarfVerlaufAnlegen(false));
+  }, []);
   const paletteOeffnen = useCallback(() => {
     setPaletteOffen(true);
     setPaletteNr((n) => n + 1);
@@ -991,7 +1002,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}
           {tab === "stunden" && <Stunden key={navZiel.nonce} />}
-          {tab === "tagesberichte" && <Tagesberichte key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />}
+          {tab === "tagesberichte" && <Dokumentation key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />}
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
@@ -1034,6 +1045,15 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           }}
         />
       )}
+      {telefonatKlient && (
+        <NeuerEintragFenster
+          klientId={telefonatKlient.id}
+          klientName={telefonatKlient.name}
+          startArt="telefonat"
+          onSchliessen={() => setTelefonatKlient(null)}
+          onAngelegt={() => setTelefonatKlient(null)}
+        />
+      )}
       <Befehlspalette
         offen={paletteOffen}
         oeffnungNr={paletteNr}
@@ -1041,6 +1061,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         navigation={paletteNavigation}
         aktionen={paletteAktionen}
         tagesberichtFuer={(t) => geheZu("tagesberichte", { tagesberichtKlientId: t.id })}
+        telefonatFuer={darfVerlaufAnlegen ? (t) => setTelefonatKlient({ id: t.id, name: t.titel }) : undefined}
         onTreffer={(t) => {
           zuletztMerken({ gruppe: t.gruppe, id: t.id });
           if (t.gruppe === "klienten") geheZu("klienten", { klientId: t.id });

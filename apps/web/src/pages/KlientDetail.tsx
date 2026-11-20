@@ -1,6 +1,10 @@
-import { CSSProperties, FormEvent, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import type {
   BenutzerListEintragDto,
+  HilfeplanDto,
+  KlientEintragArt,
+  VerlaufDto,
+  VerlaufRechteDto,
   KassenbuchungDto,
   KlientDetailDto,
   KlientKontaktDto,
@@ -14,15 +18,19 @@ import type {
 } from "@zimmerakte/shared";
 import { HZL_RHYTHMUS_LABEL, RECHNUNG_STATUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { AktionsMenue } from "../components/AktionsMenue";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { KlientZugang } from "../components/KlientZugang";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
+import { NeuerEintragFenster } from "../components/NeuerEintrag";
 import { NeuerTagesberichtFenster } from "../components/NeuerTagesbericht";
+import { Reiterleiste, reiterPanelProps, type ReiterEintrag } from "../components/Reiterleiste";
 import {
   IAbbrechen,
   IAblehnen,
   IArchivieren,
+  IAufklappen,
   IAuszahlen,
   IAuszug,
   IBearbeiten,
@@ -54,14 +62,85 @@ import {
   IZurueck,
 } from "../components/icons";
 import { dateiZuBase64 } from "../datei";
-import { formatBetrag, formatDatum, heuteBerlin } from "../format";
+import { formatBetrag, formatDatum, heuteBerlin, lokalesDatum } from "../format";
 import { HilfeplanTab } from "./klient/HilfeplanTab";
 import { ProtokolleTab } from "./klient/ProtokolleTab";
+import { VerlaufTab, verlaufArtLabel, verlaufKlasse } from "./klient/VerlaufTab";
 import { berichtFormularTexte, TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
-type Tab = "ueberblick" | "tagesberichte" | "protokolle" | "hilfeplan" | "kassenbuch" | "kostenuebernahmen" | "rechnungen" | "stammdaten" | "zugang";
+type Tab = "ueberblick" | "verlauf" | "dokumentation" | "hilfeplan" | "finanzen" | "akte";
+type DokuTeil = "tagesberichte" | "protokolle";
+type FinanzTeil = "kassenbuch" | "kostenuebernahmen" | "rechnungen";
+type AkteTeil = "stammdaten" | "kontakte" | "zugang";
+
+interface AkteAnsicht {
+  tab: Tab;
+  doku: DokuTeil;
+  finanz: FinanzTeil;
+  akte: AkteTeil;
+}
+
+const ANSICHT_SCHLUESSEL = "zv-akte-ansicht";
+const ANSICHT_START: AkteAnsicht = { tab: "ueberblick", doku: "tagesberichte", finanz: "kassenbuch", akte: "stammdaten" };
+
+/**
+ * Welcher Reiter (und welcher Umschalter darin) zuletzt offen war, fuer die
+ * Sitzung gemerkt: wer gerade die Kassenbuecher mehrerer Klient:innen
+ * durchgeht, soll nicht bei jeder Akte neu auf "Finanzen" klicken muessen
+ * (Konzept klienten-ansicht, 3.3 Punkt 4). sessionStorage statt Zustand im
+ * Elternteil, weil das Panel beim Schliessen die Akte abbaut. Nur
+ * Ansichtsangaben, keine Daten -- und ohne Speicher (privates Fenster)
+ * startet die Akte eben im Ueberblick.
+ */
+function ansichtLesen(): AkteAnsicht {
+  try {
+    const roh = sessionStorage.getItem(ANSICHT_SCHLUESSEL);
+    return roh ? { ...ANSICHT_START, ...(JSON.parse(roh) as Partial<AkteAnsicht>) } : ANSICHT_START;
+  } catch {
+    return ANSICHT_START;
+  }
+}
+
+function ansichtMerken(a: AkteAnsicht) {
+  try {
+    sessionStorage.setItem(ANSICHT_SCHLUESSEL, JSON.stringify(a));
+  } catch {
+    // Kein Speicher verfuegbar: dann eben ohne Gedaechtnis.
+  }
+}
+
+/** Segment-Umschalter innerhalb eines Reiters (wie in der Anwaerter-Ansicht). */
+function Umschalter<T extends string>({
+  label,
+  wert,
+  optionen,
+  onWahl,
+}: {
+  label: string;
+  wert: T;
+  optionen: { wert: T; label: string }[];
+  onWahl: (w: T) => void;
+}) {
+  return (
+    <div className="zv-segmented zv-akte-umschalter" role="radiogroup" aria-label={label}>
+      {optionen.map((o) => (
+        <button
+          key={o.wert}
+          type="button"
+          role="radio"
+          aria-checked={wert === o.wert}
+          className={wert === o.wert ? "active" : ""}
+          onClick={() => onWahl(o.wert)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const eingabeFeldStil = {
+
   padding: "6px 8px",
   borderRadius: "var(--zv-radius-s)",
   border: "1px solid var(--zv-border)",
@@ -72,11 +151,17 @@ const eingabeFeldStil = {
 
 export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
-  const [tab, setTab] = useState<Tab>("ueberblick");
-  // Fuer Zaehler am Reiter und die Chronik im Ueberblick; nach jedem
-  // Tabwechsel neu geholt, damit ein im Tab angelegter Bericht sofort zaehlt.
+  const [ansicht, setAnsichtRoh] = useState<AkteAnsicht>(ansichtLesen);
+  const tab = ansicht.tab;
+  // Fuer Zaehler am Reiter und als Ersatz fuer den Verlauf im Ueberblick,
+  // wenn das Verlaufsrecht fehlt; nach jedem Tabwechsel neu geholt, damit
+  // ein im Tab angelegter Bericht sofort zaehlt.
   const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
   const [berichtFormularBeiStart, setBerichtFormularBeiStart] = useState(false);
+  const [verlaufRechte, setVerlaufRechte] = useState<VerlaufRechteDto | null>(null);
+  const [eintragFenster, setEintragFenster] = useState<{ art: KlientEintragArt } | null>(null);
+  // Zaehlt bei jedem neuen Eintrag hoch; Verlauf und Ueberblick laden dann neu.
+  const [verlaufStand, setVerlaufStand] = useState(0);
   const [fehler, setFehler] = useState<string | null>(null);
   const [anonymisierenOffen, setAnonymisierenOffen] = useState(false);
   const [wirdAnonymisiert, setWirdAnonymisiert] = useState(false);
@@ -84,11 +169,24 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   const [entarchivierenOffen, setEntarchivierenOffen] = useState(false);
   const [wirdArchiviert, setWirdArchiviert] = useState(false);
 
+  const setAnsicht = useCallback((teil: Partial<AkteAnsicht>) => {
+    setAnsichtRoh((alt) => {
+      const neu = { ...alt, ...teil };
+      ansichtMerken(neu);
+      return neu;
+    });
+  }, []);
+  const setTab = useCallback((t: Tab) => setAnsicht({ tab: t }), [setAnsicht]);
+
   function laden() {
     api.klient(klientId).then(setKlient).catch((err) => setFehler(err.message));
   }
 
   useEffect(laden, [klientId]);
+
+  useEffect(() => {
+    api.verlaufRechte().then(setVerlaufRechte).catch(() => setVerlaufRechte(null));
+  }, []);
 
   const berichteLaden = useCallback(() => {
     api.tagesberichteListe({ klientId }).then(setBerichte).catch(() => setBerichte([]));
@@ -97,7 +195,11 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
 
   function berichtSchreiben() {
     setBerichtFormularBeiStart(true);
-    setTab("tagesberichte");
+    setAnsicht({ tab: "dokumentation", doku: "tagesberichte" });
+  }
+
+  function eintragAnlegen(art: KlientEintragArt = "notiz") {
+    setEintragFenster({ art });
   }
 
   async function anonymisieren() {
@@ -156,8 +258,23 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
     }
   }
 
+  const archiviert = !!klient?.archiviertAm;
+  const darfEintragen = !!verlaufRechte?.anlegen && !archiviert;
+  const zeigeVerlauf = verlaufRechte?.ansehen ?? false;
+
+  const reiter: ReiterEintrag<Tab>[] = [
+    { wert: "ueberblick", label: "Überblick" },
+    ...(zeigeVerlauf ? [{ wert: "verlauf" as const, label: "Verlauf" }] : []),
+    { wert: "dokumentation", label: "Dokumentation", zaehler: berichte.length },
+    { wert: "hilfeplan", label: "Hilfeplan" },
+    { wert: "finanzen", label: "Finanzen" },
+    { wert: "akte", label: "Akte" },
+  ];
+  // Gemerkter Reiter "Verlauf", aber hier kein Recht dazu: Ueberblick zeigen.
+  const sichtbarerTab: Tab = tab === "verlauf" && verlaufRechte && !zeigeVerlauf ? "ueberblick" : tab;
+
   return (
-    <div>
+    <div className="zv-akte">
       <button className="zv-link-btn" onClick={onZurueck} style={{ marginBottom: 14 }}>
         <IZurueck />
         Zurück zur Liste
@@ -170,102 +287,107 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </div>
       )}
 
+      {/* Zwei Zeilen statt vier (Konzept klienten-ansicht, 3.1): Name, dann
+          nur was zur Orientierung noetig ist. Aktenzeichen, Amt, HZL und
+          "seit" stehen im Ueberblick unter "Auf einen Blick". Archivieren
+          und das nicht umkehrbare Anonymisieren liegen im Menue statt als
+          gleichrangige Knoepfe neben der Hauptaktion. */}
       {klient && (
         <header className="zv-akte-kopf">
-          <div className="zv-akte-haupt">
-            <span className="zv-initialen-kachel" aria-hidden="true">
-              {klient.vorname.charAt(0)}
-              {klient.nachname.charAt(0)}
-            </span>
-            <div className="zv-akte-titel">
-              <h2>
-                {klient.vorname} {klient.nachname}
-              </h2>
-              <p className="zv-akte-meta">
-                {klient.geburtsdatum && (
-                  <span>
-                    <span className="zv-mono">{formatDatum(klient.geburtsdatum)}</span> ({alterIn(klient.geburtsdatum)} J.)
-                  </span>
-                )}
-                {klient.aktuellesZimmer && (
-                  <span>
-                    Zimmer <span className="zv-mono">{klient.aktuellesZimmer.nummer}</span>, {klient.aktuellesZimmer.standortName}
-                  </span>
-                )}
-                {klient.aufnahmeAm && (
-                  <span>
-                    seit <span className="zv-mono">{formatDatum(klient.aufnahmeAm)}</span>
-                  </span>
-                )}
-                {klient.stammdaten?.bezugsbetreuerName && (
-                  <span>
-                    Bezugsbetreuung{" "}
-                    <button type="button" className="zv-link-btn" onClick={() => setTab("stammdaten")}>
-                      {klient.stammdaten.bezugsbetreuerName}
-                    </button>
-                  </span>
-                )}
-              </p>
-              <p className="zv-akte-meta">
-                <span>
-                  Aktenzeichen <span className="zv-mono">{klient.aktenzeichen}</span>
+          <span className="zv-initialen-kachel" aria-hidden="true">
+            {klient.vorname.charAt(0)}
+            {klient.nachname.charAt(0)}
+          </span>
+          <div className="zv-akte-titel">
+            <h2>
+              {klient.vorname} {klient.nachname}
+              {klient.archiviertAm && (
+                <span className="zv-pill zv-pill-neutral">
+                  <IArchivieren />
+                  Archiviert {formatDatum(klient.archiviertAm.slice(0, 10))}
                 </span>
-                <span>{klient.amt}</span>
-                <span>HZL {HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]}</span>
-                {klient.archiviertAm && (
-                  <span className="zv-pill zv-pill-neutral">
-                    <IArchivieren />
-                    Archiviert am {formatDatum(klient.archiviertAm.slice(0, 10))}
-                    {klient.archiviertVonName ? ` · ${klient.archiviertVonName}` : ""}
-                  </span>
-                )}
-                {klient.anonymisiertAm && (
-                  <span className="zv-pill zv-pill-vergeben">
-                    <ILoeschen />
-                    Anonymisiert am {formatDatum(klient.anonymisiertAm.slice(0, 10))}
-                  </span>
-                )}
-              </p>
-            </div>
+              )}
+              {klient.anonymisiertAm && (
+                <span className="zv-pill zv-pill-vergeben">
+                  <ILoeschen />
+                  Anonymisiert
+                </span>
+              )}
+            </h2>
+            <p className="zv-akte-meta">
+              {[
+                klient.geburtsdatum ? `${alterIn(klient.geburtsdatum)} J.` : null,
+                klient.aktuellesZimmer
+                  ? `Zimmer ${klient.aktuellesZimmer.nummer}, ${klient.aktuellesZimmer.standortName}`
+                  : "Kein Zimmer",
+                klient.stammdaten?.bezugsbetreuerName ? `Bezug: ${klient.stammdaten.bezugsbetreuerName}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
           </div>
 
           <div className="zv-akte-aktionen">
-            {!klient.archiviertAm && (
-              <button type="button" className="zv-btn" onClick={berichtSchreiben}>
+            {darfEintragen ? (
+              <button type="button" className="zv-btn" onClick={() => eintragAnlegen()}>
                 <INeu />
-                Tagesbericht schreiben
-              </button>
-            )}
-            {klient.archiviertAm ? (
-              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setEntarchivierenOffen(true)}>
-                <IEntarchivieren />
-                Entarchivieren
+                Eintrag
               </button>
             ) : (
-              <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setArchivierenOffen(true)}>
-                <IArchivieren />
-                Archivieren
-              </button>
+              !archiviert && (
+                <button type="button" className="zv-btn" onClick={berichtSchreiben}>
+                  <INeu />
+                  Tagesbericht
+                </button>
+              )
             )}
-            {!klient.anonymisiertAm && (
-              <button type="button" className="zv-btn zv-btn-still" onClick={() => setAnonymisierenOffen(true)}>
-                <ILoeschen />
-                Anonymisieren
-              </button>
-            )}
-          </div>
-
-          {klient.archivPdfs.length > 0 && (
-            <div className="zv-akte-pdfs">
+            <AktionsMenue label="Weitere Aktionen zur Akte">
+              {darfEintragen && (
+                <button type="button" role="menuitem" onClick={berichtSchreiben}>
+                  <ITagesberichte />
+                  Tagesbericht schreiben
+                </button>
+              )}
               {klient.archivPdfs.map((pdf) => (
-                <button key={pdf.id} className="zv-link-btn" onClick={() => archivPdfHerunterladen(pdf.id)}>
+                <button key={pdf.id} type="button" role="menuitem" onClick={() => archivPdfHerunterladen(pdf.id)}>
                   <IHerunterladen />
                   Aktenauszug {formatDatum(pdf.erstelltAm.slice(0, 10))}
                 </button>
               ))}
-            </div>
-          )}
+              {klient.archiviertAm ? (
+                <button type="button" role="menuitem" onClick={() => setEntarchivierenOffen(true)}>
+                  <IEntarchivieren />
+                  Entarchivieren
+                </button>
+              ) : (
+                <button type="button" role="menuitem" onClick={() => setArchivierenOffen(true)}>
+                  <IArchivieren />
+                  Archivieren
+                </button>
+              )}
+              {!klient.anonymisiertAm && (
+                <button type="button" role="menuitem" className="zv-menue-gefahr" onClick={() => setAnonymisierenOffen(true)}>
+                  <ILoeschen />
+                  Anonymisieren …
+                </button>
+              )}
+            </AktionsMenue>
+          </div>
         </header>
+      )}
+
+      {klient && eintragFenster && (
+        <NeuerEintragFenster
+          klientId={klientId}
+          klientName={`${klient.vorname} ${klient.nachname}`}
+          startArt={eintragFenster.art}
+          kontakte={klient.kontakte}
+          onSchliessen={() => setEintragFenster(null)}
+          onAngelegt={() => {
+            setEintragFenster(null);
+            setVerlaufStand((n) => n + 1);
+          }}
+        />
       )}
 
       {anonymisierenOffen && (
@@ -286,9 +408,9 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         <Modal titel="Klient:in archivieren" onClose={() => setArchivierenOffen(false)}>
           <p style={{ marginTop: 0 }}>
             Es wird ein vollständiger PDF-Aktenauszug erzeugt (Stammdaten, Kontakte, Unterbringungshistorie,
-            Kassenbuch, Kostenübernahmen, Rechnungen, Tagesberichte samt Anhängen) und dauerhaft gespeichert. Der
-            Klient wird anschließend eingefroren -- keine neuen Tagesberichte, Buchungen, Rechnungen oder
-            Änderungen mehr möglich -- und aus der Klientenliste ausgeblendet. Das lässt sich jederzeit wieder
+            Kassenbuch, Kostenübernahmen, Rechnungen, Tagesberichte samt Anhängen, Verlauf) und dauerhaft
+            gespeichert. Der Klient wird anschließend eingefroren -- keine neuen Einträge, Buchungen, Rechnungen
+            oder Änderungen mehr möglich -- und aus der Klientenliste ausgeblendet. Das lässt sich jederzeit wieder
             aufheben.
           </p>
           <button className="zv-btn zv-btn-block" onClick={archivieren} disabled={wirdArchiviert}>
@@ -311,34 +433,9 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </Modal>
       )}
 
-      <nav className="zv-reiter" aria-label="Bereiche der Akte">
-        {(
-          [
-            ["ueberblick", "Überblick", undefined],
-            ["tagesberichte", "Tagesberichte", berichte.length],
-            ["protokolle", "Protokolle", undefined],
-            ["hilfeplan", "Hilfeplan", undefined],
-            ["kassenbuch", "Kassenbuch", undefined],
-            ["kostenuebernahmen", "Kostenübernahmen", undefined],
-            ["rechnungen", "Rechnungen", undefined],
-            ["stammdaten", "Stammdaten", undefined],
-            ["zugang", "Zugang & Freigaben", undefined],
-          ] as [Tab, string, number | undefined][]
-        ).map(([wert, label, zaehler]) => (
-          <button
-            key={wert}
-            type="button"
-            className={tab === wert ? "active" : ""}
-            aria-current={tab === wert ? "true" : undefined}
-            onClick={() => setTab(wert)}
-          >
-            {label}
-            {zaehler !== undefined && <span className="zv-mono zv-reiter-zaehler">{zaehler}</span>}
-          </button>
-        ))}
-      </nav>
+      <Reiterleiste label="Bereiche der Akte" idPraefix="akte" reiter={reiter} aktiv={sichtbarerTab} onWahl={setTab} />
 
-      {klient?.archiviertAm && (
+      {archiviert && (
         <div className="zv-hinweis zv-hinweis-info" style={{ marginBottom: 16 }}>
           <IArchivieren />
           Dieser Klient ist archiviert und schreibgeschützt -- neue Einträge sind erst nach dem Entarchivieren
@@ -346,43 +443,102 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </div>
       )}
 
-      {/* fieldset[disabled] deaktiviert automatisch JEDEN verschachtelten
-          Button/Input/Select/Textarea in allen fuenf Tabs -- inklusive der
-          Knoepfe, die ein Bearbeiten-Modal erst OEFFNEN -- ohne dass jede
-          einzelne Schreibaktion separat verdrahtet werden muesste. Reine
-          Lese-Links (z.B. "Dokument oeffnen") sind davon bewusst nicht
-          betroffen, <a> ist kein "listed" Formularelement. Serverseitig
-          durchgesetzt ueber klientIstArchiviert() -- dies hier ist nur die
-          UI-Spiegelung davon. */}
-      <fieldset
-        disabled={!!klient?.archiviertAm}
-        style={{ border: 0, padding: 0, margin: 0, minInlineSize: "auto" }}
-      >
-        {tab === "ueberblick" && klient && (
-          <UeberblickTab
-            klient={klient}
-            berichte={berichte}
-            onBerichtSchreiben={berichtSchreiben}
-            onBerichtAngelegt={berichteLaden}
-            onAlleBerichte={() => setTab("tagesberichte")}
-            onKontakte={() => setTab("stammdaten")}
+      <div {...reiterPanelProps("akte", sichtbarerTab)}>
+        {/* Umschalter ausserhalb des fieldset: sie wechseln nur die Ansicht
+            und muessen auch in einer archivierten Akte bedienbar bleiben. */}
+        {sichtbarerTab === "dokumentation" && (
+          <Umschalter
+            label="Art der Dokumentation"
+            wert={ansicht.doku}
+            onWahl={(doku) => setAnsicht({ doku })}
+            optionen={[
+              { wert: "tagesberichte", label: "Tagesberichte" },
+              { wert: "protokolle", label: "Protokolle" },
+            ]}
           />
         )}
-        {tab === "tagesberichte" && (
-          <TagesberichteTab
-            klientId={klientId}
-            startMitFormular={berichtFormularBeiStart}
-            onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
+        {sichtbarerTab === "finanzen" && (
+          <Umschalter
+            label="Finanzbereich"
+            wert={ansicht.finanz}
+            onWahl={(finanz) => setAnsicht({ finanz })}
+            optionen={[
+              { wert: "kassenbuch", label: "Kassenbuch" },
+              { wert: "kostenuebernahmen", label: "Kostenübernahmen" },
+              { wert: "rechnungen", label: "Rechnungen" },
+            ]}
           />
         )}
-        {tab === "protokolle" && <ProtokolleTab klientId={klientId} archiviert={!!klient?.archiviertAm} />}
-        {tab === "hilfeplan" && <HilfeplanTab klientId={klientId} onBerichtOeffnen={() => setTab("tagesberichte")} />}
-        {tab === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
-        {tab === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
-        {tab === "rechnungen" && <RechnungenTab klientId={klientId} />}
-        {tab === "stammdaten" && klient && <StammdatenTab klient={klient} onGeaendert={laden} />}
-        {tab === "zugang" && <KlientZugang klientId={klientId} />}
-      </fieldset>
+        {sichtbarerTab === "akte" && (
+          <Umschalter
+            label="Bereich der Akte"
+            wert={ansicht.akte}
+            onWahl={(akte) => setAnsicht({ akte })}
+            optionen={[
+              { wert: "stammdaten", label: "Stammdaten" },
+              { wert: "kontakte", label: "Kontakte" },
+              { wert: "zugang", label: "Zugang & Freigaben" },
+            ]}
+          />
+        )}
+
+        {/* fieldset[disabled] deaktiviert automatisch JEDEN verschachtelten
+            Button/Input/Select/Textarea in allen Tabs -- inklusive der
+            Knoepfe, die ein Bearbeiten-Modal erst OEFFNEN -- ohne dass jede
+            einzelne Schreibaktion separat verdrahtet werden muesste. Reine
+            Lese-Links (z.B. "Dokument oeffnen") sind davon bewusst nicht
+            betroffen, <a> ist kein "listed" Formularelement. Serverseitig
+            durchgesetzt ueber klientIstArchiviert() -- dies hier ist nur die
+            UI-Spiegelung davon. */}
+        <fieldset disabled={archiviert} style={{ border: 0, padding: 0, margin: 0, minInlineSize: "auto" }}>
+          {sichtbarerTab === "ueberblick" && klient && (
+            <UeberblickTab
+              klient={klient}
+              berichte={berichte}
+              mitVerlauf={zeigeVerlauf}
+              verlaufStand={verlaufStand}
+              onGanzerVerlauf={() => setTab(zeigeVerlauf ? "verlauf" : "dokumentation")}
+              onKontakte={() => setAnsicht({ tab: "akte", akte: "kontakte" })}
+              onFinanzen={(finanz) => setAnsicht({ tab: "finanzen", finanz })}
+              onHilfeplan={() => setTab("hilfeplan")}
+            />
+          )}
+          {sichtbarerTab === "verlauf" && (
+            <VerlaufTab
+              klientId={klientId}
+              archiviert={archiviert}
+              aktualisierung={verlaufStand}
+              onNeuerEintrag={(art) => eintragAnlegen(art)}
+              onDokumentationOeffnen={(quelle) =>
+                setAnsicht({ tab: "dokumentation", doku: quelle === "protokoll" ? "protokolle" : "tagesberichte" })
+              }
+            />
+          )}
+          {sichtbarerTab === "dokumentation" && ansicht.doku === "tagesberichte" && (
+            <TagesberichteTab
+              klientId={klientId}
+              startMitFormular={berichtFormularBeiStart}
+              onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
+            />
+          )}
+          {sichtbarerTab === "dokumentation" && ansicht.doku === "protokolle" && (
+            <ProtokolleTab klientId={klientId} archiviert={archiviert} />
+          )}
+          {sichtbarerTab === "hilfeplan" && (
+            <HilfeplanTab klientId={klientId} onBerichtOeffnen={() => setAnsicht({ tab: "dokumentation", doku: "tagesberichte" })} />
+          )}
+          {sichtbarerTab === "finanzen" && ansicht.finanz === "kassenbuch" && <KlientKassenbuchTab klientId={klientId} />}
+          {sichtbarerTab === "finanzen" && ansicht.finanz === "kostenuebernahmen" && <KostenuebernahmenTab klientId={klientId} />}
+          {sichtbarerTab === "finanzen" && ansicht.finanz === "rechnungen" && <RechnungenTab klientId={klientId} />}
+          {sichtbarerTab === "akte" && ansicht.akte === "stammdaten" && klient && (
+            <StammdatenTab klient={klient} onGeaendert={laden} />
+          )}
+          {sichtbarerTab === "akte" && ansicht.akte === "kontakte" && klient && (
+            <KontakteAbschnitt klientId={klient.id} kontakte={klient.kontakte} onGeaendert={laden} />
+          )}
+          {sichtbarerTab === "akte" && ansicht.akte === "zugang" && <KlientZugang klientId={klientId} />}
+        </fieldset>
+      </div>
     </div>
   );
 }
@@ -504,7 +660,9 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
   }
 
   return (
-    <div>
+    <div className="zv-stammdaten">
+    <StammdatenSprungliste />
+    <div className="zv-stammdaten-gruppen">
     <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", rowGap: 12, fontSize: 14 }}>
         <div style={{ color: "var(--zv-text-muted)" }}>Zimmer</div>
@@ -774,6 +932,7 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
     <StammdatenAbschnitt
       klientId={klient.id}
       titel="Gesundheit"
+      standardOffen={false}
       felder={GESUNDHEIT_FELDER}
       stammdaten={klient.stammdaten}
       onGeaendert={onGeaendert}
@@ -792,8 +951,7 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
       stammdaten={klient.stammdaten}
       onGeaendert={onGeaendert}
     />
-
-    <KontakteAbschnitt klientId={klient.id} kontakte={klient.kontakte} onGeaendert={onGeaendert} />
+    </div>
     </div>
   );
 }
@@ -815,59 +973,49 @@ function tageBis(datum: string): number {
 }
 
 /**
- * Ueberblick: links die Chronik (juengste Tagesberichte, Schnelleintrag),
- * rechts das, was man bei einem Blick auf die Person wissen will --
- * Kostenuebernahme mit Laufzeit, Barbetrag, Kontakte. Alles Weitere
- * (Stammdaten bearbeiten, Rechnungen, ...) hat einen eigenen Reiter, damit
- * hier nichts scrollen muss, um das Wichtige zu finden.
+ * Ueberblick (Konzept klienten-ansicht, 3.4): feste Reihenfolge nach
+ * Wichtigkeit -- Auf einen Blick, Braucht Aufmerksamkeit, Zuletzt im
+ * Verlauf, Kontakte. Im Seitenpanel eine Spalte, im Vollbild zwei; welche,
+ * entscheidet die Breite der Akte (Container-Abfrage in app.css), nicht die
+ * des Fensters. Geschrieben wird ueber "+ Eintrag" im Kopf, deshalb gibt es
+ * hier keinen Schnelleintrag mehr (der legte einen Tagesbericht an, was die
+ * Rueckmeldung "Überblick / Chronik" ausdruecklich nicht wollte).
  */
 function UeberblickTab({
   klient,
   berichte,
-  onBerichtSchreiben,
-  onBerichtAngelegt,
-  onAlleBerichte,
+  mitVerlauf,
+  verlaufStand,
+  onGanzerVerlauf,
   onKontakte,
+  onFinanzen,
+  onHilfeplan,
 }: {
   klient: KlientDetailDto;
   berichte: TagesberichtDto[];
-  onBerichtSchreiben: () => void;
-  onBerichtAngelegt: () => void;
-  onAlleBerichte: () => void;
+  mitVerlauf: boolean;
+  verlaufStand: number;
+  onGanzerVerlauf: () => void;
   onKontakte: () => void;
+  onFinanzen: (teil: FinanzTeil) => void;
+  onHilfeplan: () => void;
 }) {
   const [kostenuebernahme, setKostenuebernahme] = useState<KostenuebernahmeDto | null | undefined>(undefined);
   const [barbetragCent, setBarbetragCent] = useState<number | null>(null);
-  const [text, setText] = useState("");
-  const [wirdGespeichert, setWirdGespeichert] = useState(false);
-  const [fehler, setFehler] = useState<string | null>(null);
-  // Haengt am Standort ein Pflicht-Formular am Tagesbericht (bei "ersetzt"
-  // immer), lehnt der Server einen reinen Freitext ab. Statt eines Feldes,
-  // das nur eine Fehlermeldung liefern kann, gibt es dann den Knopf ins
-  // richtige Fenster. null = noch unbekannt, dann bleibt das Feld.
-  const [brauchtFormular, setBrauchtFormular] = useState<boolean | null>(null);
+  const [hilfeplan, setHilfeplan] = useState<HilfeplanDto | null>(null);
+  const [verlauf, setVerlauf] = useState<VerlaufDto | null>(null);
 
   useEffect(() => {
-    let aktuell = true;
-    setBrauchtFormular(null);
-    api
-      .formularAngebot(klient.id, "tagesbericht")
-      .then((l) => aktuell && setBrauchtFormular(l.some((a) => a.pflicht)))
-      .catch(() => aktuell && setBrauchtFormular(false));
-    return () => {
-      aktuell = false;
-    };
-  }, [klient.id]);
-
-  useEffect(() => {
+    const heute = heuteBerlin();
     api
       .kostenuebernahmenListe(klient.id)
       .then((liste) => {
-        const heute = new Date().toISOString().slice(0, 10);
         const aktuelle = liste
           .filter((k) => k.von <= heute && (k.bis === null || k.bis >= heute))
           .sort((a, b) => b.von.localeCompare(a.von));
-        setKostenuebernahme(aktuelle[0] ?? null);
+        // Abgelaufen ohne Nachfolger ist genau der Fall, der Aufmerksamkeit braucht.
+        const juengste = [...liste].sort((a, b) => b.von.localeCompare(a.von))[0] ?? null;
+        setKostenuebernahme(aktuelle[0] ?? (juengste && juengste.bis && juengste.bis < heute ? juengste : null));
       })
       .catch(() => setKostenuebernahme(null));
     // Stornierte Buchungen zaehlen nicht -- wie im Kassenstand (siehe
@@ -876,150 +1024,213 @@ function UeberblickTab({
       .kassenbuchungenListe({ klientId: klient.id })
       .then((liste) => setBarbetragCent(liste.filter((b) => !b.storniert).reduce((summe, b) => summe + b.betragCent, 0)))
       .catch(() => setBarbetragCent(null));
+    api
+      .hilfeplaeneListe(klient.id)
+      .then((liste) => {
+        const laufend = liste
+          .filter((p) => p.von <= heute && (p.bis === null || p.bis >= heute))
+          .sort((a, b) => b.von.localeCompare(a.von));
+        setHilfeplan(laufend[0] ?? null);
+      })
+      .catch(() => setHilfeplan(null));
   }, [klient.id]);
 
-  async function schnellEintrag(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!text.trim()) return;
-    setWirdGespeichert(true);
-    setFehler(null);
-    try {
-      await api.tagesberichtAnlegen({ klientId: klient.id, datum: heuteBerlin(), text: text.trim() });
-      setText("");
-      onBerichtAngelegt();
-    } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Eintrag konnte nicht gespeichert werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
+  useEffect(() => {
+    if (!mitVerlauf) return;
+    api.verlauf(klient.id).then(setVerlauf).catch(() => setVerlauf(null));
+  }, [klient.id, mitVerlauf, verlaufStand]);
 
   const ku = kostenuebernahme;
   const kuGesamt = ku && ku.bis ? Math.max(1, tageBis(ku.bis) - tageBis(ku.von)) : null;
   const kuVerbleibend = ku && ku.bis ? tageBis(ku.bis) : null;
   const kuFortschritt = kuGesamt && kuVerbleibend !== null ? Math.min(100, Math.max(0, ((kuGesamt - kuVerbleibend) / kuGesamt) * 100)) : 0;
 
+  // Nur, was jetzt Handeln verlangt. Ist nichts davon faellig, entfaellt der
+  // ganze Block -- ein "nichts zu tun" waere eine Zeile, die man jedes Mal
+  // liest, ohne dass sie etwas sagt.
+  const achtung: { schluessel: string; titel: string; meta: string; balken?: number; onKlick?: () => void }[] = [];
+  if (ku && kuVerbleibend !== null && kuVerbleibend <= 30) {
+    achtung.push({
+      schluessel: "ku",
+      titel: kuVerbleibend < 0 ? "Kostenübernahme abgelaufen" : "Kostenübernahme endet bald",
+      meta: `${ku.amt} · ${kuVerbleibend < 0 ? `seit ${formatDatum(ku.bis!)}` : `noch ${kuVerbleibend} ${kuVerbleibend === 1 ? "Tag" : "Tage"}, bis ${formatDatum(ku.bis!)}`}`,
+      balken: kuFortschritt,
+      onKlick: () => onFinanzen("kostenuebernahmen"),
+    });
+  }
+  if (hilfeplan?.naechstesGespraech && tageBis(hilfeplan.naechstesGespraech) <= 14) {
+    const t = tageBis(hilfeplan.naechstesGespraech);
+    achtung.push({
+      schluessel: "hp-gespraech",
+      titel: t < 0 ? "Hilfeplangespräch überfällig" : "Hilfeplangespräch steht an",
+      meta: `${t < 0 ? "war am" : "am"} ${formatDatum(hilfeplan.naechstesGespraech)}`,
+      onKlick: onHilfeplan,
+    });
+  }
+  if (hilfeplan?.bis && tageBis(hilfeplan.bis) <= 30) {
+    achtung.push({
+      schluessel: "hp-ende",
+      titel: "Hilfeplan-Fortschreibung fällig",
+      meta: `Hilfeplan läuft bis ${formatDatum(hilfeplan.bis)}`,
+      onKlick: onHilfeplan,
+    });
+  }
+  if (klient.aktuellesZimmer?.auszug) {
+    achtung.push({
+      schluessel: "auszug",
+      titel: "Auszug geplant",
+      meta: `am ${formatDatum(klient.aktuellesZimmer.auszug)} aus Zimmer ${klient.aktuellesZimmer.nummer}`,
+    });
+  }
+  for (const w of verlauf?.wiedervorlagen ?? []) {
+    achtung.push({
+      schluessel: `wv-${w.schluessel}`,
+      titel: w.titel,
+      meta: `${w.herkunft === "aufgabe" ? "Aufgabe" : "Wiedervorlage"}${w.datum ? ` · ${formatDatum(w.datum)}` : ""}`,
+      onKlick: onGanzerVerlauf,
+    });
+  }
+
+  const blick: [string, ReactNode][] = [
+    [
+      "Zimmer",
+      klient.aktuellesZimmer ? `${klient.aktuellesZimmer.nummer} · ${klient.aktuellesZimmer.standortName}` : "kein Zimmer",
+    ],
+    ["seit", klient.aufnahmeAm ? <span className="zv-mono">{formatDatum(klient.aufnahmeAm)}</span> : "–"],
+    ["Bezugsbetreuung", klient.stammdaten?.bezugsbetreuerName ?? "–"],
+    ["Amt", klient.amt],
+    ["Aktenzeichen", <span className="zv-mono">{klient.aktenzeichen}</span>],
+    ["HZL", HZL_RHYTHMUS_LABEL[klient.hzlRhythmus]],
+    ["Barbetrag", <span className="zv-mono">{barbetragCent === null ? "–" : formatBetrag(barbetragCent)}</span>],
+  ];
+
+  const letzteZeilen = (verlauf?.zeilen ?? []).slice(0, 5);
+
   return (
     <div className="zv-ueberblick">
-      <section aria-label="Chronik">
-        <div className="zv-abschnittskopf">
-          <h3>Chronik</h3>
-          <button type="button" className="zv-link-btn" onClick={onAlleBerichte}>
-            Alle Tagesberichte
-          </button>
-        </div>
-        {brauchtFormular ? (
-          <div className="zv-schnelleintrag-formular">
-            <button type="button" className="zv-btn zv-btn-block" onClick={onBerichtSchreiben}>
-              <INeu />
-              Tagesbericht für heute
-            </button>
-            <p className="zv-sub-inline">An ihrem Standort gehört ein Formular zum Tagesbericht.</p>
-          </div>
-        ) : (
-          <form className="zv-schnelleintrag" onSubmit={schnellEintrag}>
-            <label htmlFor="schnelleintrag" className="zv-sr-only">
-              Schnelleintrag für heute
-            </label>
-            <textarea
-              id="schnelleintrag"
-              rows={2}
-              value={text}
-              placeholder="Kurzer Eintrag für heute …"
-              onChange={(e) => setText(e.target.value)}
-            />
-            <button className="zv-btn zv-btn-sekundaer" type="submit" disabled={wirdGespeichert || !text.trim()}>
-              <ISpeichern />
-              Speichern
-            </button>
-          </form>
-        )}
-        {fehler && <p className="zv-fehlertext">{fehler}</p>}
-        {berichte.length === 0 ? (
-          <Leerzustand icon={ILeerTagesberichte}>Noch kein Tagesbericht. Der erste Eintrag steht oben.</Leerzustand>
-        ) : (
-          <ol className="zv-chronik">
-            {berichte.slice(0, 6).map((b) => (
-              <li key={b.id}>
-                <span className="zv-chronik-datum zv-mono">{formatDatum(b.datum)}</span>
-                <span className="zv-chronik-text">
-                  <span className="zv-chronik-inhalt">{b.text || berichtFormularTexte(b).join(" · ")}</span>
-                  <span className="zv-todo-meta">
-                    {b.autorName ?? "unbekannt"}
-                    {b.tags.length > 0 && ` · ${b.tags.map((t) => t.name).join(", ")}`}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      <aside className="zv-ueberblick-rand">
-        <section aria-label="Kostenübernahme">
+      <div className="zv-ueberblick-haupt">
+        <section className="zv-ueberblick-verlauf" aria-label="Zuletzt im Verlauf">
           <div className="zv-abschnittskopf">
-            <h3>Kostenübernahme</h3>
+            <h3>Zuletzt im Verlauf</h3>
+            <button type="button" className="zv-link-btn" onClick={onGanzerVerlauf}>
+              {mitVerlauf ? "Ganzer Verlauf" : "Alle Tagesberichte"}
+            </button>
           </div>
-          {ku === undefined ? null : ku === null ? (
-            <p className="zv-rand-leer">Keine laufende Kostenübernahme erfasst.</p>
+          {mitVerlauf ? (
+            verlauf === null ? null : letzteZeilen.length === 0 ? (
+              <p className="zv-rand-leer">Noch nichts im Verlauf. Neue Einträge über „+ Eintrag“ oben.</p>
+            ) : (
+              <ol className="zv-chronik">
+                {letzteZeilen.map((z) => (
+                  <li key={z.schluessel} className={verlaufKlasse(z)}>
+                    <span className="zv-chronik-datum zv-mono">
+                      {formatDatum(z.ganztaegig ? z.zeitpunkt.slice(0, 10) : lokalesDatum(new Date(z.zeitpunkt)))}
+                    </span>
+                    <span className="zv-chronik-text">
+                      <span className="zv-chronik-titel">
+                        <span className="zv-verlauf-punkt" aria-hidden="true" />
+                        <span className="zv-verlauf-art">{verlaufArtLabel(z)}</span>
+                        {z.titel}
+                      </span>
+                      {z.text && <span className="zv-chronik-inhalt">{z.text}</span>}
+                      {z.autorName && <span className="zv-todo-meta">{z.autorName}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )
+          ) : berichte.length === 0 ? (
+            <Leerzustand icon={ILeerTagesberichte}>Noch kein Tagesbericht.</Leerzustand>
           ) : (
-            <div>
-              <p className="zv-rand-wert">{ku.amt}</p>
-              <p className="zv-todo-meta">
-                <span className="zv-mono">{formatDatum(ku.von)}</span>
-                {" – "}
-                {ku.bis ? <span className="zv-mono">{formatDatum(ku.bis)}</span> : "unbefristet"}
-              </p>
-              {ku.bis && (
-                <div
-                  className="zv-laufzeit"
-                  role="img"
-                  aria-label={`${Math.round(kuFortschritt)} Prozent der Laufzeit vergangen`}
-                >
-                  <div style={{ width: `${kuFortschritt}%` }} />
-                </div>
-              )}
-              {kuVerbleibend !== null && kuVerbleibend <= 30 && (
-                <p className="zv-lage-folge zv-lage-folge-achtung" style={{ marginTop: "var(--zv-space-2)" }}>
-                  {kuVerbleibend < 0 ? "abgelaufen" : `endet in ${kuVerbleibend} ${kuVerbleibend === 1 ? "Tag" : "Tagen"}`}
-                </p>
-              )}
-            </div>
+            <ol className="zv-chronik">
+              {berichte.slice(0, 5).map((b) => (
+                <li key={b.id}>
+                  <span className="zv-chronik-datum zv-mono">{formatDatum(b.datum)}</span>
+                  <span className="zv-chronik-text">
+                    <span className="zv-chronik-inhalt">{b.text || berichtFormularTexte(b).join(" · ")}</span>
+                    <span className="zv-todo-meta">{b.autorName ?? "unbekannt"}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
 
-        <section aria-label="Barbetrag">
-          <div className="zv-abschnittskopf">
-            <h3>Barbetrag</h3>
-          </div>
-          <p className="zv-rand-wert zv-mono">{barbetragCent === null ? "–" : formatBetrag(barbetragCent)}</p>
-          <p className="zv-todo-meta">Summe der nicht stornierten Buchungen</p>
-        </section>
-
-        <section aria-label="Kontakte">
+        <section className="zv-ueberblick-kontakte" aria-label="Kontakte">
           <div className="zv-abschnittskopf">
             <h3>Kontakte</h3>
             <button type="button" className="zv-link-btn" onClick={onKontakte}>
-              Bearbeiten
+              Alle
             </button>
           </div>
           {klient.kontakte.length === 0 ? (
             <p className="zv-rand-leer">Keine Kontakte erfasst.</p>
           ) : (
-            <ul className="zv-rand-liste zv-kontaktliste">
-              {klient.kontakte.map((k) => (
+            <ul className="zv-rand-liste zv-ueberblick-liste">
+              {klient.kontakte.slice(0, 4).map((k) => (
                 <li key={k.id}>
                   <span className="zv-todo-titel">{k.name}</span>
-                  <span className="zv-todo-meta">
-                    {[k.beziehung, k.telefon].filter(Boolean).join(" · ")}
-                  </span>
+                  <span className="zv-todo-meta">{[k.beziehung, k.telefon].filter(Boolean).join(" · ")}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
-      </aside>
+      </div>
+
+      <div className="zv-ueberblick-rand">
+        <section className="zv-ueberblick-blick" aria-label="Auf einen Blick">
+          <div className="zv-abschnittskopf">
+            <h3>Auf einen Blick</h3>
+          </div>
+          <dl className="zv-kennwerte">
+            {blick.map(([label, wert]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{wert}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {achtung.length > 0 && (
+          <section className="zv-ueberblick-achtung" aria-label="Braucht Aufmerksamkeit">
+            <div className="zv-abschnittskopf">
+              <h3>Braucht Aufmerksamkeit</h3>
+            </div>
+            <ul className="zv-achtung-liste">
+              {achtung.map((a) => (
+                <li key={a.schluessel}>
+                  {a.onKlick ? (
+                    <button type="button" className="zv-achtung-eintrag" onClick={a.onKlick}>
+                      <AchtungInhalt titel={a.titel} meta={a.meta} balken={a.balken} />
+                    </button>
+                  ) : (
+                    <div className="zv-achtung-eintrag">
+                      <AchtungInhalt titel={a.titel} meta={a.meta} balken={a.balken} />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
     </div>
+  );
+}
+
+function AchtungInhalt({ titel, meta, balken }: { titel: string; meta: string; balken?: number }) {
+  return (
+    <>
+      <span className="zv-todo-titel">{titel}</span>
+      <span className="zv-todo-meta">{meta}</span>
+      {balken !== undefined && (
+        <span className="zv-laufzeit" role="img" aria-label={`${Math.round(balken)} Prozent der Laufzeit vergangen`}>
+          <span style={{ width: `${balken}%` }} />
+        </span>
+      )}
+    </>
   );
 }
 
@@ -1094,6 +1305,42 @@ function anzeigeWert(feld: StammdatenFeld, stammdaten: KlientStammdatenDto | nul
   return feld.typ === "datum" ? formatDatum(wert) : wert;
 }
 
+const STAMMDATEN_GRUPPEN = [
+  "Schnelle Informationen",
+  "Weitere Informationen",
+  "Kontakt / Betreuung",
+  "Gesundheit",
+  "Bildung / Ausbildung",
+  "Vorherige Einrichtung",
+];
+
+function gruppenId(titel: string): string {
+  return titel.toLowerCase().replace(/[^a-z]+/g, "-");
+}
+
+/** Sprungliste fuer die Stammdaten im Vollbild; oeffnet eine zugeklappte Gruppe gleich mit. */
+function StammdatenSprungliste() {
+  return (
+    <nav className="zv-stammdaten-sprung" aria-label="Abschnitte der Stammdaten">
+      {STAMMDATEN_GRUPPEN.map((t) => (
+        <button
+          key={t}
+          type="button"
+          className="zv-link-btn"
+          onClick={() => {
+            const el = document.getElementById(`stammdaten-${gruppenId(t)}`) as HTMLDetailsElement | null;
+            if (!el) return;
+            el.open = true;
+            el.scrollIntoView({ block: "start" });
+          }}
+        >
+          {t}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function StammdatenAbschnitt({
   klientId,
   titel,
@@ -1101,9 +1348,12 @@ function StammdatenAbschnitt({
   stammdaten,
   benutzerListe,
   onGeaendert,
+  standardOffen = true,
 }: {
   klientId: string;
   titel: string;
+  /** Gesundheit startet zu: Art.-9-Daten nicht nebenbei auf dem Bildschirm (Konzept klienten-ansicht, 3.2). */
+  standardOffen?: boolean;
   felder: StammdatenFeld[];
   stammdaten: KlientStammdatenDto | null;
   benutzerListe?: BenutzerListEintragDto[];
@@ -1141,15 +1391,18 @@ function StammdatenAbschnitt({
   }
 
   return (
-    <div className="zv-card zv-card-weit" style={{ marginBottom: 20 }}>
-      <div className="zv-seiten-kopf" style={{ marginBottom: 14 }}>
-        <h3 style={{ margin: 0, fontSize: 15 }}>{titel}</h3>
+    <details className="zv-card zv-card-weit zv-stammdaten-gruppe" id={`stammdaten-${gruppenId(titel)}`} open={standardOffen}>
+      <summary>
+        <h3>{titel}</h3>
+        <IAufklappen />
+      </summary>
+      <div className="zv-stammdaten-gruppe-kopf">
         <button className="zv-link-btn" onClick={() => setBearbeitenOffen(true)}>
           <IBearbeiten />
           Bearbeiten
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", rowGap: 10, fontSize: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 220px) minmax(0, 1fr)", rowGap: 10, columnGap: 12, fontSize: 14 }}>
         {felder.map((f) => (
           <div key={f.key} style={{ display: "contents" }}>
             <div style={{ color: "var(--zv-text-muted)" }}>{f.label}</div>
@@ -1207,7 +1460,7 @@ function StammdatenAbschnitt({
           </form>
         </Modal>
       )}
-    </div>
+    </details>
   );
 }
 

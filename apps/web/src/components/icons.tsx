@@ -16,6 +16,10 @@
  */
 import {
   Archive,
+  Gavel,
+  MessagesSquare,
+  Phone,
+  StickyNote,
   ArchiveRestore,
   ArrowDown,
   ArrowLeft,
@@ -229,6 +233,12 @@ export const IAnwaerter = baue(Inbox);
 export const IEntarchivieren = baue(ArchiveRestore);
 export const IHerunterladen = baue(Download);
 export const IVerlauf = baue(History);
+// Eintragsarten im Verlauf der Akte (Migration 0078).
+export const INotiz = baue(StickyNote);
+export const ITelefonat = baue(Phone);
+export const IGespraech = baue(MessagesSquare);
+export const IEntscheidung = baue(Gavel);
+
 export const IZurueck = baue(ArrowLeft);
 export const IZurueckziehen = baue(Undo2);
 export const IKopieren = baue(Copy);

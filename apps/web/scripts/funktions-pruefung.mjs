@@ -121,8 +121,8 @@ async function anmelden(page, email = LEITUNG) {
  * mobilen Leiste: man erreicht sie ueber das Gruppen-Panel ihres Elternpunkts.
  */
 const ELTERN_VON_UNTERPUNKT = { HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende", Belegung: "Standorte" };
-/** Seit dem Redesign heisst "Tagesberichte" in der mobilen Leiste "Bericht" (Platz fuer fuenf Felder). */
-const MOBIL_NAME = { Tagesberichte: "Bericht" };
+/** "Dokumentation" (vorher Tagesberichte) heisst in der mobilen Leiste "Doku" (Platz fuer fuenf Felder). */
+const MOBIL_NAME = { Dokumentation: "Doku" };
 
 /**
  * Funktioniert unabhaengig von der Fensterbreite: die Desktop-Sidebar
@@ -167,8 +167,8 @@ if (laufe(1)) {
   ok(await page.locator(".zv-tabbar-app button").count() === 5, "Mobile Reiterleiste hat 4 Reiter + 'Mehr'");
   const reiter = await page.locator(".zv-tabbar-app button").allInnerTexts();
   ok(
-    ["Heute", "Klienten", "Nachrichten", "Bericht"].every((n) => reiter.some((t) => t.includes(n))),
-    `Reiter Heute, Klienten, Nachrichten, Bericht direkt sichtbar (${reiter.join(", ")})`
+    ["Heute", "Klienten", "Nachrichten", "Doku"].every((n) => reiter.some((t) => t.includes(n))),
+    `Reiter Heute, Klienten, Nachrichten, Doku direkt sichtbar (${reiter.join(", ")})`
   );
   ok(!reiter.includes("Kalender"), "Kalender liegt im Sammelmenue, nicht in der Leiste");
   ok(reiter.includes("Mehr"), `Sammelmenue-Knopf "Mehr" vorhanden (${reiter.join(", ")})`);

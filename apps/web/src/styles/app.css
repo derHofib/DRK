@@ -1169,21 +1169,71 @@
   border-bottom-color: var(--zv-text);
 }
 
-/* Unterstrich-Reiter unter dem Seitenkopf (StandortReiter u. a.). Gleiche
-   Optik wie .zv-tabbar, aber ohne Flaeche und Seitenrand, weil sie im
-   Inhalt stehen und nicht am Bildschirmrand. Scrollt selbst. */
-.zv-reiter {
-  display: flex;
-  gap: var(--zv-space-1);
+/* Unterstrich-Reiter unter dem Seitenkopf (components/Reiterleiste.tsx).
+   Gleiche Optik wie .zv-tabbar, aber ohne Flaeche und Seitenrand, weil sie
+   im Inhalt stehen und nicht am Bildschirmrand. Die Leiste scrollt selbst;
+   gefuehrt wird sie aber ueber Pfeilknoepfe und das Mausrad, nicht ueber
+   den Balken (der ist ausgeblendet -- als einziger Griff war er fuer die
+   Maus zu duenn, Rueckmeldung "Ansicht Klienten"). */
+.zv-reiterleiste {
+  position: relative;
   margin-bottom: var(--zv-space-5);
   /* Haarlinie als inset-Schatten statt border-bottom, und die Knoepfe ohne
      negativen Rand: der alte -1px-Ueberstand ueber die Border hinaus machte
      den Container (overflow-x:auto erzwingt overflow-y:auto) vertikal
      scrollbar -- genau der zweite Balken, der dort nicht existieren darf. */
   box-shadow: inset 0 -1px 0 var(--zv-border);
+}
+
+.zv-reiter {
+  display: flex;
+  gap: var(--zv-space-1);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.zv-reiter::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ausblendverlauf am Rand, an dem es weitergeht. Als Maske statt als
+   Farbverlauf in Hintergrundfarbe: die Leiste steht mal auf --zv-bg, mal im
+   Seitenpanel auf --zv-surface. Eine Maske wertet nur Deckkraft aus; die
+   Farbe ist egal, darum genuegt ein beliebiges deckendes Token. */
+.zv-reiterleiste[data-rechts] .zv-reiter {
+  mask-image: linear-gradient(to left, transparent, var(--zv-text) 56px);
+}
+.zv-reiterleiste[data-links] .zv-reiter {
+  mask-image: linear-gradient(to right, transparent, var(--zv-text) 56px);
+}
+.zv-reiterleiste[data-links][data-rechts] .zv-reiter {
+  mask-image: linear-gradient(to right, transparent, var(--zv-text) 56px, var(--zv-text) calc(100% - 56px), transparent);
+}
+
+.zv-reiter-pfeil {
+  position: absolute;
+  top: 0;
+  bottom: 1px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  cursor: pointer;
+}
+.zv-reiter-pfeil:hover {
+  background: var(--zv-surface-3);
+}
+.zv-reiter-pfeil-links {
+  left: 0;
+}
+.zv-reiter-pfeil-rechts {
+  right: 0;
 }
 
 .zv-reiter button {
@@ -1196,6 +1246,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: var(--zv-radius-s) var(--zv-radius-s) 0 0;
   color: var(--zv-text-sekundaer);
   font-family: var(--zv-font-ui);
   font-size: var(--zv-text-m);
@@ -1204,8 +1255,11 @@
   cursor: pointer;
 }
 
+/* Hover auf der ganzen Flaeche statt nur hellerer Schrift: man sieht vor
+   dem Klick, welche Flaeche man trifft. */
 .zv-reiter button:hover {
   color: var(--zv-text);
+  background: var(--zv-surface-2);
 }
 
 .zv-reiter button.active {
@@ -5764,102 +5818,165 @@ button[class],
   border: 0;
 }
 
+/* Die Akte ist ein Container: ob der Ueberblick ein- oder zweispaltig
+   steht, haengt an IHRER Breite, nicht an der des Fensters. Vorher fragte
+   .zv-ueberblick per @media die Fensterbreite ab -- auf einem 1780 px
+   breiten Bildschirm galt "breit", obwohl das Seitenpanel nur 720 px hat,
+   und zwei Spalten quetschten sich hinein (Rueckmeldung "Ansicht
+   Klienten"). */
+.zv-akte {
+  container: akte / inline-size;
+}
+
 .zv-akte-kopf {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--zv-space-3) var(--zv-space-5);
+  align-items: center;
+  gap: var(--zv-space-3);
   margin-bottom: var(--zv-space-4);
-}
-.zv-akte-haupt {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--zv-space-4);
-  min-width: 0;
-  flex: 1 1 420px;
 }
 .zv-initialen-kachel {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--zv-radius-m);
   background: var(--zv-accent-soft);
   color: var(--zv-accent-strong);
   font-family: var(--zv-font-ui);
-  font-size: var(--zv-text-xl);
+  font-size: var(--zv-text-l);
   font-weight: var(--zv-weight-bold);
   letter-spacing: 0.02em;
 }
 .zv-akte-titel {
+  flex: 1 1 auto;
   min-width: 0;
 }
 .zv-akte-titel h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
   margin: 0;
   font-size: var(--zv-text-titel);
   letter-spacing: var(--zv-laufweite-titel);
   line-height: 1.15;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.zv-akte-titel h2 .zv-pill {
+  font-size: var(--zv-text-xs);
+  letter-spacing: 0;
 }
 .zv-akte-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--zv-space-1) var(--zv-space-4);
   margin: var(--zv-space-1) 0 0;
   font-size: var(--zv-text-meta);
   color: var(--zv-text-muted);
 }
-/* Kein Trennzeichen zwischen den Angaben: ein Punkt am Zeilenanfang nach
-   dem Umbruch (Handy) liest sich wie ein Fehler; der Abstand genuegt. */
 .zv-akte-aktionen {
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--zv-space-2);
 }
-.zv-akte-pdfs {
-  flex-basis: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--zv-space-4);
+/* Nicht umkehrbar: im Menue als einzige Zeile in Gefahrfarbe. */
+.zv-aktionsmenue button.zv-menue-gefahr {
+  color: var(--zv-status-danger);
 }
 
+.zv-akte-umschalter {
+  margin-bottom: var(--zv-space-4);
+}
+
+/* Ueberblick: eine Spalte in fester Reihenfolge (Auf einen Blick,
+   Braucht Aufmerksamkeit, Zuletzt im Verlauf, Kontakte). Die beiden
+   Gruppen-Divs sind dabei display:contents, damit "order" ueber sie
+   hinweg greift; erst ab 1000 px Aktenbreite werden sie zu Spalten. */
 .zv-ueberblick {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--zv-space-6);
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .zv-ueberblick {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.zv-ueberblick-rand {
   display: flex;
   flex-direction: column;
   gap: var(--zv-space-6);
-  min-width: 0;
 }
-.zv-schnelleintrag {
+.zv-ueberblick-haupt,
+.zv-ueberblick-rand {
+  display: contents;
+}
+.zv-ueberblick-blick { order: 1; }
+.zv-ueberblick-achtung { order: 2; }
+.zv-ueberblick-verlauf { order: 3; }
+.zv-ueberblick-kontakte { order: 4; }
+
+@container akte (min-width: 1000px) {
+  .zv-ueberblick {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+    align-items: start;
+  }
+  .zv-ueberblick-haupt,
+  .zv-ueberblick-rand {
+    display: flex;
+    flex-direction: column;
+    gap: var(--zv-space-6);
+    min-width: 0;
+  }
+  .zv-ueberblick-rand .zv-kennwerte {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.zv-kennwerte {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zv-space-3) var(--zv-space-4);
+  margin: 0;
+}
+@container akte (max-width: 420px) {
+  .zv-kennwerte {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.zv-kennwerte dt {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+.zv-kennwerte dd {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-m);
+  overflow-wrap: anywhere;
+}
+
+.zv-achtung-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
+  flex-direction: column;
   gap: var(--zv-space-2);
-  align-items: flex-start;
-  margin-bottom: var(--zv-space-4);
 }
-.zv-schnelleintrag textarea {
-  flex: 1;
-  min-width: 0;
-  resize: vertical;
-  padding: var(--zv-space-2) var(--zv-space-3);
-  background: var(--zv-surface);
-  border: 1px solid var(--zv-border-strong);
+.zv-achtung-eintrag {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  width: 100%;
+  padding: var(--zv-space-3);
+  background: var(--zv-achtung-soft);
+  border: 1px solid var(--zv-border);
+  border-left: 3px solid var(--zv-achtung);
   border-radius: var(--zv-radius-m);
   color: var(--zv-text);
   font: inherit;
+  text-align: left;
 }
+button.zv-achtung-eintrag {
+  cursor: pointer;
+}
+button.zv-achtung-eintrag:hover {
+  border-color: var(--zv-border-strong);
+  border-left-color: var(--zv-achtung);
+}
+
 .zv-chronik {
   list-style: none;
   margin: 0;
@@ -5881,6 +5998,13 @@ button[class],
   flex-direction: column;
   min-width: 0;
 }
+.zv-chronik-titel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  font-weight: var(--zv-weight-medium);
+}
 .zv-chronik-inhalt {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -5898,13 +6022,15 @@ button[class],
   font-weight: 500;
 }
 .zv-laufzeit {
+  display: block;
   height: 6px;
   margin-top: var(--zv-space-2);
   border-radius: var(--zv-radius-pill);
   background: var(--zv-surface-3);
   overflow: hidden;
 }
-.zv-laufzeit > div {
+.zv-laufzeit > * {
+  display: block;
   height: 100%;
   background: var(--zv-accent);
 }
@@ -5912,6 +6038,288 @@ button[class],
   display: flex;
   flex-direction: column;
   grid-template-columns: none;
+}
+.zv-rand-liste.zv-ueberblick-liste li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* ==================================================================
+   Verlauf der Akte (pages/klient/VerlaufTab.tsx, NeuerEintrag.tsx)
+   Farbe je Art wie bei den Kalenderarten: die Klasse setzt nur Farbton
+   und Buntheit, die Helligkeit steht hier fest je Theme (CLAUDE.md,
+   Regel 7) -- dieselben Werte wie .zv-art-farbe, deren Kontrast gemessen
+   ist.
+   ================================================================== */
+.zv-verlauf-notiz { --zv-art-h: var(--zv-verlauf-notiz-h); --zv-art-c: var(--zv-verlauf-notiz-c); }
+.zv-verlauf-telefonat { --zv-art-h: var(--zv-verlauf-telefonat-h); --zv-art-c: var(--zv-verlauf-telefonat-c); }
+.zv-verlauf-gespraech { --zv-art-h: var(--zv-verlauf-gespraech-h); --zv-art-c: var(--zv-verlauf-gespraech-c); }
+.zv-verlauf-entscheidung { --zv-art-h: var(--zv-verlauf-entscheidung-h); --zv-art-c: var(--zv-verlauf-entscheidung-c); }
+.zv-verlauf-dokumentation { --zv-art-h: var(--zv-verlauf-dokumentation-h); --zv-art-c: var(--zv-verlauf-dokumentation-c); }
+.zv-verlauf-automatisch { --zv-art-h: var(--zv-verlauf-automatisch-h); --zv-art-c: var(--zv-verlauf-automatisch-c); }
+
+.zv-verlauf-punkt {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--zv-radius-pill);
+  background: light-dark(oklch(0.58 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)), oklch(0.82 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)));
+}
+
+.zv-verlauf-art {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+
+.zv-verlauf-werkzeug {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-3);
+}
+.zv-verlauf-werkzeug .zv-filterleiste {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.zv-verlauf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-verlauf-raster {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-5);
+}
+/* Wiedervorlagen im Panel oben (sie verlangen Handeln), im Vollbild rechts.
+   Ohne Wiedervorlage im Panel ganz weg: ein leerer Block ueber der Liste
+   schiebt nur die Eintraege nach unten. */
+.zv-verlauf-rand {
+  order: -1;
+}
+.zv-verlauf-rand-leer {
+  display: none;
+}
+@container akte (min-width: 1000px) {
+  .zv-verlauf-raster {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+    align-items: start;
+  }
+  .zv-verlauf-rand {
+    order: 0;
+  }
+  .zv-verlauf-rand-leer {
+    display: block;
+  }
+}
+.zv-verlauf-summe {
+  margin-top: var(--zv-space-3);
+}
+
+.zv-verlauf-tag + .zv-verlauf-tag {
+  margin-top: var(--zv-space-4);
+}
+.zv-verlauf-tagkopf {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text-sekundaer);
+}
+.zv-verlauf-tag ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-verlauf-zeile {
+  display: grid;
+  grid-template-columns: 44px 28px minmax(0, 1fr);
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-verlauf-zeit {
+  padding-top: 2px;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-verlauf-symbol {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--zv-radius-pill);
+  background: light-dark(oklch(0.84 var(--zv-art-c) var(--zv-art-h)), oklch(0.76 var(--zv-art-c) var(--zv-art-h)));
+  color: var(--zv-text-auf-personflaeche);
+}
+.zv-verlauf-symbol svg {
+  width: 15px;
+  height: 15px;
+}
+.zv-verlauf-inhalt {
+  min-width: 0;
+}
+.zv-verlauf-titel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  margin: 0;
+  font-weight: var(--zv-weight-medium);
+  overflow-wrap: anywhere;
+}
+.zv-verlauf-text {
+  margin: var(--zv-space-1) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.zv-verlauf-inhalt .zv-todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-3);
+  margin: var(--zv-space-1) 0 0;
+}
+/* Abgeleitete Ereignisse treten zurueck: Text gedaempft statt Deckkraft,
+   damit der gemessene Kontrast nicht von einer Transparenz abhaengt. */
+.zv-verlauf-auto .zv-verlauf-titel {
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-sekundaer);
+}
+.zv-verlauf-aenderung {
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+/* Fenster "Neuer Eintrag": vier Arten als grosse Kacheln (Handy) bzw. Zeile. */
+.zv-eintrag-arten {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-4);
+}
+@media (max-width: 480px) {
+  .zv-eintrag-arten {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.zv-eintrag-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-height: 64px;
+  padding: var(--zv-space-2);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+}
+.zv-eintrag-art svg {
+  color: light-dark(oklch(0.58 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)), oklch(0.82 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)));
+}
+.zv-eintrag-art:hover {
+  background: var(--zv-surface-2);
+}
+.zv-eintrag-art.active {
+  border-color: var(--zv-accent);
+  box-shadow: inset 0 0 0 1px var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+.zv-field .zv-field-label {
+  display: block;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+  margin-bottom: var(--zv-space-1);
+}
+.zv-eintrag-teilnehmende {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-2) 0 0;
+  padding: 0;
+}
+.zv-eintrag-teilnehmende li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  padding-left: var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-pill);
+}
+.zv-eintrag-aufgabe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+.zv-field input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Stammdaten: aufklappbare Gruppen; im Vollbild mit Sprungliste links. */
+.zv-stammdaten-gruppe > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+}
+.zv-stammdaten-gruppe > summary::-webkit-details-marker {
+  display: none;
+}
+.zv-stammdaten-gruppe > summary h3 {
+  margin: 0;
+  font-size: var(--zv-text-m);
+}
+.zv-stammdaten-gruppe > summary svg {
+  transition: transform var(--zv-transition-fast);
+}
+.zv-stammdaten-gruppe[open] > summary svg {
+  transform: rotate(180deg);
+}
+.zv-stammdaten-gruppe[open] > summary {
+  margin-bottom: var(--zv-space-2);
+}
+.zv-stammdaten-gruppe-kopf {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--zv-space-2);
+}
+.zv-stammdaten-sprung {
+  display: none;
+}
+@container akte (min-width: 1000px) {
+  .zv-stammdaten {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--zv-space-5);
+    align-items: start;
+  }
+  .zv-stammdaten-sprung {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--zv-space-2);
+  }
 }
 
 /* ==================================================================

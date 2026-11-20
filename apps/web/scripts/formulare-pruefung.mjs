@@ -150,7 +150,7 @@ await dialog.waitFor({ state: "detached" });
 pruefe(await page.locator(".zv-formular-kopf .zv-pill", { hasText: "Veröffentlicht" }).isVisible(), "Status jetzt Veröffentlicht");
 
 // ===== 3 Einstellungen: anheften =====
-await page.getByRole("navigation", { name: "Bereiche des Formulars" }).getByRole("button", { name: "Einstellungen" }).click();
+await page.getByRole("tablist", { name: "Bereiche des Formulars" }).getByRole("tab", { name: "Einstellungen" }).click();
 await page.getByText("Tagesbericht anlegen").click();
 await page.getByText(/Pflicht: speichern erst/).click();
 await page.getByRole("button", { name: "Einstellungen speichern" }).click();
@@ -166,7 +166,7 @@ pruefe((await ueberlauf(page)) <= 0, "1440 px: Formularliste ohne horizontalen �
 await bild(page, "5-liste");
 
 // ===== 4 Tagesbericht mit Pflichtformular =====
-await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Tagesberichte$/ }).click();
+await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Dokumentation$/ }).click();
 await page.getByRole("button", { name: "Neuer Tagesbericht" }).click();
 await dialog.waitFor();
 // Die Option nennt seit 0077 auch Standort und Zimmer ("Erika Beispiel · Haus …").

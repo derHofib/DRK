@@ -305,6 +305,20 @@
   --zv-art-besprechung-c: 0.1;
   --zv-art-termin-h: 0;
   --zv-art-termin-c: 0;
+  /* Arten im Verlauf der Akte (Migration 0078). Nur Farbton/Buntheit wie
+     bei den Kalenderarten; die Helligkeit setzt app.css fest je Theme. */
+  --zv-verlauf-notiz-h: 85;
+  --zv-verlauf-notiz-c: 0.12;
+  --zv-verlauf-telefonat-h: 235;
+  --zv-verlauf-telefonat-c: 0.11;
+  --zv-verlauf-gespraech-h: 195;
+  --zv-verlauf-gespraech-c: 0.1;
+  --zv-verlauf-entscheidung-h: 305;
+  --zv-verlauf-entscheidung-c: 0.13;
+  --zv-verlauf-dokumentation-h: 145;
+  --zv-verlauf-dokumentation-c: 0.13;
+  --zv-verlauf-automatisch-h: 270;
+  --zv-verlauf-automatisch-c: 0.02;
 
   /* ------------------------------------------------------------------
      Aufmerksamkeit -- Koralle, fest, nie dekorativ (siehe Kopf)

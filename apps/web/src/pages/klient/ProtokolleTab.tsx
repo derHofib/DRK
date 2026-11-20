@@ -167,7 +167,7 @@ export function ProtokolleTab({ klientId, archiviert }: { klientId: string; arch
 
 type Modus = "lesen" | "bearbeiten" | "korrigieren";
 
-function ProtokollDetail({ id, onZurueck }: { id: string; onZurueck: () => void }) {
+export function ProtokollDetail({ id, onZurueck }: { id: string; onZurueck: () => void }) {
   const [p, setP] = useState<ProtokollDto | null>(null);
   const [werte, setWerte] = useState<FeldWerte>({});
   const [modus, setModus] = useState<Modus>("lesen");

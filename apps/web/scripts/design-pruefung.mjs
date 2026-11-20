@@ -96,7 +96,7 @@ const SCHREIBE_SCREENSHOTS = process.env.SCREENSHOTS !== "0";
 const AUSGABE = "design-sources/screenshots";
 
 /** Untergrenze der zu messenden Paare -- siehe Schranke in main(). */
-const ERWARTETE_PAARE = 41 + 3 * 7 + 8 + 1 + 4 + 3;
+const ERWARTETE_PAARE = 41 + 3 * 7 + 8 + 1 + 4 + 3 + 6;
 
 /** Muss zu PASTELL_PALETTEN in packages/shared spiegeln. */
 const PALETTEN = [
@@ -306,6 +306,13 @@ async function messePaare(page) {
       pruefe("Aktiver Menuepunkt (accent-strong auf accent-soft)", q(".zv-pruef-nav-aktiv"), 4.5);
       pruefe("Gedaempft auf ausgewaehlter Zeile", q(".zv-pruef-auswahl-tg"), 4.5);
       pruefe("Text auf Hover-Zeile", q(".zv-pruef-hover-tg"), 4.5);
+      // Klientenakte (Ueberblick, Verlauf, Neuer Eintrag)
+      pruefe("Braucht Aufmerksamkeit: Titel", q(".zv-pruef-achtung-titel"), 4.5);
+      pruefe("Braucht Aufmerksamkeit: Metazeile", q(".zv-pruef-achtung-meta"), 4.5);
+      pruefe("Verlauf: Symbol Notiz (hellste Art)", q(".zv-pruef-verlauf-notiz"), 3);
+      pruefe("Verlauf: Symbol Entscheidung", q(".zv-pruef-verlauf-entscheidung"), 3);
+      pruefe("Verlauf: Artmarke auf Flaeche", q(".zv-pruef-verlauf-art"), 4.5);
+      pruefe("Neuer Eintrag: gewaehlte Art", q(".zv-pruef-eintrag-art"), 4.5);
       return ergebnisse;
     `
     )
@@ -409,6 +416,16 @@ ${["bg", "surface", "s2"].map((f) => `
   </div>
   <div style="background:var(--zv-surface-3)">
     <span class="zv-pruef-hover-tg" style="color:var(--zv-text-gedaempft)">Metazeile</span>
+  </div>
+  <div class="zv-achtung-eintrag">
+    <span class="zv-todo-titel zv-pruef-achtung-titel">Kostenübernahme endet bald</span>
+    <span class="zv-todo-meta zv-pruef-achtung-meta">Jugendamt · noch 12 Tage</span>
+  </div>
+  <div style="background:var(--zv-surface)">
+    <span class="zv-verlauf-symbol zv-verlauf-notiz zv-pruef-verlauf-notiz">N</span>
+    <span class="zv-verlauf-symbol zv-verlauf-entscheidung zv-pruef-verlauf-entscheidung">E</span>
+    <span class="zv-verlauf-art zv-pruef-verlauf-art">Telefonat</span>
+    <button class="zv-eintrag-art zv-verlauf-telefonat active zv-pruef-eintrag-art">Telefonat</button>
   </div>
 </div>`;
 
