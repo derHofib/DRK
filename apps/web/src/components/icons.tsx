@@ -179,6 +179,9 @@ export const IEinstellungen = baue(Settings);
 export const IAufgaben = baue(ListChecks);
 export const IOrganigramm = baue(Network);
 export const IVertretung = baue(UserRoundCheck);
+/* Standort-Steckbrief, Team-Karten: Bezugsbetreuung und Erreichbarkeit. */
+export const IBezugsbetreuung = baue(UserRoundCheck);
+export const IErreichbarkeit = baue(Clock);
 /** Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. */
 export const IMehr = baue(Menu);
 

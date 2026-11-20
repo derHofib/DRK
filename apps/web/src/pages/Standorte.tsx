@@ -26,9 +26,11 @@ import { StandortSteckbrief } from "./StandortSteckbrief";
 export function Standorte({
   oeffneStandortId,
   onOrganigramm,
+  onChatOeffnen,
 }: {
   oeffneStandortId?: string;
   onOrganigramm?: () => void;
+  onChatOeffnen?: (chatId: string) => void;
 }) {
   const [standorte, setStandorte] = useState<StandortListenEintragDto[] | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -73,11 +75,14 @@ export function Standorte({
   if (offenerStandort) {
     return (
       <StandortSteckbrief
+        key={offenerStandort}
         standortId={offenerStandort}
         zurueckLabel="Zurück zu Standorte"
         onZurueck={() => setOffenerStandort(null)}
         onGeaendert={laden}
         onOrganigramm={onOrganigramm}
+        onStandortOeffnen={setOffenerStandort}
+        onChatOeffnen={onChatOeffnen}
       />
     );
   }

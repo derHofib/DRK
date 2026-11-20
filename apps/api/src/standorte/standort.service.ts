@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type {
+  AbwesenheitArt,
   StandortAenderungDto,
   StandortAngabenDto,
   StandortAngebotsform,
@@ -8,6 +9,8 @@ import type {
   StandortLeitungDto,
   StandortListenEintragDto,
   StandortSteckbriefDto,
+  StandortTeamDto,
+  StandortTeamPersonDto,
 } from "@zimmerakte/shared";
 import { AuditService } from "../audit/audit.service";
 import { isoWoche } from "../common/iso-woche";
@@ -166,7 +169,7 @@ const PLAETZE_SQL = `
 // Einrichtungsknoten dieses Standorts haengt (0047, 0066).
 const TEAM_SQL = `
   WITH ou AS (SELECT id FROM org_unit WHERE standort_id = $1)
-  SELECT count(DISTINCT b.id) AS anzahl
+  SELECT DISTINCT b.id
   FROM benutzer b
   WHERE b.aktiv AND (
     EXISTS (SELECT 1 FROM benutzer_standort bs WHERE bs.benutzer_id = b.id AND bs.standort_id = $1)
@@ -183,6 +186,18 @@ const TEAM_SQL = `
     )
   )`;
 
+// Positionen, die an den Einrichtungsknoten der Standorte $1 haengen --
+// direkt oder ueber weitere_einheit. Gemeinsam fuer Leitung und unbesetzte
+// Leitungsstellen, damit beide dieselbe Vorstellung von "am Standort" haben.
+const ANKER_SQL = `
+  SELECT p.id AS position_id, ou.id AS unit_id, ou.standort_id
+  FROM org_position p JOIN org_unit ou ON ou.id = p.org_unit_id
+  WHERE ou.standort_id = ANY($1)
+  UNION
+  SELECT we.position_id, ou.id, ou.standort_id
+  FROM org_position_weitere_einheit we JOIN org_unit ou ON ou.id = we.org_unit_id
+  WHERE ou.standort_id = ANY($1)`;
+
 /**
  * Leitung wird aus dem Organigramm ABGELEITET, nie eingetragen (sonst zwei
  * Wahrheiten: Organigramm sagt A, Steckbrief sagt B). Leitung heisst: eine
@@ -197,15 +212,7 @@ async function leitungJeStandort(client: PoolClient, standortIds: string[]): Pro
   const ergebnis = new Map<string, StandortLeitungDto[]>();
   if (standortIds.length === 0) return ergebnis;
   const { rows } = await client.query(
-    `WITH anker AS (
-       SELECT p.id AS position_id, ou.id AS unit_id, ou.standort_id
-       FROM org_position p JOIN org_unit ou ON ou.id = p.org_unit_id
-       WHERE ou.standort_id = ANY($1)
-       UNION
-       SELECT we.position_id, ou.id, ou.standort_id
-       FROM org_position_weitere_einheit we JOIN org_unit ou ON ou.id = we.org_unit_id
-       WHERE ou.standort_id = ANY($1)
-     )
+    `WITH anker AS (${ANKER_SQL})
      SELECT DISTINCT ON (a.standort_id, b.id, p.id)
             a.standort_id, b.id AS benutzer_id, b.name, p.titel,
             (eltern.id IS NULL OR eltern.org_unit_id <> a.unit_id) AS ist_oben,
@@ -232,6 +239,169 @@ async function leitungJeStandort(client: PoolClient, standortIds: string[]): Pro
     ergebnis.set(r.standort_id, liste);
   }
   return ergebnis;
+}
+
+/**
+ * Unbesetzte Leitungsstellen: dieselben Positionen wie in leitungJeStandort,
+ * aber ohne heutige Besetzung durch ein aktives Konto. Bewusst NUR ueber den
+ * Titel (leitung/stellv), nicht ueber "steht am Knoten oben": oben am Knoten
+ * haengt oft auch eine offene Stelle wie "Hauswirtschaft", und die als
+ * fehlende Leitung zu melden, waere ein Fehlalarm im Steckbrief.
+ */
+async function unbesetzteLeitungLesen(client: PoolClient, standortId: string): Promise<string[]> {
+  const { rows } = await client.query<{ titel: string }>(
+    `WITH anker AS (${ANKER_SQL})
+     SELECT DISTINCT p.id, p.titel, p.reihenfolge
+     FROM anker a
+     JOIN org_position p ON p.id = a.position_id
+     WHERE p.aktiv AND p.typ = 'linie' AND NOT p.ist_sammelrang AND NOT p.ist_geplant
+       AND p.titel ~* '(leitung|stellv)'
+       AND NOT EXISTS (
+         SELECT 1 FROM org_position_besetzung pb JOIN benutzer b ON b.id = pb.benutzer_id AND b.aktiv
+         WHERE pb.position_id = p.id
+           AND pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+       )
+     ORDER BY p.reihenfolge NULLS LAST, p.titel`,
+    [[standortId]]
+  );
+  return rows.map((r) => r.titel);
+}
+
+/**
+ * Leitung & Team als Personen (Konzept standort-team). Wer dazugehoert,
+ * entscheidet weiter TEAM_SQL plus die abgeleitete Leitung -- Zahl und
+ * Karten kommen aus derselben Menge und koennen nicht auseinanderlaufen.
+ *
+ * Bewusst NICHT dabei:
+ *  - "im Dienst": es gibt keinen Dienstplan. Die App weiss nur, wer
+ *    abwesend ist; "nicht abwesend" als "im Dienst" auszugeben, waere eine
+ *    erfundene Aussage.
+ *  - die Vertretung (delegation): sie sehen heute nur die beiden
+ *    Beteiligten (DelegationService.meineDelegationen). Der Steckbrief
+ *    soll niemandem mehr zeigen, als er anderswo schon sieht.
+ *
+ * Der Grund einer Abwesenheit wird wie im Kalender beim Lesen ausgeblendet
+ * (CLAUDE.md Regel 6): nur fuer die Person selbst und abwesenheiten.art-sehen.
+ */
+async function teamLesen(
+  client: PoolClient,
+  standortId: string,
+  leitung: StandortLeitungDto[],
+  sicht: { benutzerId: string; artSehen: boolean; erlaubteStandorte: string[] | null }
+): Promise<StandortTeamDto> {
+  const { rows: teamRows } = await client.query<{ id: string }>(TEAM_SQL, [standortId]);
+  const leitungIds = leitung.map((l) => l.benutzerId);
+  const ids = [...new Set([...leitungIds, ...teamRows.map((r) => r.id)])];
+  const unbesetzteLeitung = await unbesetzteLeitungLesen(client, standortId);
+  if (ids.length === 0) return { anzahl: 0, personen: [], unbesetzteLeitung };
+
+  const { rows } = await client.query<{
+    id: string;
+    name: string;
+    farb_index: string;
+    position_titel: string | null;
+    abwesenheit: { bis: string; art: AbwesenheitArt } | null;
+    bezug: string;
+    telefon: string | null;
+    erreichbarkeit: string | null;
+    bevorzugte_kontaktart: StandortTeamPersonDto["bevorzugteKontaktart"];
+  }>(
+    // farb_index wie in BenutzerService.findeAlleImEigenenMandanten: Position
+    // in der Anlagereihenfolge ALLER Konten, damit die Farbe hier dieselbe ist
+    // wie im Kalender.
+    `WITH farbe AS (
+       SELECT id, (row_number() OVER (ORDER BY erstellt_am, id) - 1) AS farb_index FROM benutzer
+     ),
+     ou AS (SELECT id FROM org_unit WHERE standort_id = $1)
+     SELECT b.id, b.name, f.farb_index,
+            (SELECT p.titel
+             FROM org_position_besetzung pb
+             JOIN org_position p ON p.id = pb.position_id AND p.aktiv AND p.typ = 'linie'
+             WHERE pb.benutzer_id = b.id
+               AND pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+             ORDER BY (p.org_unit_id IN (SELECT id FROM ou)) DESC, p.ist_sammelrang, p.reihenfolge NULLS LAST, p.titel
+             LIMIT 1) AS position_titel,
+            (SELECT json_build_object('bis', a.bis, 'art', a.art)
+             FROM abwesenheit a
+             WHERE a.benutzer_id = b.id AND a.storniert_am IS NULL
+               AND a.von <= CURRENT_DATE AND a.bis >= CURRENT_DATE
+             ORDER BY a.bis DESC LIMIT 1) AS abwesenheit,
+            (SELECT count(DISTINCT k.id)
+             FROM klient_stammdaten ks
+             JOIN klient k ON k.id = ks.klient_id
+             JOIN belegung be ON be.klient_id = k.id
+             JOIN zimmer z ON z.id = be.zimmer_id
+             WHERE ks.bezugsbetreuer_id = b.id AND z.standort_id = $1 AND k.archiviert_am IS NULL
+               AND be.einzug <= CURRENT_DATE AND (be.auszug IS NULL OR be.auszug > CURRENT_DATE)) AS bezug,
+            mp.telefon, mp.erreichbarkeit, mp.bevorzugte_kontaktart
+     FROM benutzer b
+     JOIN farbe f ON f.id = b.id
+     LEFT JOIN mitarbeiter_profil mp ON mp.benutzer_id = b.id
+     WHERE b.id = ANY($2)`,
+    [standortId, ids]
+  );
+
+  // Andere Standorte: dieselben zwei Wege wie TEAM_SQL (Zuordnung oder
+  // Besetzung an einem Einrichtungsknoten), nur ohne diesen Standort.
+  const { rows: weitere } = await client.query<{ benutzer_id: string; id: string; name: string }>(
+    `SELECT DISTINCT x.benutzer_id, s.id, s.name
+     FROM (
+       SELECT bs.benutzer_id, bs.standort_id FROM benutzer_standort bs WHERE bs.benutzer_id = ANY($2)
+       UNION
+       SELECT pb.benutzer_id, u.standort_id
+       FROM org_position_besetzung pb
+       JOIN org_position p ON p.id = pb.position_id AND p.aktiv AND p.typ = 'linie'
+       CROSS JOIN LATERAL (
+         SELECT p.org_unit_id AS id WHERE NOT p.ist_sammelrang
+         UNION
+         SELECT w.org_unit_id FROM org_position_weitere_einheit w WHERE w.position_id = p.id
+         UNION
+         SELECT e.org_unit_id FROM org_position_besetzung_einheit e WHERE e.besetzung_id = pb.id
+       ) e
+       JOIN org_unit u ON u.id = e.id AND u.standort_id IS NOT NULL
+       WHERE pb.benutzer_id = ANY($2)
+         AND pb.gueltig_ab <= CURRENT_DATE AND (pb.gueltig_bis IS NULL OR pb.gueltig_bis >= CURRENT_DATE)
+     ) x
+     JOIN standort s ON s.id = x.standort_id AND s.aktiv
+     WHERE x.standort_id <> $1
+     ORDER BY s.name`,
+    [standortId, ids]
+  );
+  const weitereJePerson = new Map<string, { id: string; name: string }[]>();
+  for (const w of weitere) {
+    if (sicht.erlaubteStandorte && !sicht.erlaubteStandorte.includes(w.id)) continue;
+    const liste = weitereJePerson.get(w.benutzer_id) ?? [];
+    liste.push({ id: w.id, name: w.name });
+    weitereJePerson.set(w.benutzer_id, liste);
+  }
+
+  const leitungTitel = new Map<string, string>();
+  for (const l of leitung) if (!leitungTitel.has(l.benutzerId)) leitungTitel.set(l.benutzerId, l.positionTitel);
+  const personen: StandortTeamPersonDto[] = rows.map((r) => {
+    const grundSichtbar = r.id === sicht.benutzerId || sicht.artSehen;
+    return {
+      benutzerId: r.id,
+      name: r.name,
+      farbIndex: Number(r.farb_index),
+      positionTitel: leitungTitel.get(r.id) ?? r.position_titel,
+      istLeitung: leitungTitel.has(r.id),
+      abwesenheit: r.abwesenheit
+        ? { bis: r.abwesenheit.bis, art: grundSichtbar ? r.abwesenheit.art : null }
+        : null,
+      bezugKlienten: Number(r.bezug),
+      telefon: r.telefon,
+      erreichbarkeit: r.erreichbarkeit,
+      bevorzugteKontaktart: r.bevorzugte_kontaktart,
+      weitereStandorte: weitereJePerson.get(r.id) ?? [],
+    };
+  });
+  const leitungRang = new Map(leitungIds.map((id, i) => [id, i]));
+  personen.sort(
+    (a, b) =>
+      (leitungRang.get(a.benutzerId) ?? Infinity) - (leitungRang.get(b.benutzerId) ?? Infinity) ||
+      a.name.localeCompare(b.name, "de")
+  );
+  return { anzahl: personen.length, personen, unbesetzteLeitung };
 }
 
 @Injectable()
@@ -416,6 +586,7 @@ export class StandortService {
     const { benutzerId } = requireTenantContext();
     const darfBearbeiten = await this.rechte.hatRecht("standorte", "bearbeiten");
     const darfVereinbarungen = await this.rechte.hatRecht("standorte", "vereinbarungen");
+    const artSehen = await this.rechte.hatRecht("abwesenheiten", "art-sehen");
     return this.db.withTenant(async (client) => {
       if (!(await standortIstErlaubt(client, benutzerId, id))) {
         throw new NotFoundException("Standort nicht gefunden.");
@@ -429,7 +600,8 @@ export class StandortService {
       );
       const r = rows[0];
       const leitung = await leitungJeStandort(client, [id]);
-      const { rows: teamRows } = await client.query(TEAM_SQL, [id]);
+      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
+      const team = await teamLesen(client, id, leitung.get(id) ?? [], { benutzerId, artSehen, erlaubteStandorte });
       const eingerichtet = Number(r.plaetze_eingerichtet);
       const belegt = Number(r.plaetze_belegt);
       const steckbrief: StandortSteckbriefDto = {
@@ -441,7 +613,7 @@ export class StandortService {
         orgUnitId: r.org_unit_id,
         plaetze: { eingerichtet, belegt, frei: Math.max(0, eingerichtet - belegt), zimmer: Number(r.zimmer_anzahl) },
         leitung: leitung.get(id) ?? [],
-        team: { anzahl: Number(teamRows[0].anzahl) },
+        team,
         fehlendeAngaben: fehlendeAngaben(r),
         kontakte: await kontakteLesen(client, id),
         genehmigtePlaetze: await genehmigtePlaetzeLesen(client, id),

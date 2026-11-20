@@ -79,9 +79,12 @@ const schluessel = (art: Objektart, id: string) => `${art}:${id}`;
 export function StandortRaeume({
   standortIds,
   onStandorteWaehlen,
+  onChatOeffnen,
 }: {
   standortIds: string[];
   onStandorteWaehlen: (ids: string[]) => void;
+  /** Nachricht aus den Team-Karten des Steckbriefs. */
+  onChatOeffnen?: (chatId: string) => void;
 }) {
   const [standorte, setStandorte] = useState<StandortDto[] | null>(null);
   // Steckbrief zum Nachschlagen (Bereitschaft, Buero, Anschrift, Leitung):
@@ -221,7 +224,14 @@ export function StandortRaeume({
   }
 
   if (steckbriefId) {
-    return <StandortSteckbrief standortId={steckbriefId} zurueckLabel="Belegung" onZurueck={() => setSteckbriefId(null)} />;
+    return <StandortSteckbrief
+        key={steckbriefId}
+        standortId={steckbriefId}
+        zurueckLabel="Belegung"
+        onZurueck={() => setSteckbriefId(null)}
+        onStandortOeffnen={setSteckbriefId}
+        onChatOeffnen={onChatOeffnen}
+      />;
   }
 
   return (
