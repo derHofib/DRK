@@ -380,6 +380,114 @@ export interface StandortSteckbriefDto {
   leitung: StandortLeitungDto[];
   team: { anzahl: number };
   fehlendeAngaben: StandortFehlendeAngabe[];
+  /** Kontakte vor Ort -- fuer alle, die den Standort sehen (Phase 2). */
+  kontakte: StandortKontaktDto[];
+  /**
+   * Genehmigte Plaetze: die kleinste Zahl unter den heute gueltigen
+   * Vereinbarungen (die engste Grenze bindet). Fuer alle sichtbar -- die
+   * Zahl allein verraet keine Verguetung. null = keine Vereinbarung mit Plaetzen.
+   */
+  genehmigtePlaetze: number | null;
+  /** true = Konto hat standorte.vereinbarungen. */
+  darfVereinbarungen: boolean;
+  /** Nur mit standorte.vereinbarungen; ohne das Recht fehlt das Feld ganz. */
+  vereinbarungen?: StandortVereinbarungDto[];
+}
+
+export type StandortKontaktRolle =
+  | "vermieter"
+  | "hausmeister"
+  | "notdienst"
+  | "krisendienst"
+  | "hausarzt"
+  | "apotheke"
+  | "polizei"
+  | "sonstiges";
+/** Reihenfolge = Anzeigereihenfolge im Steckbrief. */
+export const STANDORT_KONTAKT_ROLLE_LABEL: Record<StandortKontaktRolle, string> = {
+  notdienst: "Notdienst",
+  krisendienst: "Krisendienst",
+  polizei: "Polizei",
+  vermieter: "Vermieter / Hausverwaltung",
+  hausmeister: "Hausmeister",
+  hausarzt: "Hausarztpraxis",
+  apotheke: "Apotheke",
+  sonstiges: "Sonstiges",
+};
+/** Rollen, die in der mobilen Ansicht unter "Im Notfall" stehen. */
+export const STANDORT_KONTAKT_NOTFALL_ROLLEN: readonly StandortKontaktRolle[] = ["notdienst", "krisendienst", "polizei"];
+
+export interface StandortKontaktDto {
+  id: string;
+  rolle: StandortKontaktRolle;
+  name: string;
+  telefon: string | null;
+  email: string | null;
+  hinweis: string | null;
+}
+
+export interface StandortKontaktEingabe {
+  rolle: StandortKontaktRolle;
+  name: string;
+  telefon?: string | null;
+  email?: string | null;
+  hinweis?: string | null;
+}
+
+export type StandortVereinbarungArt = "leistungsvereinbarung" | "verguetungsvereinbarung" | "betriebserlaubnis" | "sonstige";
+export const STANDORT_VEREINBARUNG_ART_LABEL: Record<StandortVereinbarungArt, string> = {
+  leistungsvereinbarung: "Leistungsvereinbarung",
+  verguetungsvereinbarung: "Vergütungsvereinbarung",
+  betriebserlaubnis: "Betriebserlaubnis / Heimaufsicht",
+  sonstige: "Sonstige Vereinbarung",
+};
+
+/** Abgeleitet aus Laufzeit, Storno und Folgevereinbarung -- nie gespeichert. */
+export type StandortVereinbarungStatus = "kuenftig" | "gueltig" | "endet_bald" | "verlaengert" | "abgelaufen" | "storniert";
+export const STANDORT_VEREINBARUNG_STATUS_LABEL: Record<StandortVereinbarungStatus, string> = {
+  kuenftig: "Künftig",
+  gueltig: "Gültig",
+  endet_bald: "Endet bald",
+  verlaengert: "Verlängert",
+  abgelaufen: "Abgelaufen",
+  storniert: "Storniert",
+};
+
+export interface StandortVereinbarungDto {
+  id: string;
+  art: StandortVereinbarungArt;
+  partner: string;
+  kennung: string | null;
+  gueltigVon: string;
+  gueltigBis: string | null;
+  plaetze: number | null;
+  verguetungTagCent: number | null;
+  bemerkung: string | null;
+  erstelltAm: string;
+  erstelltVonName: string | null;
+  storniertAm: string | null;
+  stornoGrund: string | null;
+  status: StandortVereinbarungStatus;
+  /** Tage bis zum Ende, nur bei status "endet_bald". */
+  endetInTagen: number | null;
+}
+
+export interface StandortVereinbarungEingabe {
+  art: StandortVereinbarungArt;
+  partner: string;
+  kennung?: string | null;
+  gueltigVon: string;
+  gueltigBis?: string | null;
+  plaetze?: number | null;
+  verguetungTagCent?: number | null;
+  bemerkung?: string | null;
+}
+
+/** Nur diese drei Felder sind nachtraeglich korrigierbar (Migration 0081). */
+export interface StandortVereinbarungAenderung {
+  gueltigBis?: string | null;
+  kennung?: string | null;
+  bemerkung?: string | null;
 }
 
 export interface StandortUebersichtDto {

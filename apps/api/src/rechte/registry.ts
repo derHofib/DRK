@@ -136,6 +136,10 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "standorte", aktion: "ansehen" },
   { modul: "standorte", aktion: "anlegen" },
   { modul: "standorte", aktion: "bearbeiten" },
+  // Vereinbarungen mit Kostentraegern inkl. Verguetungssaetzen (0081):
+  // eigenes Recht, weil eine Einrichtungsleitung den Steckbrief pflegt,
+  // aber nicht zwingend die Verguetung sehen soll.
+  { modul: "standorte", aktion: "vereinbarungen" },
 
   // Heutiges ROLLEN_MIT_STATUSWECHSEL (rechnung.service.ts).
   { modul: "rechnungen", aktion: "ansehen" },

@@ -9178,6 +9178,56 @@ button.zv-achtung-eintrag:hover {
   text-decoration: none;
 }
 
+/* Phase 2: Kontakte vor Ort stehen unter Leitung & Team -- schmal wie
+   breit (order 4 = gleich wie Leitung, DOM-Reihenfolge entscheidet). */
+.zv-steckbrief-kontakte-kurz { order: 4; }
+@container akte (min-width: 1000px) {
+  .zv-steckbrief-ueberblick .zv-steckbrief-kontakte-kurz {
+    order: 2;
+  }
+}
+.zv-steckbrief-kontakte-kurz .zv-sub {
+  margin: 0;
+}
+.zv-steckbrief-anhang-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+}
+.zv-steckbrief-anhang-kopf .zv-sub {
+  margin: 0;
+  flex: 1 1 280px;
+}
+/* Rolle bzw. Art klein ueber dem Namen: die Liste wird nach Rolle gelesen
+   ("wer ist der Hausmeister?"), der Name ist trotzdem das Wichtigste. */
+.zv-steckbrief-kontakt-rolle,
+.zv-steckbrief-vereinbarung-meta {
+  display: block;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+}
+.zv-steckbrief-vereinbarung-meta {
+  font-weight: normal;
+  margin-top: 2px;
+}
+.zv-steckbrief-anhang .zv-liste-zelle {
+  overflow-wrap: anywhere;
+}
+.zv-steckbrief-anhang .zv-liste-zelle a {
+  color: var(--zv-accent-strong);
+}
+/* Storniert bleibt als Nachweis sichtbar, tritt aber zurueck. */
+.zv-vereinbarung-storniert .zv-liste-zelle-titel {
+  color: var(--zv-text-muted);
+  font-weight: var(--zv-weight-medium);
+}
+.zv-steckbrief-fruehere {
+  margin-top: var(--zv-space-3);
+}
+
 /* ==================================================================
    Stunden aus dem Kalender (migrations/0080)
    ================================================================== */
