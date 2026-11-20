@@ -551,22 +551,24 @@ interface EingabeProps {
 export function Datumseingabe(p: EingabeProps) {
   const eigeneId = useId();
   const id = p.id ?? `datum-${eigeneId}`;
-  const [text, setText] = useState(p.wert ? formatDatum(p.wert) : "");
+  // Text und der Wert, zu dem er gehoert. Aendert sich `wert` von aussen
+  // (Kalender, Schnellwahl, Elternzustand), wird der Text NOCH IM SELBEN
+  // Rendern neu gesetzt -- beim eigenen Tippen nicht, sonst spraenge der
+  // Cursor. Bewusst kein useEffect: der laeuft erst nach dem Zeichnen, und
+  // eine schnelle Taste dazwischen (Alt+Pfeil direkt nach der Kalenderwahl)
+  // las noch den alten Text und schrieb ihn als Wert zurueck. Gefunden von
+  // datumsfeld-pruefung.mjs, nicht von Hand.
+  const [stand, setStand] = useState({ text: p.wert ? formatDatum(p.wert) : "", wert: p.wert });
   const [fehler, setFehler] = useState<string | null>(null);
+  if (stand.wert !== p.wert) {
+    setStand({ text: p.wert ? formatDatum(p.wert) : "", wert: p.wert });
+    setFehler(null);
+  }
+  const text = stand.wert === p.wert ? stand.text : p.wert ? formatDatum(p.wert) : "";
+  const setText = (t: string) => setStand((s) => ({ ...s, text: t }));
   const eigeneEingabe = useRef<HTMLInputElement>(null);
   const eingabe = p.eingabeRef ?? eigeneEingabe;
   const versteckt = useRef<HTMLInputElement>(null);
-  // Zuletzt selbst gemeldeter Wert: aendert sich `wert` von aussen
-  // (Kalender, Schnellwahl, Elternzustand), wird der Text neu gesetzt --
-  // beim eigenen Tippen nicht, sonst spraenge der Cursor.
-  const gemeldet = useRef(p.wert);
-
-  useEffect(() => {
-    if (p.wert === gemeldet.current) return;
-    gemeldet.current = p.wert;
-    setText(p.wert ? formatDatum(p.wert) : "");
-    setFehler(null);
-  }, [p.wert]);
 
   // Formularpruefung des Browsers: ein ungueltiger Text blockiert das
   // Absenden mit derselben Meldung, die unter dem Feld steht.
@@ -576,8 +578,8 @@ export function Datumseingabe(p: EingabeProps) {
     eingabe.current?.setCustomValidity(meldung);
   }, [text, p.min, p.max, eingabe]);
 
-  function melden(iso: string) {
-    gemeldet.current = iso;
+  function melden(iso: string, neuerText?: string) {
+    setStand((s) => ({ text: neuerText ?? s.text, wert: iso }));
     // Sofort ins DOM: drueckt jemand Enter, liest das Formular FormData noch
     // im selben Ereignis -- vor Reacts naechstem Rendern.
     if (versteckt.current) versteckt.current.value = iso;
