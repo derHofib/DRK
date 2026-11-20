@@ -508,6 +508,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     protokollSprung?: ProtokollSprung;
     /** Organisatorisch > Standorte: gleich diesen Steckbrief oeffnen. */
     standortId?: string;
+    /** Nachrichten: gleich diesen Chat oeffnen (z. B. aus den Team-Karten des Steckbriefs). */
+    chatId?: string;
   }>({ nonce: 0 });
 
   const geheZu = useCallback((ziel: Tab, extra: Omit<typeof navZiel, "nonce"> = {}) => {
@@ -1052,7 +1054,11 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             <Leerzustand icon={ILeerStandorte}>Ihnen ist kein Standort zugeordnet.</Leerzustand>
           )}
           {tab === "standorte" && standorte.length > 0 && (
-            <StandortRaeume standortIds={belegungStandortIds} onStandorteWaehlen={setBelegungStandortIds} />
+            <StandortRaeume
+              standortIds={belegungStandortIds}
+              onStandorteWaehlen={setBelegungStandortIds}
+              onChatOeffnen={(chatId) => geheZu("nachrichten", { chatId })}
+            />
           )}
           {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} oeffneProtokoll={navZiel.protokollSprung} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
@@ -1063,7 +1069,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
               <Dokumentation key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />
             </ProtokollSprungKontext.Provider>
           )}
-          {tab === "nachrichten" && <Nachrichten />}
+          {tab === "nachrichten" && <Nachrichten key={navZiel.nonce} startChatId={navZiel.chatId} />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
           {tab === "mitarbeitende" && <Mitarbeitende />}
@@ -1072,7 +1078,12 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "formulare" && <Formulare />}
           {tab === "standorte-verwalten" && (
             <OrganisatorischSeite eintrag="standorte-verwalten">
-              <Standorte key={navZiel.nonce} oeffneStandortId={navZiel.standortId} onOrganigramm={() => geheZu("organigramm")} />
+              <Standorte
+                key={navZiel.nonce}
+                oeffneStandortId={navZiel.standortId}
+                onOrganigramm={() => geheZu("organigramm")}
+                onChatOeffnen={(chatId) => geheZu("nachrichten", { chatId })}
+              />
             </OrganisatorischSeite>
           )}
           {tab === "buchungstypen" && (

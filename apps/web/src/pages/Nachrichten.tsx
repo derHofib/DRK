@@ -21,12 +21,13 @@ function nachAktivitaet(liste: ChatDto[]): ChatDto[] {
  * "Neuer Chat" (sie fragen Gespraeche an, siehe AnfrageDialog) und mit
  * ihren eigenen Anfragen statt der Annahme-Liste der Mitarbeitenden.
  */
-export function Nachrichten({ klient = false }: { klient?: boolean }) {
+export function Nachrichten({ klient = false, startChatId }: { klient?: boolean; startChatId?: string }) {
   const { abonnieren } = useChatEreignisse();
   const [chats, setChats] = useState<ChatDto[]>([]);
   const [geladen, setGeladen] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [aktivId, setAktivId] = useState<string | null>(null);
+  // Sprung von woanders her (Team-Karte im Steckbrief): diesen Chat gleich zeigen.
+  const [aktivId, setAktivId] = useState<string | null>(startChatId ?? null);
   const [neuerChatOffen, setNeuerChatOffen] = useState(false);
   const [gruppeOffen, setGruppeOffen] = useState(false);
   const [anfragen, setAnfragen] = useState<ChatAnfrageDto[]>([]);

@@ -405,6 +405,45 @@ export interface StandortLeitungDto {
   positionTitel: string;
 }
 
+/**
+ * Eine Person im Abschnitt "Leitung & Team" des Steckbriefs (Rueckmeldung
+ * "Standorte Mitarbeiter", Konzept standort-team). Alles abgeleitet aus
+ * Organigramm, Profil, Abwesenheiten und Belegung -- nichts davon wird
+ * fuer den Steckbrief eigens eingetragen.
+ */
+export interface StandortTeamPersonDto {
+  benutzerId: string;
+  name: string;
+  /** Wie BenutzerListEintragDto.farbIndex: dieselbe Personenfarbe wie im Kalender. */
+  farbIndex: number;
+  /** Titel der heutigen Position, bevorzugt die an diesem Standort; null = keine Position. */
+  positionTitel: string | null;
+  istLeitung: boolean;
+  /**
+   * Heute laufende Abwesenheit, null = nicht abwesend. art ist null, wenn
+   * die betrachtende Person den Grund nicht sehen darf (nur die Person
+   * selbst und abwesenheiten.art-sehen, wie im Kalender).
+   */
+  abwesenheit: { bis: string; art: AbwesenheitArt | null } | null;
+  /** Klient:innen mit laufender Belegung an DIESEM Standort, deren Bezugsbetreuung die Person ist. */
+  bezugKlienten: number;
+  /** Aus dem eigenen Profil (Mitarbeitende sehen Profile untereinander ohnehin, Migration 0058). */
+  telefon: string | null;
+  erreichbarkeit: string | null;
+  bevorzugteKontaktart: KontaktArt | null;
+  /** Andere aktive Standorte der Person, nur solche, die die betrachtende Person sehen darf. */
+  weitereStandorte: { id: string; name: string }[];
+}
+
+export interface StandortTeamDto {
+  /** Alle Personen (Leitung und Team); entspricht personen.length. */
+  anzahl: number;
+  /** Leitung zuerst (in Organigramm-Reihenfolge), dann alphabetisch. */
+  personen: StandortTeamPersonDto[];
+  /** Titel von Leitungspositionen am Standort ohne heutige Besetzung. */
+  unbesetzteLeitung: string[];
+}
+
 /** Was fehlt, damit der Steckbrief im Alltag traegt (Konzept 4.1). */
 export type StandortFehlendeAngabe = "angebotsform" | "telefon" | "bereitschaft" | "anschrift";
 export const STANDORT_FEHLENDE_ANGABE_LABEL: Record<StandortFehlendeAngabe, string> = {
@@ -434,7 +473,7 @@ export interface StandortSteckbriefDto {
   orgUnitId: string | null;
   plaetze: { eingerichtet: number; belegt: number; frei: number; zimmer: number };
   leitung: StandortLeitungDto[];
-  team: { anzahl: number };
+  team: StandortTeamDto;
   fehlendeAngaben: StandortFehlendeAngabe[];
   /** Kontakte vor Ort -- fuer alle, die den Standort sehen (Phase 2). */
   kontakte: StandortKontaktDto[];
