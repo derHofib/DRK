@@ -92,6 +92,10 @@ import type {
   SucheErgebnisDto,
   SucheGruppe,
   ZimmerListEintragDto,
+  StandortAenderungDto,
+  StandortAngebotsform,
+  StandortListenEintragDto,
+  StandortSteckbriefDto,
 } from "@zimmerakte/shared";
 
 const TOKEN_KEY = "zimmerakte_token";
@@ -564,15 +568,22 @@ export const api = {
       throw new Error(body.message ?? `Upload fehlgeschlagen (${res.status})`);
     }
   },
-  standortAnlegen: (payload: { name: string; adresse: string }) =>
-    request<StandortDto>("/standorte", { method: "POST", body: JSON.stringify(payload) }),
-  standortAktualisieren: (id: string, payload: { name?: string; adresse?: string; aktiv?: boolean }) =>
+  standortAnlegen: (payload: {
+    name: string;
+    angebotsform?: StandortAngebotsform | null;
+    strasse: string;
+    plz?: string | null;
+    ort?: string | null;
+  }) => request<StandortDto>("/standorte", { method: "POST", body: JSON.stringify(payload) }),
+  standortAktualisieren: (id: string, payload: StandortAenderungDto) =>
     request<StandortDto>(`/standorte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  standorteVerwaltung: () => request<StandortListenEintragDto[]>("/standorte/verwaltung"),
+  standortSteckbrief: (id: string) => request<StandortSteckbriefDto>(`/standorte/${id}/steckbrief`),
 
   zimmerListe: () => request<ZimmerListEintragDto[]>("/zimmer"),
-  zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string; kapazitaet?: number }) =>
+  zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string; kapazitaet?: number; anschrift?: string | null }) =>
     request<ZimmerListEintragDto>("/zimmer", { method: "POST", body: JSON.stringify(payload) }),
-  zimmerAktualisieren: (id: string, payload: { nummer: string; etage?: string }) =>
+  zimmerAktualisieren: (id: string, payload: { nummer: string; etage?: string; anschrift?: string | null }) =>
     request<ZimmerListEintragDto>(`/zimmer/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   zimmerDeaktivieren: (id: string) => request<ZimmerListEintragDto>(`/zimmer/${id}/deaktivieren`, { method: "PATCH" }),
   zimmerKapazitaetAendern: (id: string, neueKapazitaet: number) =>

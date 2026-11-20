@@ -13,11 +13,15 @@ const anlegenSchema = z.object({
   nummer: z.string().min(1),
   etage: z.string().min(1).optional(),
   kapazitaet: kapazitaetSchema.optional(),
+  anschrift: z.string().max(300).nullable().optional(),
 });
 
+// anschrift: eigene Wohnanschrift (Einzelwohnen, Migration 0079). Weglassen
+// = unveraendert, leer oder null = es gilt wieder die Anschrift des Standorts.
 const aktualisierenSchema = z.object({
   nummer: z.string().min(1),
   etage: z.string().min(1).optional(),
+  anschrift: z.string().max(300).nullable().optional(),
 });
 
 const kapazitaetAendernSchema = z.object({

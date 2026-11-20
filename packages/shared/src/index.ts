@@ -250,8 +250,130 @@ export interface BenutzerListEintragDto {
 export interface StandortDto {
   id: string;
   name: string;
+  /** Abgeleitet aus strasse, plz und ort (Migration 0079), nicht direkt aenderbar. */
   adresse: string;
   aktiv: boolean;
+  angebotsform: StandortAngebotsform | null;
+}
+
+// --- Standort-Steckbrief (Migration 0079, Konzept standort-daten) ----------
+
+/** Feste Auswahl (von Dennis bestaetigt): neue Werte kommen per Migration. */
+export type StandortAngebotsform =
+  | "besondere_wohnform"
+  | "ambulant_wg"
+  | "einzelwohnen"
+  | "jugendhilfe_34"
+  | "hilfe_67"
+  | "sonstiges";
+
+export const STANDORT_ANGEBOTSFORM_LABEL: Record<StandortAngebotsform, string> = {
+  besondere_wohnform: "Besondere Wohnform",
+  ambulant_wg: "Ambulant betreute Wohngemeinschaft",
+  einzelwohnen: "Ambulant betreutes Einzelwohnen",
+  jugendhilfe_34: "Jugendhilfe",
+  hilfe_67: "Hilfe in besonderen Lebenslagen",
+  sonstiges: "Sonstiges",
+};
+
+/** Rechtsgrundlage zur Angebotsform; "Sonstiges" hat keine. */
+export const STANDORT_ANGEBOTSFORM_RECHTSGRUNDLAGE: Record<StandortAngebotsform, string | null> = {
+  besondere_wohnform: "SGB IX",
+  ambulant_wg: "SGB IX",
+  einzelwohnen: "SGB IX",
+  jugendhilfe_34: "§ 34 SGB VIII",
+  hilfe_67: "§ 67 SGB XII",
+  sonstiges: null,
+};
+
+export type StandortBetreuungsumfang = "rund_um_die_uhr" | "tagsueber" | "stundenweise";
+export const STANDORT_BETREUUNGSUMFANG_LABEL: Record<StandortBetreuungsumfang, string> = {
+  rund_um_die_uhr: "rund um die Uhr",
+  tagsueber: "tagsüber mit Rufbereitschaft",
+  stundenweise: "stundenweise (ambulant)",
+};
+
+export type StandortBarrierefreiheit = "barrierefrei" | "teilweise" | "nicht";
+export const STANDORT_BARRIEREFREIHEIT_LABEL: Record<StandortBarrierefreiheit, string> = {
+  barrierefrei: "barrierefrei",
+  teilweise: "teilweise barrierefrei",
+  nicht: "nicht barrierefrei",
+};
+
+/**
+ * Die pflegbaren Angaben. Kostenstelle und IK-Nummer FEHLEN im JSON (nicht
+ * null), wenn das Konto standorte.bearbeiten nicht hat -- durchgesetzt im
+ * Service, nicht in der Oberflaeche.
+ */
+export interface StandortAngabenDto {
+  name: string;
+  angebotsform: StandortAngebotsform | null;
+  zielgruppe: string | null;
+  betreuungsumfang: StandortBetreuungsumfang | null;
+  inBetriebSeit: string | null;
+  strasse: string;
+  plz: string | null;
+  ort: string | null;
+  telefon: string | null;
+  fax: string | null;
+  email: string | null;
+  buerozeiten: string | null;
+  bereitschaftTelefon: string | null;
+  bereitschaftHinweis: string | null;
+  barrierefreiheit: StandortBarrierefreiheit | null;
+  barrierefreiheitHinweis: string | null;
+  oepnv: string | null;
+  zugang: string | null;
+  kostenstelle?: string | null;
+  ikNummer?: string | null;
+  hinweise: string | null;
+}
+
+/** Fuer PATCH /standorte/:id: jedes Feld optional, "" bzw. null leert es. */
+export type StandortAenderungDto = Partial<Omit<StandortAngabenDto, "strasse" | "name">> & {
+  name?: string;
+  strasse?: string;
+  aktiv?: boolean;
+};
+
+export interface StandortLeitungDto {
+  benutzerId: string;
+  name: string;
+  /** Titel der Position im Organigramm, z. B. "Einrichtungsleitung". */
+  positionTitel: string;
+}
+
+/** Was fehlt, damit der Steckbrief im Alltag traegt (Konzept 4.1). */
+export type StandortFehlendeAngabe = "angebotsform" | "telefon" | "bereitschaft" | "anschrift";
+export const STANDORT_FEHLENDE_ANGABE_LABEL: Record<StandortFehlendeAngabe, string> = {
+  angebotsform: "Angebotsform",
+  telefon: "Telefon",
+  bereitschaft: "Bereitschaftsnummer",
+  anschrift: "PLZ und Ort",
+};
+
+/** Eine Zeile der Standortliste unter Organisatorisch, alles Abgeleitete schon gerechnet. */
+export interface StandortListenEintragDto extends StandortDto {
+  telefon: string | null;
+  plaetzeEingerichtet: number;
+  plaetzeBelegt: number;
+  leitung: StandortLeitungDto[];
+  fehlendeAngaben: StandortFehlendeAngabe[];
+}
+
+export interface StandortSteckbriefDto {
+  id: string;
+  aktiv: boolean;
+  adresse: string;
+  angaben: StandortAngabenDto;
+  /** true = Konto hat standorte.bearbeiten (und der Standort ist erlaubt). */
+  darfBearbeiten: boolean;
+  /** Org-Einheit (Einrichtungsknoten) fuer den Sprung ins Organigramm. */
+  orgUnitId: string | null;
+  plaetze: { eingerichtet: number; belegt: number; frei: number; zimmer: number };
+  leitung: StandortLeitungDto[];
+  team: { anzahl: number };
+  fehlendeAngaben: StandortFehlendeAngabe[];
 }
 
 export interface StandortUebersichtDto {
@@ -370,6 +492,8 @@ export interface ZimmerListEintragDto {
   etage: string;
   standortId: string;
   standortName: string;
+  /** Eigene Wohnanschrift (Einzelwohnen, Migration 0079); null = Anschrift des Standorts. */
+  anschrift: string | null;
   kapazitaet: number;
   status: Zimmerstatus;
   bewohner: ZimmerBewohnerDto[];

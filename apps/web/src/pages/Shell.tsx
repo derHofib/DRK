@@ -496,6 +496,8 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     neueBuchung?: boolean;
     tagesberichtKlientId?: string;
     protokollSprung?: ProtokollSprung;
+    /** Organisatorisch > Standorte: gleich diesen Steckbrief oeffnen. */
+    standortId?: string;
   }>({ nonce: 0 });
 
   const geheZu = useCallback((ziel: Tab, extra: Omit<typeof navZiel, "nonce"> = {}) => {
@@ -1026,7 +1028,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "formulare" && <Formulare />}
           {tab === "standorte-verwalten" && (
             <OrganisatorischSeite eintrag="standorte-verwalten">
-              <Standorte />
+              <Standorte key={navZiel.nonce} oeffneStandortId={navZiel.standortId} onOrganigramm={() => geheZu("organigramm")} />
             </OrganisatorischSeite>
           )}
           {tab === "buchungstypen" && (

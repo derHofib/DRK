@@ -195,11 +195,22 @@ export function Zimmer({
       let zielStandortId = standortAuswahl;
       if (zielStandortId === NEUER_STANDORT) {
         const name = String(form.get("standortName") ?? "").trim();
-        const adresse = String(form.get("standortAdresse") ?? "").trim();
-        const neuerStandort = await api.standortAnlegen({ name, adresse });
+        const neuerStandort = await api.standortAnlegen({
+          name,
+          strasse: String(form.get("standortStrasse") ?? "").trim(),
+          plz: String(form.get("standortPlz") ?? "").trim() || null,
+          ort: String(form.get("standortOrt") ?? "").trim() || null,
+        });
         zielStandortId = neuerStandort.id;
       }
-      await api.zimmerAnlegen({ standortId: zielStandortId, nummer, etage: etage || undefined, kapazitaet });
+      const anschrift = String(form.get("anschrift") ?? "").trim();
+      await api.zimmerAnlegen({
+        standortId: zielStandortId,
+        nummer,
+        etage: etage || undefined,
+        kapazitaet,
+        anschrift: anschrift || null,
+      });
       setFormularOffen(false);
       ladeZimmer();
       ladeStandorte();
@@ -222,6 +233,7 @@ export function Zimmer({
       await api.zimmerAktualisieren(bearbeitetesZimmer.id, {
         nummer: String(form.get("nummer") ?? "").trim(),
         etage: etage || undefined,
+        anschrift: String(form.get("anschrift") ?? "").trim() || null,
       });
       setBearbeitetesZimmer(null);
       ladeZimmer();
@@ -1002,16 +1014,26 @@ export function Zimmer({
             </div>
 
             {standortAuswahl === NEUER_STANDORT && (
-              <div className="zv-field-row">
+              <>
                 <div className="zv-field">
                   <label htmlFor="zimmer-standort-name">Name des Standorts</label>
                   <input id="zimmer-standort-name" name="standortName" placeholder="z. B. Wohnheim Nordstraße" required autoFocus />
                 </div>
                 <div className="zv-field">
-                  <label htmlFor="zimmer-standort-adresse">Adresse</label>
-                  <input id="zimmer-standort-adresse" name="standortAdresse" placeholder="Straße, PLZ Ort" required />
+                  <label htmlFor="zimmer-standort-strasse">Straße und Hausnummer</label>
+                  <input id="zimmer-standort-strasse" name="standortStrasse" autoComplete="street-address" required />
                 </div>
-              </div>
+                <div className="zv-field-row">
+                  <div className="zv-field">
+                    <label htmlFor="zimmer-standort-plz">PLZ</label>
+                    <input id="zimmer-standort-plz" name="standortPlz" inputMode="numeric" pattern="[0-9]{5}" maxLength={5} required />
+                  </div>
+                  <div className="zv-field">
+                    <label htmlFor="zimmer-standort-ort">Ort</label>
+                    <input id="zimmer-standort-ort" name="standortOrt" required />
+                  </div>
+                </div>
+              </>
             )}
               </>
             )}
@@ -1037,6 +1059,8 @@ export function Zimmer({
               <label htmlFor="zimmer-kapazitaet">Kapazität (Bewohner:innen)</label>
               <input id="zimmer-kapazitaet" name="kapazitaet" type="number" min={1} max={12} defaultValue={1} />
             </div>
+
+            <ZimmerAnschriftFeld id="zimmer-anschrift" />
 
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <ISpeichern />
@@ -1076,6 +1100,7 @@ export function Zimmer({
                 />
               </div>
             </div>
+            <ZimmerAnschriftFeld id="zimmer-bearbeiten-anschrift" vorgabe={bearbeitetesZimmer.anschrift} />
             <div className="zv-vorschau-zeile">
               <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
                 <ISpeichern />
@@ -1289,6 +1314,24 @@ export function Zimmer({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Eigene Wohnanschrift einer Wohnung (Einzelwohnen, Migration 0079): dort
+ * ist der Standort das Buero, die Klient:innen wohnen verstreut. Jede
+ * Wohnung bleibt ein Zimmer, damit Belegung, Plaetze und Raumplan
+ * unveraendert funktionieren -- nur die Anschrift kommt dazu.
+ */
+function ZimmerAnschriftFeld({ id, vorgabe }: { id: string; vorgabe?: string | null }) {
+  return (
+    <div className="zv-field">
+      <label htmlFor={id}>Eigene Wohnanschrift (optional)</label>
+      <input id={id} name="anschrift" defaultValue={vorgabe ?? ""} placeholder="Straße Nr., PLZ Ort" aria-describedby={`${id}-hinweis`} />
+      <p id={`${id}-hinweis`} className="zv-sub">
+        Nur wenn die Wohnung nicht unter der Anschrift des Standorts liegt, etwa im Einzelwohnen.
+      </p>
     </div>
   );
 }

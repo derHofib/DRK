@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { bildVerkleinern } from "../datei";
 import { Modal } from "../components/Modal";
 import { Zimmer as ZimmerVerwaltung } from "./Zimmer";
+import { StandortSteckbrief } from "./StandortSteckbrief";
 import { Seitenpanel } from "../components/Seitenpanel";
 import { Filterleiste, OptionenFilter, StandortMehrfachFilter, trifftSuche } from "../components/Listenfilter";
 import { PRIORITAET_PILL_KLASSE } from "../components/AufgabeZeile";
@@ -15,6 +16,7 @@ import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Belegungszeitleiste, type ZeitleistenGruppe } from "../components/Belegungszeitleiste";
 import {
+  IStandort,
   IAbbrechen,
   IBaumAnsicht,
   IBearbeiten,
@@ -82,6 +84,10 @@ export function StandortRaeume({
   onStandorteWaehlen: (ids: string[]) => void;
 }) {
   const [standorte, setStandorte] = useState<StandortDto[] | null>(null);
+  // Steckbrief zum Nachschlagen (Bereitschaft, Buero, Anschrift, Leitung):
+  // Mitarbeitende kommen ueber die Belegung hierher, nicht ueber
+  // Organisatorisch -- das sehen sie gar nicht (Konzept standort-daten, 4.4).
+  const [steckbriefId, setSteckbriefId] = useState<string | null>(null);
   // Belegte/vorhandene Plaetze je Standort fuer den Zaehler in der Auswahl.
   // Aus der Dashboard-Antwort statt einer eigenen Abfrage: dort ist die
   // Zaehlung (Plaetze, nicht Zimmer) schon festgelegt und getestet.
@@ -214,6 +220,10 @@ export function StandortRaeume({
     }
   }
 
+  if (steckbriefId) {
+    return <StandortSteckbrief standortId={steckbriefId} zurueckLabel="Belegung" onZurueck={() => setSteckbriefId(null)} />;
+  }
+
   return (
     <div>
       {fehler && (
@@ -238,6 +248,12 @@ export function StandortRaeume({
               <button className="zv-btn zv-btn-sekundaer" onClick={() => setRaumDialog("neu")}>
                 <INeu />
                 Gemeinschaftsraum
+              </button>
+            )}
+            {sichtbar.length === 1 && (
+              <button className="zv-btn zv-btn-sekundaer" onClick={() => setSteckbriefId(sichtbar[0].id)}>
+                <IStandort />
+                Steckbrief
               </button>
             )}
           </div>
