@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Reiterleiste } from "../components/Reiterleiste";
 import {
   ANHEFTPUNKTE,
+  ZUORDNUNG_ERKLAERUNG,
+  ZUORDNUNG_LABEL,
+  zuordnungKenntKlient,
   ANHEFT_DARSTELLUNG_LABEL,
   FORMULAR_STATUS_LABEL,
   formularVergleich,
@@ -676,6 +679,7 @@ function Einstellungen({
   const [alle, setAlle] = useState(d.standortIds.length === 0);
   const [ids, setIds] = useState<string[]>(d.standortIds);
   const [anheftungen, setAnheftungen] = useState<FormularAnheftung[]>(d.anheftungen);
+  const [aufDokumentation, setAufDokumentation] = useState(d.aufDokumentation);
   const [fehler, setFehler] = useState<string | null>(null);
   const [gespeichert, setGespeichert] = useState(false);
   const [speichert, setSpeichert] = useState(false);
@@ -701,7 +705,9 @@ function Einstellungen({
         name: name.trim(),
         beschreibung: beschreibung.trim() || null,
         standortIds: alle ? [] : ids,
-        anheftungen,
+        // Anheften an den Tagesbericht gibt es nur fuer Klienten-Formulare (ladeAngebot filtert sie sonst ohnehin heraus).
+        anheftungen: zuordnungKenntKlient(d.zuordnung) ? anheftungen : [],
+        aufDokumentation,
       });
       onGespeichert(neu);
       setGespeichert(true);
@@ -784,8 +790,25 @@ function Einstellungen({
         )}
       </section>
 
+      <section className="zv-fo-karte">
+        <h3>Zuordnung und Dokumentation</h3>
+        <p>
+          <strong>{ZUORDNUNG_LABEL[d.zuordnung]}</strong>
+          <span className="zv-formular-meta">{ZUORDNUNG_ERKLAERUNG[d.zuordnung]}</span>
+        </p>
+        <p className="zv-sub">Die Zuordnung ist Teil der Version und wird im Reiter „Aufbau“ geändert.</p>
+        <label className="zv-checkbox-zeile">
+          <input type="checkbox" checked={aufDokumentation} onChange={(e) => (setAufDokumentation(e.target.checked), geaendert())} />
+          <span>
+            <strong>Auf der Seite Dokumentation zum Ausfüllen anbieten</strong>
+            <span className="zv-formular-meta">Im Knopf „Formular ausfüllen“. Klienten-Formulare bleiben in der Akte immer ausfüllbar.</span>
+          </span>
+        </label>
+      </section>
+
       </div>
       <div className="zv-fe-spalte">
+      {zuordnungKenntKlient(d.zuordnung) ? (
       <section className="zv-fo-karte">
         <h3>Angeheftet an</h3>
         <p className="zv-sub">In der Klientenakte unter Protokolle ist jedes veröffentlichte Formular immer dabei. Zusätzlich lässt es sich hier an Abläufe heften.</p>
@@ -861,6 +884,12 @@ function Einstellungen({
         })}
         <p className="zv-protokoll-hilfe">Weitere Stellen wie Einzug, Auszug oder Termin erledigt kommen später dazu.</p>
       </section>
+      ) : (
+      <section className="zv-fo-karte">
+        <h3>Angeheftet an</h3>
+        <p className="zv-sub">An den Tagesbericht heften lassen sich nur Formulare, die zu einer Klient:in gehören.</p>
+      </section>
+      )}
       </div>
       </div>
 

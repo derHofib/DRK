@@ -86,6 +86,16 @@ const anlegenSchema = z.object({
 
 const stilllegenSchema = z.object({ stillgelegt: z.boolean() });
 
+// Obergrenze: ein Sammel-PDF wird im Speicher zusammengesetzt; 50 Dokumente
+// sind ein Monat Teambesprechungen mehrerer Standorte, mehr ist eher ein Versehen.
+const sammelSchema = z.object({
+  eintraege: z
+    .array(z.object({ protokollId: z.string().uuid(), exportId: z.string().uuid() }))
+    .min(1)
+    .max(50)
+    .refine((l) => new Set(l.map((e) => e.protokollId)).size === l.length, "Jedes Dokument nur einmal."),
+});
+
 const erzeugenSchema = z.object({
   exportId: z.string().uuid(),
   empfaenger: optText(1000),
@@ -216,6 +226,13 @@ export class PdfExportController {
   @Get("protokolle/:id/pdf-exporte")
   angebot(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.exporte.angebot(id);
+  }
+
+  @Post("protokolle/sammel-pdf")
+  async sammel(@Body() body: unknown, @Res({ passthrough: false }) res: Response) {
+    const { eintraege } = lies(sammelSchema, body);
+    const { pdf, dateiname } = await this.exporte.sammelErzeugen(eintraege);
+    pdfSenden(res, pdf, dateiname, false);
   }
 
   @Post("protokolle/:id/pdf")

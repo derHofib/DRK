@@ -17,7 +17,13 @@ function lies<T>(schema: z.ZodType<T>, wert: unknown): T {
 const feldWert = z.union([z.string().max(20000), z.number(), z.boolean(), z.array(z.string().max(200)).max(200), z.null()]);
 const werteSchema = z.record(z.string().max(63), feldWert);
 
-const anlegenSchema = z.object({ formularId: z.string().uuid(), klientId: z.string().uuid() });
+// Klient:in ODER Standort ODER nichts -- welches passt, entscheidet die
+// Zuordnung des Formulars im Service (und der Trigger aus 0083).
+const anlegenSchema = z.object({
+  formularId: z.string().uuid(),
+  klientId: z.string().uuid().nullish(),
+  standortId: z.string().uuid().nullish(),
+});
 const speichernSchema = z.object({ werte: werteSchema });
 const korrigierenSchema = z.object({
   werte: werteSchema,
@@ -45,9 +51,11 @@ const einstellungenSchema = z.object({
         darstellung: z.enum(["ergaenzt", "ersetzt"]).default("ergaenzt"),
       }))
     .max(20),
+  // Default fuer aeltere Oberflaechen, die das Feld noch nicht schicken.
+  aufDokumentation: z.boolean().default(true),
 });
 const angebotSchema = z.object({ klientId: z.string().uuid(), anheftpunkt: anheftpunktSchema.optional() });
-const listeSchema = z.object({ klientId: z.string().uuid().optional() });
+const listeSchema = z.object({ klientId: z.string().uuid().optional(), formularId: z.string().uuid().optional() });
 
 @Controller()
 @Authenticated()
@@ -68,6 +76,11 @@ export class ProtokollController {
   formularAnlegen(@Body() body: unknown) {
     const { name, beschreibung } = lies(anlegenFormularSchema, body);
     return this.protokolle.formularAnlegen({ name, beschreibung: beschreibung || null });
+  }
+
+  @Get("formulare/dokumentation")
+  dokumentationsAngebot() {
+    return this.protokolle.dokumentationsAngebot();
   }
 
   @Get("formulare/angebot")
@@ -117,6 +130,7 @@ export class ProtokollController {
     return this.protokolle.einstellungenSpeichern(id, {
       ...e,
       beschreibung: e.beschreibung || null,
+      aufDokumentation: e.aufDokumentation ?? true,
       anheftungen: e.anheftungen.map((a) => ({ ...a, darstellung: a.darstellung ?? "ergaenzt" })),
     });
   }
@@ -128,7 +142,9 @@ export class ProtokollController {
 
   @Get("protokolle")
   liste(@Query() query: Record<string, unknown>) {
-    return this.protokolle.liste(lies(listeSchema, { klientId: query.klientId || undefined }));
+    return this.protokolle.liste(
+      lies(listeSchema, { klientId: query.klientId || undefined, formularId: query.formularId || undefined })
+    );
   }
 
   @Post("protokolle")
