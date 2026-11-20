@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ChatKontaktDto, ChatKontaktEingabe } from "@zimmerakte/shared";
 import { Leerzustand } from "../Leerzustand";
 import { ILeerKontakte } from "../icons";
@@ -19,12 +19,17 @@ export function KontaktAuswahl({
   onToggle,
   einzeln = false,
   idPraefix,
+  suchLabel = "Person suchen",
+  zusatz,
 }: {
   kontakte: ChatKontaktDto[];
   ausgewaehlt?: Set<string>;
   onToggle: (k: ChatKontaktDto) => void;
   einzeln?: boolean;
   idPraefix: string;
+  suchLabel?: string;
+  /** Ersetzt die Pille "Klient:in/Mitarbeitende:r", wo die Liste schon nach Art getrennt ist (Termin-Dialog). */
+  zusatz?: (k: ChatKontaktDto) => ReactNode;
 }) {
   const [suche, setSuche] = useState("");
   const gefiltert = useMemo(() => {
@@ -35,7 +40,7 @@ export function KontaktAuswahl({
   return (
     <div className="zv-kontaktwahl">
       <div className="zv-field" style={{ marginBottom: "var(--zv-space-2)" }}>
-        <label htmlFor={`${idPraefix}-suche`}>Person suchen</label>
+        <label htmlFor={`${idPraefix}-suche`}>{suchLabel}</label>
         <input
           id={`${idPraefix}-suche`}
           type="search"
@@ -62,7 +67,7 @@ export function KontaktAuswahl({
                   <label className="zv-kontakt-zeile">
                     <input type="checkbox" checked={gewaehlt} onChange={() => onToggle(k)} />
                     <span className="zv-kontakt-name">{k.name}</span>
-                    <span className="zv-pill zv-pill-vergeben">{k.art === "klient" ? "Klient:in" : "Mitarbeitende:r"}</span>
+                    {zusatz ? zusatz(k) : <span className="zv-pill zv-pill-vergeben">{k.art === "klient" ? "Klient:in" : "Mitarbeitende:r"}</span>}
                   </label>
                 )}
               </li>

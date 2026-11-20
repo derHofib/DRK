@@ -37,6 +37,7 @@ import type {
   MitarbeiterProfilKollegeDto,
   ChatDto,
   ChatKontaktDto,
+  TerminKontaktDto,
   ChatKontaktEingabe,
   ChatNachrichtDto,
   ChatNachrichtEingabe,
@@ -1032,6 +1033,7 @@ export const api = {
   chatListe: () => request<ChatDto[]>("/chat"),
   chatEinzeln: (id: string) => request<ChatDto>(`/chat/${id}`),
   chatKontakte: () => request<ChatKontaktDto[]>("/chat/kontakte"),
+  terminKontakte: () => request<TerminKontaktDto[]>("/kalender/teilnehmer-auswahl"),
   chatUngelesen: () => request<ChatUngelesenDto>("/chat/ungelesen"),
   chatDirektAnlegen: (ziel: ChatKontaktEingabe) =>
     request<ChatDto>("/chat/direkt", { method: "POST", body: JSON.stringify(ziel) }),

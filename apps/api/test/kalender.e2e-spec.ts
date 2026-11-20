@@ -369,27 +369,57 @@ describe("Kalender", () => {
     expect(ok.body).toMatchObject({ ganztaegig: false, beginn: "2026-06-01T10:00:00.000Z" });
   });
 
-  it("Teilnehmer-Pruefung: inaktiv, fremder Mandant, Klient ohne Zugang -> 400; Standort-Einschraenkung gilt fuer Klient:innen", async () => {
+  it("Teilnehmer-Pruefung: inaktiv, fremder Mandant -> 400; Klient:in ohne Zugang einladbar; Standort-Einschraenkung gilt fuer Klient:innen", async () => {
     const basis = { titel: "Einladung", beginn: zeit("12-01", "09:00"), ende: zeit("12-01", "10:00") };
     const post = (token: string, teilnehmer: object[]) => als(token).post("/kalender/termine", { ...basis, teilnehmer });
     expect((await post(tokenLeitung, [{ benutzerId: inaktivId }])).status).toBe(400);
     expect((await post(tokenLeitung, [{ benutzerId: leitungBId }])).status).toBe(400);
     expect((await post(tokenLeitung, [{ benutzerId: randomUUID() }])).status).toBe(400);
-    expect((await post(tokenLeitung, [{ klientId: klient3Id }])).status).toBe(400);
     expect((await post(tokenLeitung, [{ klientId: klientBId }])).status).toBe(400);
-
-    // Deaktivierter Zugang: nicht mehr einladbar.
-    await admin.query("UPDATE klient_zugang SET aktiv = false WHERE klient_id = $1", [klient2Id]);
-    expect((await post(tokenLeitung, [{ klientId: klient2Id }])).status).toBe(400);
-    await admin.query("UPDATE klient_zugang SET aktiv = true WHERE klient_id = $1", [klient2Id]);
+    expect((await post(tokenLeitung, [{ klientId: randomUUID() }])).status).toBe(400);
 
     // Eingeschraenkt auf S1: Klient 1 (keine Belegung) ist unsichtbar, Klient 2 (an S1) sichtbar.
     expect((await post(tokenEingeschraenkt, [{ klientId: klient1Id }])).status).toBe(400);
     expect((await post(tokenEingeschraenkt, [{ klientId: klient2Id }])).status).toBe(201);
 
+    // Archivierte Klient:innen sind nicht einladbar.
+    await admin.query("UPDATE klient SET archiviert_am = now(), archiviert_von = $2 WHERE id = $1", [klient3Id, leitungId]);
+    expect((await post(tokenLeitung, [{ klientId: klient3Id }])).status).toBe(400);
+    await admin.query("UPDATE klient SET archiviert_am = NULL, archiviert_von = NULL WHERE id = $1", [klient3Id]);
+
     // Kein halb angelegter Termin nach einem Fehlschlag.
     const { rows } = await admin.query("SELECT 1 FROM termin WHERE mandant_id = $1 AND titel = 'Einladung' AND erstellt_von_benutzer_id = $2", [mandantAId, leitungId]);
     expect(rows).toHaveLength(0);
+  });
+
+  it("Klient:in ohne Zugang einladbar (Rueckmeldung Termine Kalender), Auswahl zeigt Zugang und haelt die Standort-Einschraenkung ein", async () => {
+    const basis = { titel: "Arztbegleitung", beginn: zeit("12-03", "09:00"), ende: zeit("12-03", "10:00") };
+    const ohne = await als(tokenLeitung).post("/kalender/termine", { ...basis, teilnehmer: [{ klientId: klient3Id }] });
+    expect(ohne.status).toBe(201);
+    expect(ohne.body.teilnehmer.find((t: any) => t.id === klient3Id)).toMatchObject({ art: "klient", antwort: "offen" });
+
+    // Deaktivierter Zugang ist ebenfalls einladbar.
+    await admin.query("UPDATE klient_zugang SET aktiv = false WHERE klient_id = $1", [klient2Id]);
+    expect((await als(tokenLeitung).post("/kalender/termine", { ...basis, teilnehmer: [{ klientId: klient2Id }] })).status).toBe(201);
+
+    const auswahl = await als(tokenLeitung).get("/kalender/teilnehmer-auswahl");
+    expect(auswahl.status).toBe(200);
+    const eintrag = (id: string) => auswahl.body.find((k: any) => k.art === "klient" && k.id === id);
+    expect(eintrag(klient3Id)).toMatchObject({ hatZugang: false });
+    expect(eintrag(klient2Id)).toMatchObject({ hatZugang: false });
+    expect(eintrag(klient1Id)).toMatchObject({ hatZugang: true });
+    expect(eintrag(klientBId)).toBeUndefined();
+    expect(auswahl.body.some((k: any) => k.art === "benutzer" && k.id === leitungId)).toBe(false);
+    await admin.query("UPDATE klient_zugang SET aktiv = true WHERE klient_id = $1", [klient2Id]);
+
+    // Eingeschraenkt auf S1: Klient 1 (keine Belegung) wird nicht angeboten.
+    const eng = await als(tokenEingeschraenkt).get("/kalender/teilnehmer-auswahl");
+    const ids = eng.body.filter((k: any) => k.art === "klient").map((k: any) => k.id);
+    expect(ids).toContain(klient2Id);
+    expect(ids).not.toContain(klient1Id);
+
+    // Klient:innen-Sitzung bekommt nichts angeboten.
+    expect((await als(tokenKlient1).get("/kalender/teilnehmer-auswahl")).body).toEqual([]);
   });
 
   it("Klientennamen werden beim Lesen anonymisiert: eingeschraenkter Kollege sieht Initialen statt Namen", async () => {

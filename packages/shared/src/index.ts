@@ -1326,6 +1326,16 @@ export interface ChatKontaktDto extends ChatPersonDto {
   direktChatId: string | null;
 }
 
+/**
+ * Waehlbare Teilnehmende im Termin-Dialog der Mitarbeitenden. Klient:innen
+ * stehen hier auch OHNE Zugang (anders als bei den Chat-Kontakten): Sie sehen
+ * die Einladung dann nicht selbst, der Termin zaehlt aber als Termin mit ihnen.
+ */
+export interface TerminKontaktDto extends ChatKontaktDto {
+  /** Mitarbeitende immer true; Klient:innen nur mit aktivem Zugang. */
+  hatZugang: boolean;
+}
+
 export interface ChatTerminKurzDto {
   id: string;
   titel: string;
