@@ -39,6 +39,7 @@ import { ExportMenue } from "../components/ExportMenue";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
 import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
 import { zeitraumKurz } from "../components/datumsfeld-logik";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 /**
  * Zeile eines Tagesberichts -- wird sowohl vom allgemeinen Menuepunkt hier
@@ -140,13 +141,13 @@ export function TagesberichtZeile({
       <span className="zv-liste-zelle" data-label="Bericht">
         {bearbeiten ? (
           <form onSubmit={speichern} style={{ display: "grid", gap: 8 }}>
-            <input
-              type="date"
-              className="zv-field-inline zv-eingabe-kompakt"
+            <Datumsfeld
               value={bearbeiten.datum}
               max={heuteBerlin()}
-              onChange={(e) => setBearbeiten({ ...bearbeiten, datum: e.target.value })}
+              onChange={(v) => setBearbeiten({ ...bearbeiten, datum: v })}
               aria-label="Datum des Tagesberichts"
+              groesse="kompakt"
+              schnellwahl="heute-gestern"
             />
             <textarea
               value={bearbeiten.text}

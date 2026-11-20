@@ -689,7 +689,7 @@ export function Datumseingabe(p: EingabeProps) {
 /* Natives Feld (Touch)                                                  */
 /* ------------------------------------------------------------------ */
 
-function NativesDatum({
+export function NativesDatum({
   feldRef,
   id,
   name,
@@ -703,7 +703,7 @@ function NativesDatum({
   chips,
   ...aria
 }: {
-  feldRef: RefObject<HTMLInputElement>;
+  feldRef?: RefObject<HTMLInputElement>;
   id?: string;
   name?: string;
   wert: string;

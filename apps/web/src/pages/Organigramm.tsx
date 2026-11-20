@@ -52,6 +52,7 @@ import {
   IZiehen,
   IZuklappen,
 } from "../components/icons";
+import { Datumsfeld } from "../components/Datumsfeld";
 
 /**
  * Ein Knoten im Organigramm -- entweder eine Organisationseinheit oder eine
@@ -1407,7 +1408,7 @@ function PositionPanel({
             </div>
             <div className="zv-field">
               <label htmlFor="besetzen-gueltig-ab">Besetzt ab</label>
-              <input id="besetzen-gueltig-ab" name="gueltigAb" type="date" defaultValue={heute()} />
+              <Datumsfeld id="besetzen-gueltig-ab" name="gueltigAb" defaultValue={heute()} schnellwahl="heute" />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert} style={{ marginTop: 16 }}>
               <IEinziehen />
@@ -1425,7 +1426,7 @@ function PositionPanel({
             </p>
             <div className="zv-field">
               <label htmlFor="beenden-datum">Ende (optional, Standard: heute)</label>
-              <input id="beenden-datum" name="gueltigBis" type="date" defaultValue={heute()} />
+              <Datumsfeld id="beenden-datum" name="gueltigBis" defaultValue={heute()} schnellwahl="heute" />
             </div>
             <div className="zv-vorschau-zeile" style={{ marginTop: 16 }}>
               <button className="zv-btn" type="submit" disabled={wirdGespeichert}>

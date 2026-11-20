@@ -6,6 +6,7 @@ import { formatDatum } from "../format";
 import { Leerzustand } from "../components/Leerzustand";
 import { Modal } from "../components/Modal";
 import { IAbbrechen, IAblehnen, IFehler, IGenehmigen, ILeerVertretung, INeu, ISpeichern, IStornieren } from "../components/icons";
+import { Zeitraumfeld } from "../components/Datumsfeld";
 
 /**
  * Eigene Statusfarben, aber ausschliesslich ueber die vorhandenen
@@ -247,14 +248,10 @@ export function Vertretung() {
               </select>
             </div>
             <div className="zv-field-row">
-              <div className="zv-field">
-                <label htmlFor="vertretung-von">Von</label>
-                <input id="vertretung-von" name="von" type="date" required />
-              </div>
-              <div className="zv-field">
-                <label htmlFor="vertretung-bis">Bis</label>
-                <input id="vertretung-bis" name="bis" type="date" required />
-              </div>
+              <Zeitraumfeld
+                von={{ id: "vertretung-von", name: "von", label: "Von", required: true }}
+                bis={{ id: "vertretung-bis", name: "bis", label: "Bis", required: true }}
+              />
             </div>
             <div className="zv-field">
               <label htmlFor="vertretung-umfang">Umfang</label>

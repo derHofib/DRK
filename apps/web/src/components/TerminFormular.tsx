@@ -4,6 +4,7 @@ import { TERMIN_ART_LABEL } from "@zimmerakte/shared";
 import { lokalesDatum, terminTag } from "../format";
 import { IFehler, ISpeichern } from "./icons";
 import { KontaktAuswahl, kontaktEingabe, kontaktSchluessel } from "./chat/KontaktAuswahl";
+import { Datumsfeld, Zeitraumfeld } from "./Datumsfeld";
 
 function uhrzeitVon(iso: string): string {
   const d = new Date(iso);
@@ -115,23 +116,31 @@ export function TerminFormular({
         Ganztägig
       </label>
       <div className="zv-field-row">
-        <div className="zv-field">
-          <label htmlFor="termin-datum">{ganztaegig ? "Erster Tag" : "Datum"}</label>
-          <input
-            id="termin-datum"
-            type="date"
-            value={datum}
-            onChange={(e) => {
-              setDatum(e.target.value);
-              if (endDatum < e.target.value) setEndDatum(e.target.value);
+        {ganztaegig ? (
+          <Zeitraumfeld
+            von={{ id: "termin-datum", label: "Erster Tag", required: true }}
+            bis={{ id: "termin-ende-datum", label: "Letzter Tag", required: true }}
+            wertVon={datum}
+            wertBis={endDatum}
+            onChange={(v, b) => {
+              setDatum(v);
+              // Wie vorher: ein Ende vor dem Anfang wird zum Anfang.
+              setEndDatum(!b || (v && b < v) ? v : b);
             }}
-            required
           />
-        </div>
-        {ganztaegig && (
+        ) : (
           <div className="zv-field">
-            <label htmlFor="termin-ende-datum">Letzter Tag</label>
-            <input id="termin-ende-datum" type="date" value={endDatum} min={datum} onChange={(e) => setEndDatum(e.target.value)} required />
+            <label htmlFor="termin-datum">Datum</label>
+            <Datumsfeld
+              id="termin-datum"
+              value={datum}
+              onChange={(v) => {
+                setDatum(v);
+                if (endDatum < v) setEndDatum(v);
+              }}
+              required
+              schnellwahl="faelligkeit"
+            />
           </div>
         )}
       </div>

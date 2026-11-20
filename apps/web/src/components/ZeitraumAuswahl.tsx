@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { SCHNELLWAHL_LABEL, type Schnellwahl } from "../pages/tagesberichte-filter";
-import { Datumseingabe, Kalender, useGrobZeiger } from "./Datumsfeld";
+import { Datumseingabe, Kalender, NativesDatum, useGrobZeiger } from "./Datumsfeld";
 import { zeitraumInWorten } from "./datumsfeld-logik";
 
 /**
@@ -61,14 +61,14 @@ export function ZeitraumAuswahl({
       <div className="zv-field">
         <label htmlFor={id}>{teil === "von" ? "Von" : "Bis"}</label>
         {grob ? (
-          <input
+          <NativesDatum
             id={id}
-            type="date"
-            className="zv-datum-nativ kompakt"
-            value={wert}
+            wert={wert}
+            onWert={setzen}
+            kompakt
+            chips={[]}
             min={teil === "bis" ? eVon || undefined : undefined}
             max={teil === "von" ? eBis || undefined : undefined}
-            onChange={(e) => setzen(e.target.value)}
           />
         ) : (
           <Datumseingabe

@@ -14,6 +14,7 @@ import {
 import { api } from "../api/client";
 import { Modal } from "./Modal";
 import { IAbbrechen, IEntscheidung, IFehler, IGespraech, INotiz, ISpeichern, ITelefonat, type IconKomponente } from "./icons";
+import { Datumsfeld } from "./Datumsfeld";
 
 export const EINTRAG_ART_ICON: Record<KlientEintragArt, IconKomponente> = {
   notiz: INotiz,
@@ -327,12 +328,7 @@ export function NeuerEintragFenster({
           {art === "entscheidung" && (
             <div className="zv-field">
               <label htmlFor="eintrag-wiedervorlage">Wiedervorlage am (optional)</label>
-              <input
-                id="eintrag-wiedervorlage"
-                type="date"
-                value={wiedervorlageAm}
-                onChange={(e) => setWiedervorlageAm(e.target.value)}
-              />
+              <Datumsfeld id="eintrag-wiedervorlage" value={wiedervorlageAm} onChange={setWiedervorlageAm} schnellwahl="faelligkeit" />
             </div>
           )}
         </div>
@@ -383,12 +379,7 @@ export function NeuerEintragFenster({
             {alsAufgabe && (
               <div className="zv-field">
                 <label htmlFor="eintrag-aufgabe-faellig">Fällig am (optional)</label>
-                <input
-                  id="eintrag-aufgabe-faellig"
-                  type="date"
-                  value={aufgabeFaelligAm}
-                  onChange={(e) => setAufgabeFaelligAm(e.target.value)}
-                />
+                <Datumsfeld id="eintrag-aufgabe-faellig" value={aufgabeFaelligAm} onChange={setAufgabeFaelligAm} schnellwahl="faelligkeit" />
               </div>
             )}
           </div>

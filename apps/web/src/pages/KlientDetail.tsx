@@ -68,7 +68,7 @@ import { ProtokolleTab } from "./klient/ProtokolleTab";
 import { ProtokollSprungKontext, type ProtokollSprung } from "../components/ProtokollSprung";
 import { VerlaufTab, verlaufArtLabel, verlaufKlasse } from "./klient/VerlaufTab";
 import { berichtFormularTexte, TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
-import { Monatsfeld } from "../components/Datumsfeld";
+import { Datumsfeld, Monatsfeld, Zeitraumfeld } from "../components/Datumsfeld";
 
 type Tab = "ueberblick" | "verlauf" | "dokumentation" | "hilfeplan" | "finanzen" | "akte";
 type DokuTeil = "tagesberichte" | "protokolle";
@@ -835,13 +835,7 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
             </div>
             <div className="zv-field">
               <label htmlFor="klient-einzug">Einzugsdatum</label>
-              <input
-                id="klient-einzug"
-                name="einzug"
-                type="date"
-                required
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
+              <Datumsfeld id="klient-einzug" name="einzug" required defaultValue={heuteBerlin()} schnellwahl="heute" />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IEinziehen />
@@ -862,14 +856,7 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
             )}
             <div className="zv-field">
               <label htmlFor="klient-auszug">Auszugsdatum</label>
-              <input
-                id="klient-auszug"
-                name="auszug"
-                type="date"
-                required
-                autoFocus
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
+              <Datumsfeld id="klient-auszug" name="auszug" required autoFocus defaultValue={heuteBerlin()} schnellwahl="heute" />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <IAuszug />
@@ -892,26 +879,13 @@ function StammdatenTab({ klient, onGeaendert }: { klient: KlientDetailDto; onGea
               Nutzen, wenn sich ein Einzug oder Auszug verzögert oder sich geändert hat.
             </p>
             <div className="zv-field-row">
-              <div className="zv-field">
-                <label htmlFor="klient-belegung-einzug">Einzugsdatum</label>
-                <input
-                  id="klient-belegung-einzug"
-                  name="einzug"
-                  type="date"
-                  required
-                  autoFocus
-                  defaultValue={klient.aktuellesZimmer.einzug}
-                />
-              </div>
-              <div className="zv-field">
-                <label htmlFor="klient-belegung-auszug">Auszugsdatum (optional)</label>
-                <input
-                  id="klient-belegung-auszug"
-                  name="auszug"
-                  type="date"
-                  defaultValue={klient.aktuellesZimmer.auszug ?? ""}
-                />
-              </div>
+              <Zeitraumfeld
+                von={{ id: "klient-belegung-einzug", name: "einzug", label: "Einzugsdatum", required: true }}
+                bis={{ id: "klient-belegung-auszug", name: "auszug", label: "Auszugsdatum (optional)" }}
+                defaultVon={klient.aktuellesZimmer.einzug}
+                defaultBis={klient.aktuellesZimmer.auszug ?? ""}
+                autoFocus
+              />
             </div>
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
               <ISpeichern />
@@ -1479,12 +1453,7 @@ function StammdatenAbschnitt({
                 {f.typ === "textarea" ? (
                   <textarea id={`sf-${f.key}`} name={f.key} rows={3} defaultValue={stammdaten?.[f.key] ?? ""} />
                 ) : f.typ === "datum" ? (
-                  <input
-                    id={`sf-${f.key}`}
-                    name={f.key}
-                    type="date"
-                    defaultValue={(stammdaten?.[f.key] as string | null) ?? ""}
-                  />
+                  <Datumsfeld id={`sf-${f.key}`} name={f.key} defaultValue={(stammdaten?.[f.key] as string | null) ?? ""} />
                 ) : f.typ === "benutzer" ? (
                   <select id={`sf-${f.key}`} name={f.key} defaultValue={stammdaten?.bezugsbetreuerId ?? ""}>
                     <option value="">Nicht zugeordnet</option>
@@ -1791,14 +1760,10 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
               <label htmlFor="ku-amt">Amt</label>
               <input id="ku-amt" name="amt" required />
             </div>
-            <div className="zv-field">
-              <label htmlFor="ku-von">Von</label>
-              <input id="ku-von" name="von" type="date" required />
-            </div>
-            <div className="zv-field">
-              <label htmlFor="ku-bis">Bis (optional)</label>
-              <input id="ku-bis" name="bis" type="date" />
-            </div>
+            <Zeitraumfeld
+              von={{ id: "ku-von", name: "von", label: "Von", required: true }}
+              bis={{ id: "ku-bis", name: "bis", label: "Bis (optional)" }}
+            />
           </div>
           <button className="zv-btn" type="submit">
             <ISpeichern />
@@ -1837,7 +1802,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
                 {k.bis === null &&
                   (beendenId === k.id ? (
                     <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => beenden(e, k.id)}>
-                      <input name="bis" type="date" required aria-label="Kostenübernahme endet am" className="zv-field-inline zv-eingabe-kompakt" />
+                      <Datumsfeld name="bis" required aria-label="Kostenübernahme endet am" groesse="kompakt" schnellwahl="heute" />
                       <button className="zv-link-btn" type="submit">
                         <ISpeichern />
                         Speichern
