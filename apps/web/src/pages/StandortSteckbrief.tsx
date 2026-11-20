@@ -27,7 +27,6 @@ import {
   IFehler,
   IInfo,
   IKopieren,
-  IOrganigramm,
   ISpeichern,
   ISperre,
   IStandort,
@@ -36,6 +35,7 @@ import {
 } from "../components/icons";
 import { formatDatum } from "../format";
 import { KontakteVorOrt, telLink, Vereinbarungen } from "./StandortKontakteVereinbarungen";
+import { StandortTeam } from "./StandortTeam";
 
 /**
  * Standort-Steckbrief (Konzept standort-daten, Phase 1). Eigene Seite im
@@ -46,7 +46,8 @@ import { KontakteVorOrt, telLink, Vereinbarungen } from "./StandortKontakteVerei
  * damit niemand etwas Neues lernen muss, und damit die CSS-Klassen der Akte
  * hier ohne zweite Fassung tragen.
  *
- * Plaetze, Leitung und Team kommen abgeleitet vom Server; eingetragen wird
+ * Plaetze, Leitung und Team kommen abgeleitet vom Server (Team als Karten,
+ * siehe StandortTeam.tsx); eingetragen wird
  * hier nur, was es nirgends sonst gibt.
  */
 
@@ -166,6 +167,8 @@ export function StandortSteckbrief({
   onZurueck,
   onGeaendert,
   onOrganigramm,
+  onStandortOeffnen,
+  onChatOeffnen,
 }: {
   standortId: string;
   zurueckLabel: string;
@@ -173,6 +176,10 @@ export function StandortSteckbrief({
   /** Liste dahinter neu laden (Name, Status, fehlende Angaben). */
   onGeaendert?: () => void;
   onOrganigramm?: () => void;
+  /** Weiterer Standort einer Person im Team: dessen Steckbrief oeffnen. */
+  onStandortOeffnen?: (standortId: string) => void;
+  /** Nachricht an eine Person im Team: Chat in "Nachrichten" oeffnen. */
+  onChatOeffnen?: (chatId: string) => void;
 }) {
   const [daten, setDaten] = useState<StandortSteckbriefDto | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -311,6 +318,8 @@ export function StandortSteckbrief({
                 onKopieren={() => anschriftKopieren(a)}
                 onBearbeiten={daten.darfBearbeiten ? gruppeBearbeiten : undefined}
                 onOrganigramm={onOrganigramm}
+                onStandortOeffnen={onStandortOeffnen}
+                onChatOeffnen={onChatOeffnen}
                 onReiter={setReiter}
               />
             ) : reiter === "angaben" ? (
@@ -370,6 +379,8 @@ function Ueberblick({
   onKopieren,
   onBearbeiten,
   onOrganigramm,
+  onStandortOeffnen,
+  onChatOeffnen,
   onReiter,
 }: {
   daten: StandortSteckbriefDto;
@@ -378,6 +389,8 @@ function Ueberblick({
   onKopieren: () => void;
   onBearbeiten?: (g: GruppeId) => void;
   onOrganigramm?: () => void;
+  onStandortOeffnen?: (standortId: string) => void;
+  onChatOeffnen?: (chatId: string) => void;
   onReiter: (r: Reiter) => void;
 }) {
   const blick: [string, ReactNode][] = [
@@ -519,38 +532,12 @@ function Ueberblick({
           </dl>
         </section>
 
-        <section className="zv-steckbrief-leitung" aria-label="Leitung und Team">
-          <div className="zv-abschnittskopf">
-            <h3>Leitung & Team</h3>
-            {onOrganigramm && (
-              <button type="button" className="zv-link-btn" onClick={onOrganigramm}>
-                <IOrganigramm />
-                Im Organigramm
-              </button>
-            )}
-          </div>
-          <ul className="zv-rand-liste zv-ueberblick-liste">
-            {daten.leitung.length === 0 ? (
-              <li>
-                <span className="zv-todo-titel">Keine Leitung im Organigramm</span>
-                <span className="zv-todo-meta">Die Leitung ergibt sich aus der besetzten Position am Standort im Organigramm.</span>
-              </li>
-            ) : (
-              daten.leitung.map((l) => (
-                <li key={`${l.benutzerId}-${l.positionTitel}`}>
-                  <span className="zv-todo-titel">{l.name}</span>
-                  <span className="zv-todo-meta">{l.positionTitel}</span>
-                </li>
-              ))
-            )}
-            <li>
-              <span className="zv-todo-titel">
-                {daten.team.anzahl === 1 ? "1 Mitarbeitende:r" : `${daten.team.anzahl} Mitarbeitende`}
-              </span>
-              <span className="zv-todo-meta">diesem Standort zugeordnet</span>
-            </li>
-          </ul>
-        </section>
+        <StandortTeam
+          team={daten.team}
+          onOrganigramm={onOrganigramm}
+          onStandortOeffnen={onStandortOeffnen}
+          onChatOeffnen={onChatOeffnen}
+        />
 
         <section className="zv-steckbrief-kontakte-kurz" aria-label="Kontakte vor Ort">
           <div className="zv-abschnittskopf">

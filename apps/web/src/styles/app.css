@@ -9937,3 +9937,278 @@ button.zv-achtung-eintrag:hover {
   min-height: 0;
   padding: 0;
 }
+
+/* ------------------------------------------------------------------
+   Standort-Steckbrief: Leitung & Team als Karten (StandortTeam.tsx,
+   Rueckmeldung "Standorte Mitarbeiter"). Raster passt sich der Breite
+   an; schmal (Handy) wird jede Karte zu einer Zeile mit den Knoepfen
+   rechts, damit die Liste kurz bleibt und die Tippflaechen gross.
+   ------------------------------------------------------------------ */
+.zv-team-kopfzahl {
+  margin-left: var(--zv-space-3);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+}
+.zv-team-gruppe {
+  margin: var(--zv-space-2) 0 var(--zv-space-2);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+.zv-team-leer {
+  margin: 0 0 var(--zv-space-4);
+}
+.zv-team-karten {
+  list-style: none;
+  margin: 0 0 var(--zv-space-4);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: var(--zv-space-3);
+}
+.zv-team-karte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  min-width: 0;
+  padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+}
+.zv-team-karte-leitung {
+  border-color: var(--zv-accent-soft-strong);
+}
+/* Offene Stelle: gestrichelt und ohne Flaeche -- sichtbar, aber erkennbar
+   keine Person. */
+.zv-team-karte-offen {
+  background: transparent;
+  border-style: dashed;
+  padding-bottom: var(--zv-space-3);
+}
+.zv-team-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-team-kuerzel {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--zv-radius-pill);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-bold);
+  color: var(--zv-text-auf-personflaeche);
+}
+.zv-team-kuerzel-offen {
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+}
+/* Abwesend: Punkt am Kuerzel in der Abwesenheitsfarbe des Kalenders
+   (gleiche feste Helligkeit wie .zv-art-flaeche, CLAUDE.md Regel 7). Er
+   ergaenzt die Pille, ersetzt sie nicht -- Farbe allein traegt keine
+   Information. */
+.zv-team-kuerzel-weg::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--zv-radius-pill);
+  border: 2px solid var(--zv-surface);
+  background: light-dark(
+    oklch(0.84 var(--zv-art-abwesend-c) var(--zv-art-abwesend-h)),
+    oklch(0.76 var(--zv-art-abwesend-c) var(--zv-art-abwesend-h))
+  );
+}
+.zv-team-name-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zv-team-name {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-bold);
+  line-height: var(--zv-leading-tight);
+  color: var(--zv-text);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+button.zv-team-name:hover {
+  color: var(--zv-accent-strong);
+}
+.zv-team-name .zv-sub {
+  font-weight: var(--zv-weight-medium);
+}
+.zv-team-position {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  line-height: var(--zv-leading-tight);
+  overflow-wrap: anywhere;
+}
+.zv-team-abwesend {
+  align-self: flex-start;
+}
+.zv-team-zeilen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+}
+.zv-team-zeilen li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.zv-team-zeilen svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  margin-top: 2px;
+  color: var(--zv-text-muted);
+}
+.zv-team-inline-link {
+  padding: 0;
+  font-size: inherit;
+}
+.zv-team-fuss {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-top: auto;
+  padding-top: var(--zv-space-1);
+  border-top: 1px solid var(--zv-haarlinie);
+}
+.zv-team-karte-offen .zv-team-fuss {
+  padding-top: var(--zv-space-2);
+}
+.zv-team-telefon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+  text-decoration: none;
+}
+.zv-team-telefon svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+.zv-team-telefon-nummer {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zv-team-ohne-telefon {
+  margin: 0;
+}
+.zv-team-knoepfe {
+  display: inline-flex;
+  flex: none;
+}
+/* "Am liebsten per Chat" im Profil: der Nachricht-Knopf in Akzentfarbe. */
+.zv-icon-btn.zv-team-bevorzugt {
+  color: var(--zv-accent-strong);
+}
+.zv-team-mehr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-1);
+  width: 100%;
+  margin-bottom: var(--zv-space-4);
+  padding: var(--zv-space-2);
+  border: 1px dashed var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  background: none;
+  font: inherit;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+  cursor: pointer;
+}
+
+/* Schmal: eine Zeile je Person -- Kuerzel, Name und Position, darunter
+   ggf. "abwesend", rechts Anrufen/Nachricht/Profil. Bezug, Erreichbarkeit
+   und weitere Standorte stehen dann im Profil, sonst wird die Liste auf
+   dem Handy laenger als der restliche Steckbrief. */
+@container akte (max-width: 520px) {
+  .zv-team-kopfzahl {
+    display: block;
+    margin: var(--zv-space-1) 0 0;
+  }
+  .zv-team-link-text {
+    display: none;
+  }
+  .zv-team-karten {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-2);
+  }
+  .zv-team-karte {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "kopf fuss" "abwesend fuss";
+    align-items: center;
+    gap: var(--zv-space-1) var(--zv-space-2);
+    padding: var(--zv-space-2) var(--zv-space-1) var(--zv-space-2) var(--zv-space-3);
+  }
+  .zv-team-kopf {
+    grid-area: kopf;
+  }
+  .zv-team-abwesend {
+    grid-area: abwesend;
+    justify-self: start;
+    margin-left: calc(36px + var(--zv-space-3));
+  }
+  .zv-team-zeilen {
+    display: none;
+  }
+  .zv-team-fuss {
+    grid-area: fuss;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+  .zv-team-telefon-nummer,
+  .zv-team-ohne-telefon {
+    display: none;
+  }
+  .zv-team-telefon {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+  .zv-team-telefon svg {
+    width: var(--zv-icon-m);
+    height: var(--zv-icon-m);
+  }
+  .zv-team-knoepfe .zv-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .zv-team-karte-offen .zv-team-fuss {
+    padding: 0;
+  }
+}
