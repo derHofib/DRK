@@ -19,6 +19,8 @@ import { Modal } from "../components/Modal";
 import { IFehler, IFilterLoeschen, IKalender, IKlienten, ILeerStunden, INeu, IPerson, ISpeichern, IStornieren, ISuche } from "../components/icons";
 import { SCHNELLWAHL_LABEL, zeitraumFuer, type Schnellwahl } from "./tagesberichte-filter";
 import { Datumsfeld } from "../components/Datumsfeld";
+import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
+import { zeitraumKurz } from "../components/datumsfeld-logik";
 
 const MONATSNAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
@@ -96,7 +98,7 @@ export function Stunden() {
   const mitarbeiterText = mitarbeitende.find((m) => m.id === mitarbeiterFilter);
   const zeitraumText = schnellwahl
     ? SCHNELLWAHL_LABEL[schnellwahl]
-    : [von && formatDatum(von), bis && formatDatum(bis)].filter(Boolean).join(" – ") || null;
+    : zeitraumKurz(von, bis) || null;
   const filterAktiv = Boolean(klientFilter || mitarbeiterFilter || suche.trim() || schnellwahl !== "monat");
 
   function alleZuruecksetzen() {
@@ -184,48 +186,27 @@ export function Stunden() {
         <FilterPille
           icon={<IKalender />}
           label="Zeitraum"
+          breit
           wert={schnellwahl === "monat" ? null : zeitraumText ? `: ${zeitraumText}` : ""}
           onEntfernen={() => schnellwahlWaehlen("monat")}
         >
           {(schliessen) => (
-            <>
-              <FilterAuswahl
-                optionen={(Object.keys(SCHNELLWAHL_LABEL) as Schnellwahl[]).map((w) => ({ wert: w, label: SCHNELLWAHL_LABEL[w] }))}
-                gewaehlt={schnellwahl}
-                onWaehlen={(w) => {
-                  schnellwahlWaehlen(w);
-                  schliessen();
-                }}
-              />
-              <div className="zv-filter-datumsfelder">
-                <div className="zv-field">
-                  <label htmlFor="std-von">Von</label>
-                  <input
-                    id="std-von"
-                    type="date"
-                    value={von}
-                    max={bis || undefined}
-                    onChange={(e) => {
-                      setSchnellwahl(null);
-                      setVon(e.target.value);
-                    }}
-                  />
-                </div>
-                <div className="zv-field">
-                  <label htmlFor="std-bis">Bis</label>
-                  <input
-                    id="std-bis"
-                    type="date"
-                    value={bis}
-                    min={von || undefined}
-                    onChange={(e) => {
-                      setSchnellwahl(null);
-                      setBis(e.target.value);
-                    }}
-                  />
-                </div>
-              </div>
-            </>
+            <ZeitraumAuswahl
+              idPraefix="std"
+              schnellwahl={schnellwahl}
+              von={von}
+              bis={bis}
+              onSchnellwahl={(w) => {
+                schnellwahlWaehlen(w);
+                schliessen();
+              }}
+              onUebernehmen={(v, b) => {
+                setSchnellwahl(null);
+                setVon(v);
+                setBis(b);
+                schliessen();
+              }}
+            />
           )}
         </FilterPille>
 
