@@ -1,11 +1,7 @@
 import {
   alleBausteine,
-  DATENQUELLEN,
-  istEingabe,
   type Baustein,
   type Bedingung,
-  type FeldWert,
-  type FeldWerte,
   type FormularDefinition,
 } from "@zimmerakte/shared";
 
@@ -76,89 +72,6 @@ export function istBreit(b: Baustein): boolean {
   return false;
 }
 
-export const BEISPIEL_PERSON = { id: "00000000-0000-4000-8000-00000000beef", name: "A. Beispiel" };
-
-const BEISPIEL_ANZEIGE: Record<keyof typeof DATENQUELLEN, string> = {
-  "klient.name": "Mira Beispiel",
-  "klient.vorname": "Mira",
-  "klient.nachname": "Beispiel",
-  "klient.initialen": "M. B.",
-  "klient.geburtsdatum": "2004-05-06",
-  "klient.alter": "22",
-  "klient.aktenzeichen": "AZ-0000",
-  "klient.amt": "Jugendamt",
-  "klient.bezugsbetreuung": "A. Beispiel",
-  "belegung.standort": "Haus Beispiel",
-  "belegung.zimmer": "4",
-  "belegung.wohnung": "Haus Beispiel, Zimmer 4",
-  "ausfuellende.name": "A. Beispiel",
-  "zeit.heute": "",
-  "zeit.jetzt": "",
-};
-
-function heute(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/**
- * Beispieldaten aus den Feldtypen, fuer die Vorschau in „Ansichten“. Ja/Nein
- * steht auf Ja, damit bedingte Abschnitte (meist „wenn Vorfall = Ja“) sichtbar
- * werden -- die Vorschau soll moeglichst viel vom Formular zeigen. Gespeichert
- * wird nichts davon.
- */
-export function beispielDaten(def: FormularDefinition): {
-  werte: FeldWerte;
-  anzeige: Record<string, string | null>;
-  personen: Record<string, string>;
-} {
-  const werte: FeldWerte = {};
-  const anzeige: Record<string, string | null> = {};
-  for (const b of alleBausteine(def)) {
-    if (b.typ === "anzeige") {
-      anzeige[b.schluessel] = b.quelle === "zeit.heute" ? heute() : b.quelle === "zeit.jetzt" ? "06:00" : BEISPIEL_ANZEIGE[b.quelle];
-      continue;
-    }
-    if (!istEingabe(b)) continue;
-    let w: FeldWert | null = null;
-    switch (b.typ) {
-      case "kurztext":
-        w = "Beispiel";
-        break;
-      case "langtext":
-        w = "Beispieltext: so sieht eine längere Angabe aus.";
-        break;
-      case "zahl": {
-        const min = b.min ?? 0;
-        const max = b.max ?? Math.max(min + 10, 10);
-        w = Math.round((min + max) / 2);
-        break;
-      }
-      case "datum":
-        w = heute();
-        break;
-      case "uhrzeit":
-        w = "06:00";
-        break;
-      case "ja_nein":
-        w = true;
-        break;
-      case "auswahl": {
-        const o = b.optionen.find((x) => !x.ausgeblendet);
-        w = o ? o.wert : null;
-        break;
-      }
-      case "mehrfachauswahl":
-        w = b.optionen.filter((x) => !x.ausgeblendet).slice(0, 2).map((x) => x.wert);
-        break;
-      case "skala":
-        w = Math.round((b.min + b.max) / 2);
-        break;
-      case "mitarbeitende":
-        w = [BEISPIEL_PERSON.id];
-        break;
-    }
-    if (w !== null) werte[b.schluessel] = w;
-  }
-  return { werte, anzeige, personen: { [BEISPIEL_PERSON.id]: BEISPIEL_PERSON.name } };
-}
+// Beispieldaten liegen in packages/shared: die Vorschau der PDF-Exporte
+// erzeugt sie auf dem Server mit denselben Regeln.
+export { BEISPIEL_PERSON, beispielDaten } from "@zimmerakte/shared";

@@ -96,6 +96,10 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "protokolle", aktion: "ausfuellen" },
   { modul: "protokolle", aktion: "korrigieren-fremde", sensibel: true },
   { modul: "protokolle", aktion: "formulare-verwalten" },
+  // PDF-Exporte (migrations/0082): ein externes PDF (Bericht an das Amt,
+  // Brief an die Klient:in) verlaesst die Einrichtung -- eigenes Recht, damit
+  // ein Traeger es auf Bezugsbetreuung und Leitung beschraenken kann.
+  { modul: "protokolle", aktion: "pdf-extern" },
 
   // Verlauf der Klientenakte (migrations/0078): Notizen, Telefonate,
   // Gespraeche, Entscheidungen. Entscheidungen eintragen ist eigenes Recht --

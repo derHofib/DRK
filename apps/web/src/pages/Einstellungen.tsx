@@ -17,6 +17,7 @@ import { ThemeAuswahl } from "../components/ThemeToggle";
 import { MeinProfil } from "../components/MeinProfil";
 import { KalenderStundenKonto, KalenderStundenTraeger, KalenderStundenVormerkungen } from "../components/StundenKalenderEinstellungen";
 import { Sicherheit } from "./Sicherheit";
+import { DokumentAngaben } from "./DokumentAngaben";
 import {
   IAnpassen,
   IBestaetigen,
@@ -31,6 +32,7 @@ import {
   ISicherheit,
   ISpeichern,
   ITraeger,
+  IDokument,
   IVerschiebenHoch,
   IVerschiebenRunter,
   IZiehen,
@@ -50,7 +52,7 @@ import {
 } from "../navigation";
 
 type KontoBereich = "profil" | "darstellung" | "kalender-stunden" | "anmeldung";
-type TraegerBereich = "erscheinungsbild" | "datenschutz" | "stunden" | "rueckmeldungen";
+type TraegerBereich = "erscheinungsbild" | "dokumente" | "datenschutz" | "stunden" | "rueckmeldungen";
 type Bereich = KontoBereich | TraegerBereich;
 
 interface BereichEintrag<B extends Bereich> {
@@ -75,6 +77,8 @@ const KONTO_BEREICHE: BereichEintrag<KontoBereich>[] = [
  */
 const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof EinstellungenRechteDto })[] = [
   { wert: "erscheinungsbild", label: "Erscheinungsbild", icon: ITraeger, recht: "erscheinungsbild", beschreibung: "Trägerfarbe und Grundfarbe des dunklen Designs." },
+  // Wer die Traegerfarbe pflegt, pflegt auch Logos und Angaben (gleiches Recht im Service).
+  { wert: "dokumente", label: "Angaben für Dokumente", icon: IDokument, recht: "erscheinungsbild", beschreibung: "Logos und Trägerangaben, die PDF-Exporte verwenden können." },
   { wert: "datenschutz", label: "Datenschutz", icon: ISicherheit, recht: "datenschutz", beschreibung: "Fristen, nach denen Daten endgültig gelöscht werden." },
   { wert: "stunden", label: "Stunden", icon: IStunden, recht: "stunden", beschreibung: "Ob Kalendertermine als Betreuungszeit gebucht werden dürfen." },
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
@@ -256,6 +260,11 @@ export function Einstellungen({
           <div className="zv-einstellungen-raster">
             <Traegerfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
             <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
+          </div>
+        )}
+        {aktuell.wert === "dokumente" && (
+          <div className="zv-einstellungen-raster">
+            <DokumentAngaben />
           </div>
         )}
         {aktuell.wert === "datenschutz" && mandant && (

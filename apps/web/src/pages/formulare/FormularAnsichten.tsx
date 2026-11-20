@@ -21,8 +21,8 @@ import { BEISPIEL_PERSON, beispielDaten } from "./formularHilfen";
  * Ausfuellen und Lesen, keine Nachbildung: sonst gaebe es zwei Wahrheiten
  * ueber das Aussehen. Gespeichert wird hier nichts.
  *
- * PDF-Ansichten gibt es noch nicht (eigener Schritt, Konzept Frage 2); sie
- * stehen ausgegraut in der Liste, damit sichtbar ist, wo sie hinkommen.
+ * PDF-Ansichten haben einen eigenen Reiter (FormularPdfExporte.tsx): dort
+ * hat jeder Export sein eigenes Design und eine echte PDF-Vorschau.
  */
 
 type Ansicht = "rechner" | "handy" | "akte" | "tagesbericht";
@@ -109,15 +109,7 @@ export function FormularAnsichten({ d, kennzahlen }: { d: FormularDetailDto; ken
           </button>
         ))}
         <div className="zv-gruppenlabel">PDF</div>
-        <button type="button" disabled aria-disabled="true">
-          <span>Standard-PDF</span>
-          <span className="zv-pill">später</span>
-        </button>
-        <button type="button" disabled aria-disabled="true">
-          <span>Eigene Druckansichten</span>
-          <span className="zv-pill">später</span>
-        </button>
-        <p className="zv-sub zv-fv-liste-hinweis">PDF und eigene Druckansichten (z. B. „Für das Amt“ ohne interne Felder) kommen in einem eigenen Schritt.</p>
+        <p className="zv-sub zv-fv-liste-hinweis">PDF-Exporte mit eigenem Design gestalten Sie im Reiter „PDF-Exporte“.</p>
       </nav>
 
       <div className="zv-fv-haupt">
