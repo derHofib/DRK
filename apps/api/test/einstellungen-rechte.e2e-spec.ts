@@ -75,19 +75,19 @@ describe("Einstellungen: Träger-Bereiche nach Recht", () => {
   it("Geschäftsführung/Bereichsleitung sieht alle Träger-Bereiche", async () => {
     const res = await rechte(await login("bereichsleitung"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: true, standorte: true, kassenbuch: true, datenschutz: true, formulare: true });
+    expect(res.body).toEqual({ erscheinungsbild: true, standorte: true, kassenbuch: true, datenschutz: true, formulare: true, stunden: true });
   });
 
-  it("Einrichtungsleitung sieht Standorte, Kassenbuch und Formulare, aber weder Farben noch Datenschutz", async () => {
+  it("Einrichtungsleitung sieht Standorte, Kassenbuch, Formulare und Stunden, aber weder Farben noch Datenschutz", async () => {
     const res = await rechte(await login("einrichtungsleitung"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: false, standorte: true, kassenbuch: true, datenschutz: false, formulare: true });
+    expect(res.body).toEqual({ erscheinungsbild: false, standorte: true, kassenbuch: true, datenschutz: false, formulare: true, stunden: true });
   });
 
   it("Betreuer sieht keinen Träger-Bereich", async () => {
     const res = await rechte(await login("betreuer"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false });
+    expect(res.body).toEqual({ erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false });
   });
 
   it("Betreuer kann ausgeblendete Einstellungen auch direkt nicht speichern", async () => {
@@ -98,6 +98,7 @@ describe("Einstellungen: Träger-Bereiche nach Recht", () => {
     expect((await request(server).patch("/mandant/me/chat-loeschfrist").set(auth).send({ tage: 30 })).status).toBe(403);
     expect((await request(server).patch("/mandant/me/klient-loeschfrist").set(auth).send({ tage: 60 })).status).toBe(403);
     expect((await request(server).patch("/mandant/me/rueckmeldung-weitergabe").set(auth).send({ aktiv: true })).status).toBe(403);
+    expect((await request(server).put("/stundenbuchungen/kalender/traeger").set(auth).send({ erlaubt: false, vorauswahl: false })).status).toBe(403);
 
     const { rows } = await admin.query(
       "SELECT akzentfarbe, chat_loeschfrist_tage, rueckmeldung_weitergabe FROM mandant WHERE id = $1",

@@ -8,12 +8,14 @@ import {
   KLIENT_LOESCHFRIST_MIN_TAGE,
   PASTELL_PALETTEN,
   type EinstellungenRechteDto,
+  type KalenderStundenEinstellungenDto,
   type MandantDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { MeinProfil } from "../components/MeinProfil";
+import { KalenderStundenKonto, KalenderStundenTraeger, KalenderStundenVormerkungen } from "../components/StundenKalenderEinstellungen";
 import { Sicherheit } from "./Sicherheit";
 import {
   IAnpassen,
@@ -35,6 +37,7 @@ import {
   IVor,
   IZurueckPfeil,
   IZuruecksetzen,
+  IStunden,
   type IconKomponente,
 } from "../components/icons";
 import {
@@ -46,8 +49,8 @@ import {
   type MenueGruppeId,
 } from "../navigation";
 
-type KontoBereich = "profil" | "darstellung" | "anmeldung";
-type TraegerBereich = "erscheinungsbild" | "datenschutz" | "rueckmeldungen";
+type KontoBereich = "profil" | "darstellung" | "kalender-stunden" | "anmeldung";
+type TraegerBereich = "erscheinungsbild" | "datenschutz" | "stunden" | "rueckmeldungen";
 type Bereich = KontoBereich | TraegerBereich;
 
 interface BereichEintrag<B extends Bereich> {
@@ -60,6 +63,7 @@ interface BereichEintrag<B extends Bereich> {
 const KONTO_BEREICHE: BereichEintrag<KontoBereich>[] = [
   { wert: "profil", label: "Profil", icon: IMitarbeitende, beschreibung: "Deine Kontaktdaten und was andere davon sehen." },
   { wert: "darstellung", label: "Darstellung", icon: IDarstellung, beschreibung: "Wie die Zimmerakte für dich aussieht, auf diesem Gerät." },
+  { wert: "kalender-stunden", label: "Kalender & Stunden", icon: IStunden, beschreibung: "Wie deine Termine in die Stundenerfassung einfließen." },
   { wert: "anmeldung", label: "Anmeldung & Sicherheit", icon: IPasswort, beschreibung: "Passwort und Zwei-Faktor-Anmeldung deines Kontos." },
 ];
 
@@ -72,10 +76,11 @@ const KONTO_BEREICHE: BereichEintrag<KontoBereich>[] = [
 const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof EinstellungenRechteDto })[] = [
   { wert: "erscheinungsbild", label: "Erscheinungsbild", icon: ITraeger, recht: "erscheinungsbild", beschreibung: "Trägerfarbe und Grundfarbe des dunklen Designs." },
   { wert: "datenschutz", label: "Datenschutz", icon: ISicherheit, recht: "datenschutz", beschreibung: "Fristen, nach denen Daten endgültig gelöscht werden." },
+  { wert: "stunden", label: "Stunden", icon: IStunden, recht: "stunden", beschreibung: "Ob Kalendertermine als Betreuungszeit gebucht werden dürfen." },
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
 ];
 
-const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false };
+const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false };
 
 /**
  * Zwei Gruppen statt einer Reiterleiste: "Mein Konto" gilt nur fuer die
@@ -110,6 +115,11 @@ export function Einstellungen({
   // ein Bereich zu sehen (app.css, .zv-einstellungen[data-ansicht]).
   const [ansicht, setAnsicht] = useState<"liste" | "bereich">("liste");
   const [rechte, setRechte] = useState<EinstellungenRechteDto>(KEINE_TRAEGER_RECHTE);
+  const [stunden, setStunden] = useState<KalenderStundenEinstellungenDto | null>(null);
+
+  useEffect(() => {
+    api.stundenKalenderEinstellungen().then(setStunden).catch(() => setStunden(null));
+  }, []);
 
   useEffect(() => {
     let aktiv = true;
@@ -125,7 +135,9 @@ export function Einstellungen({
   }, []);
 
   const traegerBereiche = TRAEGER_BEREICHE.filter((b) => rechte[b.recht]);
-  const alle: BereichEintrag<Bereich>[] = [...KONTO_BEREICHE, ...traegerBereiche];
+  // "Kalender & Stunden" nur, wer ueberhaupt Stunden buchen darf.
+  const kontoBereiche = KONTO_BEREICHE.filter((b) => b.wert !== "kalender-stunden" || stunden?.darfBuchen);
+  const alle: BereichEintrag<Bereich>[] = [...kontoBereiche, ...traegerBereiche];
   // Faellt ein Recht weg (z. B. Vertretung beendet), nicht auf einem leeren Bereich stehen bleiben.
   const aktuell = alle.find((b) => b.wert === bereich) ?? KONTO_BEREICHE[0];
   const istTraeger = traegerBereiche.some((b) => b.wert === aktuell.wert);
@@ -159,7 +171,7 @@ export function Einstellungen({
           <div className="zv-gruppenlabel" id="zv-einst-konto">
             Mein Konto
           </div>
-          {KONTO_BEREICHE.map(menuePunkt)}
+          {kontoBereiche.map(menuePunkt)}
         </div>
         {traegerBereiche.length > 0 && (
           <div role="group" aria-labelledby="zv-einst-traeger">
@@ -222,6 +234,17 @@ export function Einstellungen({
               menuReihenfolge={menuReihenfolge}
               onMenuReihenfolgeAendern={onMenuReihenfolgeAendern}
             />
+          </div>
+        )}
+        {aktuell.wert === "kalender-stunden" && stunden && (
+          <div className="zv-einstellungen-raster">
+            <KalenderStundenKonto einstellungen={stunden} onGeaendert={setStunden} />
+            <KalenderStundenVormerkungen />
+          </div>
+        )}
+        {aktuell.wert === "stunden" && stunden && (
+          <div className="zv-einstellungen-raster">
+            <KalenderStundenTraeger einstellungen={stunden} onGeaendert={setStunden} />
           </div>
         )}
         {aktuell.wert === "anmeldung" && (

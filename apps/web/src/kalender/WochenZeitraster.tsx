@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { TerminDto } from "@zimmerakte/shared";
 import { formatDatum, formatTerminUhrzeit, lokalesDatum } from "../format";
 import { personFarbStil } from "../personFarbe";
+import { IStunden } from "../components/icons";
 import { ganztagsBalken, startStunde, zeitBloecke } from "./zeitraster";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -148,7 +149,10 @@ export function WochenZeitraster({
                   onClick={() => onTerminOeffnen(b.termin.id)}
                   title={`${formatTerminUhrzeit(b.termin)} · ${b.termin.titel} · ${b.termin.erstelltVon.name}`}
                 >
-                  <strong className={b.termin.abgesagtAm ? "zv-durchgestrichen" : undefined}>{b.termin.titel}</strong>
+                  <strong className={b.termin.abgesagtAm ? "zv-durchgestrichen" : undefined}>
+                    {b.termin.stunden?.vorgemerkt && !b.termin.abgesagtAm && <IStunden className="zv-kal-stunden-marke" role="img" aria-hidden={false} aria-label="Als Betreuungszeit vorgemerkt" />}
+                    {b.termin.titel}
+                  </strong>
                   <span>{formatTerminUhrzeit(b.termin)}</span>
                   {b.termin.ort && <span>{b.termin.ort}</span>}
                 </button>

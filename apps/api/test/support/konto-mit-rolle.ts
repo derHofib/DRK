@@ -64,6 +64,7 @@ const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "aufgaben", aktion: "koordinieren", scope: "einrichtung" },
   { modul: "kassenbuch", aktion: "storno-entscheiden", scope: "einrichtung" },
   { modul: "stunden", aktion: "stornieren", scope: "einrichtung" },
+  { modul: "stunden", aktion: "einstellungen-verwalten", scope: "einrichtung" },
   { modul: "stunden", aktion: "fuer-andere-buchen", scope: "einrichtung" },
   { modul: "protokolle", aktion: "korrigieren-fremde", scope: "einrichtung" },
   { modul: "protokolle", aktion: "formulare-verwalten", scope: "einrichtung" },

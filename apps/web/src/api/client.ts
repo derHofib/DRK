@@ -84,7 +84,10 @@ import type {
   TagDto,
   TagesberichtAenderungDto,
   StundenbuchungDto,
+  StundenHerkunft,
   StundenSummeDto,
+  StundenVormerkungDto,
+  KalenderStundenEinstellungenDto,
   Leistungsart,
   TagesberichtDto,
   TotpEinrichtenResponse,
@@ -781,9 +784,9 @@ export const api = {
   rechnungDokumentUrl: (rechnungId: string) => blobUrl(`/rechnungen/${rechnungId}/dokument`),
 
   stundenRechte: () => request<{ ansehen: boolean; buchen: boolean; fuerAndereBuchen: boolean }>("/stundenbuchungen/rechte"),
-  stundenListe: (filter: { klientId?: string; mitarbeiterId?: string; von?: string; bis?: string } = {}) =>
+  stundenListe: (filter: { klientId?: string; mitarbeiterId?: string; herkunft?: StundenHerkunft; von?: string; bis?: string } = {}) =>
     request<StundenbuchungDto[]>(`/stundenbuchungen${stundenFilterText(filter)}`),
-  stundenSummen: (filter: { klientId?: string; mitarbeiterId?: string; von?: string; bis?: string } = {}) =>
+  stundenSummen: (filter: { klientId?: string; mitarbeiterId?: string; herkunft?: StundenHerkunft; von?: string; bis?: string } = {}) =>
     request<StundenSummeDto[]>(`/stundenbuchungen/summen${stundenFilterText(filter)}`),
   // idempotenzSchluessel: das Formular erzeugt ihn beim Oeffnen und schickt ihn
   // bei jedem Versuch gleich -- ein zweimal getipptes "Buchen" oder ein
@@ -800,6 +803,15 @@ export const api = {
     }),
   stundenStornieren: (id: string, grund: string) =>
     request<StundenbuchungDto>(`/stundenbuchungen/${id}/storno`, { method: "POST", body: JSON.stringify({ grund }) }),
+  // Stunden aus dem Kalender (migrations/0080)
+  stundenKalenderNachziehen: () =>
+    request<{ gebucht: number; storniert: number }>("/stundenbuchungen/kalender/nachziehen", { method: "POST" }),
+  stundenVormerkungen: () => request<StundenVormerkungDto[]>("/stundenbuchungen/kalender/vormerkungen"),
+  stundenKalenderEinstellungen: () => request<KalenderStundenEinstellungenDto>("/stundenbuchungen/kalender/einstellungen"),
+  stundenKalenderEinstellungenSpeichern: (eingabe: { vorauswahl: boolean | null; vorauswahlZusage: boolean | null }) =>
+    request<KalenderStundenEinstellungenDto>("/stundenbuchungen/kalender/einstellungen", { method: "PUT", body: JSON.stringify(eingabe) }),
+  stundenKalenderTraegerSpeichern: (eingabe: { erlaubt: boolean; vorauswahl: boolean }) =>
+    request<KalenderStundenEinstellungenDto>("/stundenbuchungen/kalender/traeger", { method: "PUT", body: JSON.stringify(eingabe) }),
 
   tagesberichteListe: (filter: { klientId?: string; von?: string; bis?: string } = {}) => {
     const q = new URLSearchParams();
@@ -1071,8 +1083,10 @@ export const api = {
     payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean; art?: TerminDto["art"] }
   ) => request<TerminDto>(`/kalender/termine/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   terminAbsagen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/absagen`, { method: "POST" }),
-  terminAntworten: (id: string, antwort: TerminAntwort) =>
-    request<TerminDto>(`/kalender/termine/${id}/antwort`, { method: "POST", body: JSON.stringify({ antwort }) }),
+  terminAntworten: (id: string, antwort: TerminAntwort, stundenErfassen?: boolean) =>
+    request<TerminDto>(`/kalender/termine/${id}/antwort`, { method: "POST", body: JSON.stringify({ antwort, stundenErfassen }) }),
+  terminStundenVormerken: (id: string, erfassen: boolean) =>
+    request<TerminDto>(`/kalender/termine/${id}/stunden`, { method: "POST", body: JSON.stringify({ erfassen }) }),
   terminUebernehmen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/uebernehmen`, { method: "POST" }),
   terminIcsHerunterladen: (id: string) => dateiHerunterladen(`/kalender/termine/${id}/ics`, "termin.ics"),
   abwesenheiten: (von: string, bis: string) =>

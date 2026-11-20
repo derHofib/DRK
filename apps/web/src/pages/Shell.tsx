@@ -228,6 +228,13 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       // egal
     }
   }, []);
+  // Stunden aus dem Kalender (migrations/0080): beim Start der App -- also nach
+  // dem Anmelden und auf "Heute" -- die seit dem letzten Besuch beendeten
+  // eigenen Termine buchen. Kein Hintergrundlauf auf dem Server (Konzept 3.3);
+  // Fehler sind hier egal, die Stundenseite zieht beim Oeffnen erneut nach.
+  useEffect(() => {
+    api.stundenKalenderNachziehen().catch(() => undefined);
+  }, []);
   const [eingeklappt, setEingeklappt] = useState(() => ladeBoolean(SIDEBAR_SPEICHER));
   // "Beim Ueberfahren ausklappen" wirkt nur, solange das Menueband
   // eingeklappt ist -- greift also erst zusammen mit eingeklappt=true (siehe
