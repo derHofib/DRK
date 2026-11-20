@@ -9,8 +9,19 @@
 FROM node:20-alpine AS build
 RUN corepack enable
 WORKDIR /repo
+# Erst nur die Manifeste, dann installieren, dann den Quellcode: so bleibt
+# die Installationsschicht im Build-Cache gültig, solange sich pnpm-lock.yaml
+# und die package.json-Dateien nicht ändern -- der Normalfall. Vorher kam
+# "COPY . ." zuerst, und jede Codeänderung installierte alles neu -- auch
+# bei jedem ./scripts/aktualisieren.sh auf dem Server. Gefiltert auf dieses Paket samt
+# seiner Workspace-Abhängigkeiten ("...") -- das Web-Image braucht weder
+# NestJS und pdf-lib aus apps/api.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter "@zimmerakte/web..."
 COPY . .
-RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @zimmerakte/web build
 
 FROM nginx:1.27-alpine AS runtime

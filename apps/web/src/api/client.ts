@@ -100,6 +100,11 @@ import type {
   StandortAngebotsform,
   StandortListenEintragDto,
   StandortSteckbriefDto,
+  StandortKontaktDto,
+  StandortKontaktEingabe,
+  StandortVereinbarungAenderung,
+  StandortVereinbarungDto,
+  StandortVereinbarungEingabe,
 } from "@zimmerakte/shared";
 
 const TOKEN_KEY = "zimmerakte_token";
@@ -583,6 +588,18 @@ export const api = {
     request<StandortDto>(`/standorte/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   standorteVerwaltung: () => request<StandortListenEintragDto[]>("/standorte/verwaltung"),
   standortSteckbrief: (id: string) => request<StandortSteckbriefDto>(`/standorte/${id}/steckbrief`),
+  standortKontaktAnlegen: (standortId: string, payload: StandortKontaktEingabe) =>
+    request<StandortKontaktDto>(`/standorte/${standortId}/kontakte`, { method: "POST", body: JSON.stringify(payload) }),
+  standortKontaktAendern: (standortId: string, kontaktId: string, payload: Partial<StandortKontaktEingabe>) =>
+    request<StandortKontaktDto>(`/standorte/${standortId}/kontakte/${kontaktId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  standortKontaktLoeschen: (standortId: string, kontaktId: string) =>
+    request<void>(`/standorte/${standortId}/kontakte/${kontaktId}`, { method: "DELETE" }),
+  standortVereinbarungAnlegen: (standortId: string, payload: StandortVereinbarungEingabe) =>
+    request<StandortVereinbarungDto>(`/standorte/${standortId}/vereinbarungen`, { method: "POST", body: JSON.stringify(payload) }),
+  standortVereinbarungAendern: (standortId: string, id: string, payload: StandortVereinbarungAenderung) =>
+    request<StandortVereinbarungDto>(`/standorte/${standortId}/vereinbarungen/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  standortVereinbarungStornieren: (standortId: string, id: string, grund: string) =>
+    request<StandortVereinbarungDto>(`/standorte/${standortId}/vereinbarungen/${id}/storno`, { method: "POST", body: JSON.stringify({ grund }) }),
 
   zimmerListe: () => request<ZimmerListEintragDto[]>("/zimmer"),
   zimmerAnlegen: (payload: { standortId: string; nummer: string; etage?: string; kapazitaet?: number; anschrift?: string | null }) =>

@@ -9,10 +9,18 @@
  *   - Speichern einer Gruppe kommt im Ueberblick an;
  *   - Mitarbeitende (390 px, hell) erreichen den Steckbrief ueber die
  *     Belegung, sehen "Im Notfall" mit tel:-Link und KEINE Kostenstelle.
+ *   Phase 2:
+ *   - Kontakte vor Ort im Ueberblick unter Leitung & Team, Reiter mit Liste
+ *     ohne Ueberlauf (1440 und 390 px), Anlegen und Loeschen per Dialog;
+ *   - Vereinbarungen nur mit Recht: Leitung sieht Reiter, Frist-Hinweis und
+ *     "genehmigt"; Mitarbeitende sehen weder Reiter noch Verguetung, aber
+ *     Notdienste unter "Im Notfall".
  *
  * Voraussetzung: API + Dev-Server laufen, ein Traeger mit einem Standort,
  * dessen Kostenstelle gesetzt ist, und einem Mitarbeitenden-Konto, das nur
- * diesem Standort zugeordnet ist.
+ * diesem Standort zugeordnet ist. Fuer Phase 2 am Standort: mindestens ein
+ * Notdienst-/Krisendienst-Kontakt mit Telefon, eine Vereinbarung, die in
+ * hoechstens 90 Tagen endet, und eine mit genehmigten Plaetzen.
  *
  * Nutzung: node scripts/standort-steckbrief-pruefung.mjs <slug> <leitungEmail> <mitarbeiterEmail> <passwort> <standortName> <kostenstelle> [bildordner]
  */
@@ -29,7 +37,7 @@ if (!slug || !leitungEmail || !mitarbeiterEmail || !passwort || !standortName ||
 }
 const BASIS = process.env.BASIS_URL ?? "http://localhost:5173";
 // Ein Pruefskript, das nichts misst, muss fehlschlagen (CLAUDE.md).
-const ERWARTETE_MESSUNGEN = 19;
+const ERWARTETE_MESSUNGEN = 33;
 const browser = await chromium.launch(process.env.CHROMIUM_PFAD ? { executablePath: process.env.CHROMIUM_PFAD } : {});
 const fehler = [];
 let messungen = 0;
@@ -118,6 +126,55 @@ async function anmelden(email, viewport, colorScheme) {
   await page.click('.zv-steckbrief [role="tab"]:has-text("Überblick")');
   pruefe((await page.locator(".zv-steckbrief-lage").innerText()).includes(neuerOepnv), "Geänderte ÖPNV-Angabe steht im Überblick");
 
+  // --- Phase 2: Kontakte vor Ort und Vereinbarungen (Leitung) ---
+  const blick = await page.locator(".zv-steckbrief-blick").innerText();
+  pruefe(/\d+ genehmigt/.test(blick), "Auf einen Blick: genehmigte Plätze aus der Vereinbarung");
+  const achtung = await page.locator(".zv-steckbrief-achtung").innerText();
+  pruefe(/endet in \d+ Tagen/.test(achtung), "Braucht Aufmerksamkeit: Vereinbarung endet bald");
+  const kurz = page.locator(".zv-steckbrief-kontakte-kurz");
+  const kurzAnzahl = await kurz.locator("dl > div").count();
+  pruefe(kurzAnzahl >= 1 && (await y(".zv-steckbrief-leitung")) < (await y(".zv-steckbrief-kontakte-kurz")), `Überblick: ${kurzAnzahl} Kontakte vor Ort unter Leitung & Team`);
+  await bild(page, "phase2-1-ueberblick-dunkel");
+
+  await page.click('.zv-steckbrief [role="tab"]:has-text("Kontakte vor Ort")');
+  await page.waitForSelector(".zv-steckbrief-kontakte .zv-info-karte");
+  const kontakteVorher = await page.locator(".zv-steckbrief-kontakte .zv-info-karte").count();
+  pruefe(!(await ueberlauf(page)), "Kontakte 1440 px: kein waagerechter Überlauf");
+  await page.click('.zv-steckbrief-anhang button:has-text("Neuer Kontakt")');
+  await page.selectOption("#kontakt-rolle", "apotheke");
+  const apotheke = `Prüf-Apotheke ${Date.now() % 1000}`;
+  await page.fill("#kontakt-name", apotheke);
+  await page.fill("#kontakt-telefon", "0123 777");
+  const kontaktGespeichert = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/kontakte"));
+  await page.click('.zv-modal button[type="submit"]');
+  pruefe((await kontaktGespeichert).status() === 201, "Kontakt anlegen: HTTP 201");
+  await page.waitForSelector(`.zv-steckbrief-kontakte .zv-info-karte:has-text("${apotheke}")`);
+  pruefe((await page.locator(".zv-steckbrief-kontakte .zv-info-karte").count()) === kontakteVorher + 1, "Neuer Kontakt steht in der Liste");
+  await bild(page, "phase2-2-kontakte-dunkel");
+  // Wieder entfernen, damit wiederholte Laeufe die Liste nicht fuellen.
+  await page.locator(`.zv-steckbrief-kontakte .zv-info-karte:has-text("${apotheke}") .zv-liste-zelle-aktionen button`).click();
+  await page.click('[role="menuitem"]:has-text("Löschen")');
+  const geloescht = page.waitForResponse((r) => r.request().method() === "DELETE" && r.url().includes("/kontakte/"));
+  await page.click('.zv-modal button:has-text("Jetzt löschen")');
+  pruefe((await geloescht).status() === 204, "Kontakt löschen: HTTP 204");
+
+  await page.click('.zv-steckbrief [role="tab"]:has-text("Vereinbarungen")');
+  await page.waitForSelector(".zv-steckbrief-vereinbarungen .zv-info-karte");
+  const vText = await page.locator(".zv-steckbrief-vereinbarungen").innerText();
+  pruefe(/€ \/ Tag/.test(vText) && /Endet in \d+ Tagen/.test(vText), "Vereinbarungen: Vergütung und Frist sichtbar");
+  pruefe(!(await ueberlauf(page)), "Vereinbarungen 1440 px: kein waagerechter Überlauf");
+  await bild(page, "phase2-3-vereinbarungen-dunkel");
+  await page.click('.zv-steckbrief-anhang button:has-text("Neue Vereinbarung")');
+  await page.waitForTimeout(500);
+  pruefe(await page.$eval(".zv-modal", (m) => m.getBoundingClientRect().right <= window.innerWidth + 1), "Dialog Neue Vereinbarung liegt ganz im Fenster");
+  await page.click('.zv-modal button:has-text("Abbrechen")');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+  pruefe(!(await ueberlauf(page)), "Vereinbarungen 390 px: kein waagerechter Überlauf");
+  await bild(page, "phase2-4-vereinbarungen-handy-dunkel");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.click('.zv-steckbrief [role="tab"]:has-text("Überblick")');
+
   await page.setViewportSize({ width: 800, height: 1000 });
   await page.waitForTimeout(150);
   const schmal = await page.$$eval(".zv-steckbrief section", (e) => [...new Set(e.filter((x) => x.offsetParent).map((x) => Math.round(x.getBoundingClientRect().x)))]);
@@ -147,8 +204,12 @@ async function anmelden(email, viewport, colorScheme) {
   const notfall = page.locator(".zv-steckbrief-notfall");
   const tel = await notfall.locator('a[href^="tel:"]').count();
   pruefe((await notfall.isVisible()) && tel >= 1, `Handy: „Im Notfall“ oben mit ${tel} Anrufknopf/-knöpfen`);
+  const notfallText = await notfall.innerText();
+  pruefe(/Notdienst|Krisendienst|Polizei/.test(notfallText), "Handy: Notdienste aus den Kontakten unter „Im Notfall“");
   const text = await page.locator(".zv-steckbrief").innerText();
   pruefe(!text.includes(kostenstelle) && !text.includes("Kostenstelle"), "Mitarbeitende sehen keine Kostenstelle");
+  pruefe((await page.locator('.zv-steckbrief [role="tab"]:has-text("Vereinbarungen")').count()) === 0, "Mitarbeitende: kein Reiter Vereinbarungen");
+  pruefe(!/€|endet in/i.test(text) && /\d+ genehmigt/.test(text), "Mitarbeitende: keine Vergütung oder Frist, aber genehmigte Plätze");
   pruefe(!(await ueberlauf(page)), "Steckbrief 390 px: kein waagerechter Überlauf");
   await bild(page, "umgesetzt-4-handy-hell");
   await page.close();
