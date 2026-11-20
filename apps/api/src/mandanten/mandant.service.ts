@@ -11,10 +11,12 @@ interface MandantZeile {
   chatLoeschfristTage: number;
   klientLoeschfristTage: number | null;
   rueckmeldungWeitergabe: boolean;
+  terminStundenErlaubt: boolean;
+  terminStundenVorauswahl: boolean;
 }
 
 const MANDANT_SPALTEN =
-  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage", klient_loeschfrist_tage AS "klientLoeschfristTage", rueckmeldung_weitergabe AS "rueckmeldungWeitergabe"';
+  'id, name, slug, akzentfarbe, dunkel_grundfarbe AS "dunkelGrundfarbe", chat_loeschfrist_tage AS "chatLoeschfristTage", klient_loeschfrist_tage AS "klientLoeschfristTage", rueckmeldung_weitergabe AS "rueckmeldungWeitergabe", termin_stunden_erlaubt AS "terminStundenErlaubt", termin_stunden_vorauswahl AS "terminStundenVorauswahl"';
 
 /** Partielles Update -- mindestens ein Feld ist gesetzt, siehe Controller. */
 interface ErscheinungsbildPatch {
@@ -69,15 +71,16 @@ export class MandantService {
    * beim Speichern: was hier true ist, darf auch gespeichert werden.
    */
   async einstellungenRechte() {
-    const [erscheinungsbild, standortAnlegen, standortBearbeiten, kassenbuch, datenschutz, formulare] = await Promise.all([
+    const [erscheinungsbild, standortAnlegen, standortBearbeiten, kassenbuch, datenschutz, formulare, stunden] = await Promise.all([
       this.rechte.hatRecht("mandanten", "branding-bearbeiten"),
       this.rechte.hatRecht("standorte", "anlegen"),
       this.rechte.hatRecht("standorte", "bearbeiten"),
       this.rechte.hatRecht("kassenbuch", "typen-verwalten"),
       this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"),
       this.rechte.hatRecht("protokolle", "formulare-verwalten"),
+      this.rechte.hatRecht("stunden", "einstellungen-verwalten"),
     ]);
-    return { erscheinungsbild, standorte: standortAnlegen || standortBearbeiten, kassenbuch, datenschutz, formulare };
+    return { erscheinungsbild, standorte: standortAnlegen || standortBearbeiten, kassenbuch, datenschutz, formulare, stunden };
   }
 
   /**

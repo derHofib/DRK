@@ -1,6 +1,14 @@
 import { FormEvent, useState } from "react";
-import type { ChatKontaktDto, TerminAnlegenEingabe, TerminArt, TerminDto } from "@zimmerakte/shared";
-import { TERMIN_ART_LABEL } from "@zimmerakte/shared";
+import type { ChatKontaktDto, KalenderStundenEinstellungenDto, Leistungsart, TerminAnlegenEingabe, TerminArt, TerminDto } from "@zimmerakte/shared";
+import {
+  LEISTUNGSARTEN,
+  LEISTUNGSART_LABEL,
+  TERMIN_ART_LABEL,
+  formatMinutenAlsStunden,
+  terminMinuten,
+  terminStundenHindernis,
+  terminStundenLeistungsart,
+} from "@zimmerakte/shared";
 import { lokalesDatum, terminTag } from "../format";
 import { IFehler, ISpeichern } from "./icons";
 import { KontaktAuswahl, kontaktEingabe, kontaktSchluessel } from "./chat/KontaktAuswahl";
@@ -33,6 +41,7 @@ export function TerminFormular({
   wirdGesendet,
   fehler,
   onAbsenden,
+  stunden,
 }: {
   initial?: TerminDto;
   standardDatum?: string;
@@ -45,6 +54,11 @@ export function TerminFormular({
   wirdGesendet: boolean;
   fehler: string | null;
   onAbsenden: (eingabe: TerminAnlegenEingabe) => void;
+  /**
+   * Kasten "Als Betreuungszeit erfassen" (migrations/0080). Ohne Angabe (Chat)
+   * gibt es ihn nicht: dort wird schnell geteilt, nicht dokumentiert.
+   */
+  stunden?: KalenderStundenEinstellungenDto | null;
 }) {
   const [titel, setTitel] = useState(initial?.titel ?? "");
   const [beschreibung, setBeschreibung] = useState(initial?.beschreibung ?? "");
@@ -57,6 +71,18 @@ export function TerminFormular({
   const [bis, setBis] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.ende) : standardUhrzeit ? eineStundeSpaeter(standardUhrzeit) : "10:00");
   const [auswahl, setAuswahl] = useState<Map<string, ChatKontaktDto>>(new Map());
   const [eingabeFehler, setEingabeFehler] = useState<string | null>(null);
+  const mitStunden = !!stunden && stunden.funktionAn && stunden.darfBuchen && (!initial || initial.stunden !== null);
+  const [stundenGewuenscht, setStundenGewuenscht] = useState(initial ? (initial.stunden?.vorgemerkt ?? false) : (stunden?.vorauswahl ?? false));
+  const [leistungsart, setLeistungsart] = useState<Leistungsart | "">(initial?.stundenLeistungsart ?? "");
+
+  // Klient:innen fuer den Kasten: beim Anlegen die Auswahl, beim Bearbeiten
+  // die eingetragenen (Teilnehmende aendert das Bearbeiten-Formular nicht).
+  const klientNamen = kontakte
+    ? [...auswahl.values()].filter((k) => k.art === "klient").map((k) => k.name)
+    : (initial?.teilnehmer ?? []).filter((t) => t.art === "klient" && t.antwort !== "abgelehnt").map((t) => t.name);
+  const zeitraum = ganztaegig ? { beginn: datum, ende: endDatum } : { beginn: new Date(`${datum}T${von}`), ende: new Date(`${datum}T${bis}`) };
+  const stundenHindernis = terminStundenHindernis({ ganztaegig, ...zeitraum, klientAnzahl: klientNamen.length });
+  const stundenAktiv = mitStunden && stundenGewuenscht && !stundenHindernis;
 
   function absenden(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -84,6 +110,7 @@ export function TerminFormular({
       ganztaegig,
       art,
       ...(kontakte ? { teilnehmer: [...auswahl.values()].map(kontaktEingabe) } : {}),
+      ...(mitStunden ? { stundenErfassen: stundenAktiv, stundenLeistungsart: leistungsart || null } : {}),
     });
   }
 
@@ -185,10 +212,83 @@ export function TerminFormular({
           />
         </div>
       )}
+      {mitStunden && (
+        <StundenKasten
+          aktiv={stundenAktiv}
+          hindernis={stundenHindernis}
+          onAktiv={setStundenGewuenscht}
+          minuten={stundenHindernis ? 0 : terminMinuten(zeitraum.beginn as Date, zeitraum.ende as Date)}
+          klientNamen={klientNamen}
+          leistungsart={leistungsart}
+          onLeistungsart={setLeistungsart}
+        />
+      )}
       <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGesendet || !titel.trim()}>
         <ISpeichern />
         {wirdGesendet ? "Speichert…" : absendenLabel}
       </button>
     </form>
   );
+}
+
+/**
+ * Gesperrt mit Grund statt ausgeblendet (Konzept 3.6): wer den Haken sucht,
+ * soll sehen, warum er gerade nicht geht -- etwa weil noch keine Klient:in
+ * eingetragen ist.
+ */
+function StundenKasten({
+  aktiv,
+  hindernis,
+  onAktiv,
+  minuten,
+  klientNamen,
+  leistungsart,
+  onLeistungsart,
+}: {
+  aktiv: boolean;
+  hindernis: string | null;
+  onAktiv: (v: boolean) => void;
+  minuten: number;
+  klientNamen: string[];
+  leistungsart: Leistungsart | "";
+  onLeistungsart: (v: Leistungsart | "") => void;
+}) {
+  const automatisch = LEISTUNGSART_LABEL[terminStundenLeistungsart(null, klientNamen.length)];
+  return (
+    <div className={`zv-stunden-kasten${hindernis ? " zv-stunden-kasten-gesperrt" : ""}`}>
+      <label className="zv-checkbox-zeile">
+        <input type="checkbox" checked={aktiv} disabled={!!hindernis} onChange={(e) => onAktiv(e.target.checked)} />
+        Als Betreuungszeit erfassen
+      </label>
+      {hindernis ? (
+        <p className="zv-stunden-kasten-text">{hindernis}</p>
+      ) : aktiv ? (
+        <>
+          <p className="zv-stunden-kasten-text">
+            <strong>{formatMinutenAlsStunden(minuten)}</strong> für <strong>{namenListe(klientNamen)}</strong>
+            {klientNamen.length > 1 && " (je)"} in den Stunden, sobald der Termin vorbei ist. Ändert sich der Termin danach, wird automatisch
+            storniert und neu gebucht.
+          </p>
+          <div className="zv-field">
+            <label htmlFor="termin-leistung">Leistung</label>
+            <select id="termin-leistung" value={leistungsart} onChange={(e) => onLeistungsart(e.target.value as Leistungsart | "")}>
+              <option value="">Automatisch ({automatisch})</option>
+              {LEISTUNGSARTEN.map((l) => (
+                <option key={l} value={l}>
+                  {LEISTUNGSART_LABEL[l]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      ) : (
+        <p className="zv-stunden-kasten-text">Die Dauer wird nicht in die Stunden übernommen.</p>
+      )}
+    </div>
+  );
+}
+
+function namenListe(namen: string[]): string {
+  if (namen.length <= 1) return namen[0] ?? "";
+  return `${namen.slice(0, -1).join(", ")} und ${namen[namen.length - 1]}`;
 }

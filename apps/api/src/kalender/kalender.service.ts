@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { terminStundenHindernis, terminMinuten } from "@zimmerakte/shared";
 import type {
+  Leistungsart,
   TerminAnlegenEingabe,
   TerminAntwort,
   TerminArt,
@@ -14,6 +16,7 @@ import { KlientNamen } from "../common/klient-namen";
 import { pruefeKontakt } from "../common/kontakt-pruefung";
 import { aktuellerTeilnehmer, requireTenantContext, type Teilnehmer } from "../common/tenant-context";
 import { DatabaseService } from "../database/database.service";
+import { StundenKalenderService } from "../stunden/stunden-kalender.service";
 import { terminAlsIcs } from "./ics";
 
 const MAX_SPANNE_TAGE = 400;
@@ -31,6 +34,8 @@ export interface TerminAendernEingabe {
   ende?: string;
   ganztaegig?: boolean;
   art?: TerminArt;
+  stundenErfassen?: boolean;
+  stundenLeistungsart?: Leistungsart | null;
 }
 
 interface TerminRow {
@@ -50,6 +55,8 @@ interface TerminRow {
   ersteller_klient_vorname: string | null;
   ersteller_klient_nachname: string | null;
   meine_antwort: TerminAntwort | null;
+  meine_stunden_erfassen: boolean | null;
+  stunden_leistungsart: Leistungsart | null;
 }
 
 interface TeilnehmerRow {
@@ -73,7 +80,10 @@ interface TeilnehmerRow {
  */
 @Injectable()
 export class KalenderService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly stunden: StundenKalenderService
+  ) {}
 
   async liste(vonEingabe: string, bisEingabe: string): Promise<TerminDto[]> {
     const von = parseGrenze(vonEingabe, "von");
@@ -135,6 +145,14 @@ export class KalenderService {
     } else {
       for (const t of eingeladen) await pruefeKontakt(client, ich.id, t);
     }
+    if (eingabe.stundenErfassen) {
+      await this.stunden.verlangeVormerkbar({
+        ganztaegig: eingabe.ganztaegig ?? false,
+        beginn: zeitraum.beginn,
+        ende: zeitraum.ende,
+        klientAnzahl: eingeladen.filter((t) => "klientId" in t).length,
+      });
+    }
 
     // ID vorab erzeugen und Termin vor den Teilnehmerzeilen einfuegen: die
     // Insert-Policy von termin_teilnehmer fragt termin_ist_ersteller(), das den
@@ -142,19 +160,22 @@ export class KalenderService {
     const id = randomUUID();
     await client.query(
       `INSERT INTO termin (id, mandant_id, titel, beschreibung, ort, beginn, ende, ganztaegig,
-                           erstellt_von_benutzer_id, erstellt_von_klient_id, art)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                           erstellt_von_benutzer_id, erstellt_von_klient_id, art, stunden_leistungsart)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id, ctx.mandantId, eingabe.titel.trim(), leerZuNull(eingabe.beschreibung), leerZuNull(eingabe.ort),
         zeitraum.beginn, zeitraum.ende, eingabe.ganztaegig ?? false,
         ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null,
         eingabe.art ?? "termin",
+        eingabe.stundenLeistungsart ?? null,
       ]
     );
+    // Die Vormerkung gilt nur fuer die Ersteller:in selbst. Eingeladene setzen
+    // ihren Haken beim Zusagen -- eine Einladung bucht niemandem Stunden.
     await client.query(
-      `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id, antwort, geantwortet_am)
-       VALUES ($1, $2, $3, $4, 'zugesagt', now())`,
-      [ctx.mandantId, id, ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null]
+      `INSERT INTO termin_teilnehmer (mandant_id, termin_id, benutzer_id, klient_id, antwort, geantwortet_am, stunden_erfassen)
+       VALUES ($1, $2, $3, $4, 'zugesagt', now(), $5)`,
+      [ctx.mandantId, id, ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null, ich.art === "benutzer" && !!eingabe.stundenErfassen]
     );
     for (const t of eingeladen) {
       await client.query(
@@ -167,7 +188,19 @@ export class KalenderService {
 
   async aendern(id: string, eingabe: TerminAendernEingabe): Promise<TerminDto> {
     const ich = aktuellerTeilnehmer();
-    return this.db.withTenant(async (client) => {
+    if (eingabe.stundenErfassen) {
+      // Gegen den Stand NACH der Aenderung pruefen -- vorher lesen, weil
+      // verlangeVormerkbar() eigene Verbindungen fuer die Rechte braucht.
+      const vorher = await this.einzeln(id);
+      const ganztaegig = eingabe.ganztaegig ?? vorher.ganztaegig;
+      const zeitraum = ganztaegig === vorher.ganztaegig || (eingabe.beginn && eingabe.ende)
+        ? berechneZeitraum(ganztaegig, eingabe.beginn ?? vorher.beginn, eingabe.ende ?? vorher.ende)
+        : null;
+      if (zeitraum) {
+        await this.stunden.verlangeVormerkbar({ ganztaegig, beginn: zeitraum.beginn, ende: zeitraum.ende, klientAnzahl: klientAnzahl(vorher) });
+      }
+    }
+    const dto = await this.db.withTenant(async (client) => {
       const alt = await this.ladeEinzeln(client, ich, id);
       this.pruefeAenderbar(alt);
 
@@ -191,22 +224,70 @@ export class KalenderService {
           eingabe.art ?? alt.art,
         ]
       );
+      if (eingabe.stundenLeistungsart !== undefined) {
+        await client.query("UPDATE termin SET stunden_leistungsart = $2 WHERE id = $1", [id, eingabe.stundenLeistungsart]);
+      }
+      if (eingabe.stundenErfassen !== undefined) await this.stunden.setzeVormerkung(client, id, eingabe.stundenErfassen);
       return this.ladeEinzeln(client, ich, id);
     });
+    return this.nachStundenAbgleich(dto);
+  }
+
+  /**
+   * Eigene Vormerkung setzen oder zuruecknehmen -- fuer jede eingetragene
+   * Mitarbeiter:in, nicht nur die Ersteller:in. Wirkt nur auf die eigene
+   * Teilnahmezeile (Policy termin_teilnehmer_antworten).
+   */
+  async stundenVormerken(id: string, erfassen: boolean): Promise<TerminDto> {
+    const ich = aktuellerTeilnehmer();
+    const termin = await this.einzeln(id);
+    if (termin.abgesagtAm) throw new ConflictException("Der Termin wurde abgesagt.");
+    if (termin.meineAntwort === null || termin.meineAntwort === "abgelehnt" || ich.art !== "benutzer") {
+      throw new ConflictException("Stunden lassen sich nur für Termine vormerken, an denen du teilnimmst.");
+    }
+    if (erfassen) {
+      await this.stunden.verlangeVormerkbar({ ganztaegig: termin.ganztaegig, beginn: termin.beginn, ende: termin.ende, klientAnzahl: klientAnzahl(termin) });
+    }
+    const dto = await this.db.withTenant(async (client) => {
+      await this.stunden.setzeVormerkung(client, id, erfassen);
+      return this.ladeEinzeln(client, ich, id);
+    });
+    return this.nachStundenAbgleich(dto);
+  }
+
+  /**
+   * Nach jeder Aenderung, die eigene Kalenderbuchungen betreffen kann, sofort
+   * abgleichen (statt erst beim naechsten Seitenaufruf) und den Termin mit den
+   * neuen Buchungen zurueckgeben. Die Buchungen ANDERER Teilnehmender gleichen
+   * deren eigene Aufrufe ab -- nie diese Anfrage.
+   */
+  private async nachStundenAbgleich(dto: TerminDto): Promise<TerminDto> {
+    if (!dto.stunden) return dto;
+    await this.stunden.nachziehenStill();
+    return this.einzeln(dto.id);
   }
 
   async absagen(id: string): Promise<TerminDto> {
     const ich = aktuellerTeilnehmer();
-    return this.db.withTenant(async (client) => {
+    const dto = await this.db.withTenant(async (client) => {
       this.pruefeAenderbar(await this.ladeEinzeln(client, ich, id));
       await client.query("UPDATE termin SET abgesagt_am = now() WHERE id = $1 AND abgesagt_am IS NULL", [id]);
       return this.ladeEinzeln(client, ich, id);
     });
+    return this.nachStundenAbgleich(dto);
   }
 
-  async antworten(id: string, antwort: TerminAntwort): Promise<TerminDto> {
+  /**
+   * stundenErfassen: der Haken neben "Zusagen" (Konzept 3.2). Ablehnen nimmt
+   * die eigene Vormerkung immer zurueck.
+   */
+  async antworten(id: string, antwort: TerminAntwort, stundenErfassen?: boolean): Promise<TerminDto> {
     const ich = aktuellerTeilnehmer();
-    return this.db.withTenant(async (client) => {
+    if (stundenErfassen && antwort === "zugesagt") {
+      const termin = await this.einzeln(id);
+      await this.stunden.verlangeVormerkbar({ ganztaegig: termin.ganztaegig, beginn: termin.beginn, ende: termin.ende, klientAnzahl: klientAnzahl(termin) });
+    }
+    const dto = await this.db.withTenant(async (client) => {
       const termin = await this.ladeEinzeln(client, ich, id);
       if (termin.abgesagtAm) throw new ConflictException("Der Termin wurde abgesagt.");
       const { rowCount } = await client.query(
@@ -217,8 +298,11 @@ export class KalenderService {
       if (!rowCount) {
         throw new ConflictException("Du bist für diesen Termin nicht eingetragen. Übernimm ihn zuerst in deinen Kalender.");
       }
+      if (antwort === "abgelehnt") await this.stunden.setzeVormerkung(client, id, false);
+      else if (antwort === "zugesagt" && stundenErfassen !== undefined) await this.stunden.setzeVormerkung(client, id, stundenErfassen);
       return this.ladeEinzeln(client, ich, id);
     });
+    return this.nachStundenAbgleich(dto);
   }
 
   /**
@@ -288,6 +372,10 @@ export class KalenderService {
       [rows.map((r) => r.id)]
     );
     const sichtbarkeit = new KlientNamen(client, ich);
+    const stundenBuchungen = await this.stunden.buchungenFuerTermine(
+      client,
+      rows.filter((r) => r.meine_stunden_erfassen !== null).map((r) => r.id)
+    );
     const nachTermin = new Map<string, TerminTeilnehmerDto[]>();
     for (const r of tn) {
       const person: TerminPersonDto = r.benutzer_id
@@ -321,10 +409,29 @@ export class KalenderService {
         binErsteller: erstelltVon.art === ich.art && erstelltVon.id === ich.id,
         meineAntwort: r.meine_antwort,
         teilnehmer: nachTermin.get(r.id) ?? [],
+        stundenLeistungsart: r.stunden_leistungsart,
+        stunden: null,
       });
+      const dto = dtos[dtos.length - 1];
+      // Nur fuer die eigene Teilnahme als Mitarbeiter:in -- ueber fremde
+      // Vormerkungen sagt der Termin nichts (jede Person bucht nur sich selbst).
+      if (ich.art === "benutzer" && r.meine_stunden_erfassen !== null) {
+        const hindernis = terminStundenHindernis({ ganztaegig: r.ganztaegig, beginn: r.beginn, ende: r.ende, klientAnzahl: klientAnzahl(dto) });
+        dto.stunden = {
+          vorgemerkt: r.meine_stunden_erfassen,
+          hindernis,
+          minuten: hindernis ? null : terminMinuten(r.beginn, r.ende),
+          buchungen: stundenBuchungen.get(r.id) ?? [],
+        };
+      }
     }
     return dtos;
   }
+}
+
+/** Klient:innen, deren Zeit zaehlt: eingetragen und nicht abgesagt. */
+function klientAnzahl(termin: TerminDto): number {
+  return termin.teilnehmer.filter((t) => t.art === "klient" && t.antwort !== "abgelehnt").length;
 }
 
 /** $1 = benutzer_id, $2 = klient_id des Aufrufers (je eines NULL); weitere Parameter ab $3. */
@@ -337,7 +444,9 @@ async function ladeTermine(client: PoolClient, ich: Teilnehmer, bedingung: strin
     `SELECT t.id, t.titel, t.beschreibung, t.ort, t.beginn, t.ende, t.ganztaegig, t.art, t.erstellt_am, t.abgesagt_am,
             t.erstellt_von_benutzer_id, t.erstellt_von_klient_id,
             eb.name AS ersteller_benutzer_name, ek.vorname AS ersteller_klient_vorname, ek.nachname AS ersteller_klient_nachname,
-            mein.antwort AS meine_antwort
+            mein.antwort AS meine_antwort,
+            CASE WHEN mein.benutzer_id IS NOT NULL THEN mein.stunden_erfassen END AS meine_stunden_erfassen,
+            t.stunden_leistungsart
      FROM termin t
      LEFT JOIN benutzer eb ON eb.id = t.erstellt_von_benutzer_id
      LEFT JOIN klient ek ON ek.id = t.erstellt_von_klient_id

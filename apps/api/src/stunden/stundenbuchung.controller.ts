@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { LEISTUNGSARTEN, STUNDENBUCHUNG_MINUTEN_MAX } from "@zimmerakte/shared";
 import { Authenticated } from "../common/authenticated.decorator";
+import { StundenKalenderService } from "./stunden-kalender.service";
 import { StundenbuchungService } from "./stundenbuchung.service";
 
 const anlegenSchema = z.object({
@@ -16,12 +17,16 @@ const anlegenSchema = z.object({
   notiz: z.string().trim().max(2000).optional(),
 });
 
+const eigeneEinstellungSchema = z.object({ vorauswahl: z.boolean().nullable(), vorauswahlZusage: z.boolean().nullable() }).strict();
+const traegerEinstellungSchema = z.object({ erlaubt: z.boolean(), vorauswahl: z.boolean() }).strict();
+
 const stornoSchema = z.object({ grund: z.string().trim().min(1, "Grund darf nicht leer sein.") });
 
 const listeSchema = z
   .object({
     klientId: z.string().uuid().optional(),
     mitarbeiterId: z.string().uuid().optional(),
+    herkunft: z.enum(["manuell", "kalender"]).optional(),
     von: z.string().date().optional(),
     bis: z.string().date().optional(),
   })
@@ -31,6 +36,7 @@ function leseFilter(query: Record<string, unknown>) {
   const parsed = listeSchema.safeParse({
     klientId: query.klientId || undefined,
     mitarbeiterId: query.mitarbeiterId || undefined,
+    herkunft: query.herkunft || undefined,
     von: query.von || undefined,
     bis: query.bis || undefined,
   });
@@ -42,11 +48,49 @@ function leseFilter(query: Record<string, unknown>) {
 @Controller("stundenbuchungen")
 @Authenticated()
 export class StundenbuchungController {
-  constructor(private readonly stunden: StundenbuchungService) {}
+  constructor(
+    private readonly stunden: StundenbuchungService,
+    private readonly kalender: StundenKalenderService
+  ) {}
 
+  // Vor dem Lesen nachziehen: wer die Stunden oeffnet, soll die Termine sehen,
+  // die seit dem letzten Besuch zu Ende gegangen sind (Konzept 3.3).
   @Get()
   async list(@Query() query: Record<string, unknown>) {
-    return this.stunden.findeAlle(leseFilter(query));
+    const filter = leseFilter(query);
+    await this.kalender.nachziehenStill();
+    return this.stunden.findeAlle(filter);
+  }
+
+  /** Die Web-App ruft das beim Start auf -- "Heute" und Anmeldung (Konzept 3.3). */
+  @Post("kalender/nachziehen")
+  @HttpCode(200)
+  async nachziehen() {
+    return this.kalender.nachziehen();
+  }
+
+  @Get("kalender/vormerkungen")
+  async vormerkungen() {
+    return this.kalender.vormerkungen();
+  }
+
+  @Get("kalender/einstellungen")
+  async kalenderEinstellungen() {
+    return this.kalender.einstellungen();
+  }
+
+  @Put("kalender/einstellungen")
+  async kalenderEinstellungenSpeichern(@Body() body: unknown) {
+    const eingabe = eigeneEinstellungSchema.safeParse(body);
+    if (!eingabe.success) throw new BadRequestException(eingabe.error.issues.map((i) => i.message).join(" "));
+    return this.kalender.eigeneSpeichern(eingabe.data);
+  }
+
+  @Put("kalender/traeger")
+  async kalenderTraegerSpeichern(@Body() body: unknown) {
+    const eingabe = traegerEinstellungSchema.safeParse(body);
+    if (!eingabe.success) throw new BadRequestException(eingabe.error.issues.map((i) => i.message).join(" "));
+    return this.kalender.traegerSpeichern(eingabe.data);
   }
 
   @Get("rechte")
