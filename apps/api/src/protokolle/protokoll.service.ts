@@ -31,6 +31,9 @@ import {
   type ProtokolleRechteDto,
   type ProtokollKurzDto,
   type ProtokollWertQuelle,
+  type DokumentationsAngebotDto,
+  ZUORDNUNG_LABEL,
+  type FormularZuordnung,
 } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
 import { requireTenantContext } from "../common/tenant-context";
@@ -41,6 +44,7 @@ import {
   klientIstArchiviert,
   klientIstErlaubt,
   klientStandortBedingung,
+  standortIstErlaubt,
 } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
 
@@ -59,7 +63,8 @@ interface WertZeile {
 interface ProtokollKopf {
   id: string;
   autor_id: string;
-  klient_id: string;
+  klient_id: string | null;
+  standort_id: string | null;
   abgeschlossen_am: string | null;
   definition: FormularDefinition;
   formular_id: string;
@@ -295,7 +300,7 @@ export class ProtokollService {
    */
   async einstellungenSpeichern(
     id: string,
-    input: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[] }
+    input: { name: string; beschreibung: string | null; standortIds: string[]; anheftungen: FormularAnheftung[]; aufDokumentation: boolean }
   ): Promise<FormularDetailDto> {
     await this.brauche("formulare-verwalten", "Keine Berechtigung, Formulare zu verwalten.");
     const { mandantId } = requireTenantContext();
@@ -316,7 +321,12 @@ export class ProtokollService {
         const { rows } = await client.query("SELECT id FROM standort WHERE id = ANY($1::uuid[])", [standortIds]);
         if (rows.length !== standortIds.length) throw new BadRequestException("Ein ausgewählter Standort existiert nicht.");
       }
-      await client.query("UPDATE formular SET name = $2, beschreibung = $3 WHERE id = $1", [id, input.name, input.beschreibung]);
+      await client.query("UPDATE formular SET name = $2, beschreibung = $3, auf_dokumentation = $4 WHERE id = $1", [
+        id,
+        input.name,
+        input.beschreibung,
+        input.aufDokumentation,
+      ]);
       await client.query("DELETE FROM formular_standort WHERE formular_id = $1", [id]);
       for (const s of standortIds) {
         await client.query("INSERT INTO formular_standort (mandant_id, formular_id, standort_id) VALUES ($1, $2, $3)", [mandantId, id, s]);
@@ -441,7 +451,7 @@ export class ProtokollService {
    * Entwurf ist noch nicht Teil der Akte. Standort-Einschraenkung wie bei
    * Tagesberichten ueber klientStandortBedingung.
    */
-  async liste(filter: { klientId?: string }): Promise<ProtokollKurzDto[]> {
+  async liste(filter: { klientId?: string; formularId?: string }): Promise<ProtokollKurzDto[]> {
     await this.brauche("ansehen", "Keine Berechtigung, Protokolle zu sehen.");
     const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
@@ -452,7 +462,11 @@ export class ProtokollService {
         params.push(filter.klientId);
         bedingungen.push(`p.klient_id = $${params.length}`);
       }
-      bedingungen.push(klientStandortBedingung(erlaubte, "k", params));
+      if (filter.formularId) {
+        params.push(filter.formularId);
+        bedingungen.push(`f.id = $${params.length}`);
+      }
+      bedingungen.push(protokollSichtbarBedingung(erlaubte, "p", "k", params));
       const { rows } = await client.query(
         `${KURZ_AUSWAHL} WHERE ${bedingungen.join(" AND ")}
          ORDER BY p.bezugsdatum DESC, p.erstellt_am DESC`,
@@ -503,7 +517,7 @@ export class ProtokollService {
     const kopf = await ladeKopf(client, id);
     if (!kopf) throw new NotFoundException("Protokoll nicht gefunden.");
     if (!kopf.abgeschlossen_am && kopf.autor_id !== benutzerId) throw new NotFoundException("Protokoll nicht gefunden.");
-    if (!(await klientIstErlaubt(client, benutzerId, kopf.klient_id))) throw new NotFoundException("Protokoll nicht gefunden.");
+    if (!(await bezugIstSichtbar(client, benutzerId, kopf))) throw new NotFoundException("Protokoll nicht gefunden.");
     return kopf;
   }
 
@@ -512,28 +526,55 @@ export class ProtokollService {
   // -------------------------------------------------------------------------
 
   /** Legt einen Entwurf an und fuellt "vorschlag"- und "festgehalten"-Felder vor. */
-  async anlegen(input: { formularId: string; klientId: string }): Promise<ProtokollDto> {
+  /**
+   * Legt einen Entwurf an und fuellt "vorschlag"- und "festgehalten"-Felder
+   * vor. Mit Klient:in wie bisher (Angebot der Klientenakte); ohne Klient:in
+   * ueber das Angebot der Seite Dokumentation, je nach Zuordnung mit Standort
+   * oder ganz ohne Bezug (Migration 0083). Der Trigger protokoll_bezug_passt
+   * prueft das noch einmal in der Datenbank.
+   */
+  async anlegen(input: { formularId: string; klientId?: string | null; standortId?: string | null }): Promise<ProtokollDto> {
     await this.brauche("ausfuellen", "Keine Berechtigung, Protokolle auszufüllen.");
     const { mandantId, benutzerId } = requireTenantContext();
+    const klientId = input.klientId ?? null;
+    const standortId = input.standortId ?? null;
     return this.db.withTenant(async (client) => {
-      await schreibbarerKlient(client, benutzerId, input.klientId);
-      // Dieselbe Abfrage wie das Angebot der Klientenakte: veroeffentlicht,
-      // nicht stillgelegt, fuer den Standort der Klient:in zugelassen. Der
-      // Browser bietet nur das an; hier wird es verbindlich geprueft.
-      const angebot = (await ladeAngebot(client, input.klientId, null)).find((a) => a.id === input.formularId);
-      if (!angebot) throw new NotFoundException("Formular nicht gefunden.");
-      const { versionId, definition } = angebot;
+      let versionId: string;
+      let definition: FormularDefinition;
+      if (klientId) {
+        if (standortId) throw new BadRequestException("Ein Dokument gehört entweder zu einer Klient:in oder zu einem Standort.");
+        await schreibbarerKlient(client, benutzerId, klientId);
+        // Dieselbe Abfrage wie das Angebot der Klientenakte: veroeffentlicht,
+        // nicht stillgelegt, fuer den Standort der Klient:in zugelassen. Der
+        // Browser bietet nur das an; hier wird es verbindlich geprueft.
+        const angebot = (await ladeAngebot(client, klientId, null)).find((a) => a.id === input.formularId);
+        if (!angebot) throw new NotFoundException("Formular nicht gefunden.");
+        ({ versionId, definition } = angebot);
+      } else {
+        const angebot = (await ladeDokumentationsAngebot(client, benutzerId)).find((a) => a.id === input.formularId);
+        if (!angebot) throw new NotFoundException("Formular nicht gefunden.");
+        if (angebot.zuordnung === "klient") throw new BadRequestException("Bitte eine Klient:in wählen.");
+        if (angebot.zuordnung === "standort") {
+          if (!standortId) throw new BadRequestException("Bitte einen Standort wählen.");
+          // Nur Standorte, fuer die das Formular zugelassen ist UND die die Person sehen darf.
+          if (!angebot.standorte.some((st) => st.id === standortId)) throw new NotFoundException("Standort nicht gefunden.");
+        } else if (standortId) {
+          throw new BadRequestException("Dieses Formular gehört zu keinem Standort.");
+        }
+        versionId = angebot.versionId;
+        definition = angebot.definition;
+      }
 
-      const quellen = await ladeQuellen(client, input.klientId, benutzerId);
+      const quellen = await ladeQuellen(client, klientId, benutzerId);
       const vor: Record<string, { wert: FeldWert; quelle: ProtokollWertQuelle }> = {};
       const vb = vorbelegung(definition, quellen);
       for (const [k, w] of Object.entries(vb.werte)) vor[k] = { wert: w, quelle: vb.quellen[k] };
       const bezugsdatum = bezugsdatumAus(definition, vb.werte);
 
       const ins = await client.query<{ id: string }>(
-        `INSERT INTO protokoll (mandant_id, formular_version_id, klient_id, autor_id, bezugsdatum)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [mandantId, versionId, input.klientId, benutzerId, bezugsdatum]
+        `INSERT INTO protokoll (mandant_id, formular_version_id, klient_id, standort_id, autor_id, bezugsdatum)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [mandantId, versionId, klientId, standortId, benutzerId, bezugsdatum]
       );
       const protokollId = ins.rows[0].id;
       const { werte } = werteAus(definition, Object.fromEntries(Object.entries(vor).map(([k, v]) => [k, v.wert])));
@@ -544,13 +585,22 @@ export class ProtokollService {
     });
   }
 
+  /** Formulare fuer den Knopf „Formular ausfüllen“ auf der Seite Dokumentation. */
+  async dokumentationsAngebot(): Promise<DokumentationsAngebotDto[]> {
+    await this.brauche("ausfuellen", "Keine Berechtigung, Protokolle auszufüllen.");
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) =>
+      (await ladeDokumentationsAngebot(client, benutzerId)).map(({ versionId: _v, definition: _d, ...rest }) => rest)
+    );
+  }
+
   /** Zwischenspeichern eines Entwurfs: Typen werden geprueft, Pflicht noch nicht. */
   async entwurfSpeichern(id: string, eingabe: FeldWerte): Promise<ProtokollDto> {
     await this.brauche("ausfuellen", "Keine Berechtigung, Protokolle auszufüllen.");
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const kopf = await this.eigenerEntwurf(client, id, benutzerId);
-      await schreibbarerKlient(client, benutzerId, kopf.klient_id);
+      await schreibbarerBezug(client, benutzerId, kopf);
       const alt = await ladeWerte(client, id);
       const zusammen = mitFestenWerten(kopf.definition, eingabe, alt);
       const fehler = typFehlerAlle(kopf.definition, zusammen);
@@ -574,7 +624,7 @@ export class ProtokollService {
     const { mandantId, benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
       const kopf = await this.eigenerEntwurf(client, id, benutzerId);
-      await schreibbarerKlient(client, benutzerId, kopf.klient_id);
+      await schreibbarerBezug(client, benutzerId, kopf);
       const alt = await ladeWerte(client, id);
       const quellenDaten = await ladeQuellen(client, kopf.klient_id, benutzerId);
       const zusammen: FeldWerte = { ...eingabe };
@@ -615,7 +665,7 @@ export class ProtokollService {
       if (!((eigenes && darfAusfuellen) || darfFremde)) {
         throw new ForbiddenException("Nur die Autorin bzw. der Autor oder die Leitung darf dieses Protokoll korrigieren.");
       }
-      await schreibbarerKlient(client, benutzerId, kopf.klient_id);
+      await schreibbarerBezug(client, benutzerId, kopf);
       const alt = await ladeWerte(client, id);
       const zusammen = mitFestenWerten(kopf.definition, eingabe, alt);
       const erlaubeAusgeblendet: Record<string, string[]> = {};
@@ -652,6 +702,35 @@ export class ProtokollService {
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
 // ---------------------------------------------------------------------------
+
+/** Schreiben in ein vorhandenes Protokoll: Klient:in wie bisher, Standort ueber die Standort-Einschraenkung. */
+async function schreibbarerBezug(client: PoolClient, benutzerId: string, kopf: ProtokollKopf) {
+  if (kopf.klient_id) return schreibbarerKlient(client, benutzerId, kopf.klient_id);
+  if (kopf.standort_id && !(await standortIstErlaubt(client, benutzerId, kopf.standort_id))) {
+    throw new NotFoundException("Protokoll nicht gefunden.");
+  }
+}
+
+/** Lesen: wer die Klient:in bzw. den Standort nicht sehen darf, sieht auch das Protokoll nicht. Ohne Bezug: alle mit Leserecht. */
+async function bezugIstSichtbar(client: PoolClient, benutzerId: string, kopf: ProtokollKopf): Promise<boolean> {
+  if (kopf.klient_id) return klientIstErlaubt(client, benutzerId, kopf.klient_id);
+  if (kopf.standort_id) return standortIstErlaubt(client, benutzerId, kopf.standort_id);
+  return true;
+}
+
+/**
+ * Listen-Gegenstueck zu bezugIstSichtbar: Klient:innen ueber ihre Belegung
+ * (wie bisher), Standort-Dokumente ueber ihre standort_id, Dokumente ohne
+ * Bezug fuer alle mit Leserecht.
+ */
+function protokollSichtbarBedingung(erlaubte: string[] | null, p: string, k: string, params: unknown[]): string {
+  if (!erlaubte) return "1=1";
+  const klientBed = klientStandortBedingung(erlaubte, k, params);
+  params.push(erlaubte);
+  return `((${p}.klient_id IS NOT NULL AND ${klientBed})
+           OR (${p}.standort_id IS NOT NULL AND ${p}.standort_id = ANY($${params.length}))
+           OR (${p}.klient_id IS NULL AND ${p}.standort_id IS NULL))`;
+}
 
 async function schreibbarerKlient(client: PoolClient, benutzerId: string, klientId: string) {
   if (!(await klientIstErlaubt(client, benutzerId, klientId))) throw new NotFoundException("Klient nicht gefunden.");
@@ -790,8 +869,12 @@ async function schreibeWerte(
  * Nach einer Anonymisierung steht in klient schon der Platzhalter, also
  * zeigt auch jedes Protokoll automatisch nur noch ihn.
  */
-async function ladeQuellen(client: PoolClient, klientId: string, benutzerId: string): Promise<Record<Datenquelle, FeldWert | null>> {
-  const { rows } = await client.query(
+async function ladeQuellen(client: PoolClient, klientId: string | null, benutzerId: string): Promise<Record<Datenquelle, FeldWert | null>> {
+  // Ohne Klient:in bleiben alle Klienten- und Belegungsquellen leer; die
+  // ausfuellende Person und die Zeit gibt es trotzdem.
+  const { rows } = klientId === null
+    ? await client.query("SELECT (SELECT name FROM benutzer WHERE id = $1) AS ausfuellende", [benutzerId])
+    : await client.query(
     `SELECT k.vorname, k.nachname, k.geburtsdatum, k.aktenzeichen, k.amt,
             bb.name AS bezugsbetreuung,
             (SELECT s.name FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id JOIN standort s ON s.id = z.standort_id
@@ -805,7 +888,7 @@ async function ladeQuellen(client: PoolClient, klientId: string, benutzerId: str
      WHERE k.id = $1`,
     [klientId, benutzerId]
   );
-  const r = rows[0] ?? {};
+  const r: Record<string, any> = rows[0] ?? {};
   const heute = heuteBerlin();
   let alter: number | null = null;
   if (r.geburtsdatum) {
@@ -833,13 +916,15 @@ async function ladeQuellen(client: PoolClient, klientId: string, benutzerId: str
 }
 
 const KURZ_AUSWAHL = `
-  SELECT p.id, f.id AS formular_id, f.name AS formular_name, v.nummer AS version_nummer,
-         p.klient_id, k.vorname, k.nachname, b.name AS autor_name, p.bezugsdatum, p.abgeschlossen_am, p.tagesbericht_id,
+  SELECT p.id, f.id AS formular_id, f.name AS formular_name, v.nummer AS version_nummer, v.zuordnung,
+         p.klient_id, k.vorname, k.nachname, p.standort_id, st.name AS standort_name,
+         b.name AS autor_name, p.bezugsdatum, p.abgeschlossen_am, p.tagesbericht_id,
          (SELECT count(*)::int FROM protokoll_aenderung a WHERE a.protokoll_id = p.id) AS anzahl_aenderungen
   FROM protokoll p
   JOIN formular_version v ON v.id = p.formular_version_id
   JOIN formular f ON f.id = v.formular_id
-  JOIN klient k ON k.id = p.klient_id
+  LEFT JOIN klient k ON k.id = p.klient_id
+  LEFT JOIN standort st ON st.id = p.standort_id
   LEFT JOIN benutzer b ON b.id = p.autor_id
 `;
 
@@ -849,8 +934,11 @@ function kurzDto(r: Record<string, any>): ProtokollKurzDto {
     formularId: r.formular_id,
     formularName: r.formular_name,
     versionNummer: r.version_nummer,
+    zuordnung: r.zuordnung as FormularZuordnung,
     klientId: r.klient_id,
-    klientName: `${r.vorname} ${r.nachname}`,
+    klientName: r.klient_id ? `${r.vorname} ${r.nachname}` : null,
+    standortId: r.standort_id,
+    standortName: r.standort_name,
     autorName: r.autor_name,
     bezugsdatum: r.bezugsdatum,
     abgeschlossen: r.abgeschlossen_am !== null,
@@ -862,7 +950,7 @@ function kurzDto(r: Record<string, any>): ProtokollKurzDto {
 
 async function ladeKopf(client: PoolClient, id: string): Promise<ProtokollKopf | null> {
   const { rows } = await client.query<ProtokollKopf>(
-    `SELECT p.id, p.autor_id, p.klient_id, p.abgeschlossen_am, v.definition, v.formular_id, v.nummer AS version_nummer
+    `SELECT p.id, p.autor_id, p.klient_id, p.standort_id, p.abgeschlossen_am, v.definition, v.formular_id, v.nummer AS version_nummer
      FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id
      WHERE p.id = $1`,
     [id]
@@ -929,6 +1017,11 @@ const VERWALTUNG_AUSWAHL = `
   SELECT f.id, f.name, f.beschreibung, f.archiviert_am,
          (SELECT max(nummer) FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NOT NULL) AS veroeffentlicht,
          (SELECT nummer FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NULL) AS entwurf,
+         f.auf_dokumentation,
+         COALESCE(
+           (SELECT zuordnung FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NOT NULL ORDER BY nummer DESC LIMIT 1),
+           (SELECT zuordnung FROM formular_version v WHERE v.formular_id = f.id AND v.veroeffentlicht_am IS NULL),
+           'klient') AS zuordnung,
          COALESCE((SELECT array_agg(fs.standort_id) FROM formular_standort fs WHERE fs.formular_id = f.id), '{}') AS standort_ids,
          COALESCE((SELECT json_agg(json_build_object('anheftpunkt', fa.anheftpunkt, 'modus', fa.modus, 'pflicht', fa.pflicht, 'darstellung', fa.darstellung))
                    FROM formular_anheftung fa WHERE fa.formular_id = f.id), '[]') AS anheftungen,
@@ -952,6 +1045,8 @@ function verwaltungDto(r: Record<string, any>): FormularVerwaltungDto {
     anheftungen: r.anheftungen,
     anzahlProtokolle: r.anzahl,
     anzahl30Tage: r.anzahl30,
+    aufDokumentation: r.auf_dokumentation,
+    zuordnung: r.zuordnung,
   };
 }
 
@@ -977,9 +1072,9 @@ async function ladeFormularKopf(
  * (Migration 0010), daher "auszug > bezugsdatum".
  */
 const PROTOKOLL_STANDORT = `
-  (SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id
+  COALESCE(p.standort_id, (SELECT z.standort_id FROM belegung b JOIN zimmer z ON z.id = b.zimmer_id
    WHERE b.klient_id = p.klient_id AND b.einzug <= p.bezugsdatum AND (b.auszug IS NULL OR b.auszug > p.bezugsdatum)
-   ORDER BY b.einzug DESC LIMIT 1)`;
+   ORDER BY b.einzug DESC LIMIT 1))`;
 
 async function ladeKennzahlen(
   client: PoolClient,
@@ -990,7 +1085,7 @@ async function ladeKennzahlen(
   // Grenzen in Berliner Zeit, sonst rutscht ein Protokoll von 00:30 in den Vortag/die Vorwoche.
   const basis = `
     WITH pr AS (
-      SELECT p.id, p.klient_id, p.abgeschlossen_am, p.erstellt_am, v.nummer AS version,
+      SELECT p.id, p.klient_id, p.standort_id AS eigener_standort, p.abgeschlossen_am, p.erstellt_am, v.nummer AS version,
              (p.abgeschlossen_am AT TIME ZONE 'Europe/Berlin') AS lokal,
              ${PROTOKOLL_STANDORT} AS standort_id
       FROM protokoll p JOIN formular_version v ON v.id = p.formular_version_id
@@ -1039,19 +1134,22 @@ async function ladeKennzahlen(
   const alleStandorte = await client.query<{ id: string; name: string }>("SELECT id, name FROM standort ORDER BY name");
 
   const params: unknown[] = [formularId];
-  const bedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+  const bedingung = erlaubteStandorte
+    ? `((pr.klient_id IS NOT NULL AND ${klientStandortBedingung(erlaubteStandorte, "k", params)})
+        OR (pr.klient_id IS NULL AND (pr.eigener_standort IS NULL OR pr.eigener_standort = ANY($${params.push(erlaubteStandorte)}))))`
+    : "1=1";
   const letzte = await client.query<{
     id: string;
-    klient_id: string;
+    klient_id: string | null;
     am: Date;
-    vorname: string;
-    nachname: string;
+    vorname: string | null;
+    nachname: string | null;
     standort: string | null;
     version: number;
   }>(
     `${basis}
      SELECT pr.id, pr.klient_id, pr.abgeschlossen_am AS am, k.vorname, k.nachname, s.name AS standort, pr.version
-     FROM pr JOIN klient k ON k.id = pr.klient_id LEFT JOIN standort s ON s.id = pr.standort_id
+     FROM pr LEFT JOIN klient k ON k.id = pr.klient_id LEFT JOIN standort s ON s.id = pr.standort_id
      WHERE pr.abgeschlossen_am IS NOT NULL AND ${bedingung}
      ORDER BY pr.abgeschlossen_am DESC LIMIT 5`,
     params
@@ -1099,7 +1197,7 @@ async function ladeKennzahlen(
       id: r.id,
       klientId: r.klient_id,
       abgeschlossenAm: new Date(r.am).toISOString(),
-      klientInitialen: initialen(r.vorname, r.nachname),
+      klientInitialen: r.vorname !== null && r.nachname !== null ? initialen(r.vorname, r.nachname) : null,
       standortName: r.standort,
       versionNummer: r.version,
     })),
@@ -1173,11 +1271,12 @@ async function ladeAngebot(client: PoolClient, klientId: string, anheftpunkt: An
     `SELECT f.id, f.name, f.beschreibung, v.id AS version_id, v.nummer, v.definition, fa.modus, COALESCE(fa.pflicht, false) AS pflicht, fa.darstellung
      FROM formular f
      JOIN LATERAL (
-       SELECT id, nummer, definition FROM formular_version
+       SELECT id, nummer, definition, zuordnung FROM formular_version
        WHERE formular_id = f.id AND veroeffentlicht_am IS NOT NULL ORDER BY nummer DESC LIMIT 1
      ) v ON true
      LEFT JOIN formular_anheftung fa ON fa.formular_id = f.id AND fa.anheftpunkt = $2
      WHERE f.archiviert_am IS NULL
+       AND v.zuordnung IN ('klient', 'klient_wahlweise')
        AND ($2::text IS NULL OR fa.formular_id IS NOT NULL)
        AND (
          NOT EXISTS (SELECT 1 FROM formular_standort fs WHERE fs.formular_id = f.id)
@@ -1202,6 +1301,53 @@ async function ladeAngebot(client: PoolClient, klientId: string, anheftpunkt: An
     pflicht: anheftpunkt ? r.pflicht : false,
     darstellung: anheftpunkt ? r.darstellung : null,
   }));
+}
+
+/**
+ * Angebot der Seite Dokumentation: neueste veroeffentlichte Version, nicht
+ * stillgelegt, auf_dokumentation. Klienten-Formulare erscheinen ohne
+ * Standortpruefung -- die greift erst beim Anlegen mit der gewaehlten
+ * Klient:in (ladeAngebot). Standort-Formulare nur mit den Standorten, die
+ * zugelassen sind UND die die Person sehen darf; ohne solchen Standort gar nicht.
+ */
+async function ladeDokumentationsAngebot(
+  client: PoolClient,
+  benutzerId: string
+): Promise<(DokumentationsAngebotDto & { versionId: string; definition: FormularDefinition })[]> {
+  const erlaubte = await ermittleErlaubteStandortIds(client, benutzerId);
+  const { rows } = await client.query(
+    `SELECT f.id, f.name, f.beschreibung, v.id AS version_id, v.nummer, v.definition, v.zuordnung,
+            (SELECT max(p.erstellt_am) FROM protokoll p JOIN formular_version pv ON pv.id = p.formular_version_id
+             WHERE pv.formular_id = f.id AND p.autor_id = $1) AS zuletzt_am,
+            COALESCE((
+              SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY s.name)
+              FROM standort s
+              WHERE (NOT EXISTS (SELECT 1 FROM formular_standort fs WHERE fs.formular_id = f.id)
+                     OR EXISTS (SELECT 1 FROM formular_standort fs WHERE fs.formular_id = f.id AND fs.standort_id = s.id))
+                AND ($2::uuid[] IS NULL OR s.id = ANY($2::uuid[]))
+            ), '[]') AS standorte
+     FROM formular f
+     JOIN LATERAL (
+       SELECT id, nummer, definition, zuordnung FROM formular_version
+       WHERE formular_id = f.id AND veroeffentlicht_am IS NOT NULL ORDER BY nummer DESC LIMIT 1
+     ) v ON true
+     WHERE f.archiviert_am IS NULL AND f.auf_dokumentation
+     ORDER BY f.name`,
+    [benutzerId, erlaubte]
+  );
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      beschreibung: r.beschreibung,
+      versionId: r.version_id,
+      versionNummer: r.nummer,
+      definition: r.definition,
+      zuordnung: r.zuordnung as FormularZuordnung,
+      standorte: r.zuordnung === "standort" ? (r.standorte as { id: string; name: string }[]) : [],
+      zuletztAm: r.zuletzt_am ? new Date(r.zuletzt_am).toISOString() : null,
+    }))
+    .filter((a) => a.zuordnung !== "standort" || a.standorte.length > 0);
 }
 
 /** Vorausgefuellte Werte (Vorschlag und festgehalten) und Anzeigewerte fuer eine Klient:in. */
@@ -1236,6 +1382,9 @@ function vorbelegung(
  */
 function strukturFehler(def: unknown): string | null {
   if (!def || typeof def !== "object" || !Array.isArray((def as FormularDefinition).bausteine)) return "Die Definition hat keine Bausteine.";
+  // Sonst scheiterte der Entwurf erst am CHECK der generierten Spalte (0083) -- als 500.
+  const z = (def as FormularDefinition).zuordnung;
+  if (z !== undefined && !(z in ZUORDNUNG_LABEL)) return "Unbekannte Zuordnung.";
   let anzahl = 0;
   const pruefe = (liste: unknown[], tiefe: number): string | null => {
     if (tiefe > 3) return "Abschnitte sind zu tief verschachtelt.";
