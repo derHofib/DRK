@@ -115,6 +115,7 @@ describe("Klient archivieren: Rollen-Gate, Schreibsperre, PDF-Snapshot, Reversib
       await raeumeKontoMitRolleAuf(admin, mandantId);
       await admin.query("DELETE FROM kassenbuchung WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM tagesbericht WHERE mandant_id = $1", [mandantId]);
+      await admin.query("DELETE FROM klient_eintrag WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM rechnung_statuswechsel WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM rechnung WHERE mandant_id = $1", [mandantId]);
       await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1", [mandantId]);
@@ -161,6 +162,16 @@ describe("Klient archivieren: Rollen-Gate, Schreibsperre, PDF-Snapshot, Reversib
   });
 
   it("archiviert den Klienten: PDF-Snapshot entsteht, Zustand wird eingefroren", async () => {
+    // Ein Verlaufseintrag vorab, damit das Kapitel "6. Verlauf" mit Inhalt
+    // gebaut wird (die Abfrage laeuft sonst ungeprueft ins Leere).
+    const eintrag = await als(tokenBereichsleitung).post(`/klienten/${klientId}/eintraege`, {
+      art: "telefonat",
+      richtung: "eingehend",
+      gegenueber: "Jugendamt",
+      text: "Rueckruf wegen Hilfeplan vereinbart.",
+    });
+    expect(eintrag.status).toBe(201);
+
     const res = await als(tokenBereichsleitung).patch(`/klienten/${klientId}/archivieren`);
     expect(res.status).toBe(200);
     expect(res.body.archiviertAm).not.toBeNull();

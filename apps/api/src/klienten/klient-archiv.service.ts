@@ -7,6 +7,12 @@ import { klientIstErlaubt } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
 import { ArchivPdfInput, erzeugeArchivPdf } from "./klient-archiv-pdf";
 import { zuKontaktDto, zuStammdatenDto } from "./klient.service";
+import {
+  GESPRAECH_ART_LABEL,
+  KLIENT_EINTRAG_ART_LABEL,
+  type GespraechArt,
+  type KlientEintragArt,
+} from "@zimmerakte/shared";
 
 export interface KlientArchivPdfEintrag {
   id: string;
@@ -223,6 +229,26 @@ async function datenSammeln(
     tagesberichtDokumenteById.set(dok.tagesbericht_id, liste);
   }
 
+  // Verlauf: nur die erfassten Eintraege, in der korrigierten Fassung (text
+  // ist die aktuelle Spalte; die Korrekturhistorie bleibt in der Datenbank
+  // und gehoert nicht in den Auszug fuers Amt).
+  const { rows: eintragRows } = await client.query<{
+    zeitpunkt: Date;
+    art: KlientEintragArt;
+    text: string;
+    gegenueber: string | null;
+    richtung: string | null;
+    gespraech_art: GespraechArt | null;
+    autor_name: string | null;
+  }>(
+    `SELECT e.zeitpunkt, e.art, e.text, e.gegenueber, e.richtung, e.gespraech_art, ben.name AS autor_name
+     FROM klient_eintrag e
+     LEFT JOIN benutzer ben ON ben.id = e.autor_id
+     WHERE e.klient_id = $1
+     ORDER BY e.zeitpunkt, e.erstellt_am`,
+    [klientId]
+  );
+
   // "Wer archiviert gerade" -- der handelnde Benutzer selbst, nicht
   // klient.archiviert_von (das wird erst NACH diesem Datensammeln gesetzt,
   // siehe archivieren() oben).
@@ -282,6 +308,19 @@ async function datenSammeln(
         mimeType: d.mime_type,
         inhalt: d.inhalt,
       })),
+    })),
+    verlauf: eintragRows.map((e) => ({
+      // Ortszeit der Einrichtung, nicht UTC: im Auszug steht die Uhrzeit,
+      // zu der das Telefonat tatsaechlich gefuehrt wurde.
+      zeitpunkt: new Date(e.zeitpunkt).toLocaleString("de-DE", {
+        timeZone: "Europe/Berlin",
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+      artLabel: e.gespraech_art ? GESPRAECH_ART_LABEL[e.gespraech_art] : KLIENT_EINTRAG_ART_LABEL[e.art],
+      zusatz: e.art === "telefonat" ? `${e.richtung === "eingehend" ? "von" : "an"} ${e.gegenueber ?? "?"}` : e.gegenueber,
+      text: e.text,
+      autorName: e.autor_name,
     })),
   };
 }
