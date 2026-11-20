@@ -97,6 +97,15 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   { modul: "protokolle", aktion: "korrigieren-fremde", sensibel: true },
   { modul: "protokolle", aktion: "formulare-verwalten" },
 
+  // Verlauf der Klientenakte (migrations/0078): Notizen, Telefonate,
+  // Gespraeche, Entscheidungen. Entscheidungen eintragen ist eigenes Recht --
+  // eine Entscheidung bindet gegenueber Amt und Team. Fremde (oder eigene,
+  // aelter als 24 Stunden) korrigieren ist sensibel wie bei Protokollen.
+  { modul: "verlauf", aktion: "ansehen" },
+  { modul: "verlauf", aktion: "anlegen" },
+  { modul: "verlauf", aktion: "entscheidungen-anlegen" },
+  { modul: "verlauf", aktion: "korrigieren-fremde", sensibel: true },
+
   // Stundenbuchung (migrations/0072). "buchen" gilt fuer die eigene Leistung;
   // fuer eine andere Person buchen darf nur, wer "fuer-andere-buchen" hat.
   // "stornieren" betrifft FREMDE Buchungen -- die eigene darf die buchende

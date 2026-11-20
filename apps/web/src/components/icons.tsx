@@ -16,6 +16,10 @@
  */
 import {
   Archive,
+  Gavel,
+  MessagesSquare,
+  Phone,
+  StickyNote,
   ArchiveRestore,
   ArrowDown,
   ArrowLeft,
@@ -58,6 +62,8 @@ import {
   FileClock,
   Target,
   FileText,
+  Folder,
+  FolderOpen,
   Glasses,
   GripVertical,
   HandCoins,
@@ -217,6 +223,9 @@ export const IMehrAktionen = baue(EllipsisVertical);
 export const IVergroessern = baue(Maximize2);
 export const IVerkleinern = baue(Minimize2);
 export const IDokument = baue(FileText);
+// Karteilasche "Organisatorisch" (Shell.tsx): zu = Ordner, auf = offener Ordner.
+export const IOrdner = baue(Folder);
+export const IOrdnerOffen = baue(FolderOpen);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);
 export const IArchivieren = baue(Archive);
@@ -224,6 +233,12 @@ export const IAnwaerter = baue(Inbox);
 export const IEntarchivieren = baue(ArchiveRestore);
 export const IHerunterladen = baue(Download);
 export const IVerlauf = baue(History);
+// Eintragsarten im Verlauf der Akte (Migration 0078).
+export const INotiz = baue(StickyNote);
+export const ITelefonat = baue(Phone);
+export const IGespraech = baue(MessagesSquare);
+export const IEntscheidung = baue(Gavel);
+
 export const IZurueck = baue(ArrowLeft);
 export const IZurueckziehen = baue(Undo2);
 export const IKopieren = baue(Copy);

@@ -68,11 +68,37 @@ const lage = await page.evaluate(() => {
 });
 pruefe(lage.abstand <= 1, `Lasche sitzt auf der Trennlinie zum Fuß (Abstand ${lage.abstand.toFixed(1)} px)`);
 pruefe(lage.unterNav, "Lasche liegt unter dem Hauptmenü (ganz unten)");
+// Rueckmeldung "Organisatorisch Reiter links im Menue" (20.11.2026): Lasche
+// links, ihr Symbol beginnt dort, wo der Text der Gruppenlabels beginnt.
+const links = await page.evaluate(() => {
+  const icon = document.querySelector(".zv-aktenlippe-lasche svg").getBoundingClientRect();
+  const lab = document.querySelector(".zv-gruppenlabel");
+  const r = document.createRange();
+  r.selectNodeContents(lab);
+  return { icon: icon.left, label: r.getBoundingClientRect().left };
+});
+pruefe(Math.abs(links.icon - links.label) <= 2, `Lasche links, bündig mit den Gruppenlabels (${links.icon} / ${links.label})`);
 await bild(page, "1-aktenlippe-zu");
 await lasche.click();
 await page.locator("#zv-organisatorisch").getByRole("button", { name: "Formulare" }).click();
 await page.getByRole("heading", { name: "Formulare", level: 2 }).waitFor();
 pruefe((await lasche.getAttribute("aria-expanded")) === "true", "aufgeklappt nach Klick");
+// Aufgeklappt: Lasche und Inhalt sind EINE Karteikarte -- der Inhalt steht
+// direkt unter der Lasche, gleiche Flaeche, unter der Lasche kein Strich.
+const karte = await page.evaluate(() => {
+  const l = document.querySelector(".zv-aktenlippe-lasche");
+  const k = document.querySelector("#zv-organisatorisch");
+  const ls = getComputedStyle(l);
+  const ks = getComputedStyle(k);
+  return {
+    luecke: k.getBoundingClientRect().top - l.getBoundingClientRect().bottom,
+    gleicheFlaeche: ls.backgroundColor === ks.backgroundColor,
+    keinStrich: ls.borderBottomColor === ks.backgroundColor,
+    rahmen: ks.borderTopStyle !== "none",
+  };
+});
+pruefe(karte.luecke <= 0 && karte.luecke >= -1, `Inhalt hängt direkt unter der Lasche (Abstand ${karte.luecke} px)`);
+pruefe(karte.gleicheFlaeche && karte.keinStrich && karte.rahmen, "Lasche und Inhalt bilden eine Karteikarte (gleiche Fläche, Rahmen, kein Strich dazwischen)");
 
 // ===== 2 Neues Formular, Editor, Veroeffentlichen =====
 const name = `Nachtkontrolle ${Date.now().toString(36)}`;
@@ -124,7 +150,7 @@ await dialog.waitFor({ state: "detached" });
 pruefe(await page.locator(".zv-formular-kopf .zv-pill", { hasText: "Veröffentlicht" }).isVisible(), "Status jetzt Veröffentlicht");
 
 // ===== 3 Einstellungen: anheften =====
-await page.getByRole("navigation", { name: "Bereiche des Formulars" }).getByRole("button", { name: "Einstellungen" }).click();
+await page.getByRole("tablist", { name: "Bereiche des Formulars" }).getByRole("tab", { name: "Einstellungen" }).click();
 await page.getByText("Tagesbericht anlegen").click();
 await page.getByText(/Pflicht: speichern erst/).click();
 await page.getByRole("button", { name: "Einstellungen speichern" }).click();
@@ -140,7 +166,7 @@ pruefe((await ueberlauf(page)) <= 0, "1440 px: Formularliste ohne horizontalen �
 await bild(page, "5-liste");
 
 // ===== 4 Tagesbericht mit Pflichtformular =====
-await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Tagesberichte$/ }).click();
+await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Dokumentation$/ }).click();
 await page.getByRole("button", { name: "Neuer Tagesbericht" }).click();
 await dialog.waitFor();
 // Die Option nennt seit 0077 auch Standort und Zimmer ("Erika Beispiel · Haus …").

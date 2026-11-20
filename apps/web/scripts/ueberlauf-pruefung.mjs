@@ -28,9 +28,9 @@ const PW = process.env.PRUEF_PASSWORT ?? "dev-passwort-nur-lokal";
 const LEITUNG = process.env.PRUEF_LEITUNG ?? "leitung@drk-musterverband.test";
 
 /** Seite -> Ueberschrift/Marker, damit "gerendert" gemessen wird und nicht ein leeres Geruest. */
-const ANSICHTEN = ["Heute", "Nachrichten", "Kalender", "Aufgaben", "Klienten", "Mitarbeitende", "Standorte", "Tagesberichte", "Kassenbuch", "Einstellungen", "HZL", "Vertretung", "Organigramm", "Belegung (Zeitleiste)", "Klientenakte"];
+const ANSICHTEN = ["Heute", "Nachrichten", "Kalender", "Aufgaben", "Klienten", "Mitarbeitende", "Standorte", "Dokumentation", "Kassenbuch", "Einstellungen", "HZL", "Vertretung", "Organigramm", "Belegung (Zeitleiste)", "Klientenakte"];
 const ELTERN = { HZL: "Kassenbuch", Vertretung: "Mitarbeitende", Organigramm: "Mitarbeitende", Belegung: "Standorte" };
-const MOBIL_NAME = { Tagesberichte: "Bericht" };
+const MOBIL_NAME = { Dokumentation: "Doku" };
 const BREITEN = [390, 1440];
 
 const browser = await chromium.launch().catch(async () => {

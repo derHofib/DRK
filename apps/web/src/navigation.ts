@@ -16,6 +16,7 @@ import {
   IMitarbeitende,
   INachrichten,
   IOrganigramm,
+  IRueckmeldungen,
   IStandort,
   IStunden,
   ITagesberichte,
@@ -47,12 +48,14 @@ export type UnterReiter =
   | "organigramm"
   | "hzl"
   // Eingang der Rueckmeldungen (Idee/Fehler): kein sortierbarer Hauptpunkt,
-  // sondern nur mit dem Recht rueckmeldungen.verwalten in der Fusszeile der
-  // Seitenleiste sichtbar (Shell.tsx).
+  // sondern nur mit dem Recht rueckmeldungen.verwalten in der Gruppe
+  // "Organisatorisch" sichtbar (Shell.tsx).
   | "rueckmeldungen"
   // Gruppe "Organisatorisch" (siehe ORGANISATORISCH): nicht frei sortierbar,
   // immer ganz unten und eingeklappt.
-  | "formulare";
+  | "formulare"
+  | "standorte-verwalten"
+  | "buchungstypen";
 
 export type Tab = HauptReiter | UnterReiter;
 
@@ -103,16 +106,27 @@ export const MENUE_GRUPPEN: { id: MenueGruppeId; label: string; reiter: HauptRei
 ];
 
 /**
- * Gruppe "Organisatorisch" (Rueckmeldung "Formulare", 18.11.2026): Dinge, die
- * man selten braucht und die im Alltag nicht auffallen sollen. Sie steht
- * IMMER ganz unten im Hauptmenue und ist standardmaessig eingeklappt -- als
- * kleine, blasse Aktenlippe. Bewusst nicht Teil von MENUE_GRUPPEN und der
- * frei sortierbaren Reihenfolge: ein Verwaltungsbereich, den man nach oben
- * schieben kann, verliert genau die Unauffaelligkeit, um die es geht.
- * Jeder Eintrag nennt das Recht, ohne das er nicht erscheint.
+ * Gruppe "Organisatorisch" (Rueckmeldungen "Formulare", 18.11.2026, und
+ * "Organisatorisch Reiter links im Menue", 20.11.2026): Strukturen des
+ * Traegers, die man anlegt und pflegt -- im Unterschied zu den
+ * Einstellungen, die nur regeln, WIE sich die Zimmerakte verhaelt. Deshalb
+ * wohnen Standorte und Buchungstypen hier und nicht mehr in den
+ * Einstellungen.
+ *
+ * Die Gruppe steht IMMER ganz unten im Hauptmenue und ist standardmaessig
+ * eingeklappt -- als kleine, blasse Karteilasche. Bewusst nicht Teil von
+ * MENUE_GRUPPEN und der frei sortierbaren Reihenfolge: ein
+ * Verwaltungsbereich, den man nach oben schieben kann, verliert genau die
+ * Unauffaelligkeit, um die es geht. Jeder Eintrag nennt das Recht, ohne das
+ * er nicht erscheint (nur Ausblenden -- verbindlich prueft der Service).
  */
-export const ORGANISATORISCH: (UnterpunktEintrag & { recht: "formulareVerwalten" })[] = [
-  { wert: "formulare", label: "Formulare", icon: IDokument, recht: "formulareVerwalten" },
+export type OrganisatorischRecht = "standorte" | "kassenbuch" | "formulare" | "rueckmeldungen";
+
+export const ORGANISATORISCH: (UnterpunktEintrag & { recht: OrganisatorischRecht; beschreibung: string })[] = [
+  { wert: "standorte-verwalten", label: "Standorte", icon: IStandort, recht: "standorte", beschreibung: "Standorte des Trägers anlegen, bearbeiten und stilllegen." },
+  { wert: "buchungstypen", label: "Buchungstypen", icon: IKassenbuch, recht: "kassenbuch", beschreibung: "Buchungstypen für das Kassenbuch." },
+  { wert: "formulare", label: "Formulare", icon: IDokument, recht: "formulare", beschreibung: "Formulare für Protokolle und Tagesberichte bauen." },
+  { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "rueckmeldungen", beschreibung: "Ideen und Fehler aus dem Team prüfen und freigeben." },
 ];
 
 /** In welcher Gruppe ein Hauptpunkt steht; Einstellungen: keine. */
@@ -136,7 +150,10 @@ export const STANDARD_REITER: ReiterEintrag[] = [
   { wert: "klienten", label: "Klienten", icon: IKlienten },
   { wert: "mitarbeitende", label: "Mitarbeitende", icon: IMitarbeitende },
   { wert: "standorte", label: "Standorte", icon: IStandort },
-  { wert: "tagesberichte", label: "Tagesberichte", icon: ITagesberichte },
+  // Interner Wert bleibt "tagesberichte" (gemerkte Menue-Reihenfolgen und
+  // Spruenge zeigen darauf); sichtbar heisst der Punkt seit dem Verlauf
+  // "Dokumentation" und umfasst Tagesberichte und Protokolle.
+  { wert: "tagesberichte", label: "Dokumentation", icon: ITagesberichte },
   { wert: "stunden", label: "Stunden", icon: IStunden },
   { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch },
   { wert: "einstellungen", label: "Einstellungen", icon: IEinstellungen },

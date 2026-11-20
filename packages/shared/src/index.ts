@@ -2511,3 +2511,145 @@ export function bedingungAlsSatz(def: FormularDefinition, b: Bedingung): string 
   const w = Array.isArray(b.wert) ? b.wert.map(wertText).join(", ") : wertText(b.wert);
   return `${name} ${OP_SATZ[b.op]} ${w}`;
 }
+
+// ---------------------------------------------------------------------------
+// Verlauf der Klientenakte (Migration 0078, Konzept chronik/konzept-chronik.md)
+// ---------------------------------------------------------------------------
+
+/** Von Hand erfasste Eintraege. Alles mit Formular ist Dokumentation, nicht Verlauf. */
+export type KlientEintragArt = "notiz" | "telefonat" | "gespraech" | "entscheidung";
+
+export const KLIENT_EINTRAG_ART_LABEL: Record<KlientEintragArt, string> = {
+  notiz: "Notiz",
+  telefonat: "Telefonat",
+  gespraech: "Gespräch",
+  entscheidung: "Entscheidung",
+};
+
+export type GespraechArt = "team" | "hilfeplan" | "klient" | "angehoerige" | "schule" | "amt" | "sonstiges";
+
+export const GESPRAECH_ART_LABEL: Record<GespraechArt, string> = {
+  team: "Teamgespräch",
+  hilfeplan: "Hilfeplangespräch",
+  klient: "Gespräch mit Klient:in",
+  angehoerige: "Gespräch mit Angehörigen",
+  schule: "Gespräch mit Schule/Ausbildung",
+  amt: "Gespräch mit dem Amt",
+  sonstiges: "Sonstiges Gespräch",
+};
+
+export type TelefonatRichtung = "eingehend" | "ausgehend";
+
+export interface KlientEintragDto {
+  id: string;
+  klientId: string;
+  art: KlientEintragArt;
+  zeitpunkt: string;
+  text: string;
+  gegenueber: string | null;
+  richtung: TelefonatRichtung | null;
+  dauerMinuten: number | null;
+  gespraechArt: GespraechArt | null;
+  ergebnis: string | null;
+  entschiedenVonId: string | null;
+  entschiedenVonName: string | null;
+  wiedervorlageAm: string | null;
+  naechsterSchritt: string | null;
+  teilnehmende: { id: string; name: string }[];
+  autorName: string | null;
+  erstelltAm: string;
+  anzahlKorrekturen: number;
+  /** Darf die angemeldete Person den Text jetzt korrigieren? */
+  korrigierbar: boolean;
+  /** Muss sie dabei einen Grund nennen (nach 24 Stunden oder fremder Eintrag)? */
+  korrekturBrauchtGrund: boolean;
+  aufgabe: { id: string; faelligAm: string | null; erledigt: boolean } | null;
+}
+
+export interface KlientEintragAnlegenDto {
+  art: KlientEintragArt;
+  /** ISO-Zeitpunkt; ohne Angabe: jetzt. */
+  zeitpunkt?: string;
+  text: string;
+  gegenueber?: string;
+  richtung?: TelefonatRichtung;
+  dauerMinuten?: number;
+  gespraechArt?: GespraechArt;
+  teilnehmendeIds?: string[];
+  ergebnis?: string;
+  entschiedenVonId?: string;
+  wiedervorlageAm?: string;
+  naechsterSchritt?: string;
+  /** Legt aus dem naechsten Schritt eine Aufgabe fuer die anlegende Person an. */
+  aufgabeFaelligAm?: string;
+}
+
+export interface KlientEintragAenderungDto {
+  id: string;
+  geaendertAm: string;
+  geaendertVonName: string | null;
+  textAlt: string;
+  textNeu: string;
+  grund: string | null;
+}
+
+/**
+ * Herkunft einer Zeile im Verlauf. Die vier Eintragsarten sind gespeichert,
+ * alle anderen werden beim Lesen aus ihren Quelltabellen abgeleitet.
+ */
+export type VerlaufQuelle = KlientEintragArt | "tagesbericht" | "protokoll" | "belegung" | "kostenuebernahme" | "hilfeplan" | "akte";
+
+/** Die Filter-Chips im Verlauf. */
+export type VerlaufFilter = KlientEintragArt | "dokumentation" | "automatisch";
+
+export const VERLAUF_FILTER_LABEL: Record<VerlaufFilter, string> = {
+  notiz: "Notizen",
+  telefonat: "Telefonate",
+  gespraech: "Gespräche",
+  entscheidung: "Entscheidungen",
+  dokumentation: "Dokumentation",
+  automatisch: "Automatisch",
+};
+
+export function verlaufFilterVon(quelle: VerlaufQuelle): VerlaufFilter {
+  if (quelle === "tagesbericht" || quelle === "protokoll") return "dokumentation";
+  if (quelle === "notiz" || quelle === "telefonat" || quelle === "gespraech" || quelle === "entscheidung") return quelle;
+  return "automatisch";
+}
+
+export interface VerlaufZeileDto {
+  /** Stabil je Zeile: "<quelle>:<id>[:<teil>]". */
+  schluessel: string;
+  quelle: VerlaufQuelle;
+  /** ISO-Zeitpunkt; bei ganztaegig nur das Datum relevant. */
+  zeitpunkt: string;
+  ganztaegig: boolean;
+  titel: string;
+  text: string | null;
+  autorName: string | null;
+  /** Zeigt auf den Tagesbericht bzw. das Protokoll, wenn quelle eine Dokumentation ist. */
+  bezugId: string | null;
+  eintrag: KlientEintragDto | null;
+}
+
+export interface VerlaufWiedervorlageDto {
+  schluessel: string;
+  datum: string | null;
+  titel: string;
+  herkunft: "entscheidung" | "aufgabe";
+  eintragId: string;
+}
+
+export interface VerlaufRechteDto {
+  ansehen: boolean;
+  anlegen: boolean;
+  entscheidungenAnlegen: boolean;
+  korrigierenFremde: boolean;
+}
+
+export interface VerlaufDto {
+  zeilen: VerlaufZeileDto[];
+  wiedervorlagen: VerlaufWiedervorlageDto[];
+  /** true, wenn mehr Zeilen existieren als geliefert (Obergrenze). */
+  gekuerzt: boolean;
+}

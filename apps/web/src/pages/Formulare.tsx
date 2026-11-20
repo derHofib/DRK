@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Reiterleiste } from "../components/Reiterleiste";
 import {
   ANHEFTPUNKTE,
   ANHEFT_DARSTELLUNG_LABEL,
@@ -543,21 +544,20 @@ function FormularDetail({ id, standorte, onZurueck }: { id: string; standorte: S
         </div>
       )}
 
-      <nav className="zv-reiter" aria-label="Bereiche des Formulars">
-        {(
-          [
-            ["uebersicht", "Übersicht"],
-            ["aufbau", "Aufbau"],
-            ["ansichten", "Ansichten"],
-            ["einstellungen", "Einstellungen"],
-            ["versionen", "Versionen"],
-          ] as [Reiter, string][]
-        ).map(([w, label]) => (
-          <button key={w} type="button" className={reiter === w ? "active" : ""} aria-current={reiter === w ? "true" : undefined} onClick={() => setReiter(w)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+      <Reiterleiste
+        label="Bereiche des Formulars"
+        idPraefix="formular"
+        mitPanel={false}
+        aktiv={reiter}
+        onWahl={setReiter}
+        reiter={[
+          { wert: "uebersicht", label: "Übersicht" },
+          { wert: "aufbau", label: "Aufbau" },
+          { wert: "ansichten", label: "Ansichten" },
+          { wert: "einstellungen", label: "Einstellungen" },
+          { wert: "versionen", label: "Versionen" },
+        ]}
+      />
 
       {reiter === "uebersicht" && (
         <FormularUebersicht

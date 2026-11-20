@@ -10,7 +10,7 @@
  *     gespeichert, mit Antworten entsteht ein Bericht ohne Freitext, die
  *     Liste zeigt die Kurzfassung.
  *   3 An einem Standort ohne Formular bleibt der freie Bericht (Pflicht).
- *   4 Klientenakte: Schnelleintrag wird zum Knopf und oeffnet das Fenster.
+ *   4 Klientenakte: "Tagesbericht schreiben" im Aktenmenue oeffnet das Fenster.
  *   5 Formular-Einstellungen zeigen "Ersetzt die Standardsicht".
  *   6 "ergaenzt": Freitext vor dem Formular, wie bisher.
  *   7 Kein horizontaler Ueberlauf bei 1440 und 390 px.
@@ -101,7 +101,7 @@ await page.getByRole("button", { name: /Anmelden/i }).click();
 await page.getByRole("button", { name: /^Klienten$/ }).first().waitFor({ timeout: 15000 });
 
 // ===== 1 Klient:in zuerst =====
-await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Tagesberichte$/ }).click();
+await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Dokumentation$/ }).click();
 await page.getByRole("button", { name: "Neuer Tagesbericht" }).click();
 const dialog = page.getByRole("dialog");
 await dialog.waitFor();
@@ -158,27 +158,31 @@ pruefe((await dialog.locator(".zv-angeheftet-formular").count()) === 0, "Standor
 await dialog.getByRole("button", { name: /Schließen/ }).first().click().catch(() => page.keyboard.press("Escape"));
 await dialog.waitFor({ state: "detached" }).catch(() => undefined);
 
-// ===== 4 Klientenakte: Schnelleintrag wird Knopf =====
+// ===== 4 Klientenakte: Tagesbericht aus dem Aktenmenue =====
+// Seit dem Verlauf gibt es im Ueberblick keinen Freitext-Schnelleintrag
+// mehr ("+ Eintrag" legt Verlaufseintraege an); der Tagesbericht steht im
+// Menue der Akte und oeffnet das Fenster samt angeheftetem Formular.
 await page.goto(`${BASIS}/klienten/${mira.id}`).catch(() => undefined);
-let knopf = page.getByRole("button", { name: "Tagesbericht für heute" });
-if (!(await knopf.isVisible().catch(() => false))) {
+let menue = page.getByRole("button", { name: "Weitere Aktionen zur Akte" });
+if (!(await menue.isVisible().catch(() => false))) {
   await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Klienten$/ }).first().click();
   await page.getByText("Mira Beispiel").first().click();
 }
-knopf = page.getByRole("button", { name: "Tagesbericht für heute" });
-await knopf.waitFor({ timeout: 10000 });
-pruefe((await page.locator("#schnelleintrag").count()) === 0, "Klientenakte: kein Freitext-Schnelleintrag, wenn ein Pflichtformular dazugehört");
+menue = page.getByRole("button", { name: "Weitere Aktionen zur Akte" });
+await menue.waitFor({ timeout: 10000 });
+pruefe((await page.locator("#schnelleintrag").count()) === 0, "Klientenakte: kein Freitext-Schnelleintrag mehr im Überblick");
 await bild(page, "4-akte-knopf");
-await knopf.click();
+await menue.click();
+await page.getByRole("menuitem", { name: "Tagesbericht schreiben" }).click();
 await page.getByRole("dialog").locator(".zv-angeheftet-formular", { hasText: name }).waitFor({ timeout: 10000 });
-pruefe(true, "Knopf öffnet das Fenster mit dem Formular");
+pruefe(true, "Menüpunkt öffnet das Fenster mit dem Formular");
 await page.keyboard.press("Escape");
 
 // ===== 5 Einstellungen zeigen die Darstellung =====
 await page.getByRole("button", { name: /Organisatorisch/ }).first().click().catch(() => undefined);
 await page.getByRole("button", { name: /^Formulare$/ }).first().click();
 await page.locator(".zv-info-karte", { hasText: name }).click();
-await page.getByRole("navigation", { name: "Bereiche des Formulars" }).getByRole("button", { name: "Einstellungen" }).click();
+await page.getByRole("tablist", { name: "Bereiche des Formulars" }).getByRole("tab", { name: "Einstellungen" }).click();
 const ersetztRadio = page.getByRole("radio", { name: /Ersetzt die Standardsicht/ });
 await ersetztRadio.waitFor();
 pruefe(await ersetztRadio.isChecked(), "Einstellungen: „Ersetzt die Standardsicht“ ist gewählt");
@@ -187,7 +191,7 @@ await bild(page, "5-einstellungen");
 
 // ===== 6 ergaenzt: Freitext vor dem Formular =====
 await einstellen("ergaenzt");
-await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Tagesberichte$/ }).click();
+await page.getByRole("navigation", { name: "Hauptmenü" }).getByRole("button", { name: /^Dokumentation$/ }).click();
 await page.getByRole("button", { name: "Neuer Tagesbericht" }).click();
 await dialog.waitFor();
 await dialog.locator("#ntb-klient").selectOption(mira.id);
@@ -200,8 +204,8 @@ await einstellen("ersetzt");
 const handy = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, storageState: await ctx.storageState() });
 const p2 = await handy.newPage();
 await p2.goto(BASIS + "/");
-// Unten in der Handy-Leiste heisst der Punkt kurz "Bericht".
-await p2.getByRole("button", { name: /^Bericht$/ }).click();
+// Unten in der Handy-Leiste heisst der Punkt kurz "Doku".
+await p2.getByRole("button", { name: /^Doku$/ }).click();
 await p2.getByRole("button", { name: "Neuer Tagesbericht" }).click();
 const d2 = p2.getByRole("dialog");
 await d2.locator("#ntb-klient").selectOption(mira.id);

@@ -324,7 +324,14 @@ export function TagVorschlaegeDatalist({ tags }: { tags: TagDto[] }) {
   );
 }
 
-export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}) {
+export function Tagesberichte({
+  startKlientId,
+  eingebettet = false,
+}: {
+  startKlientId?: string;
+  /** Innerhalb der Seite "Dokumentation": deren Titel steht schon darueber. */
+  eingebettet?: boolean;
+} = {}) {
   const [berichte, setBerichte] = useState<TagesberichtDto[]>([]);
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [tagVorschlaege, setTagVorschlaege] = useState<TagDto[]>([]);
@@ -482,7 +489,7 @@ export function Tagesberichte({ startKlientId }: { startKlientId?: string } = {}
       )}
 
       <div className="zv-seiten-kopf">
-        <h2>Tagesberichte</h2>
+        {eingebettet ? <span /> : <h2>Tagesberichte</h2>}
         <button
           className="zv-btn"
           onClick={() => setFormularOffen(true)}

@@ -15,8 +15,6 @@ import { useTheme } from "../theme/ThemeProvider";
 import { ThemeAuswahl } from "../components/ThemeToggle";
 import { MeinProfil } from "../components/MeinProfil";
 import { Sicherheit } from "./Sicherheit";
-import { Standorte } from "./Standorte";
-import { KassenbuchTypen } from "./KassenbuchTypen";
 import {
   IAnpassen,
   IBestaetigen,
@@ -25,13 +23,11 @@ import {
   IEinklappen,
   IErfolg,
   IFehler,
-  IKassenbuch,
   IPasswort,
   IPerson,
   IRueckmeldungen,
   ISicherheit,
   ISpeichern,
-  IStandort,
   ITraeger,
   IVerschiebenHoch,
   IVerschiebenRunter,
@@ -51,7 +47,7 @@ import {
 } from "../navigation";
 
 type KontoBereich = "profil" | "darstellung" | "anmeldung";
-type TraegerBereich = "erscheinungsbild" | "standorte" | "kassenbuch" | "datenschutz" | "rueckmeldungen";
+type TraegerBereich = "erscheinungsbild" | "datenschutz" | "rueckmeldungen";
 type Bereich = KontoBereich | TraegerBereich;
 
 interface BereichEintrag<B extends Bereich> {
@@ -75,8 +71,6 @@ const KONTO_BEREICHE: BereichEintrag<KontoBereich>[] = [
  */
 const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof EinstellungenRechteDto })[] = [
   { wert: "erscheinungsbild", label: "Erscheinungsbild", icon: ITraeger, recht: "erscheinungsbild", beschreibung: "Trägerfarbe und Grundfarbe des dunklen Designs." },
-  { wert: "standorte", label: "Standorte", icon: IStandort, recht: "standorte", beschreibung: "Standorte des Trägers anlegen und bearbeiten." },
-  { wert: "kassenbuch", label: "Kassenbuch", icon: IKassenbuch, recht: "kassenbuch", beschreibung: "Buchungstypen für das Kassenbuch." },
   { wert: "datenschutz", label: "Datenschutz", icon: ISicherheit, recht: "datenschutz", beschreibung: "Fristen, nach denen Daten endgültig gelöscht werden." },
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
 ];
@@ -101,6 +95,7 @@ export function Einstellungen({
   onHoverAusklappenAendern,
   menuReihenfolge,
   onMenuReihenfolgeAendern,
+  onOrganisatorischOeffnen,
 }: {
   mandant: MandantDto | null;
   onMandantAktualisiert: (m: MandantDto) => void;
@@ -108,6 +103,7 @@ export function Einstellungen({
   onHoverAusklappenAendern: (wert: boolean) => void;
   menuReihenfolge: HauptReiter[];
   onMenuReihenfolgeAendern: (reihenfolge: HauptReiter[]) => void;
+  onOrganisatorischOeffnen: (ziel: "standorte-verwalten" | "buchungstypen") => void;
 }) {
   const [bereich, setBereich] = useState<Bereich>("profil");
   // Nur auf schmalen Bildschirmen relevant: dort ist entweder die Liste oder
@@ -173,6 +169,25 @@ export function Einstellungen({
             {traegerBereiche.map(menuePunkt)}
           </div>
         )}
+        {/* Uebergangshinweis: Standorte und Buchungstypen standen bis
+            20.11.2026 hier. Wer sie gewohnheitsmaessig hier sucht, soll den
+            neuen Platz finden statt eines fehlenden Punkts. */}
+        {(rechte.standorte || rechte.kassenbuch) && (
+          <p className="zv-einstellungen-umzug">
+            Standorte und Buchungstypen findest du jetzt unten im Menü unter <strong>Organisatorisch</strong>.{" "}
+            {rechte.standorte && (
+              <button type="button" className="zv-link-btn" onClick={() => onOrganisatorischOeffnen("standorte-verwalten")}>
+                Standorte
+              </button>
+            )}
+            {rechte.standorte && rechte.kassenbuch && " · "}
+            {rechte.kassenbuch && (
+              <button type="button" className="zv-link-btn" onClick={() => onOrganisatorischOeffnen("buchungstypen")}>
+                Buchungstypen
+              </button>
+            )}
+          </p>
+        )}
       </nav>
 
       <div className="zv-einstellungen-inhalt">
@@ -220,8 +235,6 @@ export function Einstellungen({
             <DunkleGrundfarbe mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />
           </div>
         )}
-        {aktuell.wert === "standorte" && <Standorte />}
-        {aktuell.wert === "kassenbuch" && <KassenbuchTypen />}
         {aktuell.wert === "datenschutz" && mandant && (
           <div className="zv-einstellungen-raster">
             <ChatLoeschfrist mandant={mandant} onMandantAktualisiert={onMandantAktualisiert} />

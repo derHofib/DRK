@@ -137,7 +137,10 @@ pruefe(detail.kontext.seite === "klienten" && !/[0-9a-f]{8}-[0-9a-f]{4}/.test(JS
 
 // Menue: Eingang sichtbar, oeffnet, zeigt den Eintrag
 await page.locator(".zv-modal").getByRole("button", { name: /^Schließen$/ }).last().click();
-const eingang = page.getByRole("button", { name: /^Rückmeldungen/ }).first();
+// Seit 20.11.2026 wohnt der Eingang in der Karteikarte "Organisatorisch".
+const laschePruefung = page.locator(".zv-aktenlippe-lasche");
+if ((await laschePruefung.getAttribute("aria-expanded")) === "false") await laschePruefung.click();
+const eingang = page.locator("#zv-organisatorisch").getByRole("button", { name: /^Rückmeldungen/ });
 pruefe(await eingang.isVisible(), "Geschäftsführung sieht den Menüpunkt Rückmeldungen");
 await eingang.click();
 pruefe(await page.getByText("Prüfmeldung Filter").first().waitFor({ timeout: 8000 }).then(() => true, () => false), "Eintrag erscheint im Eingang");

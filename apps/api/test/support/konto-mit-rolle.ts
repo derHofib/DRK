@@ -53,6 +53,9 @@ const MITARBEITER_RECHTE: readonly RechtEintrag[] = [
   // Spiegel von Migration 0075.
   { modul: "protokolle", aktion: "ansehen", scope: "einrichtung" },
   { modul: "protokolle", aktion: "ausfuellen", scope: "einrichtung" },
+  // Spiegel von Migration 0078.
+  { modul: "verlauf", aktion: "ansehen", scope: "einrichtung" },
+  { modul: "verlauf", aktion: "anlegen", scope: "einrichtung" },
   { modul: "standorte", aktion: "ansehen", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "ansehen", scope: "einrichtung" },
 ];
@@ -64,6 +67,8 @@ const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "stunden", aktion: "fuer-andere-buchen", scope: "einrichtung" },
   { modul: "protokolle", aktion: "korrigieren-fremde", scope: "einrichtung" },
   { modul: "protokolle", aktion: "formulare-verwalten", scope: "einrichtung" },
+  { modul: "verlauf", aktion: "entscheidungen-anlegen", scope: "einrichtung" },
+  { modul: "verlauf", aktion: "korrigieren-fremde", scope: "einrichtung" },
   // Wie Migration 0074: wer Storno-Antraege entscheidet, sieht den Grund
   // fremder Abwesenheiten und darf sie fuer andere eintragen.
   { modul: "abwesenheiten", aktion: "art-sehen", scope: "einrichtung" },

@@ -53,6 +53,19 @@ export interface ArchivPdfInput {
     text: string;
     dokumente: ArchivPdfDokument[];
   }[];
+  /**
+   * Optional, damit aeltere Aufrufer (und Testdaten) ohne Verlauf weiter
+   * gebaut werden koennen. Nur die erfassten Eintraege -- abgeleitete
+   * Ereignisse (Belegung, Kostenuebernahme ...) stehen bereits in den
+   * Kapiteln 3 und 4 und wuerden hier nur doppelt erscheinen.
+   */
+  verlauf?: {
+    zeitpunkt: string;
+    artLabel: string;
+    zusatz: string | null;
+    text: string;
+    autorName: string | null;
+  }[];
 }
 
 interface TocEintrag {
@@ -468,6 +481,20 @@ async function baueInhalt(input: ArchivPdfInput): Promise<ContentBuilder> {
         }
         b.leerzeile();
       }
+    }
+  }
+
+  // 6. Verlauf (Notizen, Telefonate, Gespräche, Entscheidungen)
+  const verlauf = input.verlauf ?? [];
+  b.kapitel("6. Verlauf");
+  if (verlauf.length === 0) {
+    b.absatz("Keine Verlaufseinträge erfasst.");
+  } else {
+    for (const e of verlauf) {
+      const kopf = [e.zeitpunkt, e.artLabel, e.zusatz, e.autorName].filter(Boolean).join(" · ");
+      b.absatz(kopf, 10, true);
+      b.absatz(e.text);
+      b.leerzeile();
     }
   }
 

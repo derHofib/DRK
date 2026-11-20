@@ -1,5 +1,10 @@
 import type {
   FeldWerte,
+  KlientEintragAenderungDto,
+  KlientEintragAnlegenDto,
+  KlientEintragDto,
+  VerlaufDto,
+  VerlaufRechteDto,
   AngeheftetesProtokollEingabe,
   Anheftpunkt,
   FormularAngebotDto,
@@ -454,7 +459,9 @@ export const api = {
     request<FormularAngebotDto[]>(
       `/formulare/angebot?klientId=${encodeURIComponent(klientId)}${anheftpunkt ? `&anheftpunkt=${anheftpunkt}` : ""}`
     ),
-  protokolle: (klientId: string) => request<ProtokollKurzDto[]>(`/protokolle?klientId=${encodeURIComponent(klientId)}`),
+  /** Ohne klientId: alle sichtbaren Protokolle (Seite Dokumentation). */
+  protokolle: (klientId?: string) =>
+    request<ProtokollKurzDto[]>(`/protokolle${klientId ? `?klientId=${encodeURIComponent(klientId)}` : ""}`),
   protokoll: (id: string) => request<ProtokollDto>(`/protokolle/${id}`),
   protokollHistorie: (id: string) => request<ProtokollAenderungDto[]>(`/protokolle/${id}/historie`),
   protokollAnlegen: (formularId: string, klientId: string) =>
@@ -818,6 +825,19 @@ export const api = {
   tagesberichtDokumentUrl: (tagesberichtId: string, dokumentId: string) =>
     blobUrl(`/tagesberichte/${tagesberichtId}/dokumente/${dokumentId}`),
   tagsListe: () => request<TagDto[]>("/tags"),
+
+  verlaufRechte: () => request<VerlaufRechteDto>("/verlauf/rechte"),
+  verlauf: (klientId: string, zeitraum: { von?: string; bis?: string } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(zeitraum)) if (v) q.set(k, v);
+    const qs = q.toString();
+    return request<VerlaufDto>(`/klienten/${klientId}/verlauf${qs ? `?${qs}` : ""}`);
+  },
+  klientEintragAnlegen: (klientId: string, payload: KlientEintragAnlegenDto) =>
+    request<KlientEintragDto>(`/klienten/${klientId}/eintraege`, { method: "POST", body: JSON.stringify(payload) }),
+  klientEintragKorrigieren: (id: string, payload: { text: string; grund?: string }) =>
+    request<KlientEintragDto>(`/klient-eintraege/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  klientEintragHistorie: (id: string) => request<KlientEintragAenderungDto[]>(`/klient-eintraege/${id}/historie`),
 
   aufgabenListe: (filter?: {
     zimmerId?: string;
