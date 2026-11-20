@@ -1,4 +1,6 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { StandortSichtDto } from "@zimmerakte/shared";
+import { SichtHinweis } from "../components/StandortSicht";
 import type { DashboardDto, StandortDto, StandortUebersichtDto, TerminDto } from "@zimmerakte/shared";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -140,7 +142,16 @@ function fristAnzeige(frist: string | null, heute: string, ohne: string): { text
   return { text: formatDatum(frist), ueberfaellig: false };
 }
 
-export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavigation; nutzerId: string }) {
+export function Dashboard({
+  navigation,
+  nutzerId,
+  sicht = null,
+}: {
+  navigation: DashboardNavigation;
+  nutzerId: string;
+  /** Eigene Standort-Sicht: Hinweis bei Vertretung oder ohne Standort (Migration 0084). */
+  sicht?: StandortSichtDto | null;
+}) {
   // Frueher ein Rollen-Hinweis (Bereichs-/Einrichtungsleitung sehen mehr
   // Widgets per Default) -- ohne feste Rollen gibt es dafuer keine Grundlage
   // mehr, also zeigt der Standard jetzt fuer alle den volleren Satz. Wer
@@ -717,6 +728,7 @@ export function Dashboard({ navigation, nutzerId }: { navigation: DashboardNavig
           {fehler}
         </div>
       )}
+      <SichtHinweis sicht={sicht} />
 
       <div className="zv-seiten-kopf">
         <div>

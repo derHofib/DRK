@@ -15,6 +15,8 @@ const standorteSetzenSchema = z.object({
   standortIds: z.array(z.string().uuid()),
 });
 
+const standortRegelSchema = z.object({ ausRang: z.boolean() });
+
 const aktivSetzenSchema = z.object({ aktiv: z.boolean() });
 
 // null = Person verliert jede Position (und damit alle Rechte).
@@ -43,6 +45,20 @@ export class BenutzerController {
   @Get("ich")
   async ich() {
     return this.benutzer.findeEigenes();
+  }
+
+  // Vorschau und Umschalten der Standortregel (Migration 0084). Rechte im
+  // Service, neben dem SQL, das sie schuetzen.
+  @Get("standort-sicht/vorschau")
+  async standortSichtVorschau() {
+    return this.benutzer.standortSichtVorschau();
+  }
+
+  @Put("standort-sicht/regel")
+  async standortRegelSetzen(@Body() body: unknown) {
+    const eingabe = standortRegelSchema.safeParse(body);
+    if (!eingabe.success) throw new BadRequestException("Erwartet { ausRang: true | false }.");
+    return this.benutzer.standortRegelSetzen(eingabe.data.ausRang);
   }
 
   @Post()

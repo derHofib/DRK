@@ -245,12 +245,68 @@ export interface BenutzerListEintragDto {
    * und in der Mitarbeitendenliste, siehe apps/web/src/personFarbe.ts.
    */
   farbIndex: number;
-  // Leer = keine Standort-Einschraenkung (siehe common/standort-restriction.ts).
+  // Feste Sicht ("Sicht festlegen", benutzer_standort). Leer = keine feste
+  // Sicht; was die Person dann sieht, steht in `sicht` (Migration 0084).
   standortIds: string[];
+  /** Was die Person heute sieht, mit Herkunft je Standort (standort_sicht()). */
+  sicht: StandortSichtDto;
   // Einrichtungen, an denen die Person laut Rang arbeitet (Positionen und
   // Standorte ihrer Besetzung) -- nicht zu verwechseln mit standortIds, der
   // Sichtbarkeitsbeschraenkung.
   einheitIds: string[];
+}
+
+// --- Standort-Sicht (Migration 0084, Konzept standort-sichtbarkeit) --------
+
+/**
+ * Woher ein sichtbarer Standort kommt: feste Sicht (benutzer_standort), aus
+ * dem Rang ("Arbeitet an") oder geliehen aus einer laufenden Vertretung.
+ */
+export type StandortSichtHerkunft = "fest" | "rang" | "vertretung";
+
+export const STANDORT_SICHT_HERKUNFT_LABEL: Record<StandortSichtHerkunft, string> = {
+  fest: "fest",
+  rang: "aus Rang",
+  vertretung: "Vertretung",
+};
+
+export interface StandortSichtEintrag {
+  standortId: string;
+  standortName: string;
+  herkunft: StandortSichtHerkunft;
+  /** Nur bei Vertretung: letzter Tag und wer vertreten wird. */
+  bis: string | null;
+  vertretenerName: string | null;
+}
+
+/**
+ * alle = true: keine Einschraenkung, eintraege dann leer. alle = false und
+ * eintraege leer: die Person sieht keinen Standort (Rang ohne Einrichtung).
+ * Ein Standort steht hoechstens einmal drin; Vertretung nur, wenn er nicht
+ * schon fest oder aus dem Rang sichtbar ist.
+ */
+export interface StandortSichtDto {
+  alle: boolean;
+  eintraege: StandortSichtEintrag[];
+}
+
+export interface StandortSichtVorschauPerson {
+  benutzerId: string;
+  name: string;
+  heute: StandortSichtDto;
+  /** Mit der jeweils anderen Regel (eingeschaltet: Vergleich mit vorher). */
+  andereRegel: StandortSichtDto;
+  /** Sieht mit der Regel "aus dem Rang" weniger als ohne. */
+  weniger: boolean;
+}
+
+export interface StandortSichtVorschauDto {
+  /** Traeger-Einstellung: Sicht aus dem Rang (true) oder bisher (false). */
+  ausRang: boolean;
+  /** Nur Vollzugriff schaltet um (traegerweite Wirkung). */
+  darfUmschalten: boolean;
+  /** Nur aktive Personen, deren Sicht sich zwischen den Regeln unterscheidet. */
+  personen: StandortSichtVorschauPerson[];
 }
 
 export interface StandortDto {
@@ -1215,6 +1271,8 @@ export interface DelegationDto {
   sensibleRechteEingeschlossen: boolean;
   status: DelegationStatus;
   effektiverStatus: DelegationEffektiverStatus;
+  /** Standorte, die die Vertretung zusaetzlich sichtbar macht (Migration 0084). */
+  standorte: { id: string; name: string }[];
 }
 
 /**

@@ -1,13 +1,23 @@
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import { personFarbStil } from "../personFarbe";
-import type { AccountTypDto, BenutzerListEintragDto, OrgUnitDto, MitarbeiterProfilKollegeDto, StandortDto } from "@zimmerakte/shared";
+import type {
+  AccountTypDto,
+  BenutzerListEintragDto,
+  OrgUnitDto,
+  MitarbeiterProfilKollegeDto,
+  StandortDto,
+  StandortSichtDto,
+  StandortSichtVorschauDto,
+} from "@zimmerakte/shared";
+import { STANDORT_SICHT_HERKUNFT_LABEL } from "@zimmerakte/shared";
+import { formatDatum } from "../format";
 import { api } from "../api/client";
 import { AktionsMenue } from "../components/AktionsMenue";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
 import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
 import { Modal } from "../components/Modal";
-import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IPosition, IResetLink, ISpeichern, IStandort } from "../components/icons";
+import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IPosition, IResetLink, ISpeichern, IStandort, IInfo, IVertretung, IAufklappen, IZuklappen } from "../components/icons";
 
 type MitarbeitendeSortierung = "name-az" | "name-za" | "status";
 const MITARBEITENDE_SORTIERUNG_LABEL: Record<MitarbeitendeSortierung, string> = {
@@ -27,6 +37,12 @@ export function Mitarbeitende() {
   const [standortZuweisung, setStandortZuweisung] = useState<BenutzerListEintragDto | null>(null);
   const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
   const [wirdZugewiesen, setWirdZugewiesen] = useState(false);
+  // "Abweichend: nur diese Standorte" im Dialog "Sicht festlegen".
+  const [sichtAbweichend, setSichtAbweichend] = useState(false);
+  // Vorschau der Standortregel; null ohne Recht (403) -- dann kein Kasten.
+  const [vorschau, setVorschau] = useState<StandortSichtVorschauDto | null>(null);
+  const [vorschauOffen, setVorschauOffen] = useState(false);
+  const [regelWirdGeschaltet, setRegelWirdGeschaltet] = useState(false);
   const [profilAnsicht, setProfilAnsicht] = useState<MitarbeiterProfilKollegeDto | null>(null);
   const [statusAenderung, setStatusAenderung] = useState<BenutzerListEintragDto | null>(null);
   const [statusFehler, setStatusFehler] = useState<string | null>(null);
@@ -87,6 +103,20 @@ export function Mitarbeitende() {
     // Liefert bereits nur die eigenen erlaubten Standorte (siehe
     // StandortService.findeAlle).
     api.standorteListe().then(setStandorte).catch(() => {});
+    api.standortSichtVorschau().then(setVorschau).catch(() => setVorschau(null));
+  }
+
+  async function regelSchalten(ausRang: boolean) {
+    setRegelWirdGeschaltet(true);
+    setFehler(null);
+    try {
+      setVorschau(await api.standortRegelSetzen(ausRang));
+      api.benutzerListe().then(setBenutzer).catch(() => {});
+    } catch (err) {
+      setFehler(err instanceof Error ? err.message : "Die Standortregel konnte nicht umgeschaltet werden.");
+    } finally {
+      setRegelWirdGeschaltet(false);
+    }
   }
 
   useEffect(laden, []);
@@ -102,8 +132,9 @@ export function Mitarbeitende() {
       .filter(
         (b) =>
           (!statusFilter || (statusFilter === "aktiv") === b.aktiv) &&
-          // Leere standortIds heisst "keine Einschraenkung" und gilt fuer jeden Standort.
-          (!standortFilter || b.standortIds.length === 0 || b.standortIds.includes(standortFilter)) &&
+          // Filtert nach dem, was die Person SIEHT (fest, aus dem Rang oder per
+          // Vertretung) -- wer alles sieht, passt zu jedem Standort.
+          (!standortFilter || b.sicht.alle || b.sicht.eintraege.some((e) => e.standortId === standortFilter)) &&
           (!positionFilter || b.positionen.some((p) => p.titel === positionFilter)) &&
           trifftSuche(suche, [b.name, b.email, ...b.positionen.map((p) => p.titel)]),
       )
@@ -123,13 +154,17 @@ export function Mitarbeitende() {
     [benutzer],
   );
   const benutzerFilterAktiv = Boolean(statusFilter || standortFilter || positionFilter || suche.trim());
-  const standortName = (id: string) => standorte.find((s) => s.id === id)?.name ?? "?";
 
   async function standorteSpeichern(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!standortZuweisung) return;
     const form = new FormData(e.currentTarget);
-    const gewaehlteIds = form.getAll("standortIds").map(String);
+    // "Wie im Rang" = keine feste Sicht: die Liste wird geleert.
+    const gewaehlteIds = sichtAbweichend ? form.getAll("standortIds").map(String) : [];
+    if (sichtAbweichend && gewaehlteIds.length === 0) {
+      setZuweisungFehler("Bitte mindestens einen Standort wählen oder „Wie im Rang“ nehmen.");
+      return;
+    }
     setZuweisungFehler(null);
     setWirdZugewiesen(true);
     try {
@@ -293,6 +328,16 @@ export function Mitarbeitende() {
         </Modal>
       )}
 
+      {vorschau && (
+        <RegelVorschau
+          vorschau={vorschau}
+          offen={vorschauOffen}
+          onUmschalten={() => setVorschauOffen((v) => !v)}
+          onRegel={regelSchalten}
+          wirdGeschaltet={regelWirdGeschaltet}
+        />
+      )}
+
       {benutzer.length > 0 && (
         <>
           <Filterleiste
@@ -361,7 +406,7 @@ export function Mitarbeitende() {
             <span>E-Mail</span>
             <span>Position(en)</span>
             <span>Status</span>
-            <span>Standorte</span>
+            <span>Sieht</span>
             <span></span>
           </div>
           {sichtbareBenutzer.map((b) => (
@@ -390,18 +435,8 @@ export function Mitarbeitende() {
               <span className="zv-liste-zelle" data-label="Status">
                 <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
               </span>
-              <span className="zv-liste-zelle" data-label="Standorte">
-                {b.standortIds.length === 0 ? (
-                  <span className="zv-sub-inline" style={{ marginLeft: 0 }}>
-                    Alle
-                  </span>
-                ) : (
-                  b.standortIds.map((id) => (
-                    <span key={id} className="zv-pill" style={{ marginRight: 4 }}>
-                      {standortName(id)}
-                    </span>
-                  ))
-                )}
+              <span className="zv-liste-zelle" data-label="Sieht">
+                <SichtZelle sicht={b.sicht} />
               </span>
               <span className="zv-liste-zelle-aktionen">
                 <AktionsMenue label={`Aktionen für ${b.name}`}>
@@ -421,11 +456,12 @@ export function Mitarbeitende() {
                     role="menuitem"
                     onClick={() => {
                       setZuweisungFehler(null);
+                      setSichtAbweichend(b.standortIds.length > 0);
                       setStandortZuweisung(b);
                     }}
                   >
                     <IStandort />
-                    Standorte zuweisen
+                    Sicht festlegen
                   </button>
                   <button
                     role="menuitem"
@@ -539,7 +575,7 @@ export function Mitarbeitende() {
       )}
 
       {standortZuweisung && (
-        <Modal titel={`Standorte zuweisen — ${standortZuweisung.name}`} onClose={() => setStandortZuweisung(null)}>
+        <Modal titel={`Sicht festlegen — ${standortZuweisung.name}`} onClose={() => setStandortZuweisung(null)}>
           <form onSubmit={standorteSpeichern}>
             {zuweisungFehler && (
               <div className="zv-hinweis zv-hinweis-fehler">
@@ -548,25 +584,43 @@ export function Mitarbeitende() {
               </div>
             )}
             <p className="zv-sub" style={{ marginTop: 0 }}>
-              Ohne Auswahl sieht {standortZuweisung.name} weiterhin alle Standorte. Mit mindestens einem Haken ist
-              die Ansicht auf genau diese Standorte begrenzt.
+              Welche Standorte {standortZuweisung.name} sieht: Klient:innen, Dokumentation, Kassenbuch und alles, was daran hängt.
             </p>
-            {standorte.length === 0 ? (
-              <p className="zv-sub">Keine Standorte verfügbar.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {standorte.map((s) => (
-                  <label key={s.id} className="zv-checkbox-zeile">
-                    <input
-                      type="checkbox"
-                      name="standortIds"
-                      value={s.id}
-                      defaultChecked={standortZuweisung.standortIds.includes(s.id)}
-                    />
-                    {s.name}
-                  </label>
-                ))}
-              </div>
+            <label className="zv-checkbox-zeile">
+              <input type="radio" name="sichtArt" checked={!sichtAbweichend} onChange={() => setSichtAbweichend(false)} />
+              <span>
+                Wie im Rang (Arbeitet an)
+                <span className="zv-sub" style={{ display: "block", margin: 0 }}>
+                  {vorschau && !vorschau.ausRang
+                    ? "Solange die Regel „Sicht aus dem Rang“ aus ist: alle Standorte."
+                    : rangSichtText(standortZuweisung, vorschau)}
+                </span>
+              </span>
+            </label>
+            <label className="zv-checkbox-zeile" style={{ marginTop: 8 }}>
+              <input type="radio" name="sichtArt" checked={sichtAbweichend} onChange={() => setSichtAbweichend(true)} />
+              Abweichend: nur diese Standorte
+            </label>
+            {sichtAbweichend && (
+            <div style={{ marginLeft: 28, marginTop: 8 }}>
+              {standorte.length === 0 ? (
+                <p className="zv-sub">Keine Standorte verfügbar.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {standorte.map((s) => (
+                    <label key={s.id} className="zv-checkbox-zeile">
+                      <input
+                        type="checkbox"
+                        name="standortIds"
+                        value={s.id}
+                        defaultChecked={standortZuweisung.standortIds.includes(s.id)}
+                      />
+                      {s.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             )}
             <button className="zv-btn zv-btn-block" type="submit" disabled={wirdZugewiesen} style={{ marginTop: 20 }}>
               <ISpeichern />
@@ -575,6 +629,127 @@ export function Mitarbeitende() {
           </form>
         </Modal>
       )}
+    </div>
+  );
+}
+
+/** Sichtbare Standorte als Pillen, mit Herkunft. */
+function SichtZelle({ sicht }: { sicht: StandortSichtDto }) {
+  if (sicht.alle) return <span className="zv-sub-inline" style={{ marginLeft: 0 }}>Alle Standorte</span>;
+  if (sicht.eintraege.length === 0) {
+    return (
+      <span className="zv-pill zv-pill-achtung">
+        <span className="zv-pill-text">Kein Standort</span>
+      </span>
+    );
+  }
+  const herkunft = new Set(sicht.eintraege.filter((e) => e.herkunft !== "vertretung").map((e) => e.herkunft));
+  return (
+    <span className="zv-sicht-zelle">
+      {sicht.eintraege.map((e) => (
+        <span
+          key={e.standortId}
+          className={`zv-pill${e.herkunft === "vertretung" ? " zv-pill-info" : ""}`}
+          title={e.herkunft === "vertretung" ? `Vertretung für ${e.vertretenerName ?? "?"}` : STANDORT_SICHT_HERKUNFT_LABEL[e.herkunft]}
+        >
+          {e.herkunft === "vertretung" && <IVertretung />}
+          <span className="zv-pill-text">
+            {e.herkunft === "vertretung" ? `+ ${e.standortName}${e.bis ? ` bis ${formatDatum(e.bis).slice(0, 6)}` : ""}` : e.standortName}
+          </span>
+        </span>
+      ))}
+      {herkunft.size === 1 && <span className="zv-sub-inline">{STANDORT_SICHT_HERKUNFT_LABEL[[...herkunft][0]]}</span>}
+    </span>
+  );
+}
+
+function sichtText(sicht: StandortSichtDto): string {
+  if (sicht.alle) return "alle";
+  const eigene = sicht.eintraege.filter((e) => e.herkunft !== "vertretung");
+  if (eigene.length === 0) return "nichts (kein Haken bei „Arbeitet an“)";
+  return eigene.map((e) => e.standortName).join(", ");
+}
+
+/** Text fuer "Wie im Rang" im Dialog: was die Person mit dieser Wahl saehe. */
+function rangSichtText(b: BenutzerListEintragDto, vorschau: StandortSichtVorschauDto | null): string {
+  // Ohne feste Sicht ist die aktuelle Sicht schon die aus dem Rang.
+  if (b.standortIds.length === 0) return `Sieht dann: ${sichtText(b.sicht)}.`;
+  const p = vorschau?.personen.find((x) => x.benutzerId === b.id);
+  return p ? `Sieht dann: ${sichtText(p.andereRegel)}.` : "Sieht dann die Einrichtungen, an denen die Person laut Rang arbeitet.";
+}
+
+/**
+ * Vorschau und Schalter der Standortregel (Konzept standort-sichtbarkeit,
+ * Abschnitt 5): die neue Regel nimmt Menschen Sicht, deshalb steht VOR dem
+ * Umschalten, wen es trifft. Umschalten nur mit Vollzugriff (Server prueft).
+ */
+function RegelVorschau({
+  vorschau,
+  offen,
+  onUmschalten,
+  onRegel,
+  wirdGeschaltet,
+}: {
+  vorschau: StandortSichtVorschauDto;
+  offen: boolean;
+  onUmschalten: () => void;
+  onRegel: (ausRang: boolean) => void;
+  wirdGeschaltet: boolean;
+}) {
+  const weniger = vorschau.personen.filter((p) => p.weniger);
+  const andere = vorschau.personen.filter((p) => !p.weniger);
+  const liste = offen ? vorschau.personen : weniger.slice(0, 3);
+  if (vorschau.ausRang && vorschau.personen.length === 0) return null;
+  return (
+    <div className="zv-hinweis zv-hinweis-info zv-regel-vorschau">
+      <IInfo />
+      <div className="zv-regel-vorschau-inhalt">
+        {vorschau.ausRang ? (
+          <strong>Sicht aus dem Rang ist eingeschaltet.</strong>
+        ) : (
+          <strong>
+            Neue Standortregel: {weniger.length === 1 ? "1 Person sieht" : `${weniger.length} Personen sehen`} danach weniger als heute.
+          </strong>
+        )}
+        <p>
+          {vorschau.ausRang
+            ? `Wer laut Rang an einer Einrichtung arbeitet, sieht nur diese. ${weniger.length} ${weniger.length === 1 ? "Person sieht" : "Personen sehen"} dadurch weniger als vorher.`
+            : "Wer laut Rang an einer Einrichtung arbeitet, sieht künftig nur diese. Wer weiter alles sehen soll, bekommt vorher über „Sicht festlegen“ eine feste Sicht."}
+        </p>
+        {liste.length > 0 && (
+          <div className="zv-regel-vorschau-liste" role="table" aria-label="Sicht heute und künftig">
+            {liste.map((p) => {
+              const vorher = vorschau.ausRang ? p.andereRegel : p.heute;
+              const nachher = vorschau.ausRang ? p.heute : p.andereRegel;
+              return (
+                <div key={p.benutzerId} role="row">
+                  <strong role="cell">{p.name}</strong>
+                  <span role="cell">{vorschau.ausRang ? "vorher" : "heute"}: {sichtText(vorher)}</span>
+                  <span role="cell">{vorschau.ausRang ? "jetzt" : "künftig"}: {sichtText(nachher)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="zv-regel-vorschau-aktionen">
+          {vorschau.personen.length > liste.length || offen ? (
+            <button type="button" className="zv-link-btn" onClick={onUmschalten} aria-expanded={offen}>
+              {offen ? <IZuklappen /> : <IAufklappen />}
+              {offen ? "Weniger anzeigen" : `Alle ${vorschau.personen.length} anzeigen${andere.length > 0 ? ` (davon ${andere.length} ohne Verlust)` : ""}`}
+            </button>
+          ) : null}
+          {vorschau.darfUmschalten && (
+            <button
+              type="button"
+              className={vorschau.ausRang ? "zv-btn zv-btn-still zv-btn-klein" : "zv-btn zv-btn-klein"}
+              onClick={() => onRegel(!vorschau.ausRang)}
+              disabled={wirdGeschaltet}
+            >
+              {wirdGeschaltet ? "Schaltet…" : vorschau.ausRang ? "Zurück zur bisherigen Regel" : "Sicht aus dem Rang einschalten"}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

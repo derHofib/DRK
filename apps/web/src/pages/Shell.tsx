@@ -5,6 +5,7 @@ import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { MarkenIcon } from "../components/MarkenZeichen";
+import { DeineSicht, StandortZeile, sichtKurztext, vertretungKurztext } from "../components/StandortSicht";
 import { useChatEreignisse } from "../components/chat/ereignisse";
 import {
   IAbmelden,
@@ -208,6 +209,8 @@ function speichereBoolean(schluessel: string, wert: boolean) {
 export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => void; onUebergabeStarten: (start: UebergabeStart) => void }) {
   const [mandant, setMandant] = useState<MandantDto | null>(null);
   const [ich, setIch] = useState<BenutzerListEintragDto | null>(null);
+  // "Deine Sicht" (Standort unter dem Namen, Migration 0084).
+  const [sichtOffen, setSichtOffen] = useState(false);
   const { badge: chatBadge } = useChatEreignisse();
   const badgeFuer = (w: HauptReiter) => (w === "nachrichten" ? chatBadge : 0);
   // Nach dem Uebergabemodus (ersetzt die Shell, siehe App.tsx) zurueck dorthin, wo man war.
@@ -794,13 +797,20 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
             <nav className="zv-sidebar-nav" aria-label="Einstellungen" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
               {STANDARD_REITER.filter((r) => r.wert === "einstellungen").map(renderReiter)}
             </nav>
-            <div className="zv-benutzerblock" title={ich ? `${ich.name}` : undefined}>
+            <div
+              className="zv-benutzerblock"
+              data-mit-standort={ich && !ich.sicht.alle ? "" : undefined}
+              title={ich ? [ich.name, sichtKurztext(ich.sicht), vertretungKurztext(ich.sicht)].filter(Boolean).join(" · ") : undefined}
+            >
               <span className="zv-benutzer-kachel" aria-hidden="true">
                 {ich ? initialen(ich.name) : "·"}
+                {/* Nur im eingeklappten Menueband sichtbar (app.css): dort fehlt die Pille. */}
+                {ich && vertretungKurztext(ich.sicht) && <span className="zv-benutzer-kachel-punkt" />}
               </span>
               <span className="zv-benutzer-text zv-sidebar-label">
                 <span className="zv-benutzer-name">{ich?.name ?? "…"}</span>
                 <span className="zv-benutzer-rolle">{ich ? (ich.positionen[0]?.titel ?? "Keine Position") : ""}</span>
+                {ich && <StandortZeile sicht={ich.sicht} onOeffnen={() => setSichtOffen((v) => !v)} />}
               </span>
             </div>
             <div className="zv-sidebar-foot-icons">
@@ -838,15 +848,42 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
         </div>
       </aside>
 
+      {/* Ausserhalb der Seitenleiste: am Handy ist sie ausgeblendet, das Blatt
+          muss trotzdem erscheinen (app.css, .zv-sicht-blatt). */}
+      {sichtOffen && ich && (
+        <DeineSicht
+          sicht={ich.sicht}
+          onClose={() => setSichtOffen(false)}
+          onBelegung={(id) => {
+            setSichtOffen(false);
+            belegungOeffnen(id);
+          }}
+        />
+      )}
+
       <div className="zv-shell-app">
         <div className="zv-topbar">
           <div className="zv-topbar-marke">
             <MarkenIcon groesse={20} />
             <strong>hecaso</strong>
-            {mandant && (
+            {mandant && (ich === null || ich.sicht.alle) && (
               <span>
                 <ITraeger style={{ verticalAlign: "-3px", marginRight: 4 }} />
                 {mandant.name}
+              </span>
+            )}
+            {/* Am Handy gibt es keinen Namensblock: wer eingeschraenkt ist, sieht
+                seinen Standort dort, wo sonst der Traeger steht (Traeger klein darueber). */}
+            {mandant && ich && !ich.sicht.alle && (
+              <span className="zv-topbar-ort">
+                <small>
+                  <ITraeger />
+                  {mandant.name}
+                </small>
+                <button type="button" data-sicht-ausloeser="" onClick={() => setSichtOffen((v) => !v)} aria-label={`Deine Sicht: ${sichtKurztext(ich.sicht)}`}>
+                  <IStandort />
+                  {sichtKurztext(ich.sicht)}
+                </button>
               </span>
             )}
           </div>
@@ -1010,7 +1047,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           className={`zv-content${BREITE_REITER.has(tab) ? " zv-content-weit" : ""}${tab === "nachrichten" ? " zv-content-voll" : ""}`}
         >
           <WarteschlangeLeiste />
-          {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} nutzerId={ich?.id ?? "unbekannt"} />}
+          {tab === "dashboard" && <Dashboard navigation={dashboardNavigation} nutzerId={ich?.id ?? "unbekannt"} sicht={ich?.sicht ?? null} />}
           {tab === "standorte" && standorteGeladen && standorte.length === 0 && (
             <Leerzustand icon={ILeerStandorte}>Ihnen ist kein Standort zugeordnet.</Leerzustand>
           )}

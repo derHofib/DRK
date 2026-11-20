@@ -6,6 +6,8 @@ import { requireTenantContext } from "../common/tenant-context";
 import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
+import { ladeStandortSicht, siehtWeniger } from "../common/standort-sicht";
+import type { StandortSichtDto, StandortSichtVorschauDto } from "@zimmerakte/shared";
 import { RechteService } from "../rechte/rechte.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -26,6 +28,7 @@ export interface BenutzerListEintrag {
   farbIndex: number;
   standortIds: string[];
   einheitIds: string[];
+  sicht: StandortSichtDto;
 }
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (benutzer_mandant_id_email_key,
@@ -117,6 +120,7 @@ export class BenutzerService {
          GROUP BY pb.benutzer_id`
       );
       const einheitenJeBenutzer = new Map(einheiten.map((e) => [e.benutzer_id, e.einheit_ids]));
+      const sichtJeBenutzer = await ladeStandortSicht(client, rows.map((r) => r.id));
       return rows.map((r) => ({
         id: r.id,
         email: r.email,
@@ -125,6 +129,7 @@ export class BenutzerService {
         farbIndex: Number(r.farb_index),
         standortIds: r.standort_ids,
         einheitIds: einheitenJeBenutzer.get(r.id) ?? [],
+        sicht: sichtJeBenutzer.get(r.id) ?? { alle: false, eintraege: [] },
         positionen: eindeutigePositionen(r.positionen),
       }));
     });
@@ -214,6 +219,93 @@ export class BenutzerService {
 
       return { token, laeuftAbAm: rows[0].laeuft_ab_am };
     });
+  }
+
+  /**
+   * Vorschau der Standortregel (Konzept standort-sichtbarkeit, Abschnitt 5):
+   * wer sieht mit "Sicht aus dem Rang" weniger als heute? Vor dem Umschalten
+   * ist das die Liste der Ueberraschungen, nach dem Umschalten der Vergleich
+   * mit vorher. Gerechnet von derselben Datenbankfunktion, die die Schranke
+   * durchsetzt -- zweimal, je einmal mit jeder Regel.
+   *
+   * Recht wie "Sicht festlegen": wer die Sicht anderer aendern darf, soll
+   * vorher sehen koennen, wen die Regel trifft. Eine standortbeschraenkte
+   * Leitung sieht nur Personen, die an ihren Standorten arbeiten -- sonst
+   * wuerde die Vorschau die Zuordnung fremder Haeuser offenlegen.
+   */
+  async standortSichtVorschau(): Promise<StandortSichtVorschauDto> {
+    const ctx = requireTenantContext();
+    if (!(await this.rechte.hatRecht("mitarbeitende", "standort-zuweisen"))) {
+      throw new ForbiddenException("Keine Berechtigung, die Standort-Sicht zu verwalten.");
+    }
+    return this.db.withTenant(async (client) => {
+      const { rows: m } = await client.query<{ an: boolean }>(
+        "SELECT standort_sicht_aus_rang AS an FROM mandant WHERE id = $1",
+        [ctx.mandantId]
+      );
+      const ausRang = m[0]?.an ?? false;
+      const { rows: personen } = await client.query<{ id: string; name: string }>(
+        "SELECT id, name FROM benutzer WHERE aktiv ORDER BY name"
+      );
+      const ids = personen.map((p) => p.id);
+      const ohne = await ladeStandortSicht(client, ids, false);
+      const mit = await ladeStandortSicht(client, ids, true);
+      const eigene = await ermittleErlaubteStandortIds(client, ctx.benutzerId);
+      const leer: StandortSichtDto = { alle: false, eintraege: [] };
+      const ergebnis = personen
+        .map((p) => {
+          const vorher = ohne.get(p.id) ?? leer;
+          const nachher = mit.get(p.id) ?? leer;
+          return {
+            benutzerId: p.id,
+            name: p.name,
+            heute: ausRang ? nachher : vorher,
+            andereRegel: ausRang ? vorher : nachher,
+            weniger: siehtWeniger(vorher, nachher),
+          };
+        })
+        .filter((p) => p.weniger || JSON.stringify(p.heute) !== JSON.stringify(p.andereRegel))
+        .filter(
+          (p) =>
+            !eigene ||
+            [...p.heute.eintraege, ...p.andereRegel.eintraege].some((e) => eigene.includes(e.standortId))
+        );
+      return {
+        ausRang,
+        darfUmschalten: await this.rechte.istVollzugriff(client, ctx.benutzerId),
+        personen: ergebnis,
+      };
+    });
+  }
+
+  /**
+   * Schaltet die Standortregel des Traegers um. Nur Vollzugriff: die Wirkung
+   * ist traegerweit und kann vielen Menschen gleichzeitig Sicht nehmen.
+   * Umkehrbar, und jeder Wechsel steht im audit_log.
+   */
+  async standortRegelSetzen(ausRang: boolean): Promise<StandortSichtVorschauDto> {
+    const ctx = requireTenantContext();
+    await this.db.withTenant(async (client) => {
+      if (!(await this.rechte.istVollzugriff(client, ctx.benutzerId))) {
+        throw new ForbiddenException("Nur die Geschäftsführung kann die Standortregel umschalten.");
+      }
+      const { rows } = await client.query<{ an: boolean }>(
+        "SELECT standort_sicht_aus_rang AS an FROM mandant WHERE id = $1",
+        [ctx.mandantId]
+      );
+      const vorher = rows[0]?.an ?? false;
+      if (vorher === ausRang) return;
+      await client.query("UPDATE mandant SET standort_sicht_aus_rang = $1 WHERE id = $2", [ausRang, ctx.mandantId]);
+      await this.audit.protokollieren(client, {
+        modul: "mitarbeitende",
+        aktion: "standort-regel",
+        objektTyp: "mandant",
+        objektId: ctx.mandantId,
+        vorher: { standortSichtAusRang: vorher },
+        nachher: { standortSichtAusRang: ausRang },
+      });
+    });
+    return this.standortSichtVorschau();
   }
 
   /**
