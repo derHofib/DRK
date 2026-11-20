@@ -12,8 +12,8 @@ WORKDIR /repo
 # Erst nur die Manifeste, dann installieren, dann den Quellcode: so bleibt
 # die Installationsschicht im Build-Cache gültig, solange sich pnpm-lock.yaml
 # und die package.json-Dateien nicht ändern -- der Normalfall. Vorher kam
-# "COPY . ." zuerst, und jede Codeänderung installierte alles neu (in der CI
-# der größte Einzelposten des Docker-Jobs). Gefiltert auf dieses Paket samt
+# "COPY . ." zuerst, und jede Codeänderung installierte alles neu -- auch
+# bei jedem ./scripts/aktualisieren.sh auf dem Server. Gefiltert auf dieses Paket samt
 # seiner Workspace-Abhängigkeiten ("...") -- das Web-Image braucht weder
 # NestJS und pdf-lib aus apps/api.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

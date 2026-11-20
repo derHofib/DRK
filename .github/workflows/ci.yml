@@ -5,7 +5,7 @@ name: CI
 #  - API-Suite parallel: drei Runner (Shards) mit je vier Jest-Workern, jeder
 #    Worker mit eigener Datenbank (apps/api/test/global-setup.ts).
 #  - PostgreSQL des Runner-Images statt Service-Container (spart den Pull).
-#  - Docker-Builds mit Schicht-Cache und als zwei parallele Jobs.
+#  - Docker-Builds als zwei parallele Jobs.
 #  - Vorinstalliertes Chrome statt Playwright-Download für die Kontrastmatrix.
 # Abgedeckt bleibt alles wie vorher: dieselben 910 API-Tests, die
 # Kontrastmatrix, beide Images gebaut UND gestartet.
@@ -158,36 +158,30 @@ jobs:
           node scripts/design-pruefung.mjs
 
   # Die beiden Images als eigene Jobs: vorher liefen Bau API, Bau Web und
-  # beide Starttests nacheinander (~2 min). Der Schicht-Cache (type=gha) hält
-  # die Installationsschicht, solange pnpm-lock.yaml unverändert ist -- siehe
-  # die Manifest-zuerst-Reihenfolge in den Dockerfiles.
+  # beide Starttests nacheinander (~2 min).
+  #
+  # Bewusst schlichtes "docker build" ohne buildx-Schicht-Cache (type=gha):
+  # gemessen (Lauf 44826973428) kostete der Cache mehr, als er sparte --
+  # buildx-Container starten 12 s, Installationsschicht aus dem Cache laden
+  # 13 s, Cache zurückschreiben 19 s, Image in den Docker-Daemon laden 6 s.
+  # Die Installation frisch im Image dauert weniger als das zusammen.
   docker-api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Zuerst und im Hintergrund: Postgres zieht und startet, während das
-      # Image baut.
-      - name: Postgres-Container vorab starten
+      # Postgres zieht und startet im Hintergrund, während das Image baut
+      # (vorher ~8 s Wartezeit allein für den Pull).
+      - name: API-Image bauen (Postgres startet nebenher)
         run: |
           docker network create zimmerakte-ci
           docker run -d --name pg --network zimmerakte-ci \
             -e POSTGRES_USER=zimmerakte_admin \
             -e POSTGRES_PASSWORD=ci_only_not_secret \
             -e POSTGRES_DB=zimmerakte \
-            postgres:16
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: API-Image bauen
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/api/Dockerfile
-          tags: zimmerakte-api:ci
-          load: true
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
+            postgres:16 > /dev/null &
+          docker build -f apps/api/Dockerfile -t zimmerakte-api:ci .
+          wait
 
       - name: API-Image tatsächlich starten und gegen eine echte Postgres testen
         run: |
@@ -221,17 +215,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
-
       - name: Web-Image bauen
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          tags: zimmerakte-web:ci
-          load: true
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,scope=web,mode=max
+        run: docker build -f apps/web/Dockerfile -t zimmerakte-web:ci .
 
       - name: Web-Image tatsächlich starten und die Startseite abrufen
         run: |
