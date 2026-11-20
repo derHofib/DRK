@@ -58,6 +58,8 @@ import {
   FileClock,
   Target,
   FileText,
+  Folder,
+  FolderOpen,
   Glasses,
   GripVertical,
   HandCoins,
@@ -217,6 +219,9 @@ export const IMehrAktionen = baue(EllipsisVertical);
 export const IVergroessern = baue(Maximize2);
 export const IVerkleinern = baue(Minimize2);
 export const IDokument = baue(FileText);
+// Karteilasche "Organisatorisch" (Shell.tsx): zu = Ordner, auf = offener Ordner.
+export const IOrdner = baue(Folder);
+export const IOrdnerOffen = baue(FolderOpen);
 export const IUnterschrift = baue(PenLine);
 export const ILoeschen = baue(Eraser);
 export const IArchivieren = baue(Archive);

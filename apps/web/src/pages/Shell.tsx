@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BenutzerListEintragDto, MandantDto, ProtokolleRechteDto, RueckmeldungBerechtigungDto, StandortDto } from "@zimmerakte/shared";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { BenutzerListEintragDto, EinstellungenRechteDto, MandantDto, RueckmeldungBerechtigungDto, StandortDto } from "@zimmerakte/shared";
 import { api, clearToken } from "../api/client";
 import { akzentSetzen, dunkelGrundfarbeSetzen } from "../theme/theme";
 import { WarteschlangeLeiste } from "../components/WarteschlangeLeiste";
@@ -11,7 +11,6 @@ import {
   IAnwaerter,
   IArchivieren,
   IAuszahlen,
-  IAufklappen,
   IAusklappen,
   IEinklappen,
   IKlienten,
@@ -23,7 +22,10 @@ import {
   IStandort,
   ITagesberichte,
   ITraeger,
+  IAufklappen,
   IZuklappen,
+  IOrdner,
+  IOrdnerOffen,
 } from "../components/icons";
 import {
   MENUE_GRUPPEN,
@@ -57,6 +59,8 @@ import { Nachrichten } from "./Nachrichten";
 import { Kalender } from "./Kalender";
 import { Rueckmeldungen } from "./Rueckmeldungen";
 import { Formulare } from "./Formulare";
+import { Standorte } from "./Standorte";
+import { KassenbuchTypen } from "./KassenbuchTypen";
 import { RueckmeldungDialog } from "../components/RueckmeldungDialog";
 import { SICHTBAR_ATTRIBUT } from "../rueckmeldung/maskierung";
 import { nimmMaskiertenScreenshot, type MaskierterScreenshot } from "../rueckmeldung/screenshot";
@@ -83,6 +87,26 @@ function initialen(name: string): string {
   if (teile.length === 0) return "?";
   if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
   return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Rahmen fuer Seiten, die aus den Einstellungen nach "Organisatorisch"
+ * umgezogen sind: dort lieferten die Einstellungen Titel und Beschreibung,
+ * die Seiten selbst haben keinen eigenen Kopf.
+ */
+function OrganisatorischSeite({ eintrag, children }: { eintrag: Tab; children: ReactNode }) {
+  const e = ORGANISATORISCH.find((o) => o.wert === eintrag);
+  return (
+    <div>
+      <div className="zv-seiten-kopf">
+        <div>
+          <h2>{e?.label}</h2>
+          <p className="zv-sub">{e?.beschreibung}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 /** Zaehler am Menuepunkt; 0 = unsichtbar. */
@@ -137,6 +161,8 @@ const BREITE_REITER = new Set<Tab>([
   "organigramm",
   "rueckmeldungen",
   "formulare",
+  "standorte-verwalten",
+  "buchungstypen",
 ]);
 
 const SIDEBAR_SPEICHER = "zimmerakte_sidebar_eingeklappt";
@@ -383,14 +409,19 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
 
   // --- Organisatorisch ---------------------------------------------------
   // Wie bei den Rueckmeldungen nur Ausblenden: die API lehnt ohne Recht ab.
-  const [protokolleRechte, setProtokolleRechte] = useState<ProtokolleRechteDto | null>(null);
+  // Die Rechte fuer Standorte, Buchungstypen und Formulare liefert derselbe
+  // Aufruf wie fuer die Einstellungen (mandant.service.ts, einstellungenRechte);
+  // Rueckmeldungen haengen an ihrem eigenen Recht (rmRecht oben).
+  const [traegerRechte, setTraegerRechte] = useState<EinstellungenRechteDto | null>(null);
   useEffect(() => {
     api
-      .protokolleRechte()
-      .then(setProtokolleRechte)
+      .einstellungenRechte()
+      .then(setTraegerRechte)
       .catch(() => {});
   }, []);
-  const organisatorisch = ORGANISATORISCH.filter((o) => protokolleRechte?.[o.recht]);
+  const organisatorisch = ORGANISATORISCH.filter((o) =>
+    o.recht === "rueckmeldungen" ? rmRecht.verwalten : !!traegerRechte?.[o.recht]
+  );
   const [organisatorischOffen, setOrganisatorischOffen] = useState(() => ladeBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER));
   useEffect(() => speichereBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER, organisatorischOffen), [organisatorischOffen]);
   // Wer ueber die Befehlspalette auf eine Seite darin springt, soll sehen, wo sie wohnt.
@@ -688,10 +719,12 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           </nav>
 
           {organisatorisch.length > 0 && (
-            // Die "Aktenlippe": ein kleiner, blasser Reiter, der auf der
-            // Trennlinie zum Fuss sitzt -- wie die Lasche eines Ordners, der
-            // hinten im Schrank steht. Bewusst unauffaelliger als die
-            // Gruppen oben (Wunsch aus der Rueckmeldung).
+            // Die "Aktenlippe": eine kleine, blasse Karteilasche LINKS auf der
+            // Trennlinie zum Fuss. Aufgeklappt bilden Lasche und Inhalt EINE
+            // Karteikarte (gleiche Flaeche, gemeinsamer Rahmen, kein Strich
+            // dazwischen) und der Inhalt steht UNTER der Lasche -- vorher stand
+            // er ohne Rahmen darueber, und man sah nicht, woraus er kam
+            // (Rueckmeldung "Organisatorisch Reiter links im Menue").
             <div className="zv-aktenlippe" data-offen={organisatorischOffen} {...{ [SICHTBAR_ATTRIBUT]: "" }}>
               <button
                 type="button"
@@ -701,8 +734,11 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
                 aria-controls="zv-organisatorisch"
                 title={organisatorischOffen ? "Organisatorisch einklappen" : "Organisatorisch ausklappen"}
               >
+                {organisatorischOffen ? <IOrdnerOffen aria-hidden="true" /> : <IOrdner aria-hidden="true" />}
                 <span className="zv-sidebar-label">Organisatorisch</span>
-                {organisatorischOffen ? <IZuklappen aria-hidden="true" /> : <IAufklappen aria-hidden="true" />}
+                {!organisatorischOffen && rmRecht.anzahlNeu > 0 && (
+                  <span className="zv-aktenlippe-punkt" aria-label={`${rmRecht.anzahlNeu} neue Rückmeldungen`} />
+                )}
               </button>
               {organisatorischOffen && (
                 <nav id="zv-organisatorisch" className="zv-sidebar-nav zv-aktenlippe-inhalt" aria-label="Organisatorisch">
@@ -716,6 +752,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
                     >
                       <o.icon />
                       <span className="zv-sidebar-label">{o.label}</span>
+                      {o.wert === "rueckmeldungen" && <NavBadge anzahl={rmRecht.anzahlNeu} />}
                     </button>
                   ))}
                 </nav>
@@ -725,18 +762,6 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
 
           <div className="zv-sidebar-foot">
             <nav className="zv-sidebar-nav" aria-label="Einstellungen" {...{ [SICHTBAR_ATTRIBUT]: "" }}>
-              {rmRecht.verwalten && (
-                <button
-                  className={tab === "rueckmeldungen" ? "active" : ""}
-                  onClick={() => tabWaehlen("rueckmeldungen")}
-                  aria-current={tab === "rueckmeldungen" ? "page" : undefined}
-                  title="Rückmeldungen"
-                >
-                  <IRueckmeldungen />
-                  <span className="zv-sidebar-label">Rückmeldungen</span>
-                  <NavBadge anzahl={rmRecht.anzahlNeu} />
-                </button>
-              )}
               {STANDARD_REITER.filter((r) => r.wert === "einstellungen").map(renderReiter)}
             </nav>
             <div className="zv-benutzerblock" title={ich ? `${ich.name}` : undefined}>
@@ -861,6 +886,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
                   >
                     <o.icon />
                     {o.label}
+                    {o.wert === "rueckmeldungen" && <NavBadge anzahl={rmRecht.anzahlNeu} />}
                   </button>
                 ))}
               </>
@@ -973,6 +999,16 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}
           {tab === "formulare" && <Formulare />}
+          {tab === "standorte-verwalten" && (
+            <OrganisatorischSeite eintrag="standorte-verwalten">
+              <Standorte />
+            </OrganisatorischSeite>
+          )}
+          {tab === "buchungstypen" && (
+            <OrganisatorischSeite eintrag="buchungstypen">
+              <KassenbuchTypen />
+            </OrganisatorischSeite>
+          )}
           {tab === "rueckmeldungen" && <Rueckmeldungen mandant={mandant} onGeaendert={rmRechtLaden} />}
           {tab === "einstellungen" && (
             <Einstellungen
@@ -982,6 +1018,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
               onHoverAusklappenAendern={setHoverAusklappen}
               menuReihenfolge={menuReihenfolge}
               onMenuReihenfolgeAendern={setMenuReihenfolge}
+              onOrganisatorischOeffnen={tabWaehlen}
             />
           )}
         </div>

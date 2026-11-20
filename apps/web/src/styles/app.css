@@ -428,15 +428,30 @@
   gap: var(--zv-space-2);
 }
 
-/* "Organisatorisch" als Aktenlippe (Shell.tsx): eine kleine Lasche, die auf
-   der Trennlinie zum Fuss sitzt. Sie ueberdeckt die Linie um 1 px mit der
+/* "Organisatorisch" als Karteilasche (Shell.tsx): eine kleine Lasche LINKS
+   auf der Trennlinie zum Fuss, buendig mit den Gruppenlabels (Text beginnt
+   bei --zv-space-3 wie dort: Lasche selbst hat --zv-space-2 Innenabstand,
+   daher --zv-space-1 Aussenabstand). Sie ueberdeckt die Linie um 1 px mit der
    Flaeche der Seitenleiste -- so liest sie sich als Reiter eines Ordners
    statt als weitere Gruppe. Blasser und kleiner als die Gruppenlabels oben:
-   sie soll im Alltag nicht auffallen. Aufgeklappt erscheinen die Eintraege
-   UEBER der Lasche, damit diese an ihrem Platz auf der Linie bleibt. */
+   sie soll im Alltag nicht auffallen.
+
+   Aufgeklappt werden Lasche und Inhalt EINE Karteikarte: gleiche Flaeche
+   (--zv-surface-2), gemeinsamer Rahmen, unter der Lasche kein Strich, die
+   Karte steht UNTER der Lasche und ist oben links eckig, wo die Lasche
+   ansetzt. Frueher erschienen die Eintraege rahmenlos UEBER der Lasche, und
+   man sah nicht, woraus sie kamen (Rueckmeldung "Organisatorisch Reiter
+   links im Menue", 20.11.2026). */
+.zv-einstellungen-umzug {
+  margin: var(--zv-space-4) var(--zv-space-3) 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-sekundaer);
+}
+
 .zv-aktenlippe {
   margin-top: auto;
-  /* Den Spalt (gap der Seitenleiste) bis zur Linie schliessen. */
+  /* Zugeklappt: den Spalt (gap der Seitenleiste) bis zur Linie schliessen,
+     damit die Lasche auf der Linie sitzt. */
   margin-bottom: calc(-1 * var(--zv-space-3) - 1px);
   position: relative;
   z-index: 1;
@@ -445,16 +460,22 @@
   flex: none;
 }
 
+/* Aufgeklappt sitzt die Karte ueber der Linie, nicht darauf: eine Karte, die
+   mit ihrem Rahmen auf der Trennlinie laege, verschmoelze mit ihr. */
+.zv-aktenlippe[data-offen="true"] {
+  margin-bottom: 0;
+}
+
 .zv-aktenlippe + .zv-sidebar-foot {
   margin-top: 0;
 }
 
 .zv-aktenlippe-lasche {
-  align-self: flex-end;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: var(--zv-space-1);
-  margin-right: var(--zv-space-3);
+  margin-left: var(--zv-space-1);
   padding: 2px var(--zv-space-2);
   border: 1px solid var(--zv-haarlinie);
   border-bottom-color: var(--zv-surface);
@@ -467,7 +488,9 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast);
+  position: relative;
+  z-index: 1;
+  transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast), background var(--zv-transition-fast);
 }
 
 .zv-aktenlippe-lasche svg {
@@ -475,21 +498,59 @@
   height: 12px;
 }
 
-.zv-aktenlippe-lasche:hover,
-.zv-aktenlippe[data-offen="true"] .zv-aktenlippe-lasche {
+.zv-aktenlippe-lasche:hover {
   color: var(--zv-text-sekundaer);
   border-color: var(--zv-border);
   border-bottom-color: var(--zv-surface);
 }
 
+.zv-aktenlippe[data-offen="true"] .zv-aktenlippe-lasche {
+  margin-left: 0;
+  color: var(--zv-text);
+  background: var(--zv-surface-2);
+  border-color: var(--zv-border);
+  border-bottom-color: var(--zv-surface-2);
+  /* 1 px ueber den oberen Rand der Karte: dort deckt die Lasche den Strich ab. */
+  margin-bottom: -1px;
+}
+
+/* Hinweis auf neue Rueckmeldungen an der zugeklappten Lasche -- ohne ihn
+   fiele eine neue Meldung erst auf, wenn man die Karte oeffnet. */
+.zv-aktenlippe-punkt {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zv-accent-vivid);
+}
+
 .zv-aktenlippe-inhalt {
-  order: -1;
-  margin-bottom: var(--zv-space-2);
+  padding: var(--zv-space-1);
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+  border-radius: 0 var(--zv-radius-m) var(--zv-radius-m) var(--zv-radius-m);
+  animation: zv-aktenlippe-auf var(--zv-transition-fast);
+}
+
+@keyframes zv-aktenlippe-auf {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zv-aktenlippe-inhalt {
+    animation: none;
+  }
 }
 
 .zv-sidebar[data-eingeklappt="true"] .zv-aktenlippe-lasche {
   align-self: center;
-  margin-right: 0;
+  margin-left: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-aktenlippe-inhalt {
+  border-radius: var(--zv-radius-m);
 }
 
 /* ------------------------------------------------------------------
