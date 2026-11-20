@@ -29,7 +29,8 @@ pnpm dev:api                      # NestJS auf :3000
 pnpm dev:web                      # Vite auf :5173 (proxyt /api an :3000)
 
 # Prüfen
-pnpm test:api                     # alle Jest-Specs gegen echte PostgreSQL
+pnpm test:api                     # alle Jest-Specs gegen echte PostgreSQL, parallel (je Worker eigene DB-Kopie)
+pnpm --filter @zimmerakte/api test:seriell   # dasselbe nacheinander, direkt gegen die DB aus .env
 pnpm test:mandanten               # nur die Mandantentrennung
 pnpm build                        # Typecheck + Build aller Pakete
 

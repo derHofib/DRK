@@ -27,21 +27,20 @@ function codeFuer(secret: string): Promise<string> {
 }
 
 /**
- * TOTP-Codes sind deterministisch je 30-Sekunden-Zeitscheibe -- ein
- * Testlauf, der schneller als 30s ist (der Normalfall), wuerde in
- * aufeinanderfolgenden Tests denselben Code erzeugen. Der
- * Replay-Schutz (siehe auth.service.ts, totpVerifizieren()) lehnt den dann
- * zu Recht ab, das ist kein Bug, sondern genau die Garantie, die dieser
- * Test eigentlich prueft. Also: wo ein Test einen GARANTIERT neuen, noch
- * nicht verbrauchten Code braucht, real bis zur naechsten Zeitscheibe
- * warten statt die Uhr zu faelschen -- eine gefaelschte Systemzeit wuerde
- * Server und Testcode ohnehin nur dann konsistent betreffen, wenn beide im
- * selben Prozess liefen, was hier zufaellig stimmt, aber fragil waere.
+ * Code fuer die Zeitscheibe NACH der aktuellen. Der Server akzeptiert +-1
+ * Zeitschritt (Uhrendrift, siehe ZEIT_TOLERANZ_SEKUNDEN in auth.service.ts),
+ * also ist das ein gueltiger Code -- und weil er zu einem spaeteren Schritt
+ * gehoert als der eben bei der Aktivierung verbrauchte, garantiert ein noch
+ * nicht verbrauchter. Frueher wartete der Test dafuer real bis zur naechsten
+ * 30-Sekunden-Scheibe (im Mittel ~30 s Laufzeit, der mit Abstand langsamste
+ * Teil der Suite). Die Uhr wird dabei nicht gefaelscht: Server und Test
+ * laufen beide auf der echten Systemzeit, nur der Code zielt einen Schritt
+ * voraus, genau wie bei einer leicht vorgehenden Authenticator-App.
  */
-async function biszurNaechstenZeitscheibeWarten(periodeSekunden = 30): Promise<void> {
-  const periodeMs = periodeSekunden * 1000;
-  const restMs = periodeMs - (Date.now() % periodeMs) + 500;
-  await new Promise((resolve) => setTimeout(resolve, restMs));
+function codeFuerNaechsteZeitscheibe(secret: string): Promise<string> {
+  return new TOTP({ secret, crypto: cryptoPlugin, base32: base32Plugin }).generate({
+    epoch: Math.floor(Date.now() / 1000) + 30,
+  });
 }
 
 describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => {
@@ -164,15 +163,12 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
     expect(res.status).toBe(401);
   });
 
-  it(
-    "tauscht pending-Token + gueltigen Code gegen ein echtes Zugriffstoken, das echte Zugriffstoken funktioniert danach",
+  it("tauscht pending-Token + gueltigen Code gegen ein echtes Zugriffstoken, das echte Zugriffstoken funktioniert danach",
     async () => {
       // Die Aktivierung eben hat schon einen Code fuer die aktuelle
-      // Zeitscheibe verbraucht -- auf eine garantiert neue warten.
-      await biszurNaechstenZeitscheibeWarten();
-
+      // Zeitscheibe verbraucht -- also den der naechsten nehmen.
       const loginRes = await login();
-      const code = await codeFuer(secret);
+      const code = await codeFuerNaechsteZeitscheibe(secret);
 
       const res = await request(app.getHttpServer())
         .post("/auth/login/totp")
@@ -185,14 +181,17 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
         .set("Authorization", `Bearer ${res.body.accessToken}`);
       expect(meRes.status).toBe(200);
       expect(meRes.body.id).toBe(mandantId);
-    },
-    35_000
-  );
+  });
 
-  it(
-    "lehnt denselben Code ein zweites Mal ab (Replay-Schutz)",
+  it("lehnt denselben Code ein zweites Mal ab (Replay-Schutz)",
     async () => {
-      await biszurNaechstenZeitscheibeWarten();
+      // Der Test davor hat den Code der naechsten Zeitscheibe verbraucht; ohne
+      // zu warten gibt es keinen spaeteren gueltigen mehr. Deshalb den
+      // gespeicherten letzten Schritt zuruecksetzen (Testvorbereitung ueber
+      // den Admin-Zugang, kein Eingriff in den Pruefpfad) -- danach muss der
+      // aktuelle Code genau einmal funktionieren und beim zweiten Mal
+      // abgelehnt werden.
+      await admin.query("UPDATE benutzer SET totp_letzter_schritt = NULL WHERE mandant_id = $1", [mandantId]);
 
       const loginRes = await login();
       const code = await codeFuer(secret);
@@ -206,9 +205,7 @@ describe("2FA-Erzwingung: TOTP-Setup, Login-Zweitschritt, Replay-Schutz", () => 
         .post("/auth/login/totp")
         .send({ pendingToken: loginRes.body.pendingToken, code });
       expect(zweiteRes.status).toBe(401);
-    },
-    35_000
-  );
+  });
 
   it("lehnt die Deaktivierung mit falschem Code ab", async () => {
     const res = await request(app.getHttpServer())

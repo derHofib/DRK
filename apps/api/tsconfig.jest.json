@@ -1,0 +1,11 @@
+{
+  // Nur für Jest: isolatedModules lässt ts-jest jede Datei einzeln
+  // transpilieren statt sie mit dem ganzen Programm zu typprüfen. Das
+  // halbiert die Laufzeit der Suite. Die Typprüfung entfällt dadurch nicht,
+  // sie läuft in der CI separat ("API-Typprüfung", tsc --noEmit über src,
+  // scripts UND test) und beim nest build im Docker-Image.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "isolatedModules": true
+  }
+}
