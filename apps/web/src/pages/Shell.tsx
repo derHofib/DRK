@@ -63,6 +63,7 @@ import { Formulare } from "./Formulare";
 import { Standorte } from "./Standorte";
 import { KassenbuchTypen } from "./KassenbuchTypen";
 import { RueckmeldungDialog } from "../components/RueckmeldungDialog";
+import { ProtokollSprungKontext, type ProtokollSprung } from "../components/ProtokollSprung";
 import { SICHTBAR_ATTRIBUT } from "../rueckmeldung/maskierung";
 import { nimmMaskiertenScreenshot, type MaskierterScreenshot } from "../rueckmeldung/screenshot";
 
@@ -494,6 +495,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     kassenbuchKlientId?: string;
     neueBuchung?: boolean;
     tagesberichtKlientId?: string;
+    protokollSprung?: ProtokollSprung;
   }>({ nonce: 0 });
 
   const geheZu = useCallback((ziel: Tab, extra: Omit<typeof navZiel, "nonce"> = {}) => {
@@ -501,6 +503,14 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
     setTab(ziel);
     setOffenesPanel(null);
   }, []);
+
+  // Variante B (Konzept protokoll-ansicht): ausserhalb der Akte gibt es kein
+  // Panel, in dem das Protokoll aufgehen koennte -- „In der Akte öffnen“
+  // springt dorthin, wo Korrigieren und Historie liegen.
+  const protokollSprungWege = useMemo(
+    () => ({ inAkteOeffnen: (s: ProtokollSprung) => geheZu("klienten", { klientId: s.klientId, protokollSprung: s }) }),
+    [geheZu],
+  );
 
   const belegungOeffnen = useCallback(
     (standortId: string | null) => {
@@ -998,11 +1008,15 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "standorte" && standorte.length > 0 && (
             <StandortRaeume standortIds={belegungStandortIds} onStandorteWaehlen={setBelegungStandortIds} />
           )}
-          {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} />}
+          {tab === "klienten" && <Klienten key={navZiel.nonce} ansicht={klientenAnsicht} onAnsichtChange={setKlientenAnsicht} oeffneKlientId={navZiel.klientId} oeffneProtokoll={navZiel.protokollSprung} />}
           {tab === "kassenbuch" && <Kassenbuch key={navZiel.nonce} ansicht="buchungen" startFilterKlientId={navZiel.kassenbuchKlientId} startNeueBuchung={navZiel.neueBuchung} />}
           {tab === "hzl" && <Kassenbuch ansicht="hzl" onUebergabeStarten={onUebergabeStarten} />}
           {tab === "stunden" && <Stunden key={navZiel.nonce} />}
-          {tab === "tagesberichte" && <Dokumentation key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />}
+          {tab === "tagesberichte" && (
+            <ProtokollSprungKontext.Provider value={protokollSprungWege}>
+              <Dokumentation key={navZiel.nonce} startKlientId={navZiel.tagesberichtKlientId} />
+            </ProtokollSprungKontext.Provider>
+          )}
           {tab === "nachrichten" && <Nachrichten />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}

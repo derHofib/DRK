@@ -805,6 +805,32 @@
   }
 }
 
+/* Breites Lesefenster (Protokoll ausserhalb der Akte): Platz fuer zwei
+   Spalten, aber ein Streifen der Seite bleibt sichtbar. */
+@media (min-width: 641px) {
+  .zv-modal.zv-modal-breit {
+    width: min(820px, calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-7) * 2.5));
+  }
+
+  .zv-modal.zv-modal-breit.zv-modal-vollbild {
+    width: calc(100vw - var(--zv-sidebar-breite));
+  }
+}
+
+.zv-modal-knoepfe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+/* Wie beim Seitenpanel: am Handy deckt das Fenster ohnehin alles ab. Zwei
+   Klassen, sonst gewinnt die spaetere .zv-icon-btn-Regel. */
+@media (max-width: 640px) {
+  .zv-icon-btn.zv-modal-vollbild-knopf {
+    display: none;
+  }
+}
+
 @keyframes zv-panel-einschieben {
   from {
     transform: translateX(100%);
@@ -7532,24 +7558,98 @@ button.zv-achtung-eintrag:hover {
   width: auto;
 }
 
-/* Lesende Ansicht: Beschriftung | Wert | Herkunft. Am Handy untereinander. */
+/*
+ * Lesende Ansicht (Konzept protokoll-ansicht, Teil 1). Umbruch nach der
+ * Breite der ANSICHT, nicht des Fensters: dieselbe Ansicht steht im 440-px-
+ * Fenster, im Akten-Panel und im Vollbild. Die fruehere @media-Regel galt bei
+ * 1780 px Fensterbreite als "breit", obwohl das Fenster nur 440 px hatte --
+ * dem Wert blieben 36 px. Nur an .zv-protokoll-lesen, nicht an der Eingabe:
+ * inline-size-Containment nimmt dem Element die Breite aus dem Inhalt, und
+ * die Eingabe braucht das nicht.
+ */
+.zv-protokoll-lesen {
+  container: protokoll / inline-size;
+}
+
+/* Schmal (unter 520 px Inhalt): Beschriftung ueber dem Wert. */
 .zv-protokoll-zeile {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
-  gap: var(--zv-space-3);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--zv-space-1);
   align-items: baseline;
   padding: var(--zv-space-2) 0;
   border-bottom: 1px solid var(--zv-border);
+}
+
+/*
+ * Breit: keine feste Beschriftungsspalte mehr, die sich zuerst ihren Platz
+ * nimmt (eine Spur mit fester Obergrenze wird vor den fr-Spuren gefuellt).
+ * Die Beschriftung bekommt hoechstens 40 %, der Wert mindestens 12 rem.
+ */
+@container protokoll (min-width: 520px) {
+  .zv-protokoll-zeile {
+    grid-template-columns: minmax(8rem, 2fr) minmax(12rem, 3fr);
+    gap: var(--zv-space-1) var(--zv-space-3);
+  }
+
+  .zv-protokoll-zeile.zv-protokoll-zeile-voll {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-1);
+  }
 }
 
 .zv-protokoll-abschnitt .zv-protokoll-zeile:last-child {
   border-bottom: none;
 }
 
+/* Plakette direkt hinter dem Wert; reicht der Platz nicht, rutscht sie in die naechste Zeile. */
+.zv-protokoll-wertzelle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  min-width: 0;
+}
+
+/* break-word statt anywhere: Umbruch an Wortgrenzen, nur ein ueberlanges einzelnes Wort wird geteilt. */
 .zv-protokoll-wert {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   min-width: 0;
+  max-width: 100%;
+}
+
+.zv-protokoll-wert.zv-protokoll-wert-einzeilig {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabellen (geplante Wiederholgruppe) ueber die volle Breite mit eigenem
+   waagrechtem Scrollen, damit eine breite Tabelle nie das Panel aufreisst. */
+.zv-protokoll-tabelle {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Woher ein ausserhalb der Akte geoeffnetes Protokoll stammt, mit Sprung in die Akte. */
+.zv-protokoll-herkunft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2) var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-protokoll-herkunft .zv-protokoll-meta {
+  margin: 0;
+}
+
+.zv-protokoll-ruecksprung {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-3);
 }
 
 .zv-protokoll-detail {
@@ -7671,15 +7771,6 @@ button.zv-achtung-eintrag:hover {
 @media (max-width: 640px) {
   .zv-protokoll-abschnitt {
     padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-1);
-  }
-
-  .zv-protokoll-zeile {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--zv-space-1) var(--zv-space-2);
-  }
-
-  .zv-protokoll-zeile .zv-protokoll-label {
-    grid-column: 1 / -1;
   }
 
   .zv-protokoll-anzeige .zv-protokoll-label {
@@ -8237,6 +8328,12 @@ button.zv-achtung-eintrag:hover {
 
 .zv-protokoll-zum-tagesbericht {
   margin-left: var(--zv-space-2);
+}
+
+/* Ruecksprung aus einem Protokoll: der Bericht, von dem man kam. Innen
+   liegender Rahmen, damit die Zeile nicht breiter wird als ihre Nachbarn. */
+.zv-info-karte.zv-tagesbericht-markiert {
+  box-shadow: inset 0 0 0 2px var(--zv-accent);
 }
 
 /* Formular-Tagesbericht in der Liste: Formularname als Pille, daneben die

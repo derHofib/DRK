@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from "react";
-import { IAbbrechen } from "./icons";
+import { useEffect, useState, type ReactNode } from "react";
+import { IAbbrechen, IVergroessern, IVerkleinern } from "./icons";
 
 /**
  * Generisches kleines Fenster fuer kurze Anlegen-Formulare (siehe
@@ -16,11 +16,19 @@ export function Modal({
   titel,
   onClose,
   children,
+  breit = false,
 }: {
   titel: string;
   onClose: () => void;
   children: ReactNode;
+  /**
+   * Breite Lese-Fassung (ein Protokoll ausserhalb der Akte). Eigene Variante
+   * statt die 440 px allgemein anzuheben: kurze Anlegen-Formulare sollen die
+   * Liste dahinter weiter sichtbar lassen.
+   */
+  breit?: boolean;
 }) {
+  const [vollbild, setVollbild] = useState(false);
   useEffect(() => {
     function beiEscape(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -32,7 +40,7 @@ export function Modal({
   return (
     <div className="zv-modal-scrim" onClick={onClose}>
       <div
-        className="zv-modal"
+        className={`zv-modal${breit ? " zv-modal-breit" : ""}${breit && vollbild ? " zv-modal-vollbild" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="zv-modal-titel"
@@ -40,9 +48,22 @@ export function Modal({
       >
         <div className="zv-modal-kopf">
           <h3 id="zv-modal-titel">{titel}</h3>
-          <button type="button" className="zv-icon-btn" aria-label="Schließen" onClick={onClose}>
-            <IAbbrechen />
-          </button>
+          <div className="zv-modal-knoepfe">
+            {breit && (
+              <button
+                type="button"
+                className="zv-icon-btn zv-modal-vollbild-knopf"
+                aria-label={vollbild ? "Vollbild verlassen" : "Vollbild anzeigen"}
+                title={vollbild ? "Vollbild verlassen" : "Vollbild anzeigen"}
+                onClick={() => setVollbild((v) => !v)}
+              >
+                {vollbild ? <IVerkleinern /> : <IVergroessern />}
+              </button>
+            )}
+            <button type="button" className="zv-icon-btn" aria-label="Schließen" onClick={onClose}>
+              <IAbbrechen />
+            </button>
+          </div>
         </div>
         <div className="zv-modal-inhalt">{children}</div>
       </div>

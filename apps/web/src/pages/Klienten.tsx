@@ -28,6 +28,7 @@ import {
   IZimmer,
 } from "../components/icons";
 import { KlientDetail } from "./KlientDetail";
+import type { ProtokollSprung } from "../components/ProtokollSprung";
 
 
 // Die Ansicht wird jetzt ausschliesslich ueber die Navigation gewaehlt
@@ -53,11 +54,14 @@ export function Klienten({
   ansicht,
   onAnsichtChange,
   oeffneKlientId,
+  oeffneProtokoll,
 }: {
   ansicht: KlientenAnsicht;
   onAnsichtChange: (ansicht: KlientenAnsicht) => void;
   /** Aus der Befehlspalette: diese Akte beim Einhaengen oeffnen. */
   oeffneKlientId?: string;
+  /** „In der Akte öffnen“ aus einem Protokoll: in der Akte gleich dieses Protokoll zeigen. */
+  oeffneProtokoll?: ProtokollSprung;
 }) {
   // Der Zustand liegt in Shell.tsx (fuer den Sidebar-Unterpunkt
   // "Anwärter", siehe dort) -- hier nur noch ein Alias, damit der Rest
@@ -72,6 +76,11 @@ export function Klienten({
   const [formularOffen, setFormularOffen] = useState(false);
   const [formFehler, setFormFehler] = useState<string | null>(null);
   const [ausgewaehlterKlientId, setAusgewaehlterKlientId] = useState<string | null>(oeffneKlientId ?? null);
+  // Nur fuer das erste Oeffnen dieser Akte; wer schliesst oder wechselt, kommt normal zurueck.
+  const [protokollStart, setProtokollStart] = useState<ProtokollSprung | null>(oeffneProtokoll ?? null);
+  useEffect(() => {
+    if (protokollStart && protokollStart.klientId !== ausgewaehlterKlientId) setProtokollStart(null);
+  }, [ausgewaehlterKlientId, protokollStart]);
 
   const [anwaerterStatus, setAnwaerterStatus] = useState<AnwaerterStatus>("offen");
   const [anwaerter, setAnwaerter] = useState<AnwaerterDto[]>([]);
@@ -514,7 +523,7 @@ export function Klienten({
 
           <Seitenpanel offen={ausgewaehlterKlientId !== null} onSchliessen={() => setAusgewaehlterKlientId(null)}>
             {ausgewaehlterKlientId && (
-              <KlientDetail klientId={ausgewaehlterKlientId} onZurueck={() => setAusgewaehlterKlientId(null)} />
+              <KlientDetail klientId={ausgewaehlterKlientId} startProtokoll={protokollStart ?? undefined} onZurueck={() => setAusgewaehlterKlientId(null)} />
             )}
           </Seitenpanel>
         </>
@@ -624,7 +633,7 @@ export function Klienten({
 
           <Seitenpanel offen={ausgewaehlterKlientId !== null} onSchliessen={() => setAusgewaehlterKlientId(null)}>
             {ausgewaehlterKlientId && (
-              <KlientDetail klientId={ausgewaehlterKlientId} onZurueck={() => setAusgewaehlterKlientId(null)} />
+              <KlientDetail klientId={ausgewaehlterKlientId} startProtokoll={protokollStart ?? undefined} onZurueck={() => setAusgewaehlterKlientId(null)} />
             )}
           </Seitenpanel>
         </>

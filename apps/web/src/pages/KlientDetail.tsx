@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import type {
   BenutzerListEintragDto,
   HilfeplanDto,
@@ -65,6 +65,7 @@ import { dateiZuBase64 } from "../datei";
 import { formatBetrag, formatDatum, heuteBerlin, lokalesDatum } from "../format";
 import { HilfeplanTab } from "./klient/HilfeplanTab";
 import { ProtokolleTab } from "./klient/ProtokolleTab";
+import { ProtokollSprungKontext, type ProtokollSprung } from "../components/ProtokollSprung";
 import { VerlaufTab, verlaufArtLabel, verlaufKlasse } from "./klient/VerlaufTab";
 import { berichtFormularTexte, TagesberichtZeile, TagVorschlaegeDatalist } from "./Tagesberichte";
 
@@ -149,9 +150,24 @@ const eingabeFeldStil = {
   fontSize: 14,
 };
 
-export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZurueck: () => void }) {
+export function KlientDetail({
+  klientId,
+  onZurueck,
+  startProtokoll,
+}: {
+  klientId: string;
+  onZurueck: () => void;
+  /** Sprung von ausserhalb (Seite Dokumentation, „In der Akte öffnen“). */
+  startProtokoll?: ProtokollSprung;
+}) {
   const [klient, setKlient] = useState<KlientDetailDto | null>(null);
-  const [ansicht, setAnsichtRoh] = useState<AkteAnsicht>(ansichtLesen);
+  const [ansicht, setAnsichtRoh] = useState<AkteAnsicht>(() =>
+    startProtokoll ? { ...ansichtLesen(), tab: "dokumentation", doku: "protokolle" } : ansichtLesen()
+  );
+  // Aus einem Tagesbericht geoeffnetes Protokoll (Konzept protokoll-ansicht,
+  // Variante A): im selben Panel unter Protokolle statt als drittes Fenster.
+  const [protokollSprung, setProtokollSprung] = useState<ProtokollSprung | null>(startProtokoll ?? null);
+  const [markierterBericht, setMarkierterBericht] = useState<string | null>(null);
   const tab = ansicht.tab;
   // Fuer Zaehler am Reiter und als Ersatz fuer den Verlauf im Ueberblick,
   // wenn das Verlaufsrecht fehlt; nach jedem Tabwechsel neu geholt, damit
@@ -273,7 +289,30 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
   // Gemerkter Reiter "Verlauf", aber hier kein Recht dazu: Ueberblick zeigen.
   const sichtbarerTab: Tab = tab === "verlauf" && verlaufRechte && !zeigeVerlauf ? "ueberblick" : tab;
 
+  const sprungWege = useMemo(
+    () => ({
+      imSelbenPanel: (s: ProtokollSprung) => {
+        setProtokollSprung(s);
+        setMarkierterBericht(null);
+        setAnsicht({ tab: "dokumentation", doku: "protokolle" });
+      },
+    }),
+    [setAnsicht]
+  );
+  // Wer Protokolle verlaesst (anderer Reiter, Umschalter), hat den Sprung
+  // hinter sich; beim naechsten Oeffnen von Protokolle zeigt es die Liste.
+  const imProtokollTeil = sichtbarerTab === "dokumentation" && ansicht.doku === "protokolle";
+  useEffect(() => {
+    if (!imProtokollTeil) setProtokollSprung(null);
+  }, [imProtokollTeil]);
+  // Die Markierung gilt nur fuer die Rueckkehr, nicht fuer spaetere Besuche.
+  const imTagesberichtTeil = sichtbarerTab === "dokumentation" && ansicht.doku === "tagesberichte";
+  useEffect(() => {
+    if (!imTagesberichtTeil) setMarkierterBericht(null);
+  }, [imTagesberichtTeil]);
+
   return (
+    <ProtokollSprungKontext.Provider value={sprungWege}>
     <div className="zv-akte">
       <button className="zv-link-btn" onClick={onZurueck} style={{ marginBottom: 14 }}>
         <IZurueck />
@@ -517,12 +556,31 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
           {sichtbarerTab === "dokumentation" && ansicht.doku === "tagesberichte" && (
             <TagesberichteTab
               klientId={klientId}
+              markiert={markierterBericht}
               startMitFormular={berichtFormularBeiStart}
               onFormularGenutzt={() => setBerichtFormularBeiStart(false)}
             />
           )}
           {sichtbarerTab === "dokumentation" && ansicht.doku === "protokolle" && (
-            <ProtokolleTab klientId={klientId} archiviert={archiviert} />
+            <ProtokolleTab
+              key={protokollSprung?.protokollId ?? "liste"}
+              klientId={klientId}
+              archiviert={archiviert}
+              start={
+                protokollSprung
+                  ? {
+                      protokollId: protokollSprung.protokollId,
+                      ruecksprung: {
+                        label: `Zurück zum Tagesbericht vom ${formatDatum(protokollSprung.berichtDatum)}`,
+                        onKlick: () => {
+                          setMarkierterBericht(protokollSprung.berichtId);
+                          setAnsicht({ doku: "tagesberichte" });
+                        },
+                      },
+                    }
+                  : undefined
+              }
+            />
           )}
           {sichtbarerTab === "hilfeplan" && (
             <HilfeplanTab klientId={klientId} onBerichtOeffnen={() => setAnsicht({ tab: "dokumentation", doku: "tagesberichte" })} />
@@ -540,6 +598,7 @@ export function KlientDetail({ klientId, onZurueck }: { klientId: string; onZuru
         </fieldset>
       </div>
     </div>
+    </ProtokollSprungKontext.Provider>
   );
 }
 
@@ -2113,10 +2172,12 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
 
 function TagesberichteTab({
   klientId,
+  markiert = null,
   startMitFormular = false,
   onFormularGenutzt,
 }: {
   klientId: string;
+  markiert?: string | null;
   startMitFormular?: boolean;
   onFormularGenutzt?: () => void;
 }) {
@@ -2212,6 +2273,7 @@ function TagesberichteTab({
               key={b.id}
               bericht={b}
               zeigeKlient={false}
+              markiert={b.id === markiert}
               onTagEntfernen={(tagId) => tagEntfernen(b.id, tagId)}
               onTagHinzufuegen={(name) => tagHinzufuegen(b.id, name)}
               onDokumentHinzufuegen={(base64, dateiname, mimeType) => dokumentHinzufuegen(b.id, base64, dateiname, mimeType)}
