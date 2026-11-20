@@ -1,0 +1,66 @@
+/* ==================================================================
+   Datumsfelder (Konzept Datumsfeld, Rueckmeldung "Datum auswahl")
+   ==================================================================
+   Eigene Datei statt app.css: Datumsfeld, Monatsfeld, Zeitraumfeld und
+   die Werkzeugzeile gehoeren zusammen und sollen beim naechsten Umbau an
+   einer Stelle liegen. Nur Tokens -- die Helligkeiten stehen in
+   tokens.css, deshalb halten die Kontraste fuer jeden Traegerakzent
+   (gemessen in scripts/design-pruefung.mjs). */
+
+/* ---------- Werkzeugzeile: Beschriftung links, Feld und Knopf gleich hoch
+   Vorher stand hier "zv-feld"/"zv-feld-zeile" -- Klassen, die es nie gab.
+   Das Feld bekam dadurch keine einzige Regel (21 px hoch, Beschriftung
+   klebte am Feld). align-items: center statt end, weil Beschriftung und
+   Feld nebeneinander stehen; end setzte die Grundlinien schief. */
+.zv-werkzeugzeile {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-werkzeugzeile > label {
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+}
+.zv-werkzeugzeile .zv-btn {
+  min-height: var(--zv-steuer-hoehe-kompakt);
+}
+
+/* Freistehendes Eingabefeld in einer Zeile (Inline-Formulare in Listen).
+   width: auto, weil .zv-field-inline fuer Formulare volle Breite hat. */
+.zv-field-inline.zv-eingabe-kompakt {
+  width: auto;
+  min-height: var(--zv-steuer-hoehe-kompakt);
+  padding: 0 var(--zv-space-2);
+}
+
+/* ---------- (a) Natives Feld angeglichen
+   Bleibt dauerhaft die Handy-Variante (pointer: coarse, siehe
+   Datumsfeld.tsx): iOS und Android bringen eine daumengerechte Auswahl mit.
+   Das geschlossene Feld sieht trotzdem aus wie am Desktop. Das Symbol ist
+   eine Maske, damit seine Farbe ein Token bleibt -- ein SVG als
+   background-image muesste die Farbe als Literal tragen und wuerde im
+   Dunkelmodus nicht mitwechseln. Das "black" in der Maske ist keine
+   Farbe, sondern nur die Deckkraft. */
+input[type="date"],
+input[type="month"] {
+  font-variant-numeric: tabular-nums;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+  width: 16px;
+  height: 16px;
+  margin-left: var(--zv-space-1);
+  cursor: pointer;
+  background: var(--zv-text-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M8 2v4M16 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M8 2v4M16 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover {
+  background: var(--zv-text);
+}

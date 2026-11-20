@@ -140,15 +140,6 @@ function Umschalter<T extends string>({
   );
 }
 
-const eingabeFeldStil = {
-
-  padding: "6px 8px",
-  borderRadius: "var(--zv-radius-s)",
-  border: "1px solid var(--zv-border)",
-  background: "var(--zv-bg)",
-  color: "var(--zv-text)",
-  fontSize: 14,
-};
 
 export function KlientDetail({
   klientId,
@@ -1796,16 +1787,16 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
         <form className="zv-inline-form" onSubmit={anlegen}>
           <div className="zv-field-row">
             <div className="zv-field">
-              <label>Amt</label>
-              <input name="amt" required />
+              <label htmlFor="ku-amt">Amt</label>
+              <input id="ku-amt" name="amt" required />
             </div>
             <div className="zv-field">
-              <label>Von</label>
-              <input name="von" type="date" required />
+              <label htmlFor="ku-von">Von</label>
+              <input id="ku-von" name="von" type="date" required />
             </div>
             <div className="zv-field">
-              <label>Bis (optional)</label>
-              <input name="bis" type="date" />
+              <label htmlFor="ku-bis">Bis (optional)</label>
+              <input id="ku-bis" name="bis" type="date" />
             </div>
           </div>
           <button className="zv-btn" type="submit">
@@ -1845,7 +1836,7 @@ function KostenuebernahmenTab({ klientId }: { klientId: string }) {
                 {k.bis === null &&
                   (beendenId === k.id ? (
                     <form style={{ display: "flex", gap: 6, alignItems: "center" }} onSubmit={(e) => beenden(e, k.id)}>
-                      <input name="bis" type="date" required style={eingabeFeldStil} />
+                      <input name="bis" type="date" required aria-label="Kostenübernahme endet am" className="zv-field-inline zv-eingabe-kompakt" />
                       <button className="zv-link-btn" type="submit">
                         <ISpeichern />
                         Speichern
@@ -2105,12 +2096,16 @@ function KlientKassenbuchTab({ klientId }: { klientId: string }) {
 
   return (
     <div>
-      <div className="zv-feld-zeile" style={{ display: "flex", gap: "var(--zv-space-3)", alignItems: "end", flexWrap: "wrap" }}>
-        <label className="zv-feld">
-          <span>Monatsabschluss für</span>
-          <input type="month" value={abschlussMonat} onChange={(e) => setAbschlussMonat(e.target.value)} />
-        </label>
-        <button type="button" className="zv-btn zv-btn-sekundaer" onClick={monatsabschlussHerunterladen} disabled={abschlussLaeuft || !abschlussMonat}>
+      <div className="zv-werkzeugzeile">
+        <label htmlFor="kb-abschluss-monat">Monatsabschluss für</label>
+        <input
+          id="kb-abschluss-monat"
+          type="month"
+          className="zv-field-inline zv-eingabe-kompakt"
+          value={abschlussMonat}
+          onChange={(e) => setAbschlussMonat(e.target.value)}
+        />
+        <button type="button" className="zv-btn zv-btn-sekundaer zv-btn-klein" onClick={monatsabschlussHerunterladen} disabled={abschlussLaeuft || !abschlussMonat}>
           <IHerunterladen />
           {abschlussLaeuft ? "Wird erstellt …" : "Als PDF"}
         </button>

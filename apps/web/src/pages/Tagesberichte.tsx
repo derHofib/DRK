@@ -140,6 +140,7 @@ export function TagesberichtZeile({
           <form onSubmit={speichern} style={{ display: "grid", gap: 8 }}>
             <input
               type="date"
+              className="zv-field-inline zv-eingabe-kompakt"
               value={bearbeiten.datum}
               max={heuteBerlin()}
               onChange={(e) => setBearbeiten({ ...bearbeiten, datum: e.target.value })}

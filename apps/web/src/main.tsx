@@ -6,6 +6,7 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 import "./styles/schrift.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/datumsfeld.css";
 
 // Nach einem Server-Update holt sich der Service Worker (registerType:
 // "autoUpdate") die neuen Dateien und uebernimmt sofort -- die bereits

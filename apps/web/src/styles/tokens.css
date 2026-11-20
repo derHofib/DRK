@@ -421,6 +421,13 @@
   --zv-space-6: 32px;
   --zv-space-7: 48px;
 
+  /* Hoehe von Steuerelementen. Felder, Knoepfe und Filterpillen waren
+     auseinandergelaufen (40 / 38,8 / 36 px) -- in einer Werkzeugzeile
+     stehen Feld und Knopf deshalb beide auf der kompakten Hoehe, in
+     Formularen auf der vollen (Konzept Datumsfeld, 3.4). */
+  --zv-steuer-hoehe: 40px;
+  --zv-steuer-hoehe-kompakt: 36px;
+
   /* Die Familiennamen sind nicht frei gewaehlt -- sie muessen zu den
      @font-face-Regeln in schrift.css passen (@fontsource-variable/
      nunito-sans). Dahinter die

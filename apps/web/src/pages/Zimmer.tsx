@@ -933,7 +933,7 @@ export function Zimmer({
                             <option value="normal">Normal</option>
                             <option value="hoch">Hoch</option>
                           </select>
-                          <input name="faelligAm" type="date" aria-label="Fälligkeit" />
+                          <input name="faelligAm" type="date" aria-label="Fälligkeit" className="zv-field-inline zv-eingabe-kompakt" />
                           <select name="zugewiesenAn" defaultValue="" aria-label="Zuweisen an">
                             <option value="">Niemand</option>
                             {benutzerListe.map((b) => (
