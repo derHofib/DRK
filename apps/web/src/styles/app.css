@@ -3391,6 +3391,17 @@ li:last-child > .zv-kontakt-zeile,
   overflow-wrap: break-word;
 }
 
+/* Art- und Zugangs-Pille im Termin-Dialog: auf schmalen Handys umbrechen
+   die beiden untereinander, statt den Namen auf zwei Buchstaben zu quetschen. */
+.zv-kontakt-pillen {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--zv-space-1);
+  flex-shrink: 0;
+  max-width: 50%;
+}
+
 /* Zweispaltig: Liste | Verlauf. Feste Hoehe statt Seitenscroll, damit nur
    der Verlauf scrollt und die Eingabezeile sichtbar bleibt -- bewusst per
    Flex/Grid in der Seite und NICHT mit position:fixed (siehe Kommentar bei
