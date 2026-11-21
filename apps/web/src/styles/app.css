@@ -4220,12 +4220,6 @@ button.zv-kal-mini-tag:focus-visible {
    Dreiecke uebereinander: das aeussere in Kartenfarbe trennt, das innere
    traegt die Art. Ohne den Trennrand verschwand im Entwurf eine rote
    "krank"-Ecke auf einer roten Personenflaeche. */
-/* Ring statt Punkt im Monatsraster: die Personenfarbe als Rand, innen leer. */
-.zv-kal-punkt.zv-kal-punkt-abwesend {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
-}
-
 .zv-kal-ecke {
   position: absolute;
   top: 0;
@@ -4557,6 +4551,43 @@ button.zv-kal-mini-tag:focus-visible {
   }
 }
 
+/* Abwesenheit als Strahl am Fuss der Tageskacheln (Kalender.tsx,
+   strahlen()). Liegt in denselben Rasterzellen wie die Kacheln und spannt
+   ueber die Luecken dazwischen -- so ist ein Urlaub ein Strich, keine
+   Punktreihe. Die Kacheln machen unten Platz fuer so viele Spuren, wie die
+   sichtbaren Wochen brauchen (--strahl-spuren aus dem JavaScript, nur eine
+   Zahl). */
+.zv-kal-raster {
+  --zv-kal-strahl-hoehe: 5px;
+  --zv-kal-strahl-abstand: 3px;
+}
+
+.zv-kal-raster .zv-kal-tag {
+  padding-bottom: calc(var(--zv-space-1) + var(--strahl-spuren, 0) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+}
+
+.zv-kal-strahl-linie {
+  align-self: end;
+  z-index: 1;
+  height: var(--zv-kal-strahl-hoehe);
+  margin: 0 var(--zv-space-1) calc(var(--zv-space-1) + var(--spur) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+  border-radius: var(--zv-radius-pill);
+  pointer-events: none;
+}
+
+/* Laeuft ueber den Wochenrand hinaus: die Kante bleibt offen, wie beim Balken. */
+.zv-kal-strahl-linie.vorher {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.zv-kal-strahl-linie.nachher {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* ------------------------------------------------------------------
    Wochenansicht als Zeitraster (kalender/WochenZeitraster.tsx)
    Kopf und Ganztagszeile stehen ausserhalb des scrollenden Stundenteils,
@@ -4675,6 +4706,51 @@ button.zv-kal-mini-tag:focus-visible {
   margin-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+/* Abwesenheit im Zeitraster: umrandet statt gefuellt -- gefuellt heisst
+   "hat einen Termin", umrandet "ist nicht da". Der Text steht auf der
+   normalen Flaeche, sein Kontrast haengt also nicht an der Personenfarbe;
+   die Personenfarbe traegt nur Rand und Punkt (Nicht-Text, >= 3:1). */
+.zv-kal-abwesend-zeile {
+  border-bottom-color: var(--zv-border);
+}
+
+.zv-kal-balken.zv-kal-strahl {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 2px solid light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
+}
+
+.zv-kal-balken.zv-kal-strahl.neutral {
+  background: var(--zv-surface);
+  border-color: var(--zv-border-strong);
+}
+
+/* Offene Kante ueber den Wochenrand: dort auch kein Rand. */
+.zv-kal-balken.zv-kal-strahl.vorher {
+  border-left-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl.nachher {
+  border-right-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-kal-balken.zv-kal-strahl > .zv-art-marke {
+  flex: none;
+}
+
+.zv-kal-balken.zv-kal-strahl:hover {
+  background: var(--zv-surface-2);
 }
 
 .zv-kal-woche-koerper {
