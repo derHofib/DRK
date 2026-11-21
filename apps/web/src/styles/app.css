@@ -8425,6 +8425,10 @@ button.zv-achtung-eintrag:hover {
   color: var(--zv-text-muted);
 }
 
+.zv-fe-schluessel-problem {
+  color: var(--zv-status-danger);
+}
+
 .zv-fe-optionen {
   list-style: none;
   margin: 0 0 var(--zv-space-2);
