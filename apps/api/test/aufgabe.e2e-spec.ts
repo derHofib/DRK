@@ -303,6 +303,40 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
       // Einrichtungsleitung darf koordinieren (ROLLEN_MIT_AUFGABEN_KOORDINATION).
       expect(versuch.status).toBe(200);
     });
+
+    // Rueckmeldung 4aa5dcb2: Die Oberflaeche zeigt den Erledigen-Knopf nach
+    // darfBearbeiten. Das Feld muss deshalb exakt dieselbe Regel wie der
+    // Schreibpfad liefern -- sonst fehlt der Knopf (Leitung) oder er wirft
+    // beim Klick einen 403 (Betreuer).
+    it("darfBearbeiten in der Liste entspricht dem Schreibrecht (Leitung ja, fremder Betreuer nein, Ersteller ja)", async () => {
+      const angelegt = await als(tokenBetreuerS1).post("/aufgaben", {
+        titel: "Knopf sichtbar?",
+        zimmerId: zimmer1Id,
+      });
+      expect(angelegt.body.darfBearbeiten).toBe(true);
+
+      const finde = async (token: string) => {
+        const res = await als(token).get(`/aufgaben?zimmerId=${zimmer1Id}`);
+        expect(res.status).toBe(200);
+        return res.body.find((a: { id: string }) => a.id === angelegt.body.id);
+      };
+      expect((await finde(tokenEinrichtungsleitungS1)).darfBearbeiten).toBe(true);
+      expect((await finde(tokenBereichsleitung)).darfBearbeiten).toBe(true);
+
+      // Betreuer am selben Standort ohne Koordinationsrecht: sieht eine
+      // fremde Aufgabe, darf sie aber nicht erledigen -- und bekommt den Knopf
+      // auch nicht.
+      const vonLeitung = await als(tokenEinrichtungsleitungS1).post("/aufgaben", {
+        titel: "Von der Leitung angelegt",
+        zimmerId: zimmer1Id,
+      });
+      const fuerBetreuer = (await als(tokenBetreuerS1).get(`/aufgaben?zimmerId=${zimmer1Id}`)).body.find(
+        (a: { id: string }) => a.id === vonLeitung.body.id
+      );
+      expect(fuerBetreuer).toBeDefined();
+      expect(fuerBetreuer.darfBearbeiten).toBe(false);
+      expect((await als(tokenBetreuerS1).patch(`/aufgaben/${vonLeitung.body.id}/erledigen`)).status).toBe(403);
+    });
   });
 
   describe("Selbstzuweisung: Ausnahme von der Schreibsperre", () => {

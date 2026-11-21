@@ -447,6 +447,105 @@ describe("Dashboard: Kennzahlen und Standort-Einschraenkung", () => {
   });
 
   /**
+   * Kachel "Kostenübernahmen" (Rückmeldung 072e7194): der ganze Bestand statt
+   * nur des 90-Tage-Fensters, plus wer hier wohnt und KEINE hat. Die Zeilen
+   * fuer "ohne" und "archiviert" entstehen nur in diesen Tests, damit die
+   * Zaehlungen der uebrigen Tests (freie Zimmer!) unberuehrt bleiben.
+   */
+  describe("kostenuebersicht", () => {
+    async function mitZusatzklienten(pruefen: (ids: { ohne: string; archiviert: string }) => Promise<void>) {
+      const { rows: zimmer } = await admin.query<{ id: string }>(
+        "SELECT id FROM zimmer WHERE mandant_id = $1 AND nummer = '103'",
+        [mandantId]
+      );
+      const { rows: ohne } = await admin.query<{ id: string }>(
+        `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt, hzl_rhythmus)
+         VALUES ($1, 'Ohne', 'Bewilligung', '1990-01-01', $2, 'Testamt', 'monatlich') RETURNING id`,
+        [mandantId, `AZ-ohne-${randomUUID()}`]
+      );
+      const { rows: archiviert } = await admin.query<{ id: string }>(
+        `INSERT INTO klient (mandant_id, vorname, nachname, geburtsdatum, aktenzeichen, amt, hzl_rhythmus, archiviert_am, archiviert_von)
+         VALUES ($1, 'Archiv', 'Akte', '1990-01-01', $2, 'Testamt', 'monatlich', now(),
+                 (SELECT id FROM benutzer WHERE mandant_id = $1 LIMIT 1)) RETURNING id`,
+        [mandantId, `AZ-archiv-${randomUUID()}`]
+      );
+      await admin.query(
+        "INSERT INTO belegung (mandant_id, zimmer_id, klient_id, einzug) VALUES ($1, $2, $3, '2024-01-01')",
+        [mandantId, zimmer[0].id, ohne[0].id]
+      );
+      await admin.query(
+        "INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis) VALUES ($1, $2, 'Amt Archiv', '2025-01-01', CURRENT_DATE + 30)",
+        [mandantId, archiviert[0].id]
+      );
+      // Verlaengerung fuer klient1 schon bewilligt: die laufende (Amt Eins)
+      // muss trotzdem die angezeigte bleiben.
+      await admin.query(
+        "INSERT INTO kostenuebernahme (mandant_id, klient_id, amt, von, bis) VALUES ($1, $2, 'Amt Verlaengert', CURRENT_DATE + 11, CURRENT_DATE + 400)",
+        [mandantId, klient1]
+      );
+      try {
+        await pruefen({ ohne: ohne[0].id, archiviert: archiviert[0].id });
+      } finally {
+        await admin.query("DELETE FROM kostenuebernahme WHERE mandant_id = $1 AND amt IN ('Amt Archiv', 'Amt Verlaengert')", [mandantId]);
+        await admin.query("DELETE FROM belegung WHERE klient_id = $1", [ohne[0].id]);
+        await admin.query("DELETE FROM klient WHERE id = ANY($1)", [[ohne[0].id, archiviert[0].id]]);
+      }
+    }
+
+    it("zeigt alle laufenden Kostenuebernahmen, auch ausserhalb des 90-Tage-Fensters, nach Ende sortiert", async () => {
+      const res = await get(tokenBereichsleitung);
+      expect(res.status).toBe(200);
+      const liste = res.body.kostenuebersicht as { klientId: string; amt: string | null; tageVerbleibend: number | null }[];
+      expect(liste.map((k) => k.klientId)).toEqual([klient2, klient1, klient3]);
+      expect(liste.find((k) => k.klientId === klient3)).toMatchObject({ amt: "Amt Drei", tageVerbleibend: 100 });
+    });
+
+    it("nennt Bewohner:innen ohne Kostenuebernahme zuerst, laesst archivierte Akten weg und nimmt die laufende statt der Verlaengerung", async () => {
+      await mitZusatzklienten(async ({ ohne, archiviert }) => {
+        const res = await get(tokenBereichsleitung);
+        const liste = res.body.kostenuebersicht as { klientId: string; amt: string | null; zimmerNummer: string | null }[];
+        expect(liste[0]).toMatchObject({ klientId: ohne, amt: null, zimmerNummer: "103" });
+        expect(liste.map((k) => k.klientId)).not.toContain(archiviert);
+        expect(liste.find((k) => k.klientId === klient1)?.amt).toBe("Amt Eins");
+      });
+    });
+
+    it("Standort-Sicht: die S1-Leitung sieht nur Klient:innen von Standort 1", async () => {
+      await mitZusatzklienten(async ({ ohne }) => {
+        const res = await get(tokenEinrichtungsleitungS1);
+        const ids = (res.body.kostenuebersicht as { klientId: string }[]).map((k) => k.klientId);
+        expect(ids.sort()).toEqual([klient1, klient3, ohne].sort());
+      });
+    });
+
+    it("ohne Recht \"Kostenübernahmen ansehen\" kommt null statt der Liste", async () => {
+      const { rows } = await admin.query<{ id: string }>(
+        `DELETE FROM account_typ_recht r USING account_typ t
+         WHERE r.account_typ_id = t.id AND t.mandant_id = $1 AND t.name = 'Einrichtungsleitung (Testkonto)'
+           AND r.modul = 'kostenuebernahmen' AND r.aktion = 'ansehen'
+         RETURNING r.account_typ_id AS id`,
+        [mandantId]
+      );
+      expect(rows).toHaveLength(1);
+      try {
+        const res = await get(tokenEinrichtungsleitungS1);
+        expect(res.status).toBe(200);
+        expect(res.body.kostenuebersicht).toBeNull();
+      } finally {
+        await admin.query(
+          "INSERT INTO account_typ_recht (mandant_id, account_typ_id, modul, aktion, scope, erlaubt) VALUES ($1, $2, 'kostenuebernahmen', 'ansehen', 'einrichtung', true)",
+          [mandantId, rows[0].id]
+        );
+      }
+    });
+
+    it("standortId engt auch diese Liste ein", async () => {
+      const res = await get(tokenBereichsleitung, standort2Id);
+      expect((res.body.kostenuebersicht as { klientId: string }[]).map((k) => k.klientId)).toEqual([klient2]);
+    });
+  });
+
+  /**
    * Standort-Umschalter im Dashboard (Dashboard.tsx): "standortId" engt die
    * bereits erlaubte Standort-Menge weiter ein, darf sie aber nie erweitern.
    * standortIstErlaubt() deckt dabei sowohl eine ungueltige/fremde ID als
