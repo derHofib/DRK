@@ -3469,16 +3469,21 @@ export function pdfFreiAusGestaltung(g: PdfGestaltung): PdfFrei {
   const fussPt = g.groesseFuss;
   const brief = g.vorlage === "brief";
   const kopfY = brief ? 10 : 12;
-  const logoB = Math.round(g.logoHoehe * 1.2);
+  // Seitenverhaeltnis des Logos kennt diese Funktion nicht; 2,5 : 1 passt
+  // zu den ueblichen Wort-Bild-Marken. Der Renderer passt das Logo ohnehin
+  // in den Kasten ein, ohne es zu verzerren.
+  const logoB = Math.round(g.logoHoehe * 2.5);
   const textB = 70;
   const gruppeB = logoB + (g.textNebenLogo.trim() ? 4 + textB : 0);
   const gruppeX = g.logoPosition === "rechts" ? (brief ? 200 : 188) - gruppeB : g.logoPosition === "mitte" ? (210 - gruppeB) / 2 : 22;
   const kopf = (liste: PdfFreiBaustein[], hoehe: number, pre: string) => {
     if (hoehe <= 0) return;
-    liste.push(pdfFreiBaustein({ id: `${pre}logo`, art: "logo", x: halbMm(gruppeX), y: kopfY, b: Math.round(hoehe * 1.2), h: hoehe, ausrichtung: "links" }));
+    const b = Math.round(hoehe * 2.5);
+    // Logo buendig zur Textgruppe: bei "rechts" steht es rechts im Kasten.
+    liste.push(pdfFreiBaustein({ id: `${pre}logo`, art: "logo", x: halbMm(gruppeX + logoB - b), y: kopfY, b, h: hoehe, ausrichtung: "rechts" }));
     if (g.textNebenLogo.trim()) {
       liste.push(
-        pdfFreiBaustein({ id: `${pre}kopf`, art: "text", x: halbMm(gruppeX + Math.round(hoehe * 1.2) + 4), y: kopfY, b: textB, h: hoehe, text: g.textNebenLogo, pt: hoehe >= 11 ? 10 : 8.5 })
+        pdfFreiBaustein({ id: `${pre}kopf`, art: "text", x: halbMm(gruppeX + logoB + 4), y: kopfY, b: textB, h: Math.max(hoehe, 8), text: g.textNebenLogo, pt: hoehe >= 11 ? 10 : 8.5 })
       );
     }
   };
@@ -3487,7 +3492,7 @@ export function pdfFreiAusGestaltung(g: PdfGestaltung): PdfFrei {
   let flussOben = 40;
   if (brief) {
     if (g.ruecksendezeile.trim()) e.push(pdfFreiBaustein({ id: "ruecksende", art: "text", x: 22, y: 45.5, b: 85, h: 4, text: g.ruecksendezeile, pt: 7, rahmen: "keiner" }));
-    if (g.anschriftfeld) e.push(pdfFreiBaustein({ id: "anschrift", art: "anschrift", x: 22, y: 52, b: 85, h: 30, pt: 10 }));
+    if (g.anschriftfeld) e.push(pdfFreiBaustein({ id: "anschrift", art: "anschrift", x: 22, y: 52, b: 83, h: 30, pt: 10 }));
     if (g.infospalte.trim()) e.push(pdfFreiBaustein({ id: "infospalte", art: "text", x: 154, y: 50, b: 46, h: 120, text: g.infospalte, pt: Math.max(7.5, fussPt) }));
     if (g.datumszeile.trim()) e.push(pdfFreiBaustein({ id: "datum", art: "text", x: 98, y: 93, b: 50, h: 5, text: g.datumszeile, pt: g.groesseText, ausrichtung: "rechts" }));
     const betreff = [g.titel.trim() ? `**${g.titel.trim()}**` : "", g.unterTitel.trim()].filter(Boolean).join("\n");
