@@ -18,6 +18,7 @@ export type WidgetId =
   | "unzugewieseneAufgaben"
   | "meineAufgaben"
   | "kostenuebernahmen"
+  | "kostenuebersicht"
   | "tagesberichte"
   | "termine"
   | "freieZimmer"
@@ -37,6 +38,7 @@ export const WIDGET_REIHENFOLGE: WidgetId[] = [
   "unzugewieseneAufgaben",
   "meineAufgaben",
   "kostenuebernahmen",
+  "kostenuebersicht",
   "tagesberichte",
   "termine",
   "freieZimmer",
@@ -55,7 +57,8 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   mitarbeitende: "Mitarbeitende",
   unzugewieseneAufgaben: "Unzugewiesene Zimmer-Aufgaben",
   meineAufgaben: "Mir zugewiesene Aufgaben",
-  kostenuebernahmen: "Kostenübernahmen laufen bald aus",
+  kostenuebernahmen: "Kostenübernahmen laufen bald aus (in „Zu erledigen“)",
+  kostenuebersicht: "Kostenübernahmen (eigene Kachel)",
   tagesberichte: "Klienten ohne aktuellen Tagesbericht",
   termine: "Termine heute",
   freieZimmer: "Freie Zimmer",
@@ -84,10 +87,18 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
  */
 const NUR_LEITUNG: WidgetId[] = ["rechnungen", "stornoantraege", "mitarbeitende"];
 
+/**
+ * Neue Kacheln, die man sich bewusst dazuholt, statt dass sie bei allen
+ * plötzlich unten auf Heute auftauchen. "kostenuebersicht" kam als Wunsch
+ * ("als Option für die Startseite", Rückmeldung 072e7194) -- wer sie nicht
+ * braucht, soll von ihr nichts merken.
+ */
+const STANDARD_AUS: WidgetId[] = ["kostenuebersicht"];
+
 const SICHTBARKEIT_KEY = "zimmerakte_dashboard_sichtbarkeit";
 
 export function standardSichtbarkeit(istLeitung: boolean): Record<WidgetId, boolean> {
-  const eintraege = WIDGET_REIHENFOLGE.map((id) => [id, istLeitung || !NUR_LEITUNG.includes(id)] as const);
+  const eintraege = WIDGET_REIHENFOLGE.map((id) => [id, !STANDARD_AUS.includes(id) && (istLeitung || !NUR_LEITUNG.includes(id))] as const);
   return Object.fromEntries(eintraege) as Record<WidgetId, boolean>;
 }
 
