@@ -7199,6 +7199,12 @@ button.zv-achtung-eintrag:hover {
 }
 .zv-kachel-karte .zv-sub { overflow-wrap: break-word; }
 
+/* Kachel "Kostenübernahmen" (Heute): Zimmer klein unter dem Namen, wenn es
+   nur einen Standort gibt und die Standortspalte deshalb fehlt; Datum und
+   Restzeit duerfen in schmalen Kacheln untereinander rutschen. */
+.zv-ku-zimmer { display: block; font-weight: normal; }
+.zv-ku-ende { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--zv-space-1) var(--zv-space-2); }
+
 /* Tabellen in Kacheln: ohne eigenen Rahmen (die Kachel ist der Rahmen),
    Zellen duerfen umbrechen statt sich zu ueberlappen. */
 .zv-kachel-karte .zv-karten-liste { box-shadow: none; }
@@ -8313,7 +8319,7 @@ button.zv-achtung-eintrag:hover {
   cursor: pointer;
 }
 
-.zv-fe-knoten-abschnitt > .zv-fe-zeile {
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile {
   border-color: transparent;
   background: none;
   font-weight: var(--zv-weight-semibold);
@@ -8323,8 +8329,96 @@ button.zv-achtung-eintrag:hover {
   border-color: var(--zv-border-strong);
 }
 
+/* Griff zum Verschieben (Rückmeldung 41c5627f): rechts am Ende jeder Zeile.
+   Eigener Knopf NEBEN der Zeile, nicht darin -- ein Knopf im Knopf ist
+   ungültiges HTML und schluckt auf Touchgeräten den Klick. */
+.zv-fe-knoten {
+  position: relative;
+}
+
+.zv-fe-zeilen-rahmen {
+  display: flex;
+  align-items: stretch;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-zeilen-rahmen > .zv-fe-zeile {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-fe-griff {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--zv-space-6);
+  min-height: var(--zv-space-6);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: grab;
+  /* Ohne das scrollt der Finger die Seite, statt den Baustein zu ziehen. */
+  touch-action: none;
+}
+
+.zv-fe-griff:hover,
+.zv-fe-griff:focus-visible {
+  color: var(--zv-text);
+  border-color: var(--zv-border-strong);
+}
+
+.zv-fe-baum-zug,
+.zv-fe-baum-zug .zv-fe-griff {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Unter dem letzten Abschnitt braucht es Platz, um einen Baustein aus ihm
+   heraus ans Ende des Formulars zu ziehen. */
+.zv-fe-baum-zug {
+  padding-bottom: var(--zv-space-7);
+}
+
+.zv-fe-gezogen {
+  opacity: 0.45;
+}
+
+/* Einfügelinie: genau in der Lücke zwischen zwei Zeilen. */
+.zv-fe-ziel-vor::before,
+.zv-fe-ziel-nach::after,
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent);
+  pointer-events: none;
+}
+
+.zv-fe-ziel-vor::before {
+  top: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-nach::after {
+  bottom: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen {
+  position: relative;
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  left: var(--zv-space-4);
+  bottom: calc(var(--zv-space-2) / -2 - 2px);
+}
+
 .zv-fe-zeile.active,
-.zv-fe-knoten-abschnitt > .zv-fe-zeile.active {
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile.active {
   border-color: var(--zv-accent);
   background: var(--zv-accent-soft);
 }
