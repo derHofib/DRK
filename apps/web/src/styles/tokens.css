@@ -587,7 +587,7 @@ body {
 }
 
 /*
- * Fellfarben der Begleit-Katze (components/KatzenPosen.tsx), nach den Fotos
+ * Fellfarben der Begleit-Katze (components/KatzenFigur.tsx), nach den Fotos
  * von Dennis' Katze: rot getigert mit Weiss. Eigene Tokens statt Literalwerten
  * im SVG, damit sie im Dunkelmodus automatisch mitwechseln. Bewusst nicht
  * Akzent- oder Achtungsfarbe: die Katze soll nicht wie eine Statusmeldung
@@ -598,7 +598,11 @@ body {
   --zv-katze-fell-dunkel: light-dark(oklch(0.6 0.14 52), oklch(0.62 0.12 52));
   --zv-katze-streifen: light-dark(oklch(0.55 0.14 48), oklch(0.56 0.12 48));
   --zv-katze-weiss: light-dark(oklch(0.985 0.008 80), oklch(0.93 0.01 80));
+  --zv-katze-fell-hell: light-dark(oklch(0.84 0.09 68), oklch(0.83 0.08 68));
+  /* Weiss der abgewandten Beine: liegt im Koerperschatten. */
+  --zv-katze-weiss-schatten: light-dark(oklch(0.9 0.012 75), oklch(0.82 0.014 75));
   --zv-katze-ohr: oklch(0.82 0.08 18);
+  --zv-katze-maul: oklch(0.52 0.12 15);
   --zv-katze-auge: oklch(0.8 0.14 85);
   --zv-katze-linie: light-dark(oklch(0.3 0.04 50), oklch(0.22 0.03 50));
   /* Der Schatten haelt die weisse Katze auf hellem Grund lesbar (Kontur statt Rahmen). */

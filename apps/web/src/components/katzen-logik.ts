@@ -13,7 +13,7 @@ export interface Ball {
   gezogen: boolean;
 }
 
-/** Abstand (px) vom Zeiger zur Katze, ab dem sie aufsteht und geht. */
+/** Abstand (px) vom Zeiger zur Katze, ab dem er ihr "zu nah" ist: bleibt er dort in Bewegung, macht sie Platz. */
 export const FLUCHT_RADIUS = 110;
 
 /** Eine Oberflaeche, auf der die Katze stehen kann: Oberkante y von x1 bis x2 (Viewport-Koordinaten). */
