@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { AbwesenheitDto, AbwesenheitRechteDto, ChatKontaktDto, KalenderStundenEinstellungenDto, TerminAnlegenEingabe, TerminDto } from "@zimmerakte/shared";
 import { LEISTUNGSART_LABEL, TERMIN_ANTWORT_LABEL, formatMinutenAlsStunden, terminStundenLeistungsart } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
@@ -23,6 +23,7 @@ import {
   type KalenderFilter,
 } from "../kalender/eintraege";
 import { WochenZeitraster } from "../kalender/WochenZeitraster";
+import { abwesenheitsBalken } from "../kalender/zeitraster";
 import { useTerminTypen } from "../kalender/terminTypen";
 import { personFarbStil, useMitarbeitendeMitFarbe } from "../personFarbe";
 import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
@@ -38,6 +39,13 @@ const MAX_TAGE_JE_TERMIN = 62;
 const SAMMEL_AB = 4;
 /** Mehr Zeilen machen die Vorschau hoeher als den Monatskasten; der Rest steht in der Monatsansicht. */
 const VORSCHAU_MAX = 6;
+/**
+ * Hoechstens so viele Abwesenheitsstrahlen uebereinander in einer Wochenzeile
+ * des Monatsrasters: mehr machen die Tageskachel am Handy hoeher als breit.
+ * Wer darueber hinaus fehlt, steht weiter in der Zeile "Abwesend" darueber
+ * und in der Vorlesebeschriftung des Tages.
+ */
+const MAX_STRAHL_SPUREN = 3;
 
 type Ansicht = "woche" | "monat" | "jahr";
 /** Woher die Farbe einer Tageszelle im Jahresueberblick kommt. Standard: Person (Rueckmeldung "Filter Kalender"). */
@@ -344,7 +352,10 @@ export function Kalender({
     setTermine((alt) => alt.map((x) => (x.id === t.id ? t : x)));
   }
 
-  function tagKnopf(tag: string, fremd: boolean) {
+  // Kacheln werden ausdruecklich in Zeile/Spalte gesetzt: die Strahlen
+  // darueber liegen in denselben Rasterzellen, und automatisch platzierte
+  // Kacheln wichen ihnen sonst in freie Zellen aus.
+  function tagKnopf(tag: string, fremd: boolean, index: number) {
     const liste = nachTag.get(tag) ?? [];
     const abw = abwNachTag.get(tag) ?? [];
     const aktiv = liste.filter((t) => !t.abgesagtAm).length;
@@ -354,21 +365,18 @@ export function Kalender({
         key={tag}
         role="gridcell"
         className={`zv-kal-tag${tag === gewaehlt ? " gewaehlt" : ""}${tag === heute ? " heute" : ""}${fremd ? " fremd" : ""}`}
+        style={{ gridRow: Math.floor(index / 7) + 2, gridColumn: (index % 7) + 1 }}
         onClick={() => setGewaehlt(tag)}
         aria-label={`${formatDatum(tag)}${liste.length ? `, ${terminWort(liste.length)}` : ""}${abw.length ? `, ${abw.length} abwesend` : ""}`}
         aria-pressed={tag === gewaehlt}
       >
         <span className="zv-kal-tag-zahl">{Number(tag.slice(8))}</span>
-        {(liste.length > 0 || abw.length > 0) && (
+        {liste.length > 0 && (
           <span className="zv-kal-punkte" aria-hidden="true">
-            {/* Abwesenheiten als Ring statt Punkt: "fehlt" ist etwas anderes als "hat einen Termin". */}
-            {abw.slice(0, 3).map((a) => {
-              const fi = farbIndizes.get(a.benutzer.id);
-              return <span key={a.id} className="zv-kal-punkt zv-kal-punkt-abwesend zv-person-farbe" style={fi === undefined ? undefined : personFarbStil(fi)} />;
-            })}
+            {/* Abwesenheiten stehen als Strahl am Kachelfuss (strahlen()), die Punkte gehoeren den Terminen. */}
             {liste
               .filter((t) => !t.abgesagtAm)
-              .slice(0, Math.max(0, 3 - abw.length))
+              .slice(0, 3)
               .map((t) => {
                 const fi = farbIndexVon(t);
                 return fi === undefined ? (
@@ -377,12 +385,49 @@ export function Kalender({
                   <span key={t.id} className="zv-kal-punkt zv-person-farbe" style={personFarbStil(fi)} />
                 );
               })}
-            {aktiv === 0 && <span className="zv-kal-punkt abgesagt" />}
+            {aktiv === 0 && liste.length > 0 && <span className="zv-kal-punkt abgesagt" />}
           </span>
         )}
       </button>
     );
   }
+
+  /**
+   * Abwesenheiten als durchgehender Strahl ueber die Kacheln einer
+   * Wochenzeile (Rueckmeldung "Kalender"). Ueber die Luecken zwischen den
+   * Kacheln hinweg, damit "Urlaub vom 16. bis 27." als ein Strich lesbar
+   * ist und nicht als zwoelf Punkte. Rein zeigend (aria-hidden, keine
+   * Klickflaeche): 5 px sind kein Tippziel; oeffnen geht ueber die Zeile
+   * "Abwesend", und die Tageskachel sagt "n abwesend" schon an.
+   */
+  function strahlen(tage: string[]) {
+    const wochen = Array.from({ length: tage.length / 7 }, (_, w) => tage.slice(w * 7, w * 7 + 7));
+    return wochen.flatMap((woche, w) =>
+      abwesenheitsBalken(sichtAbwesenheiten, woche)
+        .filter((b) => b.spur < MAX_STRAHL_SPUREN)
+        .map((b) => {
+          const fi = farbIndizes.get(b.termin.benutzer.id);
+          return (
+            <span
+              key={`${w}-${b.termin.id}`}
+              aria-hidden="true"
+              data-strahl={b.termin.id}
+              className={`zv-kal-strahl-linie${fi === undefined ? " zv-kal-vorschau-punkt" : " zv-person-farbe"}${b.vorher ? " vorher" : ""}${b.nachher ? " nachher" : ""}`}
+              style={{ ...(fi === undefined ? {} : personFarbStil(fi)), gridRow: w + 2, gridColumn: `${b.von + 1} / ${b.bis + 2}`, "--spur": b.spur } as CSSProperties}
+            />
+          );
+        }),
+    );
+  }
+
+  const rasterSichtTage = ansicht === "woche" ? wochenTage : rasterTage;
+  const strahlSpuren = ansicht === "jahr" ? 0 : Math.min(
+    MAX_STRAHL_SPUREN,
+    Array.from({ length: rasterSichtTage.length / 7 }, (_, w) => rasterSichtTage.slice(w * 7, w * 7 + 7)).reduce(
+      (n, woche) => Math.max(n, ...abwesenheitsBalken(sichtAbwesenheiten, woche).map((b) => b.spur + 1)),
+      0,
+    ),
+  );
 
   return (
     <div className="zv-kalender">
@@ -606,9 +651,12 @@ export function Kalender({
               heute={heute}
               gewaehlt={gewaehlt}
               termine={sichtTermine}
+              abwesenheiten={sichtAbwesenheiten}
               farbIndexVon={farbIndexVon}
+              farbIndizes={farbIndizes}
               onTagWaehlen={setGewaehlt}
               onTerminOeffnen={setDetailId}
+              onAbwesenheitOeffnen={setAbwDetail}
               onNeu={(tag, uhrzeit) => {
                 setGewaehlt(tag);
                 setNeuUhrzeit(uhrzeit);
@@ -616,13 +664,17 @@ export function Kalender({
               }}
             />
           )}
-        <div className={`zv-kal-raster${ansicht === "woche" ? " zv-kal-nur-schmal" : ""}`} role="grid" aria-label={ansicht === "woche" ? `Wochenübersicht ${zeitraumName}` : `Monatsübersicht ${monatsName}`}>
+        <div
+          className={`zv-kal-raster${ansicht === "woche" ? " zv-kal-nur-schmal" : ""}`}
+          style={{ "--strahl-spuren": strahlSpuren } as CSSProperties}
+          role="grid" aria-label={ansicht === "woche" ? `Wochenübersicht ${zeitraumName}` : `Monatsübersicht ${monatsName}`}>
           {WOCHENTAGE.map((w) => (
             <div key={w} className="zv-kal-wochentag" role="columnheader">
               {w}
             </div>
           ))}
-          {ansicht === "woche" ? wochenTage.map((tag) => tagKnopf(tag, false)) : rasterTage.map((tag) => tagKnopf(tag, !tag.startsWith(monat)))}
+          {ansicht === "woche" ? wochenTage.map((tag, i) => tagKnopf(tag, false, i)) : rasterTage.map((tag, i) => tagKnopf(tag, !tag.startsWith(monat), i))}
+          {strahlen(rasterSichtTage)}
         </div>
         </>
       )}

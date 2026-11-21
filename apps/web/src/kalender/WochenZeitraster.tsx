@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { TerminDto } from "@zimmerakte/shared";
+import type { AbwesenheitDto, TerminDto } from "@zimmerakte/shared";
 import { formatDatum, formatTerminUhrzeit, lokalesDatum } from "../format";
 import { personFarbStil } from "../personFarbe";
 import { IStunden } from "../components/icons";
-import { ganztagsBalken, startStunde, zeitBloecke } from "./zeitraster";
+import { ABWESENHEIT_LABEL, abwesenheitArt } from "./eintraege";
+import { abwesenheitsBalken, ganztagsBalken, startStunde, zeitBloecke } from "./zeitraster";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const KEINE_ABWESENHEITEN: AbwesenheitDto[] = [];
 const STUNDEN = Array.from({ length: 24 }, (_, i) => i);
 
 function minutenJetzt(): number {
@@ -26,22 +28,31 @@ export function WochenZeitraster({
   heute,
   gewaehlt,
   termine,
+  abwesenheiten = KEINE_ABWESENHEITEN,
   farbIndexVon,
+  farbIndizes,
   onTagWaehlen,
   onTerminOeffnen,
+  onAbwesenheitOeffnen,
   onNeu,
 }: {
   wochenTage: string[];
   heute: string;
   gewaehlt: string;
   termine: TerminDto[];
+  /** Schon gefiltert (Person/Art); leer fuer Klient:innen. */
+  abwesenheiten?: AbwesenheitDto[];
   farbIndexVon: (t: TerminDto) => number | undefined;
+  farbIndizes?: Map<string, number>;
   onTagWaehlen: (tag: string) => void;
   onTerminOeffnen: (id: string) => void;
+  onAbwesenheitOeffnen?: (a: AbwesenheitDto) => void;
   onNeu: (tag: string, uhrzeit: string) => void;
 }) {
   const balken = useMemo(() => ganztagsBalken(termine, wochenTage), [termine, wochenTage]);
   const spuren = balken.reduce((n, b) => Math.max(n, b.spur + 1), 0);
+  const abwBalken = useMemo(() => abwesenheitsBalken(abwesenheiten, wochenTage), [abwesenheiten, wochenTage]);
+  const abwSpuren = abwBalken.reduce((n, b) => Math.max(n, b.spur + 1), 0);
   const bloeckeJeTag = useMemo(() => wochenTage.map((tag) => zeitBloecke(termine, tag)), [termine, wochenTage]);
 
   const [jetzt, setJetzt] = useState(minutenJetzt);
@@ -96,6 +107,38 @@ export function WochenZeitraster({
           </button>
         ))}
       </div>
+
+      {/* Eigene Zeile ueber den ganztaegigen Terminen: "wer fehlt" ist die
+          erste Frage beim Planen, und ein Urlaub soll nicht je nach den
+          Terminen der Woche die Zeile wechseln. Umrandet statt gefuellt --
+          dieselbe Sprache wie der Ring im Monatsraster: gefuellt hat einen
+          Termin, umrandet ist nicht da. */}
+      {abwBalken.length > 0 && (
+        <div className="zv-kal-ganztag zv-kal-abwesend-zeile" style={{ "--spuren": abwSpuren } as CSSProperties}>
+          <span className="zv-kal-ganztag-label">Abwesend</span>
+          {abwBalken.map((b) => {
+            const a = b.termin;
+            const fi = farbIndizes?.get(a.benutzer.id);
+            const artSchluessel = abwesenheitArt(a);
+            const art = ABWESENHEIT_LABEL[artSchluessel];
+            return (
+              <button
+                key={a.id}
+                type="button"
+                className={`zv-kal-balken zv-kal-strahl${fi === undefined ? " neutral" : ""}${b.vorher ? " vorher" : ""}${b.nachher ? " nachher" : ""}`}
+                style={{ ...(fi === undefined ? undefined : personFarbStil(fi)), gridColumn: `${b.von + 2} / ${b.bis + 3}`, gridRow: b.spur + 1 }}
+                onClick={() => onAbwesenheitOeffnen?.(a)}
+                aria-label={`${a.benutzer.name} abwesend (${art}), ${a.von === a.bis ? formatDatum(a.von) : `${formatDatum(a.von)} bis ${formatDatum(a.bis)}`}`}
+                title={`${a.benutzer.name} · ${art}`}
+              >
+                <strong>{a.benutzer.name}</strong>
+                {/* Dieselbe Marke wie in der Zeile darueber: die Art traegt ihre Farbe, die Person den Rand. */}
+                <span className={`zv-art-marke zv-art-${artSchluessel}`}>{art}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="zv-kal-ganztag" style={{ "--spuren": Math.max(1, spuren) } as CSSProperties}>
         <span className="zv-kal-ganztag-label">Ganztägig</span>

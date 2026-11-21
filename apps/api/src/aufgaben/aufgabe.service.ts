@@ -23,6 +23,15 @@ export interface AufgabeEintrag {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
+  /**
+   * Ob die anfragende Person erledigen/loeschen darf -- serverseitig
+   * berechnet, damit die Oberflaeche dieselbe Regel wie darfSchreiben()
+   * anwendet. Vorher hat der Client nur "selbst angelegt oder zugewiesen"
+   * nachgebaut; Leitungen mit Koordinationsrecht sahen deshalb bei fremden
+   * Zimmer-Aufgaben keinen Erledigen-Knopf (Rueckmeldung 4aa5dcb2), obwohl
+   * der Server es erlaubt haette.
+   */
+  darfBearbeiten: boolean;
 }
 
 export interface AufgabenAnzahl {
@@ -356,11 +365,15 @@ export class AufgabeService {
       `,
       params
     );
-    return rows.map(zuEintrag);
+    // Einmal je Liste statt je Zeile: das Recht haengt nur an der Person.
+    const darfKoordinieren = await this.rechte.hatRecht("aufgaben", "koordinieren");
+    return rows.map((r) =>
+      zuEintrag(r, darfKoordinieren || r.erstellt_von === ctx.benutzerId || r.zugewiesen_an === ctx.benutzerId)
+    );
   }
 }
 
-function zuEintrag(r: any): AufgabeEintrag {
+function zuEintrag(r: any, darfBearbeiten: boolean): AufgabeEintrag {
   return {
     id: r.id,
     titel: r.titel,
@@ -377,5 +390,6 @@ function zuEintrag(r: any): AufgabeEintrag {
     erledigtAm: r.erledigt_am,
     erledigtVonName: r.erledigt_von_name,
     erstelltAm: r.erstellt_am,
+    darfBearbeiten,
   };
 }

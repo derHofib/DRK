@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StandortSichtDto } from "@zimmerakte/shared";
 import { SichtHinweis } from "../components/StandortSicht";
 import type { DashboardDto, StandortDto, StandortUebersichtDto, TerminDto } from "@zimmerakte/shared";
@@ -83,6 +83,17 @@ export interface DashboardNavigation {
   belegung: (standortId: string | null) => void;
 }
 
+type KuFilter = "alle" | "bald" | "ohne";
+
+/** Gleiche Schwelle wie die Hinweisliste in dashboard.service.ts (90 Tage). */
+const KU_BALD_TAGE = 90;
+
+const KU_FILTER_LABEL: Record<KuFilter, string> = {
+  alle: "Alle",
+  bald: "Bald endend",
+  ohne: "Ohne",
+};
+
 type Zustaendigkeit = "meine" | "ohne";
 type Gruppe = "heute" | "woche" | "spaeter";
 type Filter = "alle" | Zustaendigkeit;
@@ -166,6 +177,7 @@ export function Dashboard({
   const [standorteBereit, setStandorteBereit] = useState(false);
   const [wirdGeladen, setWirdGeladen] = useState(false);
   const [filter, setFilter] = useState<Filter>("alle");
+  const [kuFilter, setKuFilter] = useState<KuFilter>("alle");
   const [termine, setTermine] = useState<TerminDto[]>([]);
   const [ichId, setIchId] = useState<string | null>(null);
   const [neuOffen, setNeuOffen] = useState(false);
@@ -491,6 +503,117 @@ export function Dashboard({
     </div>
   );
 
+  /**
+   * Eigene Kachel nur fuer Kostenuebernahmen (Rueckmeldung 072e7194). Die
+   * Hinweisliste in "Zu erledigen" zeigt nur, was bald auslaeuft; hier steht
+   * der ganze Bestand, und "Ohne" macht sichtbar, wer hier wohnt und gar
+   * keine Bewilligung hat -- das faellt sonst erst bei der Abrechnung auf.
+   * Sortierung kommt vom Server: Ohne zuerst, dann nach Ende, unbefristet zuletzt.
+   */
+  function kostenKachel(liste: DashboardDto["kostenuebersicht"]): KachelDef {
+    const alle = liste ?? [];
+    const q = suche.trim().toLowerCase();
+    const gesucht = q
+      ? alle.filter((k) =>
+          [k.klientName, k.amt, k.standortName, k.zimmerNummer].some((t) => t?.toLowerCase().includes(q)),
+        )
+      : alle;
+    const istBald = (k: (typeof alle)[number]) => k.tageVerbleibend !== null && k.tageVerbleibend <= KU_BALD_TAGE;
+    const anzahl: Record<KuFilter, number> = {
+      alle: gesucht.length,
+      bald: gesucht.filter(istBald).length,
+      ohne: gesucht.filter((k) => k.amt === null).length,
+    };
+    const zeilen = gesucht.filter((k) => (kuFilter === "bald" ? istBald(k) : kuFilter === "ohne" ? k.amt === null : true));
+    const mehrere = new Set(alle.map((k) => k.standortName).filter(Boolean)).size > 1;
+    const oeffnen = (klientId: string) => navigation.zu("klienten", { klientId });
+    return {
+      id: "kostenuebersicht",
+      titel: "Kostenübernahmen",
+      standard: standardPlatz("kostenuebersicht", { w: 8, h: 8 }),
+      minW: 4,
+      minH: 4,
+      inhalt: (
+        <section className="zv-kachel-karte" aria-label="Kostenübernahmen">
+          {kachelKopf(
+            "Kostenübernahmen",
+            undefined,
+            liste !== null && (
+              <div className="zv-segmented" role="group" aria-label="Kostenübernahmen filtern">
+                {(Object.keys(KU_FILTER_LABEL) as KuFilter[]).map((f) => (
+                  <button key={f} type="button" className={kuFilter === f ? "active" : ""} aria-pressed={kuFilter === f} onClick={() => setKuFilter(f)}>
+                    {KU_FILTER_LABEL[f]} <span className="zv-mono">{anzahl[f]}</span>
+                  </button>
+                ))}
+              </div>
+            ),
+          )}
+          {liste === null ? (
+            <p className="zv-rand-leer">Dir fehlt das Recht, Kostenübernahmen anzusehen.</p>
+          ) : zeilen.length === 0 ? (
+            <p className="zv-rand-leer">
+              {kuFilter === "ohne"
+                ? "Alle, die hier wohnen, haben eine Kostenübernahme."
+                : kuFilter === "bald"
+                  ? `Keine Kostenübernahme endet in den nächsten ${KU_BALD_TAGE} Tagen.`
+                  : q
+                    ? "Nichts gefunden."
+                    : "Noch keine Kostenübernahmen erfasst."}
+            </p>
+          ) : (
+            <div
+              className="zv-karten-liste"
+              style={{ "--zv-liste-spalten": `minmax(0,1.5fr) ${mehrere ? "minmax(0,1.1fr) " : ""}minmax(0,1.3fr) minmax(110px,1fr)` } as CSSProperties}
+            >
+              <div className="zv-liste-kopf">
+                <span>Name</span>
+                {mehrere && <span>Standort</span>}
+                <span>Amt</span>
+                <span>Läuft bis</span>
+              </div>
+              {zeilen.map((k) => {
+                const zimmer = k.zimmerNummer ? `Zimmer ${k.zimmerNummer}` : "ohne Zimmer";
+                return (
+                  <div
+                    key={k.klientId}
+                    className="zv-info-karte zv-info-karte-klickbar"
+                    role="button"
+                    tabIndex={0}
+                    title="Akte öffnen"
+                    onClick={() => oeffnen(k.klientId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        oeffnen(k.klientId);
+                      }
+                    }}
+                  >
+                    <span className="zv-liste-zelle-titel">
+                      {k.klientName}
+                      {!mehrere && <span className="zv-todo-meta zv-ku-zimmer">{zimmer}</span>}
+                    </span>
+                    {mehrere && (
+                      <span className="zv-liste-zelle" data-label="Standort">
+                        {k.standortName ?? "ausgezogen"}
+                        {k.standortName && ` · ${zimmer}`}
+                      </span>
+                    )}
+                    <span className="zv-liste-zelle" data-label="Amt">
+                      {k.amt ?? "–"}
+                    </span>
+                    <span className="zv-liste-zelle" data-label="Läuft bis">
+                      <KuEnde eintrag={k} heute={heute} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ),
+    };
+  }
+
   const kacheln: KachelDef[] | null = daten
     ? [
         // Abschnitte: Ueberschriften zum Gliedern, halb so hoch wie eine
@@ -639,6 +762,7 @@ export function Dashboard({
               } satisfies KachelDef,
             ]
           : []),
+        ...(sichtbarkeit.kostenuebersicht ? [kostenKachel(daten.kostenuebersicht)] : []),
         ...(sichtbarkeit.freieZimmer
           ? [
               {
@@ -854,6 +978,28 @@ export function Dashboard({
         </button>
       </Seitenpanel>
     </div>
+  );
+}
+
+/**
+ * Ende als Klartext mit Farbe nach Dringlichkeit: Koralle (achtung) fuer
+ * "keine" und die letzten 30 Tage -- dieselbe Stufe, ab der auch die
+ * Erinnerungsaufgabe dringend wird (0071) --, Gelb (frist) bis 90 Tage.
+ */
+type KuEintrag = NonNullable<DashboardDto["kostenuebersicht"]>[number];
+
+function KuEnde({ eintrag: k, heute }: { eintrag: KuEintrag; heute: string }) {
+  if (k.amt === null) return <span className="zv-pill zv-pill-achtung">keine</span>;
+  if (k.von && k.von > heute) return <span className="zv-pill zv-pill-info">beginnt {formatDatum(k.von)}</span>;
+  if (k.bis === null || k.tageVerbleibend === null) return <span className="zv-pill">unbefristet</span>;
+  const t = k.tageVerbleibend;
+  const rest = t === 0 ? "endet heute" : `noch ${t} ${t === 1 ? "Tag" : "Tage"}`;
+  const klasse = t <= 30 ? "zv-pill zv-pill-achtung" : t <= KU_BALD_TAGE ? "zv-pill zv-pill-frist" : "zv-pill zv-pill-ok";
+  return (
+    <span className="zv-ku-ende">
+      <span className="zv-mono">{formatDatum(k.bis)}</span>
+      <span className={klasse}>{rest}</span>
+    </span>
   );
 }
 
