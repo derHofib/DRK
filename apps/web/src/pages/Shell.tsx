@@ -50,6 +50,7 @@ import { Mitarbeitende } from "./Mitarbeitende";
 import { Kassenbuch } from "./Kassenbuch";
 import type { UebergabeStart } from "./HzlUebergabe";
 import { Befehl, Befehlspalette, zuletztLoeschen, zuletztMerken } from "../components/Befehlspalette";
+import { terminTypenVergessen } from "../kalender/terminTypen";
 import { NeuerEintragFenster } from "../components/NeuerEintrag";
 import { Dokumentation } from "./Dokumentation";
 import { Stunden } from "./Stunden";
@@ -62,7 +63,7 @@ import { Kalender } from "./Kalender";
 import { Rueckmeldungen } from "./Rueckmeldungen";
 import { Formulare } from "./Formulare";
 import { Standorte } from "./Standorte";
-import { KassenbuchTypen } from "./KassenbuchTypen";
+import { TypenUndListen } from "./TypenUndListen";
 import { RueckmeldungDialog } from "../components/RueckmeldungDialog";
 import { ProtokollSprungKontext, type ProtokollSprung } from "../components/ProtokollSprung";
 import { SICHTBAR_ATTRIBUT } from "../rueckmeldung/maskierung";
@@ -432,7 +433,11 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
       .catch(() => {});
   }, []);
   const organisatorisch = ORGANISATORISCH.filter((o) =>
-    o.recht === "rueckmeldungen" ? rmRecht.verwalten : !!traegerRechte?.[o.recht]
+    o.recht === "rueckmeldungen"
+      ? rmRecht.verwalten
+      : o.recht === "typen"
+        ? !!(traegerRechte?.kassenbuch || traegerRechte?.termintypen)
+        : !!traegerRechte?.[o.recht]
   );
   const [organisatorischOffen, setOrganisatorischOffen] = useState(() => ladeBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER));
   useEffect(() => speichereBoolean(SIDEBAR_ORGANISATORISCH_SPEICHER, organisatorischOffen), [organisatorischOffen]);
@@ -584,6 +589,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
   const logout = useCallback(() => {
     clearToken();
     zuletztLoeschen();
+    terminTypenVergessen();
     onLoggedOut();
   }, [onLoggedOut]);
 
@@ -1088,7 +1094,7 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           )}
           {tab === "buchungstypen" && (
             <OrganisatorischSeite eintrag="buchungstypen">
-              <KassenbuchTypen />
+              <TypenUndListen rechte={traegerRechte} />
             </OrganisatorischSeite>
           )}
           {tab === "rueckmeldungen" && <Rueckmeldungen mandant={mandant} onGeaendert={rmRechtLaden} />}

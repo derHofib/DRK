@@ -1,9 +1,8 @@
 import { FormEvent, useMemo, useState } from "react";
-import type { ChatKontaktDto, KalenderStundenEinstellungenDto, Leistungsart, TerminAnlegenEingabe, TerminArt, TerminDto } from "@zimmerakte/shared";
+import type { ChatKontaktDto, KalenderStundenEinstellungenDto, Leistungsart, TerminAnlegenEingabe, TerminDto, TerminTypDto } from "@zimmerakte/shared";
 import {
   LEISTUNGSARTEN,
   LEISTUNGSART_LABEL,
-  TERMIN_ART_LABEL,
   formatMinutenAlsStunden,
   terminMinuten,
   terminStundenHindernis,
@@ -13,6 +12,7 @@ import { lokalesDatum, terminTag } from "../format";
 import { IFehler, IInfo, ISpeichern } from "./icons";
 import { KontaktAuswahl, kontaktEingabe, kontaktSchluessel } from "./chat/KontaktAuswahl";
 import { Datumsfeld, Zeitraumfeld } from "./Datumsfeld";
+import { useTerminTypen } from "../kalender/terminTypen";
 
 function uhrzeitVon(iso: string): string {
   const d = new Date(iso);
@@ -68,7 +68,10 @@ export function TerminFormular({
   const [beschreibung, setBeschreibung] = useState(initial?.beschreibung ?? "");
   const [ort, setOrt] = useState(initial?.ort ?? "");
   const [ganztaegig, setGanztaegig] = useState(initial?.ganztaegig ?? false);
-  const [art, setArt] = useState<TerminArt>(initial?.art ?? "termin");
+  const typen = useTerminTypen();
+  // null = Standardtyp (der Server setzt ihn, migrations/0085); so braucht
+  // ein neuer Termin die Typliste nicht abzuwarten.
+  const [typId, setTypId] = useState<string | null>(initial?.typ.id ?? null);
   const [datum, setDatum] = useState(initial ? terminTag(initial.beginn, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [endDatum, setEndDatum] = useState(initial ? terminTag(initial.ende, initial.ganztaegig) : (standardDatum ?? lokalesDatum(new Date())));
   const [von, setVon] = useState(initial && !initial.ganztaegig ? uhrzeitVon(initial.beginn) : (standardUhrzeit ?? "09:00"));
@@ -78,6 +81,26 @@ export function TerminFormular({
   const mitStunden = !!stunden && stunden.funktionAn && stunden.darfBuchen && (!initial || initial.stunden !== null);
   const [stundenGewuenscht, setStundenGewuenscht] = useState(initial ? (initial.stunden?.vorgemerkt ?? false) : (stunden?.vorauswahl ?? false));
   const [leistungsart, setLeistungsart] = useState<Leistungsart | "">(initial?.stundenLeistungsart ?? "");
+  // Welcher Typ den Haken zuletzt vorbelegt hat -- nur fuer den Hinweis im Kasten.
+  const [vorbelegtVon, setVorbelegtVon] = useState<string | null>(null);
+
+  // Waehlbar sind aktive Typen; ein ausgeblendeter bleibt sichtbar, solange
+  // dieser Termin ihn traegt (sonst verschwaende er beim Bearbeiten still).
+  const waehlbar = typen.filter((t) => t.aktiv || t.id === initial?.typ.id);
+  const gewaehlt = typId ? typen.find((t) => t.id === typId) : typen.find((t) => t.istStandard);
+
+  /**
+   * Der Typ belegt nur VOR: Haken und Leistung lassen sich danach frei
+   * aendern. "voreinstellung" faellt auf die persoenliche Vorauswahl zurueck
+   * (wie vor den Termintypen).
+   */
+  function typWaehlen(t: TerminTypDto) {
+    setTypId(t.id);
+    const haken = t.betreuungszeit === "vorbelegen" ? true : t.betreuungszeit === "nicht_vorbelegen" ? false : (stunden?.vorauswahl ?? false);
+    setStundenGewuenscht(haken);
+    setVorbelegtVon(t.betreuungszeit === "vorbelegen" ? t.bezeichnung : null);
+    setLeistungsart(t.leistungsart ?? "");
+  }
 
   // Klient:innen fuer den Kasten: beim Anlegen die Auswahl, beim Bearbeiten
   // die eingetragenen (Teilnehmende aendert das Bearbeiten-Formular nicht).
@@ -112,7 +135,7 @@ export function TerminFormular({
       beginn,
       ende,
       ganztaegig,
-      art,
+      ...(typId ? { typId } : {}),
       ...(kontakte ? { teilnehmer: [...auswahl.values()].map(kontaktEingabe) } : {}),
       ...(mitStunden ? { stundenErfassen: stundenAktiv, stundenLeistungsart: leistungsart || null } : {}),
     });
@@ -142,16 +165,23 @@ export function TerminFormular({
         <label htmlFor="termin-titel">Titel</label>
         <input id="termin-titel" value={titel} onChange={(e) => setTitel(e.target.value)} required maxLength={200} autoFocus />
       </div>
-      <div className="zv-field">
-        <label htmlFor="termin-art">Art</label>
-        <select id="termin-art" value={art} onChange={(e) => setArt(e.target.value as TerminArt)}>
-          {(Object.keys(TERMIN_ART_LABEL) as TerminArt[]).map((a) => (
-            <option key={a} value={a}>
-              {TERMIN_ART_LABEL[a]}
-            </option>
-          ))}
-        </select>
-      </div>
+      {waehlbar.length > 1 && (
+        <fieldset className="zv-field zv-art-wahl">
+          <legend>Art</legend>
+          <div className="zv-art-wahl-optionen">
+            {waehlbar.map((t) => {
+              const an = gewaehlt?.id === t.id;
+              return (
+                <label key={t.id} className={`zv-art-wahl-option${an ? " aktiv" : ""}`}>
+                  <input type="radio" name="termin-typ" value={t.id} checked={an} onChange={() => typWaehlen(t)} />
+                  <span className={`zv-person-punkt zv-art-farbe zv-typ-${t.farbe}`} aria-hidden="true" />
+                  {t.bezeichnung}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
       <label className="zv-checkbox-zeile" style={{ marginBottom: "var(--zv-space-3)" }}>
         <input type="checkbox" checked={ganztaegig} onChange={(e) => setGanztaegig(e.target.checked)} />
         Ganztägig
@@ -217,6 +247,7 @@ export function TerminFormular({
           klientNamen={klientNamen}
           leistungsart={leistungsart}
           onLeistungsart={setLeistungsart}
+          vorbelegtVon={vorbelegtVon}
         />
       )}
       <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGesendet || !titel.trim()}>
@@ -298,6 +329,7 @@ function StundenKasten({
   klientNamen,
   leistungsart,
   onLeistungsart,
+  vorbelegtVon,
 }: {
   aktiv: boolean;
   hindernis: string | null;
@@ -306,6 +338,8 @@ function StundenKasten({
   klientNamen: string[];
   leistungsart: Leistungsart | "";
   onLeistungsart: (v: Leistungsart | "") => void;
+  /** Typ, dessen Einstellung den Haken gesetzt hat; null = keiner. */
+  vorbelegtVon: string | null;
 }) {
   const automatisch = LEISTUNGSART_LABEL[terminStundenLeistungsart(null, klientNamen.length)];
   return (
@@ -314,6 +348,9 @@ function StundenKasten({
         <input type="checkbox" checked={aktiv} disabled={!!hindernis} onChange={(e) => onAktiv(e.target.checked)} />
         Als Betreuungszeit erfassen
       </label>
+      {vorbelegtVon && aktiv && !hindernis && (
+        <p className="zv-stunden-kasten-text">Vorbelegt, weil der Typ „{vorbelegtVon}“ das so vorsieht. Du kannst den Haken entfernen.</p>
+      )}
       {hindernis ? (
         <p className="zv-stunden-kasten-text">{hindernis}</p>
       ) : aktiv ? (

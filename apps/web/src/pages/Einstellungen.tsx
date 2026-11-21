@@ -84,7 +84,7 @@ const TRAEGER_BEREICHE: (BereichEintrag<TraegerBereich> & { recht: keyof Einstel
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "datenschutz", beschreibung: "Ob freigegebene Ideen und Fehler an den Hersteller gehen." },
 ];
 
-const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false };
+const KEINE_TRAEGER_RECHTE: EinstellungenRechteDto = { erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false, termintypen: false };
 
 /**
  * Zwei Gruppen statt einer Reiterleiste: "Mein Konto" gilt nur fuer die
@@ -188,18 +188,18 @@ export function Einstellungen({
         {/* Uebergangshinweis: Standorte und Buchungstypen standen bis
             20.11.2026 hier. Wer sie gewohnheitsmaessig hier sucht, soll den
             neuen Platz finden statt eines fehlenden Punkts. */}
-        {(rechte.standorte || rechte.kassenbuch) && (
+        {(rechte.standorte || rechte.kassenbuch || rechte.termintypen) && (
           <p className="zv-einstellungen-umzug">
-            Standorte und Buchungstypen findest du jetzt unten im Menü unter <strong>Organisatorisch</strong>.{" "}
+            Standorte, Buchungs- und Termintypen findest du jetzt unten im Menü unter <strong>Organisatorisch</strong>.{" "}
             {rechte.standorte && (
               <button type="button" className="zv-link-btn" onClick={() => onOrganisatorischOeffnen("standorte-verwalten")}>
                 Standorte
               </button>
             )}
-            {rechte.standorte && rechte.kassenbuch && " · "}
-            {rechte.kassenbuch && (
+            {rechte.standorte && (rechte.kassenbuch || rechte.termintypen) && " · "}
+            {(rechte.kassenbuch || rechte.termintypen) && (
               <button type="button" className="zv-link-btn" onClick={() => onOrganisatorischOeffnen("buchungstypen")}>
-                Buchungstypen
+                Typen &amp; Listen
               </button>
             )}
           </p>

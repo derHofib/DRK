@@ -130,6 +130,10 @@ export const RECHTE_REGISTRY: readonly RechtRegistryEintrag[] = [
   // erlaubt Eintragen und Stornieren fuer andere. Beides sensibel.
   { modul: "abwesenheiten", aktion: "art-sehen", sensibel: true },
   { modul: "abwesenheiten", aktion: "verwalten", sensibel: true },
+  // Eigene Termintypen des Traegers (migrations/0085): anlegen, umbenennen,
+  // Farbe, Reihenfolge, ausblenden. Nicht sensibel -- ein Typ ist eine
+  // Auswahlliste, keine personenbezogene Information.
+  { modul: "kalender", aktion: "typen-verwalten" },
 
 
   // Heutiges ROLLEN_MIT_STANDORT_ANLEGEN/-BEARBEITEN (standort.service.ts).
