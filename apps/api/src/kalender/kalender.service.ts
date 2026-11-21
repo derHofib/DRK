@@ -7,7 +7,7 @@ import type {
   Leistungsart,
   TerminAnlegenEingabe,
   TerminAntwort,
-  TerminArt,
+  TerminTypFarbe,
   TerminDto,
   TerminPersonDto,
   TerminTeilnehmerDto,
@@ -19,6 +19,7 @@ import { aktuellerTeilnehmer, requireTenantContext, type Teilnehmer } from "../c
 import { DatabaseService } from "../database/database.service";
 import { StundenKalenderService } from "../stunden/stunden-kalender.service";
 import { terminAlsIcs } from "./ics";
+import { waehlbarerTyp } from "./termin-typ.service";
 
 const MAX_SPANNE_TAGE = 400;
 const MAX_TEILNEHMER = 50;
@@ -34,7 +35,7 @@ export interface TerminAendernEingabe {
   beginn?: string;
   ende?: string;
   ganztaegig?: boolean;
-  art?: TerminArt;
+  typId?: string;
   stundenErfassen?: boolean;
   stundenLeistungsart?: Leistungsart | null;
 }
@@ -47,7 +48,10 @@ interface TerminRow {
   beginn: Date;
   ende: Date;
   ganztaegig: boolean;
-  art: TerminArt;
+  typ_id: string;
+  typ_bezeichnung: string;
+  typ_farbe: TerminTypFarbe;
+  typ_ist_standard: boolean;
   erstellt_am: Date;
   abgesagt_am: Date | null;
   erstellt_von_benutzer_id: string | null;
@@ -192,17 +196,22 @@ export class KalenderService {
     // ID vorab erzeugen und Termin vor den Teilnehmerzeilen einfuegen: die
     // Insert-Policy von termin_teilnehmer fragt termin_ist_ersteller(), das den
     // Termin nur sieht, wenn er in einem frueheren Statement angelegt wurde.
+    // Ohne Typ setzt der Trigger aus 0085 den Standardtyp. Die Leistungsart
+    // des Typs wird KOPIERT (siehe Migration): spaetere Aenderungen am Typ
+    // duerfen gebuchte Stunden nicht nachtraeglich umwerfen.
+    // Klient:innen waehlen keinen Typ -- ihre Termine bekommen immer den Standardtyp.
+    const typ = eingabe.typId && ich.art === "benutzer" ? await waehlbarerTyp(client, eingabe.typId) : null;
     const id = randomUUID();
     await client.query(
       `INSERT INTO termin (id, mandant_id, titel, beschreibung, ort, beginn, ende, ganztaegig,
-                           erstellt_von_benutzer_id, erstellt_von_klient_id, art, stunden_leistungsart)
+                           erstellt_von_benutzer_id, erstellt_von_klient_id, typ_id, stunden_leistungsart)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id, ctx.mandantId, eingabe.titel.trim(), leerZuNull(eingabe.beschreibung), leerZuNull(eingabe.ort),
         zeitraum.beginn, zeitraum.ende, eingabe.ganztaegig ?? false,
         ich.art === "benutzer" ? ich.id : null, ich.art === "klient" ? ich.id : null,
-        eingabe.art ?? "termin",
-        eingabe.stundenLeistungsart ?? null,
+        typ?.id ?? null,
+        eingabe.stundenLeistungsart !== undefined ? eingabe.stundenLeistungsart : (typ?.leistungsart ?? null),
       ]
     );
     // Die Vormerkung gilt nur fuer die Ersteller:in selbst. Eingeladene setzen
@@ -247,8 +256,11 @@ export class KalenderService {
       }
       const zeitraum = berechneZeitraum(ganztaegig, eingabe.beginn ?? alt.beginn, eingabe.ende ?? alt.ende);
 
+      // Nur ein WECHSEL verlangt einen waehlbaren Typ: ein Termin mit einem
+      // inzwischen ausgeblendeten Typ bleibt sonst bearbeitbar.
+      const neuerTyp = eingabe.typId !== undefined && eingabe.typId !== alt.typ.id ? await waehlbarerTyp(client, eingabe.typId) : null;
       await client.query(
-        `UPDATE termin SET titel = $2, beschreibung = $3, ort = $4, beginn = $5, ende = $6, ganztaegig = $7, art = $8
+        `UPDATE termin SET titel = $2, beschreibung = $3, ort = $4, beginn = $5, ende = $6, ganztaegig = $7, typ_id = $8
          WHERE id = $1`,
         [
           id,
@@ -256,11 +268,12 @@ export class KalenderService {
           eingabe.beschreibung !== undefined ? leerZuNull(eingabe.beschreibung) : alt.beschreibung,
           eingabe.ort !== undefined ? leerZuNull(eingabe.ort) : alt.ort,
           zeitraum.beginn, zeitraum.ende, ganztaegig,
-          eingabe.art ?? alt.art,
+          neuerTyp?.id ?? alt.typ.id,
         ]
       );
-      if (eingabe.stundenLeistungsart !== undefined) {
-        await client.query("UPDATE termin SET stunden_leistungsart = $2 WHERE id = $1", [id, eingabe.stundenLeistungsart]);
+      const leistungsart = eingabe.stundenLeistungsart !== undefined ? eingabe.stundenLeistungsart : neuerTyp ? neuerTyp.leistungsart : undefined;
+      if (leistungsart !== undefined) {
+        await client.query("UPDATE termin SET stunden_leistungsart = $2 WHERE id = $1", [id, leistungsart]);
       }
       if (eingabe.stundenErfassen !== undefined) await this.stunden.setzeVormerkung(client, id, eingabe.stundenErfassen);
       return this.ladeEinzeln(client, ich, id);
@@ -437,7 +450,7 @@ export class KalenderService {
         ort: r.ort,
         ...zeitraumFuerAusgabe(r),
         ganztaegig: r.ganztaegig,
-        art: r.art,
+        typ: { id: r.typ_id, bezeichnung: r.typ_bezeichnung, farbe: r.typ_farbe, istStandard: r.typ_ist_standard },
         erstelltVon,
         erstelltAm: r.erstellt_am.toISOString(),
         abgesagtAm: r.abgesagt_am?.toISOString() ?? null,
@@ -476,13 +489,15 @@ function prinzipalParameter(ich: Teilnehmer): [string | null, string | null] {
 
 async function ladeTermine(client: PoolClient, ich: Teilnehmer, bedingung: string, weitere: unknown[]): Promise<TerminRow[]> {
   const { rows } = await client.query<TerminRow>(
-    `SELECT t.id, t.titel, t.beschreibung, t.ort, t.beginn, t.ende, t.ganztaegig, t.art, t.erstellt_am, t.abgesagt_am,
+    `SELECT t.id, t.titel, t.beschreibung, t.ort, t.beginn, t.ende, t.ganztaegig, t.erstellt_am, t.abgesagt_am,
+            t.typ_id, ty.bezeichnung AS typ_bezeichnung, ty.farbe AS typ_farbe, ty.ist_standard AS typ_ist_standard,
             t.erstellt_von_benutzer_id, t.erstellt_von_klient_id,
             eb.name AS ersteller_benutzer_name, ek.vorname AS ersteller_klient_vorname, ek.nachname AS ersteller_klient_nachname,
             mein.antwort AS meine_antwort,
             CASE WHEN mein.benutzer_id IS NOT NULL THEN mein.stunden_erfassen END AS meine_stunden_erfassen,
             t.stunden_leistungsart
      FROM termin t
+     JOIN termin_typ ty ON ty.id = t.typ_id
      LEFT JOIN benutzer eb ON eb.id = t.erstellt_von_benutzer_id
      LEFT JOIN klient ek ON ek.id = t.erstellt_von_klient_id
      LEFT JOIN termin_teilnehmer mein ON mein.termin_id = t.id AND (mein.benutzer_id = $1::uuid OR mein.klient_id = $2::uuid)

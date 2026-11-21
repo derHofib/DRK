@@ -59,7 +59,6 @@ describe("Stunden aus dem Kalender", () => {
     const tag = tagVor(2);
     const r = await post(token, "/kalender/termine", {
       titel: "Begleitung zum Hausarzt",
-      art: "klient",
       beginn: um(tag, 12),
       ende: um(tag, 13, 30),
       teilnehmer: [{ klientId: k1 }],

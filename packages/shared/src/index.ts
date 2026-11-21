@@ -129,6 +129,8 @@ export interface EinstellungenRechteDto {
   formulare: boolean;
   /** Stunden aus dem Kalender -- stunden.einstellungen-verwalten. */
   stunden: boolean;
+  /** Eigene Termintypen -- kalender.typen-verwalten (migrations/0085). */
+  termintypen: boolean;
 }
 
 export interface RueckmeldungBerechtigungDto {
@@ -1328,16 +1330,69 @@ export const TERMIN_ANTWORT_LABEL: Record<TerminAntwort, string> = {
 };
 
 /**
- * Terminart (migrations/0074): feste Liste, steuert Filter und Statusfarbe
- * im Kalender. "klient" = Termin mit oder fuer Klient:innen.
+ * Termintypen (migrations/0085): je Traeger frei anlegbar, ersetzen die feste
+ * Terminart aus 0074. Die Farbe ist ein Schluessel aus einer festen Liste;
+ * Farbton/Buntheit stehen in tokens.css (--zv-typ-<farbe>-h/-c), die
+ * Helligkeit im CSS -- so bleibt der Kontrast garantiert (CLAUDE.md Regel 7).
+ * Rot, Gelb, Hellblau und Lila fehlen absichtlich: sie gehoeren den
+ * Abwesenheiten.
  */
-export type TerminArt = "termin" | "besprechung" | "klient";
+export type TerminTypFarbe = "grau" | "gruen" | "petrol" | "blau" | "oliv" | "orange" | "rose" | "sand";
 
-export const TERMIN_ART_LABEL: Record<TerminArt, string> = {
-  termin: "Termin",
-  besprechung: "Besprechung",
-  klient: "Klient:innentermin",
+export const TERMIN_TYP_FARBEN: readonly TerminTypFarbe[] = ["grau", "gruen", "petrol", "blau", "oliv", "orange", "rose", "sand"];
+
+export const TERMIN_TYP_FARBE_LABEL: Record<TerminTypFarbe, string> = {
+  grau: "Grau",
+  gruen: "Grün",
+  petrol: "Petrol",
+  blau: "Blau",
+  oliv: "Oliv",
+  orange: "Orange",
+  rose: "Rosé",
+  sand: "Sand",
 };
+
+/**
+ * Nur die VORBELEGUNG des Hakens "Als Betreuungszeit erfassen" im
+ * Termin-Dialog. Gebucht wird weiter nur mit eigenem Haken.
+ */
+export type TerminTypBetreuungszeit = "vorbelegen" | "voreinstellung" | "nicht_vorbelegen";
+
+export const TERMIN_TYP_BETREUUNGSZEITEN: readonly TerminTypBetreuungszeit[] = ["vorbelegen", "voreinstellung", "nicht_vorbelegen"];
+
+export const TERMIN_TYP_BETREUUNGSZEIT_LABEL: Record<TerminTypBetreuungszeit, string> = {
+  vorbelegen: "Haken vorbelegen",
+  voreinstellung: "Wie persönliche Voreinstellung",
+  nicht_vorbelegen: "Haken nicht vorbelegen",
+};
+
+/** Was ein Termin von seinem Typ mitbringt (Liste, Detail, Chat). */
+export interface TerminTypKurzDto {
+  id: string;
+  bezeichnung: string;
+  farbe: TerminTypFarbe;
+  istStandard: boolean;
+}
+
+export interface TerminTypDto extends TerminTypKurzDto {
+  betreuungszeit: TerminTypBetreuungszeit;
+  /** Wird beim Anlegen eines Termins als dessen Leistungsart uebernommen; null = automatisch. */
+  leistungsart: Leistungsart | null;
+  reihenfolge: number;
+  aktiv: boolean;
+}
+
+export interface TerminTypEingabe {
+  bezeichnung: string;
+  farbe: TerminTypFarbe;
+  betreuungszeit: TerminTypBetreuungszeit;
+  leistungsart: Leistungsart | null;
+}
+
+export interface TerminTypAendernEingabe extends Partial<TerminTypEingabe> {
+  /** false = ausblenden: nicht mehr waehlbar, bestehende Termine behalten den Typ. */
+  aktiv?: boolean;
+}
 
 export interface TerminPersonDto {
   art: "benutzer" | "klient";
@@ -1363,7 +1418,7 @@ export interface TerminDto {
   beginn: string;
   ende: string;
   ganztaegig: boolean;
-  art: TerminArt;
+  typ: TerminTypKurzDto;
   erstelltVon: TerminPersonDto;
   erstelltAm: string;
   abgesagtAm: string | null;
@@ -1410,7 +1465,8 @@ export interface TerminAnlegenEingabe {
   beginn: string;
   ende: string;
   ganztaegig?: boolean;
-  art?: TerminArt;
+  /** Fehlt = Standardtyp des Traegers. */
+  typId?: string;
   teilnehmer?: TerminTeilnehmerEingabe[];
   /** Eigene Vormerkung "Als Betreuungszeit erfassen" (migrations/0080). */
   stundenErfassen?: boolean;

@@ -211,15 +211,21 @@ describe("Abwesenheiten und Terminart", () => {
     });
   });
 
-  it("Terminart: wird gespeichert, ausgeliefert und ist aenderbar; Standard ist 'termin'", async () => {
+  // Seit migrations/0085 ist die feste Terminart ein Termintyp je Traeger
+  // (Details in termin-typen.e2e-spec.ts). Hier nur: der Bestand aus 0074
+  // ist als Typ da und am Termin waehl- und aenderbar.
+  it("Termintyp: Standard ist 'Termin', Besprechung/Klient:innentermin sind waehl- und aenderbar", async () => {
+    const typen = (await request(http()).get("/kalender/typen").set("Authorization", `Bearer ${tokenMa1}`)).body as { id: string; bezeichnung: string }[];
+    const typ = (name: string) => typen.find((t) => t.bezeichnung === name)!.id;
     const ohne = await post(tokenMa1, "/kalender/termine", { titel: "Ohne Art", beginn: "2026-11-20", ende: "2026-11-20", ganztaegig: true });
     expect(ohne.status).toBe(201);
-    expect(ohne.body.art).toBe("termin");
-    const mit = await post(tokenMa1, "/kalender/termine", { titel: "Team", beginn: "2026-11-21", ende: "2026-11-21", ganztaegig: true, art: "besprechung" });
-    expect(mit.body.art).toBe("besprechung");
-    const geaendert = await request(http()).patch(`/kalender/termine/${mit.body.id}`).set("Authorization", `Bearer ${tokenMa1}`).send({ art: "klient" });
+    expect(ohne.body.typ).toMatchObject({ bezeichnung: "Termin", istStandard: true });
+    const mit = await post(tokenMa1, "/kalender/termine", { titel: "Team", beginn: "2026-11-21", ende: "2026-11-21", ganztaegig: true, typId: typ("Besprechung") });
+    expect(mit.body.typ.bezeichnung).toBe("Besprechung");
+    const geaendert = await request(http()).patch(`/kalender/termine/${mit.body.id}`).set("Authorization", `Bearer ${tokenMa1}`).send({ typId: typ("Klient:innentermin") });
     expect(geaendert.status).toBe(200);
-    expect(geaendert.body.art).toBe("klient");
-    expect((await post(tokenMa1, "/kalender/termine", { titel: "X", beginn: "2026-11-21", ende: "2026-11-21", ganztaegig: true, art: "urlaub" })).status).toBe(400);
+    expect(geaendert.body.typ.bezeichnung).toBe("Klient:innentermin");
+    // Die alte feste Art gibt es nicht mehr: beim Aendern ein klarer 400.
+    expect((await request(http()).patch(`/kalender/termine/${mit.body.id}`).set("Authorization", `Bearer ${tokenMa1}`).send({ art: "klient" })).status).toBe(400);
   });
 });

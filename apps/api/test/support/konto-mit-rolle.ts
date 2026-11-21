@@ -77,6 +77,8 @@ const EINRICHTUNGSLEITUNG_ZUSATZRECHTE: readonly RechtEintrag[] = [
   { modul: "abwesenheiten", aktion: "art-sehen", scope: "einrichtung" },
   { modul: "abwesenheiten", aktion: "verwalten", scope: "einrichtung" },
   { modul: "kassenbuch", aktion: "typen-verwalten", scope: "einrichtung" },
+  // Spiegel von Migration 0085: wer Buchungstypen verwaltet, verwaltet Termintypen.
+  { modul: "kalender", aktion: "typen-verwalten", scope: "einrichtung" },
   { modul: "standorte", aktion: "bearbeiten", scope: "einrichtung" },
   { modul: "rechnungen", aktion: "status-wechseln", scope: "einrichtung" },
   { modul: "anwaerter", aktion: "entscheiden", scope: "einrichtung" },

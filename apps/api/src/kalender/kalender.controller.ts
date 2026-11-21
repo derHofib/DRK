@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { z } from "zod";
 import { TeilnehmerAuthenticated } from "../common/authenticated.decorator";
 import { KalenderService } from "./kalender.service";
-import { leistungsartSchema, terminAnlegenSchema, terminArtSchema } from "./termin.schemas";
+import { leistungsartSchema, terminAnlegenSchema } from "./termin.schemas";
 
 const aendernSchema = z
   .object({
@@ -13,7 +13,7 @@ const aendernSchema = z
     beginn: z.string().optional(),
     ende: z.string().optional(),
     ganztaegig: z.boolean().optional(),
-    art: terminArtSchema.optional(),
+    typId: z.string().uuid("Unbekannter Termintyp.").optional(),
     stundenErfassen: z.boolean().optional(),
     stundenLeistungsart: leistungsartSchema.nullable().optional(),
   })
