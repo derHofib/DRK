@@ -3,7 +3,6 @@ import { LEISTUNGSARTEN, type Leistungsart } from "@zimmerakte/shared";
 
 export const leistungsartSchema = z.enum(LEISTUNGSARTEN as unknown as [Leistungsart, ...Leistungsart[]]);
 
-export const terminArtSchema = z.enum(["termin", "besprechung", "klient"]);
 
 export const terminTeilnehmerSchema = z.union([
   z.object({ benutzerId: z.string().uuid() }).strict(),
@@ -19,7 +18,7 @@ export const terminAnlegenSchema = z.object({
   beginn: z.string(),
   ende: z.string(),
   ganztaegig: z.boolean().optional(),
-  art: terminArtSchema.optional(),
+  typId: z.string().uuid("Unbekannter Termintyp.").optional(),
   teilnehmer: z.array(terminTeilnehmerSchema).optional(),
   // Stunden aus dem Kalender (migrations/0080); ob der Termin dafuer taugt,
   // prueft der Service (haengt an ganztaegig, Dauer und Teilnehmenden).

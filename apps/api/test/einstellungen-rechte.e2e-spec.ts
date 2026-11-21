@@ -75,19 +75,19 @@ describe("Einstellungen: Träger-Bereiche nach Recht", () => {
   it("Geschäftsführung/Bereichsleitung sieht alle Träger-Bereiche", async () => {
     const res = await rechte(await login("bereichsleitung"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: true, standorte: true, kassenbuch: true, datenschutz: true, formulare: true, stunden: true });
+    expect(res.body).toEqual({ erscheinungsbild: true, standorte: true, kassenbuch: true, datenschutz: true, formulare: true, stunden: true, termintypen: true });
   });
 
   it("Einrichtungsleitung sieht Standorte, Kassenbuch, Formulare und Stunden, aber weder Farben noch Datenschutz", async () => {
     const res = await rechte(await login("einrichtungsleitung"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: false, standorte: true, kassenbuch: true, datenschutz: false, formulare: true, stunden: true });
+    expect(res.body).toEqual({ erscheinungsbild: false, standorte: true, kassenbuch: true, datenschutz: false, formulare: true, stunden: true, termintypen: true });
   });
 
   it("Betreuer sieht keinen Träger-Bereich", async () => {
     const res = await rechte(await login("betreuer"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false });
+    expect(res.body).toEqual({ erscheinungsbild: false, standorte: false, kassenbuch: false, datenschutz: false, formulare: false, stunden: false, termintypen: false });
   });
 
   it("Betreuer kann ausgeblendete Einstellungen auch direkt nicht speichern", async () => {

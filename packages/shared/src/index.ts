@@ -129,6 +129,8 @@ export interface EinstellungenRechteDto {
   formulare: boolean;
   /** Stunden aus dem Kalender -- stunden.einstellungen-verwalten. */
   stunden: boolean;
+  /** Eigene Termintypen -- kalender.typen-verwalten (migrations/0085). */
+  termintypen: boolean;
 }
 
 export interface RueckmeldungBerechtigungDto {
@@ -1328,16 +1330,69 @@ export const TERMIN_ANTWORT_LABEL: Record<TerminAntwort, string> = {
 };
 
 /**
- * Terminart (migrations/0074): feste Liste, steuert Filter und Statusfarbe
- * im Kalender. "klient" = Termin mit oder fuer Klient:innen.
+ * Termintypen (migrations/0085): je Traeger frei anlegbar, ersetzen die feste
+ * Terminart aus 0074. Die Farbe ist ein Schluessel aus einer festen Liste;
+ * Farbton/Buntheit stehen in tokens.css (--zv-typ-<farbe>-h/-c), die
+ * Helligkeit im CSS -- so bleibt der Kontrast garantiert (CLAUDE.md Regel 7).
+ * Rot, Gelb, Hellblau und Lila fehlen absichtlich: sie gehoeren den
+ * Abwesenheiten.
  */
-export type TerminArt = "termin" | "besprechung" | "klient";
+export type TerminTypFarbe = "grau" | "gruen" | "petrol" | "blau" | "oliv" | "orange" | "rose" | "sand";
 
-export const TERMIN_ART_LABEL: Record<TerminArt, string> = {
-  termin: "Termin",
-  besprechung: "Besprechung",
-  klient: "Klient:innentermin",
+export const TERMIN_TYP_FARBEN: readonly TerminTypFarbe[] = ["grau", "gruen", "petrol", "blau", "oliv", "orange", "rose", "sand"];
+
+export const TERMIN_TYP_FARBE_LABEL: Record<TerminTypFarbe, string> = {
+  grau: "Grau",
+  gruen: "Grün",
+  petrol: "Petrol",
+  blau: "Blau",
+  oliv: "Oliv",
+  orange: "Orange",
+  rose: "Rosé",
+  sand: "Sand",
 };
+
+/**
+ * Nur die VORBELEGUNG des Hakens "Als Betreuungszeit erfassen" im
+ * Termin-Dialog. Gebucht wird weiter nur mit eigenem Haken.
+ */
+export type TerminTypBetreuungszeit = "vorbelegen" | "voreinstellung" | "nicht_vorbelegen";
+
+export const TERMIN_TYP_BETREUUNGSZEITEN: readonly TerminTypBetreuungszeit[] = ["vorbelegen", "voreinstellung", "nicht_vorbelegen"];
+
+export const TERMIN_TYP_BETREUUNGSZEIT_LABEL: Record<TerminTypBetreuungszeit, string> = {
+  vorbelegen: "Haken vorbelegen",
+  voreinstellung: "Wie persönliche Voreinstellung",
+  nicht_vorbelegen: "Haken nicht vorbelegen",
+};
+
+/** Was ein Termin von seinem Typ mitbringt (Liste, Detail, Chat). */
+export interface TerminTypKurzDto {
+  id: string;
+  bezeichnung: string;
+  farbe: TerminTypFarbe;
+  istStandard: boolean;
+}
+
+export interface TerminTypDto extends TerminTypKurzDto {
+  betreuungszeit: TerminTypBetreuungszeit;
+  /** Wird beim Anlegen eines Termins als dessen Leistungsart uebernommen; null = automatisch. */
+  leistungsart: Leistungsart | null;
+  reihenfolge: number;
+  aktiv: boolean;
+}
+
+export interface TerminTypEingabe {
+  bezeichnung: string;
+  farbe: TerminTypFarbe;
+  betreuungszeit: TerminTypBetreuungszeit;
+  leistungsart: Leistungsart | null;
+}
+
+export interface TerminTypAendernEingabe extends Partial<TerminTypEingabe> {
+  /** false = ausblenden: nicht mehr waehlbar, bestehende Termine behalten den Typ. */
+  aktiv?: boolean;
+}
 
 export interface TerminPersonDto {
   art: "benutzer" | "klient";
@@ -1363,7 +1418,7 @@ export interface TerminDto {
   beginn: string;
   ende: string;
   ganztaegig: boolean;
-  art: TerminArt;
+  typ: TerminTypKurzDto;
   erstelltVon: TerminPersonDto;
   erstelltAm: string;
   abgesagtAm: string | null;
@@ -1410,7 +1465,8 @@ export interface TerminAnlegenEingabe {
   beginn: string;
   ende: string;
   ganztaegig?: boolean;
-  art?: TerminArt;
+  /** Fehlt = Standardtyp des Traegers. */
+  typId?: string;
   teilnehmer?: TerminTeilnehmerEingabe[];
   /** Eigene Vormerkung "Als Betreuungszeit erfassen" (migrations/0080). */
   stundenErfassen?: boolean;
@@ -3196,7 +3252,7 @@ export interface VerlaufDto {
  * steht. Freies Verschieben mit der Maus gibt es bewusst nicht: sonst
  * passen Fensterumschlag und Seitenumbruch nicht mehr zusammen.
  */
-export type PdfVorlage = "akte" | "brief";
+export type PdfVorlage = "akte" | "brief" | "frei";
 export type PdfZielgruppe = "intern" | "extern";
 export type PdfSchrift = "nunito" | "liberation-sans" | "liberation-serif";
 export type PdfFeldstil = "liste" | "kaesten" | "kompakt";
@@ -3207,6 +3263,7 @@ export type PdfLogoPosition = "links" | "mitte" | "rechts";
 export const PDF_VORLAGE_LABEL: Record<PdfVorlage, string> = {
   akte: "Akte (kompakter Kopf)",
   brief: "Brief nach DIN 5008 (Anschriftfeld, Infospalte)",
+  frei: "Frei gestaltet (Designer mit Millimeterraster)",
 };
 export const PDF_ZIELGRUPPE_LABEL: Record<PdfZielgruppe, string> = { intern: "intern", extern: "extern" };
 export const PDF_SCHRIFT_LABEL: Record<PdfSchrift, { name: string; hinweis: string }> = {
@@ -3274,6 +3331,257 @@ export interface PdfGestaltung {
   leereFelder: PdfLeereFelder;
   ueberschriften: PdfUeberschriften;
   jaNein: "wort" | "kreuz";
+  /** Nur Grundform "frei": die Bausteine aus dem Designer. Bei akte/brief ungenutzt, aber immer vorhanden. */
+  frei: PdfFrei;
+}
+
+// --- Grundform "frei" (Konzept pdf-designer, 21.11.2026) -------------------
+
+/**
+ * Bausteine des freien Designers. Alles in mm, Ursprung oben links (wie im
+ * Designer und auf dem Lineal), erst der Renderer rechnet in PDF-Punkte um.
+ *
+ * Bewusst KEINE freie Farbe je Baustein: Text kennt nur Schwarz, Grau und die
+ * Traegerfarbe in der festen, druckfesten Helligkeit (druckUeberschriftFarbe).
+ * Damit bleibt der Kontrast auf Papier konstruktiv gesichert -- Regel 7.
+ */
+export type PdfFreiArt = "feld" | "ankreuz" | "text" | "logo" | "linie" | "flaeche" | "unterschrift" | "anschrift" | "fluss";
+export type PdfFreiTextfarbe = "schwarz" | "grau" | "akzent";
+export type PdfFreiFlaechenfarbe = "akzent" | "akzent-hell" | "grau-hell";
+export type PdfFreiAusrichtung = "links" | "mitte" | "rechts";
+export type PdfFreiRahmen = "keiner" | "unten" | "kasten";
+export type PdfFreiBeschriftung = "darueber" | "links" | "keine";
+export type PdfFreiSeitenart = "erste" | "folge";
+export type PdfFreiHilfslinien = "din5008b" | "din5008a" | "keine";
+
+export interface PdfFreiBaustein {
+  /** Kurz, nur [a-z0-9]; wird im Pruefbericht zurueckgegeben. */
+  id: string;
+  art: PdfFreiArt;
+  x: number;
+  y: number;
+  b: number;
+  h: number;
+  /** feld/ankreuz: Feldschluessel des Formulars. */
+  feld: string;
+  /** text: mit Platzhaltern, "**Zeile**" = fett. */
+  text: string;
+  pt: number;
+  fett: boolean;
+  ausrichtung: PdfFreiAusrichtung;
+  /** Text und Linien. */
+  farbe: PdfFreiTextfarbe;
+  flaeche: PdfFreiFlaechenfarbe;
+  rahmen: PdfFreiRahmen;
+  beschriftung: PdfFreiBeschriftung;
+  /** Linienstaerke in pt (Linie, Rahmen). */
+  staerke: number;
+  /** Im Designer gegen Verschieben gesperrt; fuer das PDF ohne Bedeutung. */
+  gesperrt: boolean;
+}
+
+export interface PdfFrei {
+  /** Rasterweite im Designer in mm. */
+  raster: number;
+  hilfslinien: PdfFreiHilfslinien;
+  erste: PdfFreiBaustein[];
+  folge: PdfFreiBaustein[];
+}
+
+export const PDF_FREI_SEITE = { b: 210, h: 297 } as const;
+export const PDF_FREI_RASTER = [0.5, 1, 2, 5] as const;
+export const PDF_FREI_MAX_BAUSTEINE = 300;
+/** Bis hierhin wird ein zu langer Text verkleinert, danach geht der Rest in den Anhang "Fortsetzung". */
+export const PDF_FREI_MIN_PT = PDF_MIN_SCHRIFTGROESSE;
+
+export const PDF_FREI_ART_LABEL: Record<PdfFreiArt, string> = {
+  feld: "Feld",
+  ankreuz: "Ankreuzfeld",
+  text: "Text",
+  logo: "Logo",
+  linie: "Linie",
+  flaeche: "Fläche",
+  unterschrift: "Unterschrift",
+  anschrift: "Anschriftfeld",
+  fluss: "Fließbereich",
+};
+
+/** Umschlagfenster nach DIN 5008 (mm, von oben links), inkl. Zusatz- und Vermerkzone. */
+export const PDF_FREI_FENSTER: Record<Exclude<PdfFreiHilfslinien, "keine">, { x: number; y: number; b: number; h: number }> = {
+  din5008b: { x: 20, y: 45, b: 85, h: 45 },
+  din5008a: { x: 20, y: 27, b: 85, h: 45 },
+};
+/** Falz- und Lochmarken (mm von oben). */
+export const PDF_FREI_MARKEN: Record<Exclude<PdfFreiHilfslinien, "keine">, number[]> = {
+  din5008b: [105, 148.5, 210],
+  din5008a: [87, 148.5, 192],
+};
+/** Rand, den die meisten Bürodrucker nicht bedrucken. Bausteine darin werden gewarnt, nicht verboten. */
+export const PDF_FREI_DRUCKRAND = 5;
+
+const PDF_FREI_BAUSTEIN_VORGABE: Omit<PdfFreiBaustein, "id" | "art" | "x" | "y" | "b" | "h"> = {
+  feld: "",
+  text: "",
+  pt: 9,
+  fett: false,
+  ausrichtung: "links",
+  farbe: "schwarz",
+  flaeche: "akzent-hell",
+  rahmen: "keiner",
+  beschriftung: "darueber",
+  staerke: 0.5,
+  gesperrt: false,
+};
+
+/** Neuer Baustein mit Vorgaben; was fehlt, wird ergaenzt. */
+export function pdfFreiBaustein(teil: Partial<PdfFreiBaustein> & Pick<PdfFreiBaustein, "id" | "art" | "x" | "y" | "b" | "h">): PdfFreiBaustein {
+  return { ...PDF_FREI_BAUSTEIN_VORGABE, ...teil };
+}
+
+const halbMm = (n: number) => Math.round(n * 2) / 2;
+
+/**
+ * Gespeicherte Bausteine robust lesen (alte Version, Handarbeit): was nicht
+ * passt, faellt auf die Vorgabe zurueck oder wird verworfen. Geometrie wird
+ * auf 0,5 mm gerundet und in die Seite gezwungen -- ein Baustein ausserhalb
+ * des Blatts kann so gar nicht erst entstehen.
+ */
+export function pdfFreiMitVorgaben(roh: unknown): PdfFrei {
+  const r = (roh && typeof roh === "object" ? roh : {}) as Record<string, unknown>;
+  const raster = PDF_FREI_RASTER.includes(r.raster as (typeof PDF_FREI_RASTER)[number]) ? (r.raster as number) : 1;
+  const hilfslinien: PdfFreiHilfslinien = r.hilfslinien === "din5008a" || r.hilfslinien === "keine" ? r.hilfslinien : "din5008b";
+  const liste = (x: unknown): PdfFreiBaustein[] => {
+    if (!Array.isArray(x)) return [];
+    const out: PdfFreiBaustein[] = [];
+    let fluss = false;
+    for (const e of x.slice(0, PDF_FREI_MAX_BAUSTEINE)) {
+      if (!e || typeof e !== "object") continue;
+      const o = e as Record<string, unknown>;
+      if (typeof o.id !== "string" || !/^[a-z0-9]{1,24}$/.test(o.id)) continue;
+      if (typeof o.art !== "string" || !(o.art in PDF_FREI_ART_LABEL)) continue;
+      if (o.art === "fluss") {
+        if (fluss) continue;
+        fluss = true;
+      }
+      const zahl = (v: unknown, min: number, max: number, vorgabe: number) =>
+        typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : vorgabe;
+      const b = halbMm(zahl(o.b, 0.5, PDF_FREI_SEITE.b, 40));
+      const h = halbMm(zahl(o.h, 0.5, PDF_FREI_SEITE.h, 10));
+      const v = PDF_FREI_BAUSTEIN_VORGABE;
+      const aus = <T extends string>(w: unknown, erlaubt: readonly T[], vorgabe: T): T => (erlaubt.includes(w as T) ? (w as T) : vorgabe);
+      out.push({
+        id: o.id,
+        art: o.art as PdfFreiArt,
+        x: halbMm(zahl(o.x, 0, PDF_FREI_SEITE.b - b, 0)),
+        y: halbMm(zahl(o.y, 0, PDF_FREI_SEITE.h - h, 0)),
+        b,
+        h,
+        feld: typeof o.feld === "string" && /^[a-z][a-z0-9_]{0,62}$/.test(o.feld) ? o.feld : "",
+        text: typeof o.text === "string" ? o.text.slice(0, 4000) : "",
+        pt: Math.round(zahl(o.pt, PDF_FREI_MIN_PT, 36, v.pt) * 2) / 2,
+        fett: typeof o.fett === "boolean" ? o.fett : v.fett,
+        ausrichtung: aus(o.ausrichtung, ["links", "mitte", "rechts"] as const, v.ausrichtung),
+        farbe: aus(o.farbe, ["schwarz", "grau", "akzent"] as const, v.farbe),
+        flaeche: aus(o.flaeche, ["akzent", "akzent-hell", "grau-hell"] as const, v.flaeche),
+        rahmen: aus(o.rahmen, ["keiner", "unten", "kasten"] as const, v.rahmen),
+        beschriftung: aus(o.beschriftung, ["darueber", "links", "keine"] as const, v.beschriftung),
+        staerke: Math.round(zahl(o.staerke, 0.25, 4, v.staerke) * 4) / 4,
+        gesperrt: typeof o.gesperrt === "boolean" ? o.gesperrt : false,
+      });
+    }
+    return out;
+  };
+  return { raster, hilfslinien, erste: liste(r.erste), folge: liste(r.folge) };
+}
+
+/** Ein leeres Blatt: nur ein Fliessbereich ueber die ganze Seite, dazu Seitenzahl. */
+export function pdfFreiLeer(): PdfFrei {
+  return {
+    raster: 1,
+    hilfslinien: "din5008b",
+    erste: [
+      pdfFreiBaustein({ id: "titel", art: "text", x: 20, y: 20, b: 170, h: 14, text: "**{formular.name}**\n{klient.name} · {protokoll.datum}", pt: 12 }),
+      pdfFreiBaustein({ id: "fluss", art: "fluss", x: 20, y: 40, b: 170, h: 237 }),
+      pdfFreiBaustein({ id: "seite", art: "text", x: 150, y: 282, b: 40, h: 5, text: "Seite {seite} von {seiten}", pt: 7, farbe: "grau", ausrichtung: "rechts" }),
+    ],
+    folge: [
+      pdfFreiBaustein({ id: "fluss", art: "fluss", x: 20, y: 20, b: 170, h: 257 }),
+      pdfFreiBaustein({ id: "seite", art: "text", x: 150, y: 282, b: 40, h: 5, text: "Seite {seite} von {seiten}", pt: 7, farbe: "grau", ausrichtung: "rechts" }),
+    ],
+  };
+}
+
+/**
+ * "Aus der bisherigen Gestaltung uebernehmen": eine Akte- oder Brief-
+ * Gestaltung in einzelne Bausteine zerlegen, damit niemand die DIN-5008-
+ * Vorlage von Hand nachbauen muss. Die Masse entsprechen dem festen Renderer
+ * (Brief: Ruecksendezeile 49 mm, Anschrift ab 52 mm, Infospalte ab 154 mm).
+ * Die Lage ist danach eine Naeherung, kein Pixelvergleich -- der Logo-Text
+ * steht z. B. als eigener Textbaustein neben dem Logo.
+ */
+export function pdfFreiAusGestaltung(g: PdfGestaltung): PdfFrei {
+  const e: PdfFreiBaustein[] = [];
+  const f: PdfFreiBaustein[] = [];
+  const fussPt = g.groesseFuss;
+  const brief = g.vorlage === "brief";
+  const kopfY = brief ? 10 : 12;
+  // Seitenverhaeltnis des Logos kennt diese Funktion nicht; 2,5 : 1 passt
+  // zu den ueblichen Wort-Bild-Marken. Der Renderer passt das Logo ohnehin
+  // in den Kasten ein, ohne es zu verzerren.
+  const logoB = Math.round(g.logoHoehe * 2.5);
+  const textB = 70;
+  const gruppeB = logoB + (g.textNebenLogo.trim() ? 4 + textB : 0);
+  const gruppeX = g.logoPosition === "rechts" ? (brief ? 200 : 188) - gruppeB : g.logoPosition === "mitte" ? (210 - gruppeB) / 2 : 22;
+  const kopf = (liste: PdfFreiBaustein[], hoehe: number, pre: string) => {
+    if (hoehe <= 0) return;
+    const b = Math.round(hoehe * 2.5);
+    // Logo buendig zur Textgruppe: bei "rechts" steht es rechts im Kasten.
+    liste.push(pdfFreiBaustein({ id: `${pre}logo`, art: "logo", x: halbMm(gruppeX + logoB - b), y: kopfY, b, h: hoehe, ausrichtung: "rechts" }));
+    if (g.textNebenLogo.trim()) {
+      liste.push(
+        pdfFreiBaustein({ id: `${pre}kopf`, art: "text", x: halbMm(gruppeX + logoB + 4), y: kopfY, b: textB, h: Math.max(hoehe, 8), text: g.textNebenLogo, pt: hoehe >= 11 ? 10 : 8.5 })
+      );
+    }
+  };
+  kopf(e, g.logoHoehe, "");
+  kopf(f, g.folgeseitenLogoHoehe, "f");
+  let flussOben = 40;
+  if (brief) {
+    if (g.ruecksendezeile.trim()) e.push(pdfFreiBaustein({ id: "ruecksende", art: "text", x: 22, y: 45.5, b: 85, h: 4, text: g.ruecksendezeile, pt: 7, rahmen: "keiner" }));
+    if (g.anschriftfeld) e.push(pdfFreiBaustein({ id: "anschrift", art: "anschrift", x: 22, y: 52, b: 83, h: 30, pt: 10 }));
+    if (g.infospalte.trim()) e.push(pdfFreiBaustein({ id: "infospalte", art: "text", x: 154, y: 50, b: 46, h: 120, text: g.infospalte, pt: Math.max(7.5, fussPt) }));
+    if (g.datumszeile.trim()) e.push(pdfFreiBaustein({ id: "datum", art: "text", x: 98, y: 93, b: 50, h: 5, text: g.datumszeile, pt: g.groesseText, ausrichtung: "rechts" }));
+    const betreff = [g.titel.trim() ? `**${g.titel.trim()}**` : "", g.unterTitel.trim()].filter(Boolean).join("\n");
+    if (betreff) e.push(pdfFreiBaustein({ id: "betreff", art: "text", x: 22, y: 102, b: 126, h: 10, text: betreff, pt: g.groesseText }));
+    flussOben = 116;
+    e.push(pdfFreiBaustein({ id: "fluss", art: "fluss", x: 22, y: flussOben, b: 126, h: 287 - 22 - flussOben + 10 }));
+  } else {
+    if (g.textRechts.trim() && g.logoPosition !== "rechts") {
+      e.push(pdfFreiBaustein({ id: "rechts", art: "text", x: 128, y: 11, b: 60, h: 14, text: g.textRechts, pt: 7.5, farbe: "grau", ausrichtung: "rechts" }));
+    }
+    const titel = [g.titel.trim() ? `**${g.titel.trim()}**` : "", g.unterTitel.trim()].filter(Boolean).join("\n");
+    if (titel) e.push(pdfFreiBaustein({ id: "titel", art: "text", x: 22, y: 28, b: 166, h: 12, text: titel, pt: g.groesseUeberschrift }));
+    e.push(pdfFreiBaustein({ id: "titellinie", art: "flaeche", x: 22, y: 41, b: 166, h: 0.5, flaeche: "akzent" }));
+    flussOben = 45;
+    e.push(pdfFreiBaustein({ id: "fluss", art: "fluss", x: 22, y: flussOben, b: 166, h: 275 - flussOben }));
+  }
+  const fussZ = (liste: PdfFreiBaustein[], pre: string) => {
+    if (g.fusszeileLinks.trim() || g.fusszeileRechts.trim()) liste.push(pdfFreiBaustein({ id: `${pre}fusslinie`, art: "linie", x: 22, y: 283, b: 166, h: 0.5, staerke: 0.4, farbe: "grau" }));
+    if (g.fusszeileLinks.trim()) liste.push(pdfFreiBaustein({ id: `${pre}fussl`, art: "text", x: 22, y: 284, b: 130, h: 5, text: g.fusszeileLinks, pt: fussPt, farbe: "grau" }));
+    if (g.fusszeileRechts.trim()) liste.push(pdfFreiBaustein({ id: `${pre}fussr`, art: "text", x: 153, y: 284, b: 35, h: 5, text: g.fusszeileRechts, pt: fussPt, farbe: "grau", ausrichtung: "rechts" }));
+  };
+  fussZ(e, "");
+  const folgeOben = g.folgeseitenLogoHoehe > 0 ? kopfY + g.folgeseitenLogoHoehe + 6 : 20;
+  f.push(pdfFreiBaustein({ id: "ffluss", art: "fluss", x: 22, y: folgeOben, b: 166, h: 275 - folgeOben }));
+  fussZ(f, "f");
+  return { raster: 1, hilfslinien: brief ? "din5008b" : "keine", erste: e, folge: f };
+}
+
+/** Hat der Export ein Anschriftfeld, fuer das beim Erzeugen ein Empfaenger gebraucht wird? */
+export function pdfMitAnschriftfeld(g: PdfGestaltung): boolean {
+  if (g.vorlage === "brief") return g.anschriftfeld;
+  if (g.vorlage === "frei") return g.frei.erste.some((x) => x.art === "anschrift") || g.frei.folge.some((x) => x.art === "anschrift");
+  return false;
 }
 
 const PDF_GEMEINSAM = {
@@ -3284,10 +3592,14 @@ const PDF_GEMEINSAM = {
   feldstil: "liste" as const,
   ueberschriften: "farbig" as const,
   jaNein: "wort" as const,
+  frei: { raster: 1, hilfslinien: "din5008b" as const, erste: [], folge: [] },
 };
 
 /** Zimmerakte-Vorgaben je Grundform. Ein neuer Export und '{}' in der Datenbank bekommen diese Werte. */
 export function pdfGestaltungVorgabe(vorlage: PdfVorlage): PdfGestaltung {
+  if (vorlage === "frei") {
+    return { ...pdfGestaltungVorgabe("akte"), vorlage, frei: pdfFreiLeer() };
+  }
   if (vorlage === "brief") {
     return {
       ...PDF_GEMEINSAM,
@@ -3378,7 +3690,7 @@ export function pdfGestaltungVorgabe(vorlage: PdfVorlage): PdfGestaltung {
  */
 export function pdfGestaltungMitVorgaben(roh: unknown): PdfGestaltung {
   const r = (roh && typeof roh === "object" ? roh : {}) as Record<string, unknown>;
-  const vorlage: PdfVorlage = r.vorlage === "brief" ? "brief" : "akte";
+  const vorlage: PdfVorlage = r.vorlage === "brief" || r.vorlage === "frei" ? r.vorlage : "akte";
   const v = pdfGestaltungVorgabe(vorlage);
   const out = { ...v } as Record<string, unknown>;
   for (const [k, vorgabe] of Object.entries(v)) {
@@ -3386,6 +3698,8 @@ export function pdfGestaltungMitVorgaben(roh: unknown): PdfGestaltung {
     if (w === undefined) continue;
     if (k === "felder") {
       if (w === "alle" || (Array.isArray(w) && w.every((x) => typeof x === "string"))) out[k] = w;
+    } else if (k === "frei") {
+      out[k] = pdfFreiMitVorgaben(w);
     } else if (k === "farbe") {
       if (w === null || (typeof w === "string" && /^#[0-9a-f]{6}$/i.test(w))) out[k] = w;
     } else if (typeof w === typeof vorgabe) {

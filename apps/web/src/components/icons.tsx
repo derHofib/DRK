@@ -139,6 +139,10 @@ import {
   Wallet,
   Workflow,
   X,
+  Redo2,
+  Grid3x3,
+  Layers,
+  LockOpen,
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -376,3 +380,9 @@ export const IBaumAnsicht = baue(ListTree);
 export const IGrundrissAnsicht = baue(KartenSymbol);
 export const IHochladen = baue(Upload);
 export const ISperre = baue(Lock);
+/* PDF-Designer */
+export const IRueckgaengig = IZurueckziehen;
+export const IWiederholen = baue(Redo2);
+export const IRaster = baue(Grid3x3);
+export const IEbenen = baue(Layers);
+export const IEntsperrt = baue(LockOpen);

@@ -6,12 +6,13 @@ import { Modal } from "../components/Modal";
 import { IFehler, IStornieren } from "../components/icons";
 import { formatDatum } from "../format";
 import { personFarbStil } from "../personFarbe";
-import { ABWESENHEIT_ARTEN, KALENDER_ART_LABEL, abwesenheitArt, type KalenderArt } from "./eintraege";
+import { ABWESENHEIT_ARTEN, ABWESENHEIT_LABEL, abwesenheitArt } from "./eintraege";
 import { Zeitraumfeld } from "../components/Datumsfeld";
 
 /** Dreieck in der Farbe einer Art -- dieselbe Form wie die Statusecke der Tageszelle, damit die Legende sie erklaert. */
-export function ArtDreieck({ art }: { art: KalenderArt }) {
-  return <span className={`zv-art-dreieck zv-art-${art}`} aria-hidden="true" />;
+/** klasse: Farbklasse aus kalenderArten().klasse oder zv-art-<abwesenheit>. */
+export function ArtDreieck({ klasse }: { klasse: string }) {
+  return <span className={`zv-art-dreieck ${klasse}`} aria-hidden="true" />;
 }
 
 export function zeitraumText(a: { von: string; bis: string }): string {
@@ -50,7 +51,7 @@ export function AbwesenheitsZeile({
                   <span className="zv-person-punkt zv-kal-vorschau-punkt" aria-hidden="true" />
                 )}
                 <strong>{a.benutzer.name}</strong>
-                <span className={`zv-art-marke zv-art-${art}`}>{KALENDER_ART_LABEL[art]}</span>
+                <span className={`zv-art-marke zv-art-${art}`}>{ABWESENHEIT_LABEL[art]}</span>
                 <span className="zv-kal-abwesend-zeit">{zeitraumText(a)}</span>
               </button>
             </li>
@@ -80,7 +81,7 @@ export function AbwesenheitDetail({ abwesenheit, onClose, onStorniert }: { abwes
   }
 
   return (
-    <Modal titel={`${abwesenheit.benutzer.name}: ${KALENDER_ART_LABEL[art]}`} onClose={onClose}>
+    <Modal titel={`${abwesenheit.benutzer.name}: ${ABWESENHEIT_LABEL[art]}`} onClose={onClose}>
       {fehler && (
         <div className="zv-hinweis zv-hinweis-fehler" role="alert">
           <IFehler />
@@ -92,7 +93,7 @@ export function AbwesenheitDetail({ abwesenheit, onClose, onStorniert }: { abwes
         <dd>{zeitraumText(abwesenheit)}</dd>
         <dt>Art</dt>
         <dd>
-          <span className={`zv-art-marke zv-art-${art}`}>{KALENDER_ART_LABEL[art]}</span>
+          <span className={`zv-art-marke zv-art-${art}`}>{ABWESENHEIT_LABEL[art]}</span>
           {abwesenheit.art === null && <span className="zv-sub-inline"> · Den Grund sieht nur die Leitung.</span>}
         </dd>
         {abwesenheit.notiz && (
@@ -205,7 +206,7 @@ export function AbwesenheitEintragen({
             {ABWESENHEIT_ARTEN.map((a) => (
               <label key={a} className={`zv-art-wahl-option${art === a ? " aktiv" : ""}`}>
                 <input type="radio" name="abw-art" value={a} checked={art === a} onChange={() => setArt(a)} />
-                <ArtDreieck art={a} />
+                <ArtDreieck klasse={`zv-art-${a}`} />
                 {ABWESENHEIT_ART_LABEL[a]}
               </label>
             ))}

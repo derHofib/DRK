@@ -71,7 +71,7 @@ export class MandantService {
    * beim Speichern: was hier true ist, darf auch gespeichert werden.
    */
   async einstellungenRechte() {
-    const [erscheinungsbild, standortAnlegen, standortBearbeiten, kassenbuch, datenschutz, formulare, stunden] = await Promise.all([
+    const [erscheinungsbild, standortAnlegen, standortBearbeiten, kassenbuch, datenschutz, formulare, stunden, termintypen] = await Promise.all([
       this.rechte.hatRecht("mandanten", "branding-bearbeiten"),
       this.rechte.hatRecht("standorte", "anlegen"),
       this.rechte.hatRecht("standorte", "bearbeiten"),
@@ -79,8 +79,9 @@ export class MandantService {
       this.rechte.hatRecht("mandanten", "datenschutz-bearbeiten"),
       this.rechte.hatRecht("protokolle", "formulare-verwalten"),
       this.rechte.hatRecht("stunden", "einstellungen-verwalten"),
+      this.rechte.hatRecht("kalender", "typen-verwalten"),
     ]);
-    return { erscheinungsbild, standorte: standortAnlegen || standortBearbeiten, kassenbuch, datenschutz, formulare, stunden };
+    return { erscheinungsbild, standorte: standortAnlegen || standortBearbeiten, kassenbuch, datenschutz, formulare, stunden, termintypen };
   }
 
   /**

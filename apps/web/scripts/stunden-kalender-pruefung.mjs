@@ -158,7 +158,7 @@ async function durchlauf(breite, hoehe, schema) {
     return { beginn: b.toISOString(), ende: e.toISOString(), spaeter: new Date(b.getTime() + 120 * 60000).toISOString() };
   });
   const titel = `${TITEL} ${name}`;
-  const t = await api(page, "/kalender/termine", "POST", { titel, art: "klient", beginn: zeiten.beginn, ende: zeiten.ende, teilnehmer: [{ klientId: jonas.id }], stundenErfassen: true });
+  const t = await api(page, "/kalender/termine", "POST", { titel, beginn: zeiten.beginn, ende: zeiten.ende, teilnehmer: [{ klientId: jonas.id }], stundenErfassen: true });
   ok(t.status === 201, `Termin von gestern mit Haken angelegt (${t.status})`);
 
   await zu(page, "Stunden");
@@ -194,7 +194,7 @@ async function durchlauf(breite, hoehe, schema) {
 
   // --- Vormerkung in der Zukunft: Kasten ueber dem Saldo ---
   const morgen = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 2); const b = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0); return { beginn: b.toISOString(), ende: new Date(b.getTime() + 45 * 60000).toISOString() }; });
-  const z = await api(page, "/kalender/termine", "POST", { titel: `Zukunft ${LAUF} ${name}`, art: "klient", ...morgen, teilnehmer: [{ klientId: jonas.id }], stundenErfassen: true });
+  const z = await api(page, "/kalender/termine", "POST", { titel: `Zukunft ${LAUF} ${name}`, ...morgen, teilnehmer: [{ klientId: jonas.id }], stundenErfassen: true });
   ok(z.status === 201, "Termin in der Zukunft vorgemerkt");
   await zu(page, "Kalender");
   await zu(page, "Stunden");

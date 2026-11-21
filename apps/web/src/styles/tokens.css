@@ -299,12 +299,29 @@
   --zv-art-fortbildung-c: 0.13;
   --zv-art-abwesend-h: 270;
   --zv-art-abwesend-c: 0.03;
-  --zv-art-klient-h: 145;
-  --zv-art-klient-c: 0.13;
-  --zv-art-besprechung-h: 195;
-  --zv-art-besprechung-c: 0.1;
-  --zv-art-termin-h: 0;
-  --zv-art-termin-c: 0;
+  /* Termintypen (Migration 0085): der Traeger waehlt je Typ einen dieser
+     acht Toene -- gespeichert wird nur der Schluessel, nie ein Farbwert.
+     Gruen, Petrol und Grau sind die bisherigen Werte von Klient:innentermin,
+     Besprechung und Termin, damit sich beim Umstieg nichts verfaerbt. Die
+     Abwesenheitstoene oben (25, 85, 235, 305) sind bewusst nicht dabei;
+     die naechsten Nachbarn liegen mind. 25 Grad entfernt und haben andere
+     Buntheit. */
+  --zv-typ-grau-h: 0;
+  --zv-typ-grau-c: 0;
+  --zv-typ-gruen-h: 145;
+  --zv-typ-gruen-c: 0.13;
+  --zv-typ-petrol-h: 195;
+  --zv-typ-petrol-c: 0.1;
+  --zv-typ-blau-h: 265;
+  --zv-typ-blau-c: 0.13;
+  --zv-typ-oliv-h: 115;
+  --zv-typ-oliv-c: 0.12;
+  --zv-typ-orange-h: 55;
+  --zv-typ-orange-c: 0.15;
+  --zv-typ-rose-h: 350;
+  --zv-typ-rose-c: 0.12;
+  --zv-typ-sand-h: 75;
+  --zv-typ-sand-c: 0.05;
   /* Arten im Verlauf der Akte (Migration 0078). Nur Farbton/Buntheit wie
      bei den Kalenderarten; die Helligkeit setzt app.css fest je Theme. */
   --zv-verlauf-notiz-h: 85;
