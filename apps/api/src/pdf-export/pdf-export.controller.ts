@@ -1,8 +1,11 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { PDF_FREI_MAX_BAUSTEINE, PDF_FREI_MIN_PT, PDF_FREI_SEITE } from "@zimmerakte/shared";
 import type {
   PdfFeldstil,
+  PdfFrei,
+  PdfFreiBaustein,
   PdfGestaltung,
   PdfLeereFelder,
   PdfLogoPosition,
@@ -32,8 +35,46 @@ const optText = (max: number) =>
 // Die Grenzen sind fachlich: unter 7 pt ist ein Ausdruck nicht mehr sicher
 // lesbar, ueber 30 mm frisst ein Logo den Anschriftbereich (DIN 5008 Form B
 // laesst oben 45 mm).
+// Freie Bausteine: Geometrie in 0,5-mm-Schritten und immer innerhalb des
+// A4-Blatts. Was hier durchkommt, kann der Renderer ohne weitere Pruefung
+// zeichnen. Hoechstens EIN Fliessbereich je Seitenart -- zwei waeren
+// mehrdeutig (in welchen fliesst der Inhalt zuerst?).
+const mm = (min: number, max: number) => z.number().min(min).max(max).refine((v) => Number.isInteger(v * 2), "Bitte in Schritten von 0,5 mm.");
+const freiBausteinSchema: z.ZodType<PdfFreiBaustein> = z
+  .object({
+    id: z.string().regex(/^[a-z0-9]{1,24}$/),
+    art: z.enum(["feld", "ankreuz", "text", "logo", "linie", "flaeche", "unterschrift", "anschrift", "fluss"]),
+    x: mm(0, PDF_FREI_SEITE.b),
+    y: mm(0, PDF_FREI_SEITE.h),
+    b: mm(0.5, PDF_FREI_SEITE.b),
+    h: mm(0.5, PDF_FREI_SEITE.h),
+    feld: z.string().regex(/^([a-z][a-z0-9_]{0,62})?$/),
+    text: text(4000),
+    pt: z.number().min(PDF_FREI_MIN_PT, `Schrift mindestens ${PDF_FREI_MIN_PT} pt.`).max(36),
+    fett: z.boolean(),
+    ausrichtung: z.enum(["links", "mitte", "rechts"]),
+    farbe: z.enum(["schwarz", "grau", "akzent"]),
+    flaeche: z.enum(["akzent", "akzent-hell", "grau-hell"]),
+    rahmen: z.enum(["keiner", "unten", "kasten"]),
+    beschriftung: z.enum(["darueber", "links", "keine"]),
+    staerke: z.number().min(0.25).max(4),
+    gesperrt: z.boolean(),
+  })
+  .refine((e) => e.x + e.b <= PDF_FREI_SEITE.b + 0.001 && e.y + e.h <= PDF_FREI_SEITE.h + 0.001, "Baustein ragt über das Blatt hinaus.");
+const freiSeite = z
+  .array(freiBausteinSchema)
+  .max(PDF_FREI_MAX_BAUSTEINE)
+  .refine((l) => l.filter((e) => e.art === "fluss").length <= 1, "Höchstens ein Fließbereich je Seite.")
+  .refine((l) => new Set(l.map((e) => e.id)).size === l.length, "Doppelte Baustein-Id.");
+const freiSchema: z.ZodType<PdfFrei> = z.object({
+  raster: z.union([z.literal(0.5), z.literal(1), z.literal(2), z.literal(5)]),
+  hilfslinien: z.enum(["din5008b", "din5008a", "keine"]),
+  erste: freiSeite,
+  folge: freiSeite,
+});
+
 const gestaltungSchema: z.ZodType<PdfGestaltung> = z.object({
-  vorlage: z.enum(["akte", "brief"] as [PdfVorlage, ...PdfVorlage[]]),
+  vorlage: z.enum(["akte", "brief", "frei"] as [PdfVorlage, ...PdfVorlage[]]),
   felder: z.union([z.literal("alle"), z.array(z.string().max(63)).max(500)]),
   titel: text(300),
   unterTitel: text(300),
@@ -62,6 +103,7 @@ const gestaltungSchema: z.ZodType<PdfGestaltung> = z.object({
   leereFelder: z.enum(["ausblenden", "strich", "platz"] as [PdfLeereFelder, ...PdfLeereFelder[]]),
   ueberschriften: z.enum(["farbig", "schwarz", "balken"] as [PdfUeberschriften, ...PdfUeberschriften[]]),
   jaNein: z.enum(["wort", "kreuz"]),
+  frei: freiSchema,
 });
 
 const speichernSchema = z.object({
@@ -78,9 +120,11 @@ const vorschauSchema = speichernSchema.extend({
   empfaenger: optText(1000),
 });
 
+const pruefenSchema = vorschauSchema.extend({ laengste: z.boolean() });
+
 const anlegenSchema = z.object({
   name: z.string().trim().min(1, "Bitte einen Namen angeben.").max(120),
-  vorlage: z.enum(["akte", "brief"]).optional(),
+  vorlage: z.enum(["akte", "brief", "frei"]).optional(),
   kopieVon: z.string().uuid().optional(),
 });
 
@@ -199,6 +243,11 @@ export class PdfExportController {
     const e = lies(vorschauSchema, body);
     const pdf = await this.exporte.vorschau(id, e);
     pdfSenden(res, pdf, "vorschau.pdf", true);
+  }
+
+  @Post("formulare/:id/pdf-exporte/pruefen")
+  pruefen(@Param("id", new ParseUUIDPipe()) id: string, @Body() body: unknown) {
+    return this.exporte.pruefen(id, lies(pruefenSchema, body));
   }
 
   @Get("pdf-exporte/:id")

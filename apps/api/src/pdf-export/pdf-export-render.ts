@@ -3,6 +3,8 @@ import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, PDFEmbeddedPage, PDFFont, PDFImage, PDFPage, rgb, type RGB } from "pdf-lib";
 import {
   druckUeberschriftFarbe,
+  PDF_FREI_MIN_PT,
+  PDF_FREI_SEITE,
   pdfTextEinzeilig,
   pdfTextZeilen,
   werteAus,
@@ -10,6 +12,9 @@ import {
   type FeldWert,
   type FeldWerte,
   type FormularDefinition,
+  type PdfFreiBaustein,
+  type PdfFreiSeitenart,
+  type PdfFreiTextfarbe,
   type PdfGestaltung,
   type PdfSchrift,
   type PdfZielgruppe,
@@ -214,6 +219,8 @@ interface Satzspiegel {
   x1: number;
   /** Oberkante des Inhalts (PDF-Koordinaten, y nach oben). */
   oben: number;
+  /** Unterkante; fehlt sie, gilt der feste Fussbereich der Grundformen. */
+  unten?: number;
 }
 
 class Setzer {
@@ -247,8 +254,12 @@ class Setzer {
     return this.spiegel.x1 - this.spiegel.x0;
   }
 
+  get unten() {
+    return this.spiegel.unten ?? INHALT_UNTEN;
+  }
+
   platz(hoehe: number): void {
-    if (this.y - hoehe < INHALT_UNTEN) this.neueSeite();
+    if (this.y - hoehe < this.unten) this.neueSeite();
   }
 
   text(zeilen: string[], opt: { x?: number; groesse?: number; font?: PDFFont; farbe?: RGB; zeilenabstand?: number; rechts?: number }) {
@@ -323,7 +334,7 @@ class Setzer {
     this.platz(pad + Math.min(n, 3) * lh + pad);
     this.y -= pad;
     for (let i = 0; i < n; i++) {
-      if (this.y - lh < INHALT_UNTEN) {
+      if (this.y - lh < this.unten) {
         this.neueSeite();
         this.y -= pad;
       }
@@ -400,7 +411,7 @@ class Setzer {
           i += 2;
         } else {
           const h = this.kastenHoehe(b, this.breite);
-          if (h > this.spiegel.oben - INHALT_UNTEN) {
+          if (h > this.spiegel.oben - this.unten) {
             // Laenger als eine Seite: als Liste weiter, statt aus der Seite zu laufen.
             this.listenZeile(b);
           } else {
@@ -502,14 +513,12 @@ function blockRechts(s: Setzer, zeilen: { text: string; fett: boolean }[], yOben
 
 // --- Einstieg ---------------------------------------------------------------
 
-export async function pdfExportRendern(e: PdfRenderEingabe): Promise<Uint8Array> {
-  const g = e.gestaltung;
+async function dokumentVorbereiten(e: PdfRenderEingabe) {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
-  const [n, f] = SCHRIFT_DATEIEN[g.schrift];
+  const [n, f] = SCHRIFT_DATEIEN[e.gestaltung.schrift];
   const normal = await doc.embedFont(schriftDatei(n), { subset: true });
   const fett = await doc.embedFont(schriftDatei(f), { subset: true });
-
   let logo: Logo | null = null;
   if (e.logo) {
     if (e.logo.mime === "image/png") logo = { art: "bild", bild: await doc.embedPng(e.logo.inhalt) };
@@ -519,6 +528,25 @@ export async function pdfExportRendern(e: PdfRenderEingabe): Promise<Uint8Array>
       logo = { art: "seite", seite };
     }
   }
+  return { doc, normal, fett, logo };
+}
+
+/** Ergebnis mit Pruefbericht: welche festen Bausteine (Grundform "frei") nicht passten. */
+export interface PdfRenderBericht {
+  pdf: Uint8Array;
+  seiten: number;
+  /** "erste:<id>" bzw. "folge:<id>" der Bausteine, deren Text in den Anhang "Fortsetzung" musste. */
+  ueberlauf: string[];
+}
+
+export async function pdfExportRendern(e: PdfRenderEingabe): Promise<Uint8Array> {
+  return (await pdfExportRendernMitBericht(e)).pdf;
+}
+
+export async function pdfExportRendernMitBericht(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
+  if (e.gestaltung.vorlage === "frei") return freiRendern(e);
+  const g = e.gestaltung;
+  const { doc, normal, fett, logo } = await dokumentVorbereiten(e);
 
   const werte: Record<string, string | null> = { ...e.platzhalter, ...feldPlatzhalter(e), seite: "\u0000S", seiten: "\u0000N" };
   const zeilen = (t: string) => pdfTextZeilen(t, werte);
@@ -639,5 +667,356 @@ export async function pdfExportRendern(e: PdfRenderEingabe): Promise<Uint8Array>
   doc.setTitle(titel || e.formular.name);
   doc.setCreator("Zimmerakte");
   doc.setProducer("Zimmerakte");
-  return doc.save();
+  return { pdf: await doc.save(), seiten: gesamt, ueberlauf: [] };
+}
+
+// --- Grundform "frei" -------------------------------------------------------
+
+/**
+ * Freier Designer (Konzept pdf-designer). Zwei Arten von Inhalt:
+ *
+ * - Feste Bausteine stehen auf den Millimeter dort, wo sie im Designer
+ *   liegen. Passt ein Text nicht, wird er schrittweise bis 7 pt verkleinert;
+ *   reicht das nicht, endet der Kasten mit "→ Fortsetzung" und der VOLLE Text
+ *   steht im Anhang. Still abgeschnitten wird nie -- bei einem Bericht ans Amt
+ *   waere ein fehlender Satz nicht erkennbar.
+ * - Der Fliessbereich (hoechstens einer je Seitenart) nimmt alle Felder auf,
+ *   die nicht frei platziert sind, im gewaehlten Feldstil, und bricht auf
+ *   Folgeseiten um. Das ist derselbe Setzer wie bei Akte und Brief.
+ *
+ * Feste Bausteine werden beim Anlegen der Seite gezeichnet, also UNTER den
+ * Fliesstext (eine Flaeche darf ihn nicht verdecken). Nur Texte mit {seite}
+ * oder {seiten} kommen im zweiten Durchgang, wenn die Seitenzahl feststeht.
+ */
+
+const SEITE_NR = "\u0001";
+const SEITEN_NR = "\u0002";
+const ZEILENABSTAND = 1.2;
+const MIN_FLUSS_HOEHE = 15;
+
+type Gesetzt = { pt: number; zeilen: { text: string; fett: boolean }[]; abgeschnitten: boolean };
+
+function messText(t: string): string {
+  return t.replaceAll(SEITE_NR, "00").replaceAll(SEITEN_NR, "00");
+}
+
+/** Zeilen in eine Box setzen: kleiner werden bis 7 pt, dann kuerzen und markieren. */
+function einpassen(
+  quelle: { text: string; fett: boolean }[],
+  fonts: { normal: PDFFont; fett: PDFFont },
+  allesFett: boolean,
+  startPt: number,
+  breite: number,
+  hoehe: number,
+  /** Platz, der je Schriftgroesse vorab abgeht (Beschriftung ueber dem Wert). */
+  vorab: (pt: number) => number = () => 0
+): Gesetzt {
+  const umbr = (pt: number) =>
+    quelle.flatMap((z) => {
+      if (!z.text) return [{ text: "", fett: false }];
+      const font = z.fett || allesFett ? fonts.fett : fonts.normal;
+      // Gemessen wird mit "00" statt der Seitenzahl, gezeichnet mit der echten.
+      return umbrechen(messText(z.text), font, pt, breite).map((t, i, arr) => ({
+        text: arr.length === 1 ? z.text : t,
+        fett: z.fett,
+      }));
+    });
+  for (let pt = startPt; pt >= PDF_FREI_MIN_PT; pt -= 0.5) {
+    const zeilen = umbr(pt);
+    if (zeilen.length * pt * ZEILENABSTAND <= hoehe - vorab(pt) + 0.01) return { pt, zeilen, abgeschnitten: false };
+  }
+  const pt = PDF_FREI_MIN_PT;
+  const passen = Math.max(1, Math.floor((hoehe - vorab(pt) + 0.01) / (pt * ZEILENABSTAND)));
+  const zeilen = umbr(pt).slice(0, passen);
+  const letzte = zeilen[zeilen.length - 1];
+  const font = letzte.fett || allesFett ? fonts.fett : fonts.normal;
+  zeilen[zeilen.length - 1] = { text: kuerzenMitHinweis(letzte.text, font, pt, breite), fett: letzte.fett };
+  return { pt, zeilen, abgeschnitten: true };
+}
+
+function kuerzenMitHinweis(text: string, font: PDFFont, groesse: number, breite: number): string {
+  const hinweis = " … → Fortsetzung";
+  let t = text;
+  while (t.length > 0 && font.widthOfTextAtSize(`${t}${hinweis}`, groesse) > breite) t = t.slice(0, -1);
+  return `${t.trimEnd()}${hinweis}`;
+}
+
+async function freiRendern(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
+  const g = e.gestaltung;
+  const frei = g.frei;
+  const { doc, normal, fett, logo } = await dokumentVorbereiten(e);
+  const fonts = { normal, fett };
+  const werte: Record<string, string | null> = { ...e.platzhalter, ...feldPlatzhalter(e), seite: SEITE_NR, seiten: SEITEN_NR };
+  const farbe = g.farbe ?? e.traegerfarbe;
+  const akzentLinie = hexRgb(farbe);
+  const akzentText = hexRgb(druckUeberschriftFarbe(farbe));
+  const akzentHell = rgb(1 - (1 - akzentLinie.red) * 0.14, 1 - (1 - akzentLinie.green) * 0.14, 1 - (1 - akzentLinie.blue) * 0.14);
+  const textFarbe = (f: PdfFreiTextfarbe): RGB => (f === "akzent" ? akzentText : f === "grau" ? GRAU : SCHWARZ);
+  const linienFarbe = (f: PdfFreiTextfarbe): RGB => (f === "akzent" ? akzentLinie : f === "grau" ? GRAU : SCHWARZ);
+
+  // Feldwerte mit derselben Intern-Sperre wie ueberall: ein internes Feld in
+  // einem externen Export fehlt hier und wird damit auch als Baustein nie gezeichnet.
+  const alleFelder = new Map<string, Extract<Block, { art: "feld" }>>();
+  for (const b of pdfBloecke({ ...e, gestaltung: { ...g, felder: "alle", leereFelder: "platz" } })) {
+    if (b.art === "feld") alleFelder.set(b.schluessel, b);
+  }
+  const platziert = new Set(
+    [...frei.erste, ...frei.folge].filter((x) => x.art === "feld" || x.art === "ankreuz").map((x) => x.feld)
+  );
+  const flussRoh = pdfBloecke(e).filter((b) => b.art !== "feld" || !platziert.has(b.schluessel));
+  // Abschnittsueberschrift ohne Feld danach entfaellt (alle Felder des Abschnitts sind frei platziert).
+  const fluss = flussRoh.filter((b, i) => b.art !== "ueberschrift" || flussRoh[i + 1]?.art === "feld");
+
+  const anhang: { label: string; text: string }[] = [];
+  const ueberlauf: string[] = [];
+  const nachgereicht: { seite: PDFPage; zeichnen: (seite: string, seiten: string) => void }[] = [];
+
+  const wertText = (b: Extract<Block, { art: "feld" }>) => (b.wert === null ? (g.leereFelder === "strich" ? "–" : "") : b.wert);
+
+  /** Text zeilenweise in eine Box zeichnen (Koordinaten in pt, y = Oberkante). */
+  const zeilenZeichnen = (
+    seite: PDFPage,
+    gs: Gesetzt,
+    el: PdfFreiBaustein,
+    x0: number,
+    x1: number,
+    yOben: number,
+    farbeRgb: RGB,
+    ersetzen?: (t: string) => string
+  ) => {
+    let y = yOben;
+    for (const z of gs.zeilen) {
+      y -= gs.pt * ZEILENABSTAND;
+      if (!z.text) continue;
+      const t = ersetzen ? ersetzen(z.text) : z.text;
+      const font = z.fett || el.fett ? fett : normal;
+      const w = font.widthOfTextAtSize(t, gs.pt);
+      const x = el.ausrichtung === "rechts" ? x1 - w : el.ausrichtung === "mitte" ? (x0 + x1 - w) / 2 : x0;
+      seite.drawText(t, { x, y: y + gs.pt * 0.27, size: gs.pt, font, color: farbeRgb });
+    }
+  };
+
+  const kreuzeZeichnen = (seite: PDFPage, x: number, yGrund: number, wert: boolean | null, groesse: number) => {
+    const k = groesse * 0.8;
+    let cx = x;
+    for (const [label, an] of [["Ja", wert === true], ["Nein", wert === false]] as const) {
+      seite.drawRectangle({ x: cx, y: yGrund, width: k, height: k, borderColor: SCHWARZ, borderWidth: 0.6 });
+      if (an) {
+        seite.drawLine({ start: { x: cx + 1, y: yGrund + 1 }, end: { x: cx + k - 1, y: yGrund + k - 1 }, thickness: 0.8, color: SCHWARZ });
+        seite.drawLine({ start: { x: cx + 1, y: yGrund + k - 1 }, end: { x: cx + k - 1, y: yGrund + 1 }, thickness: 0.8, color: SCHWARZ });
+      }
+      seite.drawText(label, { x: cx + k + 3, y: yGrund + 0.5, size: groesse, font: normal, color: SCHWARZ });
+      cx += k + 3 + normal.widthOfTextAtSize(label, groesse) + 10;
+    }
+  };
+
+  // Ueberlauf je Baustein nur einmal melden, auch wenn er auf jeder Folgeseite steht.
+  const gemeldet = new Set<string>();
+  const melden = (art: PdfFreiSeitenart, el: PdfFreiBaustein, label: string, text: string) => {
+    const k = `${art}:${el.id}`;
+    if (gemeldet.has(k)) return;
+    gemeldet.add(k);
+    ueberlauf.push(k);
+    anhang.push({ label, text });
+  };
+
+  const bausteinZeichnen = (seite: PDFPage, art: PdfFreiSeitenart, el: PdfFreiBaustein) => {
+    const x0 = el.x * MM;
+    const x1 = (el.x + el.b) * MM;
+    const yOben = SEITE_H - el.y * MM;
+    const yUnten = SEITE_H - (el.y + el.h) * MM;
+    const b = x1 - x0;
+    const h = yOben - yUnten;
+    const pad = el.rahmen === "kasten" ? 1.2 * MM : 0;
+
+    switch (el.art) {
+      case "fluss":
+        return;
+      case "flaeche":
+        seite.drawRectangle({
+          x: x0,
+          y: yUnten,
+          width: b,
+          height: h,
+          color: el.flaeche === "akzent" ? akzentLinie : el.flaeche === "akzent-hell" ? akzentHell : rgb(0.94, 0.94, 0.94),
+        });
+        return;
+      case "linie":
+        if (el.b >= el.h) {
+          const y = (yOben + yUnten) / 2;
+          seite.drawLine({ start: { x: x0, y }, end: { x: x1, y }, thickness: el.staerke, color: linienFarbe(el.farbe) });
+        } else {
+          const x = (x0 + x1) / 2;
+          seite.drawLine({ start: { x, y: yOben }, end: { x, y: yUnten }, thickness: el.staerke, color: linienFarbe(el.farbe) });
+        }
+        return;
+      case "logo": {
+        if (!logo) return;
+        const q = logo.art === "bild" ? logo.bild : logo.seite;
+        const faktor = Math.min(b / q.width, h / q.height);
+        const lb = q.width * faktor;
+        const lh = q.height * faktor;
+        const x = el.ausrichtung === "rechts" ? x1 - lb : el.ausrichtung === "mitte" ? x0 + (b - lb) / 2 : x0;
+        if (logo.art === "bild") seite.drawImage(logo.bild, { x, y: yOben - lh, width: lb, height: lh });
+        else seite.drawPage(logo.seite, { x, y: yOben - lh, width: lb, height: lh });
+        return;
+      }
+    }
+
+    if (el.rahmen === "kasten") seite.drawRectangle({ x: x0, y: yUnten, width: b, height: h, borderColor: RAHMEN, borderWidth: el.staerke });
+    if (el.rahmen === "unten") seite.drawLine({ start: { x: x0, y: yUnten }, end: { x: x1, y: yUnten }, thickness: el.staerke, color: LINIE });
+    const ix0 = x0 + pad;
+    const ix1 = x1 - pad;
+    const iOben = yOben - pad;
+    const iH = h - 2 * pad;
+
+    if (el.art === "text") {
+      const quelle = pdfTextZeilen(el.text, werte);
+      if (quelle.length === 0) return;
+      const mitSeite = el.text.includes("{seite}") || el.text.includes("{seiten}");
+      const gs = einpassen(quelle, fonts, el.fett, el.pt, ix1 - ix0, iH);
+      if (gs.abgeschnitten) melden(art, el, "Text", quelle.map((z) => z.text).join("\n"));
+      if (mitSeite) {
+        nachgereicht.push({
+          seite,
+          zeichnen: (s1, s2) => zeilenZeichnen(seite, gs, el, ix0, ix1, iOben, textFarbe(el.farbe), (t) => t.replaceAll(SEITE_NR, s1).replaceAll(SEITEN_NR, s2)),
+        });
+      } else {
+        zeilenZeichnen(seite, gs, el, ix0, ix1, iOben, textFarbe(el.farbe));
+      }
+      return;
+    }
+
+    if (el.art === "anschrift") {
+      if (!e.empfaenger) return;
+      const quelle = saeubern(e.empfaenger)
+        .split("\n")
+        .slice(0, 6)
+        .map((t) => ({ text: t, fett: false }));
+      const gs = einpassen(quelle, fonts, el.fett, el.pt, ix1 - ix0, iH);
+      if (gs.abgeschnitten) melden(art, el, "Anschrift", e.empfaenger);
+      zeilenZeichnen(seite, gs, el, ix0, ix1, iOben, SCHWARZ);
+      return;
+    }
+
+    if (el.art === "unterschrift") {
+      const name = e.platzhalter["benutzer.name"] ?? "";
+      const klein = Math.max(PDF_FREI_MIN_PT, el.pt - 1.5);
+      const yLinie = yUnten + klein * 1.6;
+      seite.drawLine({ start: { x: ix0, y: yLinie }, end: { x: ix1, y: yLinie }, thickness: 0.5, color: SCHWARZ });
+      const t = kuerzen(name ? `${name}, ${e.platzhalter.datum ?? ""}` : "Datum, Unterschrift", normal, klein, ix1 - ix0);
+      seite.drawText(t, { x: ix0, y: yLinie - klein * 1.15, size: klein, font: normal, color: GRAU });
+      return;
+    }
+
+    // feld und ankreuz
+    const block = alleFelder.get(el.feld);
+    if (!block) return;
+    const kreuz = block.typ === "ja_nein" && (el.art === "ankreuz" || g.jaNein === "kreuz");
+    const wert = kreuz ? "" : wertText(block);
+    if (block.wert === null && g.leereFelder === "ausblenden") return;
+    // Beschriftung und Wert werden GEMEINSAM verkleinert: die Beschriftung
+    // ist 1,5 pt kleiner als der Wert und nimmt ihre Zeile vom Kasten weg.
+    const labelPt = (pt: number) => Math.max(PDF_FREI_MIN_PT, pt - 1.5);
+    const labelH = (pt: number) => (el.beschriftung === "darueber" ? labelPt(pt) * 1.25 : 0);
+    let wx0 = ix0;
+    if (el.beschriftung === "links") {
+      const lb = (ix1 - ix0) * 0.38;
+      // Eine zu lange Beschriftung wird nur gekuerzt, nicht in den Anhang gemeldet: sie steht im Formular.
+      const gl = einpassen([{ text: block.label, fett: false }], fonts, false, el.pt, lb - 2, iH);
+      zeilenZeichnen(seite, gl, { ...el, fett: false, ausrichtung: "links" }, ix0, ix0 + lb, iOben, GRAU);
+      wx0 = ix0 + lb + 2 * MM;
+    }
+    const beschriftungZeichnen = (pt: number) => {
+      if (el.beschriftung !== "darueber") return;
+      const lp = labelPt(pt);
+      seite.drawText(kuerzen(block.label, normal, lp, ix1 - ix0), { x: ix0, y: iOben - lp * 0.95, size: lp, font: normal, color: GRAU });
+    };
+    if (kreuz) {
+      // Kreuze brauchen eine Zeile; die Groesse folgt dem Platz, nicht umgekehrt.
+      let pt = el.pt;
+      while (pt > PDF_FREI_MIN_PT && labelH(pt) + pt * ZEILENABSTAND > iH) pt -= 0.5;
+      beschriftungZeichnen(pt);
+      kreuzeZeichnen(seite, wx0, iOben - labelH(pt) - pt * 0.95, block.jaNein, pt);
+      return;
+    }
+    if (!wert) {
+      beschriftungZeichnen(el.pt);
+      return;
+    }
+    const quelle = saeubern(wert)
+      .split("\n")
+      .map((t) => ({ text: t, fett: false }));
+    const gs = einpassen(quelle, fonts, el.fett, el.pt, ix1 - wx0, iH, labelH);
+    if (gs.abgeschnitten) melden(art, el, block.label, wert);
+    beschriftungZeichnen(gs.pt);
+    zeilenZeichnen(seite, gs, { ...el, ausrichtung: el.beschriftung === "links" ? "links" : el.ausrichtung }, wx0, ix1, iOben - labelH(gs.pt), textFarbe(el.farbe));
+  };
+
+  const flussErste = frei.erste.find((x) => x.art === "fluss") ?? null;
+  const flussFolge = frei.folge.find((x) => x.art === "fluss") ?? null;
+  const spiegelAus = (el: PdfFreiBaustein | null): Satzspiegel => {
+    if (!el) return { x0: 20 * MM, x1: SEITE_B - 20 * MM, oben: SEITE_H - 20 * MM, unten: 20 * MM };
+    const h = Math.max(el.h, MIN_FLUSS_HOEHE);
+    const yOben = Math.min(el.y, PDF_FREI_SEITE.h - h);
+    return { x0: el.x * MM, x1: (el.x + el.b) * MM, oben: SEITE_H - yOben * MM, unten: SEITE_H - (yOben + h) * MM };
+  };
+
+  const rahmen = (s: Setzer, nr: number): Satzspiegel => {
+    // Schutz gegen eine Endlosschleife bei absurd kleinem Fliessbereich.
+    if (nr > 500) throw new Error("Das PDF hätte mehr als 500 Seiten. Bitte den Fließbereich größer machen.");
+    const art: PdfFreiSeitenart = nr === 1 ? "erste" : "folge";
+    for (const el of frei[art]) bausteinZeichnen(s.seite, art, el);
+    return spiegelAus(nr === 1 ? flussErste : flussFolge);
+  };
+
+  const s = new Setzer(doc, g, normal, fett, farbe, rahmen);
+  s.neueSeite();
+
+  if (flussErste) {
+    if (g.anrede.trim()) s.absatz(pdfTextEinzeilig(g.anrede, werte));
+    if (g.einleitung.trim()) {
+      for (const z of pdfTextZeilen(g.einleitung, werte)) z.text ? s.absatz(z.text, { font: z.fett ? fett : normal }) : (s.y -= g.groesseText * 0.6);
+    }
+    s.felder(fluss);
+    if (g.gruss.trim()) {
+      s.y -= g.groesseText * 1.6;
+      s.absatz(pdfTextEinzeilig(g.gruss, werte), { abstandDanach: 0 });
+    }
+    const name = e.platzhalter["benutzer.name"] ?? "";
+    if (g.unterschrift === "linie") {
+      s.platz(20 * MM);
+      s.y -= 14 * MM;
+      s.seite.drawLine({ start: { x: s.spiegel.x0, y: s.y }, end: { x: s.spiegel.x0 + Math.min(65 * MM, s.breite), y: s.y }, thickness: 0.5, color: SCHWARZ });
+      s.text([name ? `${name}, ${e.platzhalter.datum ?? ""}` : "Datum, Unterschrift"], { groesse: Math.max(g.groesseText - 1.5, 7), farbe: GRAU });
+    } else if (g.unterschrift === "name" && name) {
+      s.platz(14 * MM);
+      s.y -= 9 * MM;
+      s.text([name], { font: fett });
+    }
+  }
+
+  if (anhang.length > 0) {
+    s.neueSeite();
+    s.abschnitt("Fortsetzung");
+    for (const a of anhang) {
+      s.absatz(a.label, { font: fett, abstandDanach: 1 });
+      for (const z of saeubern(a.text).split("\n")) z ? s.absatz(z, { abstandDanach: 1 }) : (s.y -= g.groesseText * 0.6);
+      s.y -= g.groesseText * 0.8;
+    }
+  }
+
+  const gesamt = s.seiten.length;
+  for (const n of nachgereicht) n.zeichnen(String(s.seiten.indexOf(n.seite) + 1), String(gesamt));
+  if (e.beispiel) {
+    for (const seite of s.seiten) {
+      const t = "Vorschau mit Beispieldaten · nicht zur Weitergabe";
+      seite.drawText(t, { x: (SEITE_B - normal.widthOfTextAtSize(t, 7)) / 2, y: 3.5 * MM, size: 7, font: normal, color: rgb(0.6, 0.6, 0.6) });
+    }
+  }
+
+  doc.setTitle(pdfTextEinzeilig(g.titel, werte) || e.formular.name);
+  doc.setCreator("Zimmerakte");
+  doc.setProducer("Zimmerakte");
+  return { pdf: await doc.save(), seiten: gesamt, ueberlauf };
 }

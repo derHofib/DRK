@@ -8,7 +8,10 @@ import {
   PDF_SCHRIFT_LABEL,
   PDF_UEBERSCHRIFTEN_LABEL,
   PDF_VORLAGE_LABEL,
+  pdfFreiAusGestaltung,
+  pdfFreiLeer,
   pdfGestaltungVorgabe,
+  pdfMitAnschriftfeld,
   type FormularDefinition,
   type FormularDetailDto,
   type FormularVerwaltungDto,
@@ -41,6 +44,7 @@ import {
 } from "../../components/icons";
 import { formatDatum } from "../../format";
 import { aufbauVersionen } from "./FormularAufbau";
+import { PdfDesigner } from "./PdfDesigner";
 
 /**
  * Reiter „PDF-Exporte“ eines Formulars (Konzept /mnt/project-files/formular-pdf,
@@ -218,7 +222,7 @@ function ExportKarte({
       </div>
       <ul className="zv-pe-fakten">
         <li>
-          {g.vorlage === "brief" ? "Brief nach DIN 5008" : "Akte, kompakter Kopf"}, {feldAnzahl(g, definition)}
+          {g.vorlage === "brief" ? "Brief nach DIN 5008" : g.vorlage === "frei" ? `Frei gestaltet, ${g.frei.erste.length} Bausteine` : "Akte, kompakter Kopf"}, {feldAnzahl(g, definition)}
         </li>
         <li>
           Schrift {PDF_SCHRIFT_LABEL[g.schrift].name}, {PDF_FELDSTIL_LABEL[g.feldstil].name}
@@ -237,6 +241,20 @@ function ExportKarte({
  * folgt den echten Einstellungen (Logo-Position, Infospalte, Anschriftfeld).
  */
 function ExportSkizze({ g }: { g: PdfGestaltung }) {
+  if (g.vorlage === "frei") {
+    // Frei gestaltet: die Bausteine der ersten Seite massstabsgetreu als Kaesten.
+    return (
+      <span className="zv-pe-skizze zv-pe-skizze-frei" aria-hidden="true">
+        {g.frei.erste.map((e) => (
+          <span
+            key={e.id}
+            className={`zv-pe-skizze-el zv-pe-skizze-el-${e.art}`}
+            style={{ left: `${(e.x / 210) * 100}%`, top: `${(e.y / 297) * 100}%`, width: `${(e.b / 210) * 100}%`, height: `${(e.h / 297) * 100}%` }}
+          />
+        ))}
+      </span>
+    );
+  }
   const brief = g.vorlage === "brief";
   return (
     <span className={`zv-pe-skizze zv-pe-skizze-${brief ? "brief" : "akte"}`} aria-hidden="true">
@@ -263,7 +281,7 @@ function NeuerExport({
   onClose: () => void;
   onAngelegt: (e: PdfExportDto) => void;
 }) {
-  const [art, setArt] = useState<"brief" | "akte" | "kopie">("brief");
+  const [art, setArt] = useState<"brief" | "akte" | "frei" | "kopie">("brief");
   const [name, setName] = useState("Bericht an das Amt");
   const [formulare, setFormulare] = useState<FormularVerwaltungDto[]>([]);
   const [quelleFormular, setQuelleFormular] = useState(formular.id);
@@ -306,6 +324,7 @@ function NeuerExport({
   const optionen: { wert: typeof art; titel: string; text: string }[] = [
     { wert: "brief", titel: "Brief beginnen", text: "Mit Anschriftfeld, Infospalte und Unterschrift nach DIN 5008. Für Ämter und Kostenträger." },
     { wert: "akte", titel: "Akte beginnen", text: "Kompakter Kopf, alle Felder. Für die Ablage." },
+    { wert: "frei", titel: "Frei gestalten", text: "Leeres Blatt im Designer: Felder und Angaben frei auf einem Millimeterraster platzieren." },
     { wert: "kopie", titel: "Kopie eines Exports", text: "Auch aus einem anderen Formular, z. B. den Amtsbrief vom „Hilfeplangespräch“. Danach unabhängig." },
   ];
 
@@ -409,6 +428,8 @@ function PdfExportEditor({
   const [vorschauUrl, setVorschauUrl] = useState<string | null>(null);
   const [vorschauFehler, setVorschauFehler] = useState<string | null>(null);
   const [vorschauLaeuft, setVorschauLaeuft] = useState(false);
+  const [designerOffen, setDesignerOffen] = useState(false);
+  const [freiFrage, setFreiFrage] = useState(false);
   const urlRef = useRef<string | null>(null);
 
   const g = stand.gestaltung;
@@ -436,7 +457,7 @@ function PdfExportEditor({
         const blob = await api.pdfExportVorschau(formular.id, {
           ...stand,
           protokollId: daten === "echt" && protokollId ? protokollId : null,
-          empfaenger: g.vorlage === "brief" && g.anschriftfeld ? empfaenger : null,
+          empfaenger: pdfMitAnschriftfeld(g) ? empfaenger : null,
         });
         const url = URL.createObjectURL(blob);
         if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -450,7 +471,7 @@ function PdfExportEditor({
       }
     }, 600);
     return () => window.clearTimeout(t);
-  }, [formular.id, stand, daten, protokollId, empfaenger, g.vorlage, g.anschriftfeld]);
+  }, [formular.id, stand, daten, protokollId, empfaenger, g]);
 
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -476,6 +497,7 @@ function PdfExportEditor({
 
   const felder = alleBausteine(definition).filter((b) => istEingabe(b) || b.typ === "anzeige" || b.typ === "berechnung");
   const brief = g.vorlage === "brief";
+  const istFrei = g.vorlage === "frei";
   const internFelder = felder.filter((b) => "intern" in b && b.intern);
 
   return (
@@ -543,7 +565,7 @@ function PdfExportEditor({
             </span>
           </Abschnitt>
 
-          <Abschnitt titel="Grundform" zusammenfassung={brief ? "Brief DIN 5008" : "Akte"}>
+          <Abschnitt titel="Grundform" zusammenfassung={brief ? "Brief DIN 5008" : istFrei ? "Frei gestaltet" : "Akte"} offen={istFrei}>
             <div className="zv-field">
               <label htmlFor="pe-vorlage">Aufbau der Seite</label>
               <select
@@ -551,6 +573,10 @@ function PdfExportEditor({
                 value={g.vorlage}
                 onChange={(e) => {
                   const v = e.target.value as PdfVorlage;
+                  if (v === "frei") {
+                    setFreiFrage(true);
+                    return;
+                  }
                   // Wechsel der Grundform: Kopf und Texte der neuen Vorgabe,
                   // Feldauswahl, Schrift und Farbe bleiben.
                   const vorgabe = pdfGestaltungVorgabe(v);
@@ -564,6 +590,53 @@ function PdfExportEditor({
                 ))}
               </select>
             </div>
+            {istFrei && (
+              <div className="zv-pe-designer-start">
+                <button type="button" className="zv-btn zv-pe-designer-knopf" onClick={() => setDesignerOffen(true)}>
+                  <IBearbeiten />
+                  Designer öffnen
+                </button>
+                <span className="zv-sub-inline">
+                  {g.frei.erste.length + g.frei.folge.length} Bausteine
+                  {g.frei.erste.some((x) => x.art === "fluss") ? " · mit Fließbereich" : " · ohne Fließbereich"}
+                </span>
+                <span className="zv-sub-inline zv-pe-designer-schmal">Der Designer braucht mindestens 1200 px Breite. Bitte am Rechner gestalten.</span>
+              </div>
+            )}
+            {freiFrage && (
+              <div className="zv-pe-frei-frage" role="group" aria-label="Womit soll der Designer beginnen?">
+                <strong>Womit soll der Designer beginnen?</strong>
+                <button
+                  type="button"
+                  className="zv-btn"
+                  onClick={() => {
+                    setG({ vorlage: "frei", frei: pdfFreiAusGestaltung(g) });
+                    setFreiFrage(false);
+                    setDesignerOffen(true);
+                  }}
+                >
+                  Aus der bisherigen Gestaltung übernehmen
+                </button>
+                <span className="zv-sub-inline">
+                  {brief ? "Der Brief nach DIN 5008" : "Die Akte"} wird in Bausteine zerlegt (Logo, Kopf, {brief ? "Anschriftfeld, Infospalte, Betreff, " : "Titel, "}Fließbereich, Fußzeile). Danach ist alles frei verschiebbar.
+                </span>
+                <button
+                  type="button"
+                  className="zv-btn zv-btn-still"
+                  onClick={() => {
+                    setG({ vorlage: "frei", frei: pdfFreiLeer() });
+                    setFreiFrage(false);
+                    setDesignerOffen(true);
+                  }}
+                >
+                  Leeres Blatt
+                </button>
+                <button type="button" className="zv-link-btn" onClick={() => setFreiFrage(false)}>
+                  Abbrechen
+                </button>
+                <span className="zv-sub-inline">Die bisherige Gestaltung bleibt als Version {version} erhalten; erzeugte PDFs ändern sich nie.</span>
+              </div>
+            )}
           </Abschnitt>
 
           <Abschnitt titel="Felder" zusammenfassung={feldAnzahl(g, definition)}>
@@ -596,10 +669,19 @@ function PdfExportEditor({
             )}
           </Abschnitt>
 
-          <Abschnitt titel={brief ? "Betreff, Anrede, Gruß" : "Überschrift"} zusammenfassung="mit Platzhaltern">
-            <TextFeld id="pe-titel" label={brief ? "Betreff" : "Überschrift"} wert={g.titel} onAendern={(titel) => setG({ titel })} />
-            <TextFeld id="pe-untertitel" label="Zeile darunter" wert={g.unterTitel} onAendern={(unterTitel) => setG({ unterTitel })} />
-            {brief && (
+          <Abschnitt
+            titel={brief ? "Betreff, Anrede, Gruß" : istFrei ? "Titel, Anrede, Gruß" : "Überschrift"}
+            zusammenfassung={istFrei ? "Anfang und Ende des Fließbereichs" : "mit Platzhaltern"}
+          >
+            <TextFeld
+              id="pe-titel"
+              label={brief ? "Betreff" : istFrei ? "Titel (Dokumenteigenschaft)" : "Überschrift"}
+              hinweis={istFrei ? "Sichtbare Überschriften setzen Sie im Designer als Text." : undefined}
+              wert={g.titel}
+              onAendern={(titel) => setG({ titel })}
+            />
+            {!istFrei && <TextFeld id="pe-untertitel" label="Zeile darunter" wert={g.unterTitel} onAendern={(unterTitel) => setG({ unterTitel })} />}
+            {(brief || istFrei) && (
               <>
                 <TextFeld id="pe-anrede" label="Anrede" wert={g.anrede} onAendern={(anrede) => setG({ anrede })} />
                 <TextFeld id="pe-einleitung" label="Einleitung" wert={g.einleitung} mehrzeilig onAendern={(einleitung) => setG({ einleitung })} />
@@ -618,7 +700,7 @@ function PdfExportEditor({
             )}
           </Abschnitt>
 
-          <Abschnitt titel="Kopf und Logo" zusammenfassung={stand.logoId ? `Logo ${g.logoPosition}, ${g.logoHoehe} mm` : "ohne Logo"}>
+          <Abschnitt titel={istFrei ? "Logo" : "Kopf und Logo"} zusammenfassung={stand.logoId ? (istFrei ? "gewählt" : `Logo ${g.logoPosition}, ${g.logoHoehe} mm`) : "ohne Logo"}>
             <div className="zv-field">
               <label htmlFor="pe-logo">Logo</label>
               <select id="pe-logo" value={stand.logoId ?? ""} onChange={(e) => (setErfolg(null), setStand({ ...stand, logoId: e.target.value || null }))}>
@@ -630,7 +712,10 @@ function PdfExportEditor({
                 ))}
               </select>
               {logos.length === 0 && <span className="zv-sub-inline">Logos laden Sie unter Einstellungen › Angaben für Dokumente hoch.</span>}
+              {istFrei && <span className="zv-sub-inline">Wo es steht und wie groß es ist, legen Sie im Designer fest.</span>}
             </div>
+            {!istFrei && (
+            <>
             <Segment<PdfLogoPosition>
               label="Position"
               wert={g.logoPosition}
@@ -648,6 +733,8 @@ function PdfExportEditor({
               Trennstrich zwischen Logo und Text
             </label>
             {!brief && <TextFeld id="pe-rechts" label="Block rechts oben" wert={g.textRechts} mehrzeilig onAendern={(textRechts) => setG({ textRechts })} />}
+            </>
+            )}
           </Abschnitt>
 
           {brief && (
@@ -674,11 +761,13 @@ function PdfExportEditor({
             </>
           )}
 
+          {!istFrei && (
           <Abschnitt titel="Fußzeile und Folgeseiten" zusammenfassung={`Logo ${g.folgeseitenLogoHoehe ? `${g.folgeseitenLogoHoehe} mm` : "aus"}`}>
             <TextFeld id="pe-fuss-l" label="Fußzeile links" wert={g.fusszeileLinks} mehrzeilig onAendern={(fusszeileLinks) => setG({ fusszeileLinks })} />
             <TextFeld id="pe-fuss-r" label="Fußzeile rechts" wert={g.fusszeileRechts} onAendern={(fusszeileRechts) => setG({ fusszeileRechts })} />
             <ZahlFeld id="pe-folge-logo" label="Logo auf Folgeseiten (mm, 0 = aus)" wert={g.folgeseitenLogoHoehe} min={0} max={20} schritt={1} onAendern={(folgeseitenLogoHoehe) => setG({ folgeseitenLogoHoehe })} />
           </Abschnitt>
+          )}
 
           <Abschnitt titel="Schrift und Farbe" zusammenfassung={`${PDF_SCHRIFT_LABEL[g.schrift].name} · ${g.farbe ?? "Trägerfarbe"}`}>
             <div className="zv-field">
@@ -775,7 +864,7 @@ function PdfExportEditor({
             )}
             {vorschauLaeuft && <span className="zv-sub-inline">aktualisiert …</span>}
           </div>
-          {brief && g.anschriftfeld && (
+          {pdfMitAnschriftfeld(g) && (
             <TextFeld id="pe-empf" label="Empfänger für die Vorschau" wert={empfaenger} mehrzeilig zeilen={3} onAendern={setEmpfaenger} />
           )}
           {vorschauFehler && (
@@ -798,6 +887,22 @@ function PdfExportEditor({
 
         <Platzhalter felder={felder.map((b) => ({ schluessel: b.schluessel, label: b.beschriftung }))} formularName={formular.name} />
       </div>
+      {designerOffen && istFrei && (
+        <PdfDesigner
+          formularId={formular.id}
+          formularName={formular.name}
+          exportName={stand.name}
+          definition={definition}
+          gestaltung={g}
+          zielgruppe={stand.zielgruppe}
+          logoId={stand.logoId}
+          onSchliessen={() => setDesignerOffen(false)}
+          onUebernehmen={(frei) => {
+            setG({ frei });
+            setDesignerOffen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
