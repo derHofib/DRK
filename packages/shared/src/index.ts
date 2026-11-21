@@ -1099,6 +1099,8 @@ export interface AufgabeDto {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
+  /** Vom Server berechnet: Ersteller:in, zugewiesene Person oder Koordinationsrecht. */
+  darfBearbeiten: boolean;
 }
 
 export interface AufgabenAnzahlDto {

@@ -21,20 +21,6 @@ export const PRIORITAET_PILL_KLASSE = {
   niedrig: "zv-pill-vergeben",
 } as const;
 
-/**
- * Reiner Anzeige-Hinweis, welche Knoepfe angeboten werden -- der Server
- * (aufgabe.service.ts, darfSchreiben()) entscheidet verbindlich. Frueher
- * durften Bereichs-/Einrichtungsleitung hier zusaetzlich jede Aufgabe
- * bearbeiten -- ohne feste Rollen gibt es dafuer keinen clientseitigen
- * Hinweis mehr; wer eine Aufgabe ohne eigenen Bezug trotzdem bearbeiten
- * darf (z.B. per Organigramm-Position), sieht die Knoepfe hier nicht,
- * bleibt serverseitig aber weiterhin erlaubt.
- */
-function darfBearbeiten(aufgabe: AufgabeDto, benutzerId: string | null): boolean {
-  if (!benutzerId) return false;
-  return aufgabe.erstelltVon === benutzerId || aufgabe.zugewiesenAn === benutzerId;
-}
-
 export function faelligkeitsHinweis(faelligAm: string | null): { text: string; klasse: string } | null {
   if (!faelligAm) return null;
   const heute = new Date().toISOString().slice(0, 10);
@@ -63,10 +49,11 @@ export function AufgabeZeile({
   const PrioritaetIcon = PRIORITAET_ICON[aufgabe.prioritaet];
   const faelligkeit = faelligkeitsHinweis(aufgabe.faelligAm);
   // Zuweisen ist die eine Ausnahme, die JEDE sichtbare Person darf (siehe
-  // aufgabe.service.ts, Kommentar zu aktualisieren()) -- deshalb hier
-  // unabhaengig von darfBearbeiten() immer anbieten, nicht nur wenn
-  // darfSchreiben() serverseitig zutreffen wuerde.
-  const darfSchreiben = darfBearbeiten(aufgabe, aktuelleBenutzerId);
+  // aufgabe.service.ts, Kommentar zu aktualisieren()) -- deshalb immer
+  // anbieten. Erledigen/Loeschen dagegen nur nach dem Urteil des Servers
+  // (darfBearbeiten), nicht nach einer clientseitigen Nachbildung: die
+  // kannte das Koordinationsrecht der Leitung nicht.
+  const darfSchreiben = aufgabe.darfBearbeiten;
 
   return (
     <div className="zv-info-karte" style={{ opacity: aufgabe.erledigtAm ? 0.6 : 1 }}>
