@@ -7756,6 +7756,12 @@ button.zv-achtung-eintrag:hover {
   margin: 0 0 var(--zv-space-2);
 }
 
+/* Unter dem Feld statt daneben: auf dem Handy ist neben dem Feld kein Platz. */
+.zv-protokoll-zaehler {
+  margin: var(--zv-space-1) 0 0;
+  text-align: right;
+}
+
 .zv-protokoll-warnung {
   display: flex;
   align-items: flex-start;
