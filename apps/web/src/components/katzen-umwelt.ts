@@ -59,3 +59,27 @@ export function plattformenSammeln(vw: number, vh: number): Plattform[] {
   }
   return liste;
 }
+
+const BEDIENBAR = "a,button,input,select,textarea,label,summary,[role=button],[role=tab],[role=menuitem],[role=option],[role=switch],[role=checkbox]";
+
+/**
+ * Ob die Katze an dieser Stelle (Fusspunkt x, Oberkante y) sitzen darf, ohne
+ * etwas Bedienbares zu verdecken. Eine Oberkante kann direkt unter einem Knopf
+ * liegen -- dann saesse sie minutenlang VOR dem Knopf. Klicks gingen zwar
+ * durch sie hindurch, aber man saehe nicht mehr, worauf man klickt.
+ * Geprueft wird nur bei der Wahl eines Ziels (drei Treffer-Tests), nicht je Frame.
+ */
+export function platzFrei(x: number, y: number): boolean {
+  for (const [dx, dy] of [
+    [-34, -22],
+    [34, -22],
+    [0, -50],
+  ]) {
+    const px = x + dx;
+    const py = y + dy;
+    if (px < 0 || py < 0 || px >= window.innerWidth || py >= window.innerHeight) continue;
+    const el = document.elementFromPoint(px, py);
+    if (el?.closest(BEDIENBAR)) return false;
+  }
+  return true;
+}
