@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AnwaerterDto, AnwaerterStatus, HzlRhythmus, KlientListEintragDto } from "@zimmerakte/shared";
 import { ANWAERTER_STATUS_LABEL, HZL_RHYTHMUS_LABEL } from "@zimmerakte/shared";
 import { api } from "../api/client";
@@ -82,6 +82,23 @@ export function Klienten({
   useEffect(() => {
     if (protokollStart && protokollStart.klientId !== ausgewaehlterKlientId) setProtokollStart(null);
   }, [ausgewaehlterKlientId, protokollStart]);
+
+  // Wer über die Seitenleiste zwischen Klient:innen, Anwärter:innen und
+  // Archiv wechselt, will die neue Liste sehen -- eine offen gebliebene Akte
+  // läge sonst über ihr (Rückmeldung d8bea340). Bewusst am WECHSEL der
+  // Ansicht festgemacht, nicht an der Ansicht selbst: „Anfrage annehmen"
+  // öffnet die neue Akte absichtlich innerhalb der Anwärter-Ansicht. Den
+  // einen Wechsel, den das Öffnen aus der Befehlspalette selbst auslöst
+  // (oben, auf „aktiv"), lassen wir durch, sonst ginge die Akte gleich wieder zu.
+  const vorigeAnsicht = useRef(ansicht);
+  const wechselDurchOeffnenAusstehend = useRef(Boolean(oeffneKlientId) && ansicht !== "aktiv");
+  useEffect(() => {
+    if (vorigeAnsicht.current === ansicht) return;
+    vorigeAnsicht.current = ansicht;
+    const durchOeffnen = wechselDurchOeffnenAusstehend.current && ansicht === "aktiv";
+    wechselDurchOeffnenAusstehend.current = false;
+    if (!durchOeffnen) setAusgewaehlterKlientId(null);
+  }, [ansicht]);
 
   const [anwaerterStatus, setAnwaerterStatus] = useState<AnwaerterStatus>("offen");
   const [anwaerter, setAnwaerter] = useState<AnwaerterDto[]>([]);

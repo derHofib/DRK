@@ -1002,6 +1002,21 @@ export interface DashboardDto {
     /** Erinnerungsstufe: 30, 60 oder 90 Tage (kleinste Schwelle, die noch >= Restzeit ist). */
     stufeTage: 30 | 60 | 90;
   }[];
+  /**
+   * Kachel "Kostenübernahmen": je Klient:in die laufende (sonst die nächste
+   * kommende) Kostenübernahme; amt === null = wohnt hier, hat aber keine.
+   * null statt Liste: kein Recht „Kostenübernahmen ansehen“.
+   */
+  kostenuebersicht: {
+    klientId: string;
+    klientName: string;
+    standortName: string | null;
+    zimmerNummer: string | null;
+    amt: string | null;
+    von: string | null;
+    bis: string | null;
+    tageVerbleibend: number | null;
+  }[] | null;
   klientenOhneTagesbericht: {
     klientId: string;
     klientName: string;
@@ -1099,6 +1114,8 @@ export interface AufgabeDto {
   erledigtAm: string | null;
   erledigtVonName: string | null;
   erstelltAm: string;
+  /** Vom Server berechnet: Ersteller:in, zugewiesene Person oder Koordinationsrecht. */
+  darfBearbeiten: boolean;
 }
 
 export interface AufgabenAnzahlDto {

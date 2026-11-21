@@ -4220,12 +4220,6 @@ button.zv-kal-mini-tag:focus-visible {
    Dreiecke uebereinander: das aeussere in Kartenfarbe trennt, das innere
    traegt die Art. Ohne den Trennrand verschwand im Entwurf eine rote
    "krank"-Ecke auf einer roten Personenflaeche. */
-/* Ring statt Punkt im Monatsraster: die Personenfarbe als Rand, innen leer. */
-.zv-kal-punkt.zv-kal-punkt-abwesend {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
-}
-
 .zv-kal-ecke {
   position: absolute;
   top: 0;
@@ -4557,6 +4551,43 @@ button.zv-kal-mini-tag:focus-visible {
   }
 }
 
+/* Abwesenheit als Strahl am Fuss der Tageskacheln (Kalender.tsx,
+   strahlen()). Liegt in denselben Rasterzellen wie die Kacheln und spannt
+   ueber die Luecken dazwischen -- so ist ein Urlaub ein Strich, keine
+   Punktreihe. Die Kacheln machen unten Platz fuer so viele Spuren, wie die
+   sichtbaren Wochen brauchen (--strahl-spuren aus dem JavaScript, nur eine
+   Zahl). */
+.zv-kal-raster {
+  --zv-kal-strahl-hoehe: 5px;
+  --zv-kal-strahl-abstand: 3px;
+}
+
+.zv-kal-raster .zv-kal-tag {
+  padding-bottom: calc(var(--zv-space-1) + var(--strahl-spuren, 0) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+}
+
+.zv-kal-strahl-linie {
+  align-self: end;
+  z-index: 1;
+  height: var(--zv-kal-strahl-hoehe);
+  margin: 0 var(--zv-space-1) calc(var(--zv-space-1) + var(--spur) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+  border-radius: var(--zv-radius-pill);
+  pointer-events: none;
+}
+
+/* Laeuft ueber den Wochenrand hinaus: die Kante bleibt offen, wie beim Balken. */
+.zv-kal-strahl-linie.vorher {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.zv-kal-strahl-linie.nachher {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* ------------------------------------------------------------------
    Wochenansicht als Zeitraster (kalender/WochenZeitraster.tsx)
    Kopf und Ganztagszeile stehen ausserhalb des scrollenden Stundenteils,
@@ -4675,6 +4706,51 @@ button.zv-kal-mini-tag:focus-visible {
   margin-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+/* Abwesenheit im Zeitraster: umrandet statt gefuellt -- gefuellt heisst
+   "hat einen Termin", umrandet "ist nicht da". Der Text steht auf der
+   normalen Flaeche, sein Kontrast haengt also nicht an der Personenfarbe;
+   die Personenfarbe traegt nur Rand und Punkt (Nicht-Text, >= 3:1). */
+.zv-kal-abwesend-zeile {
+  border-bottom-color: var(--zv-border);
+}
+
+.zv-kal-balken.zv-kal-strahl {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 2px solid light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
+}
+
+.zv-kal-balken.zv-kal-strahl.neutral {
+  background: var(--zv-surface);
+  border-color: var(--zv-border-strong);
+}
+
+/* Offene Kante ueber den Wochenrand: dort auch kein Rand. */
+.zv-kal-balken.zv-kal-strahl.vorher {
+  border-left-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl.nachher {
+  border-right-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-kal-balken.zv-kal-strahl > .zv-art-marke {
+  flex: none;
+}
+
+.zv-kal-balken.zv-kal-strahl:hover {
+  background: var(--zv-surface-2);
 }
 
 .zv-kal-woche-koerper {
@@ -7199,6 +7275,12 @@ button.zv-achtung-eintrag:hover {
 }
 .zv-kachel-karte .zv-sub { overflow-wrap: break-word; }
 
+/* Kachel "Kostenübernahmen" (Heute): Zimmer klein unter dem Namen, wenn es
+   nur einen Standort gibt und die Standortspalte deshalb fehlt; Datum und
+   Restzeit duerfen in schmalen Kacheln untereinander rutschen. */
+.zv-ku-zimmer { display: block; font-weight: normal; }
+.zv-ku-ende { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--zv-space-1) var(--zv-space-2); }
+
 /* Tabellen in Kacheln: ohne eigenen Rahmen (die Kachel ist der Rahmen),
    Zellen duerfen umbrechen statt sich zu ueberlappen. */
 .zv-kachel-karte .zv-karten-liste { box-shadow: none; }
@@ -8313,7 +8395,7 @@ button.zv-achtung-eintrag:hover {
   cursor: pointer;
 }
 
-.zv-fe-knoten-abschnitt > .zv-fe-zeile {
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile {
   border-color: transparent;
   background: none;
   font-weight: var(--zv-weight-semibold);
@@ -8323,8 +8405,96 @@ button.zv-achtung-eintrag:hover {
   border-color: var(--zv-border-strong);
 }
 
+/* Griff zum Verschieben (Rückmeldung 41c5627f): rechts am Ende jeder Zeile.
+   Eigener Knopf NEBEN der Zeile, nicht darin -- ein Knopf im Knopf ist
+   ungültiges HTML und schluckt auf Touchgeräten den Klick. */
+.zv-fe-knoten {
+  position: relative;
+}
+
+.zv-fe-zeilen-rahmen {
+  display: flex;
+  align-items: stretch;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-zeilen-rahmen > .zv-fe-zeile {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-fe-griff {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--zv-space-6);
+  min-height: var(--zv-space-6);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: grab;
+  /* Ohne das scrollt der Finger die Seite, statt den Baustein zu ziehen. */
+  touch-action: none;
+}
+
+.zv-fe-griff:hover,
+.zv-fe-griff:focus-visible {
+  color: var(--zv-text);
+  border-color: var(--zv-border-strong);
+}
+
+.zv-fe-baum-zug,
+.zv-fe-baum-zug .zv-fe-griff {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Unter dem letzten Abschnitt braucht es Platz, um einen Baustein aus ihm
+   heraus ans Ende des Formulars zu ziehen. */
+.zv-fe-baum-zug {
+  padding-bottom: var(--zv-space-7);
+}
+
+.zv-fe-gezogen {
+  opacity: 0.45;
+}
+
+/* Einfügelinie: genau in der Lücke zwischen zwei Zeilen. */
+.zv-fe-ziel-vor::before,
+.zv-fe-ziel-nach::after,
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent);
+  pointer-events: none;
+}
+
+.zv-fe-ziel-vor::before {
+  top: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-nach::after {
+  bottom: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen {
+  position: relative;
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  left: var(--zv-space-4);
+  bottom: calc(var(--zv-space-2) / -2 - 2px);
+}
+
 .zv-fe-zeile.active,
-.zv-fe-knoten-abschnitt > .zv-fe-zeile.active {
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile.active {
   border-color: var(--zv-accent);
   background: var(--zv-accent-soft);
 }

@@ -278,6 +278,13 @@ export const IUebertragen = baue(RefreshCw);
 export const IVerschiebenHoch = baue(ArrowUp);
 export const IVerschiebenRunter = baue(ArrowDown);
 export const IZiehen = baue(GripVertical);
+/**
+ * Griff zum Verschieben im Formular-Editor: drei Striche, so wie es die
+ * Rueckmeldung 41c5627f woertlich beschreibt -- die Punkte-Variante (IZiehen)
+ * wurde dort nicht als Griff erkannt. Dasselbe Lucide-Icon wie IMehr, aber
+ * eigener Name, weil die Bedeutung eine andere ist.
+ */
+export const IGriff = baue(Menu);
 
 /**
  * Prioritaet: Signalstaerken-Symbole statt reiner Farbe -- WCAG 1.4.1

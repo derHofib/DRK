@@ -10,6 +10,7 @@ import {
 } from "../common/standort-restriction";
 import { isoWoche } from "../common/iso-woche";
 import { AufgabePrioritaet } from "../aufgaben/aufgabe.service";
+import { RechteService } from "../rechte/rechte.service";
 
 /**
  * Schwellen fuer die beiden Hinweislisten -- Vorschlagswerte aus dem
@@ -31,6 +32,12 @@ const KOSTENUEBERNAHME_BALD_ENDEND_TAGE = 90;
  */
 const TAGESBERICHT_SCHWELLE_TAGE = 7;
 const LISTEN_LIMIT = 10;
+/**
+ * Die Kostenuebernahme-Kachel ist eine Uebersicht, keine Hinweisliste --
+ * zehn Zeilen wie oben waeren zu wenig, um "alle" zu sehen. 300 deckt
+ * jeden realistischen Traeger ab und begrenzt trotzdem die Antwort.
+ */
+const KOSTENUEBERSICHT_LIMIT = 300;
 
 function stufeFuer(tage: number): 30 | 60 | 90 {
   return tage <= 30 ? 30 : tage <= 60 ? 60 : 90;
@@ -50,6 +57,8 @@ export interface DashboardDto {
     tageVerbleibend: number;
     stufeTage: 30 | 60 | 90;
   }[];
+  /** null = kein Recht "Kostenübernahmen ansehen" -- die Kachel sagt das dann. */
+  kostenuebersicht: KostenuebersichtEintrag[] | null;
   klientenOhneTagesbericht: {
     klientId: string;
     klientName: string;
@@ -82,12 +91,38 @@ export interface DashboardDto {
   }[];
 }
 
+/**
+ * Eine Zeile je Klient:in der Kachel "Kostenübernahmen" (Rückmeldung
+ * 072e7194). amt === null heisst: wohnt aktuell hier, hat aber weder eine
+ * laufende noch eine kommende Kostenuebernahme -- genau die Faelle, die eine
+ * reine "laeuft bald aus"-Liste nie zeigen wuerde.
+ */
+export interface KostenuebersichtEintrag {
+  klientId: string;
+  klientName: string;
+  standortName: string | null;
+  zimmerNummer: string | null;
+  amt: string | null;
+  von: string | null;
+  bis: string | null;
+  /** Nur bei gesetztem "bis": Tage bis zum Ende (0 = endet heute). */
+  tageVerbleibend: number | null;
+}
+
 @Injectable()
 export class DashboardService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly rechte: RechteService,
+  ) {}
 
   async ermitteln(standortId?: string): Promise<DashboardDto> {
     const { benutzerId } = requireTenantContext();
+    // Vor withTenant: hatRecht() oeffnet eine eigene Verbindung. Die
+    // Kachel ist der ganze Bestand mit Amt und Laufzeit -- das ist genau,
+    // was das Recht "Kostenübernahmen ansehen" schuetzt (wie im Verlauf,
+    // verlauf.service.ts: kein Seiteneingang an Rechten vorbei).
+    const kuAnsehen = await this.rechte.hatRecht("kostenuebernahmen", "ansehen");
     return this.db.withTenant(async (client) => {
       let erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       // Standort-Auswahl darf die bereits ermittelte Menge nur EINENGEN,
@@ -114,6 +149,7 @@ export class DashboardService {
       const offeneStornoantraege = await this.offeneStornoantraege(client, erlaubteStandorte);
       const mitarbeitende = await this.mitarbeitende(client, erlaubteStandorte);
       const kostenuebernahmenBaldEndend = await this.kostenuebernahmenBaldEndend(client, erlaubteStandorte);
+      const kostenuebersicht = kuAnsehen ? await this.kostenuebersicht(client, erlaubteStandorte) : null;
       const klientenOhneTagesbericht = await this.klientenOhneTagesbericht(client, erlaubteStandorte);
       const unzugewieseneZimmeraufgaben = await this.unzugewieseneZimmeraufgaben(client, erlaubteStandorte);
       const freieZimmer = await this.freieZimmer(client, erlaubteStandorte);
@@ -125,6 +161,7 @@ export class DashboardService {
         offeneStornoantraege,
         mitarbeitende,
         kostenuebernahmenBaldEndend,
+        kostenuebersicht,
         klientenOhneTagesbericht,
         unzugewieseneZimmeraufgaben,
         freieZimmer,
@@ -321,6 +358,61 @@ export class DashboardService {
       bis: r.bis,
       tageVerbleibend: Number(r.tage_verbleibend),
       stufeTage: stufeFuer(Number(r.tage_verbleibend)),
+    }));
+  }
+
+  /**
+   * Je Klient:in die MASSGEBLICHE Kostenuebernahme: die laufende, sonst die
+   * naechste kommende (Verlaengerung schon bewilligt, beginnt aber erst).
+   * Ueberlappungen schliesst die Datenbank aus (0013), "laufend" ist also
+   * eindeutig; DISTINCT ON nimmt bei mehreren kommenden die frueheste.
+   *
+   * Aufgenommen wird, wer eine solche Kostenuebernahme hat ODER aktuell
+   * wohnt -- letztere auch ohne, damit fehlende Bewilligungen auffallen.
+   * Archivierte und anonymisierte Akten fehlen: dort gibt es nichts mehr
+   * zu verlaengern. Die Standort-Sicht kommt wie ueberall aus
+   * klientStandortBedingung (fail closed fuer Klient:innen ohne Belegung).
+   */
+  private async kostenuebersicht(
+    client: PoolClient,
+    erlaubteStandorte: string[] | null,
+  ): Promise<KostenuebersichtEintrag[]> {
+    const params: unknown[] = [];
+    const standortBedingung = klientStandortBedingung(erlaubteStandorte, "k", params);
+    const { rows } = await client.query(
+      `
+      SELECT k.id AS klient_id, k.vorname, k.nachname,
+             s.name AS standort_name, z.nummer AS zimmer_nummer,
+             ko.amt, ko.von, ko.bis,
+             (ko.bis - CURRENT_DATE) AS tage_verbleibend
+      FROM klient k
+      LEFT JOIN belegung bel ON bel.klient_id = k.id AND bel.auszug IS NULL AND bel.einzug <= CURRENT_DATE
+      LEFT JOIN zimmer z ON z.id = bel.zimmer_id
+      LEFT JOIN standort s ON s.id = z.standort_id
+      LEFT JOIN LATERAL (
+        SELECT amt, von, bis FROM kostenuebernahme
+        WHERE klient_id = k.id AND (bis IS NULL OR bis >= CURRENT_DATE)
+        ORDER BY von ASC
+        LIMIT 1
+      ) ko ON true
+      WHERE k.anonymisiert_am IS NULL
+        AND k.archiviert_am IS NULL
+        AND (ko.amt IS NOT NULL OR bel.id IS NOT NULL)
+        AND ${standortBedingung}
+      ORDER BY (ko.amt IS NULL) DESC, ko.bis ASC NULLS LAST, k.nachname, k.vorname
+      LIMIT ${KOSTENUEBERSICHT_LIMIT}
+      `,
+      params
+    );
+    return rows.map((r) => ({
+      klientId: r.klient_id,
+      klientName: `${r.vorname} ${r.nachname}`,
+      standortName: r.standort_name ?? null,
+      zimmerNummer: r.zimmer_nummer ?? null,
+      amt: r.amt ?? null,
+      von: r.von ?? null,
+      bis: r.bis ?? null,
+      tageVerbleibend: r.tage_verbleibend === null ? null : Number(r.tage_verbleibend),
     }));
   }
 

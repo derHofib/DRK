@@ -166,3 +166,26 @@ export function startStunde(fruehesteMinute: number | null, standard = 7): numbe
   if (fruehesteMinute === null) return standard;
   return Math.max(0, Math.min(standard, Math.floor(fruehesteMinute / 60)));
 }
+
+export interface AbwesenheitsSpanne {
+  id: string;
+  /** Erster und letzter Tag, beide inklusive ("YYYY-MM-DD"). */
+  von: string;
+  bis: string;
+}
+
+/**
+ * Abwesenheiten als durchgehende Balken ueber die Tage einer Woche
+ * (Rueckmeldung "Kalender": Abwesenheiten zusaetzlich als Strahl). Gepackt
+ * wie die Ganztagsbalken, aber in eigenen Spuren -- eine Abwesenheit ist
+ * kein Termin, und mischte man beide, wechselte ein Urlaub je nach den
+ * Terminen der Woche seine Zeile. `bis` ist hier inklusive (migrations/0074),
+ * genau wie das Ende eines ganztaegigen Termins in ganztagsBalken.
+ */
+export function abwesenheitsBalken<T extends AbwesenheitsSpanne>(abwesenheiten: T[], wochenTage: string[]): GanztagsBalken<T>[] {
+  const nachId = new Map(abwesenheiten.map((a) => [a.id, a]));
+  return ganztagsBalken(
+    abwesenheiten.map((a) => ({ id: a.id, beginn: a.von, ende: a.bis, ganztaegig: true })),
+    wochenTage,
+  ).map((b) => ({ ...b, termin: nachId.get(b.termin.id)! }));
+}

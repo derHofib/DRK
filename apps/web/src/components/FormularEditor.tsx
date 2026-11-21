@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   alleBausteine,
   ausrichtungVon,
@@ -38,6 +38,7 @@ import {
   IAusrichtungMitte,
   IAusrichtungRechts,
   IBestaetigen,
+  IGriff,
   ILoeschen,
   INeu,
   ISperre,
@@ -114,6 +115,104 @@ function mitKindern(liste: Baustein[], eltern: Pfad, fn: (kinder: Baustein[]) =>
   if (eltern.length === 0) return fn(liste);
   const [i, ...rest] = eltern;
   return liste.map((b, j) => (j === i && b.typ === "abschnitt" ? { ...b, kinder: mitKindern(b.kinder, rest, fn) } : b));
+}
+
+// ---------------------------------------------------------------------------
+// Ziehen am Griff (Rueckmeldung 41c5627f)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wohin ein gezogener Baustein faellt -- relativ zu einem anderen Baustein
+ * statt als Pfad, weil sich die Pfade verschieben, sobald der gezogene
+ * Baustein aus dem Baum genommen ist. "anfang" heisst: als erstes Kind in
+ * den Abschnitt `bezug` hinein.
+ */
+type Ziel = { bezug: string; lage: "vor" | "nach" | "anfang" };
+
+/** Liefert null, wenn der Zug nichts aendert oder nicht erlaubt ist. */
+function einsetzen(liste: Baustein[], schluessel: string, ziel: Ziel): Baustein[] | null {
+  if (ziel.bezug === schluessel) return null;
+  const von = finde(liste, schluessel);
+  if (!von) return null;
+  const b = holen(liste, von);
+  const ohne = mitKindern(liste, von.slice(0, -1), (k) => k.filter((_, x) => x !== von[von.length - 1]));
+  // Liegt das Ziel im gezogenen Abschnitt selbst, ist es jetzt verschwunden.
+  const z = finde(ohne, ziel.bezug);
+  if (!z) return null;
+  if (ziel.lage === "anfang") {
+    if (b.typ === "abschnitt" || holen(ohne, z).typ !== "abschnitt") return null;
+    return mitKindern(ohne, z, (k) => [b, ...k]);
+  }
+  const eltern = z.slice(0, -1);
+  // Abschnitte liegen immer oben (wie beim Hinzufuegen), nie in einem anderen.
+  if (b.typ === "abschnitt" && eltern.length) return null;
+  const i = z[z.length - 1] + (ziel.lage === "nach" ? 1 : 0);
+  return mitKindern(ohne, eltern, (k) => [...k.slice(0, i), b, ...k.slice(i)]);
+}
+
+/**
+ * Ziel unter dem Zeiger, gemessen an den echten Zeilen im DOM. Bewusst nur
+ * die Hoehe: die Liste ist einspaltig, und wer seitlich danebenzieht, meint
+ * trotzdem die Zeile auf derselben Hoehe.
+ */
+function zielBei(baum: HTMLElement, y: number, gezogenIstAbschnitt: boolean): Ziel | null {
+  const oben = [...baum.querySelectorAll<HTMLElement>(":scope > li[data-fe-knoten]")];
+  if (oben.length === 0) return null;
+  const s = (el: Element) => (el as HTMLElement).dataset.feKnoten!;
+  const mitte = (r: DOMRect) => r.top + r.height / 2;
+  const erster = oben[0].getBoundingClientRect();
+  const letzter = oben[oben.length - 1].getBoundingClientRect();
+  if (y < erster.top) return { bezug: s(oben[0]), lage: "vor" };
+  if (y > letzter.bottom) return { bezug: s(oben[oben.length - 1]), lage: "nach" };
+
+  if (gezogenIstAbschnitt) {
+    for (const li of oben) if (y < mitte(li.getBoundingClientRect())) return { bezug: s(li), lage: "vor" };
+    return { bezug: s(oben[oben.length - 1]), lage: "nach" };
+  }
+
+  const zeilen = [...baum.querySelectorAll<HTMLElement>("[data-fe-zeile]")];
+  const treffer = zeilen.find((z) => {
+    const r = z.getBoundingClientRect();
+    return y >= r.top && y <= r.bottom;
+  });
+  const fuerZeile = (z: HTMLElement): Ziel => {
+    const unten = y >= mitte(z.getBoundingClientRect());
+    const bezug = z.dataset.feZeile!;
+    if (z.dataset.feAbschnitt) return { bezug, lage: unten ? "anfang" : "vor" };
+    return { bezug, lage: unten ? "nach" : "vor" };
+  };
+  if (treffer) return fuerZeile(treffer);
+
+  // Im Rahmen eines Abschnitts, aber auf keiner Zeile: unten im Rahmen heisst
+  // "ans Ende dieses Abschnitts", sonst gleich unter die Ueberschrift.
+  const rahmen = oben.find((li) => {
+    const r = li.getBoundingClientRect();
+    return li.dataset.feAbschnitt && y >= r.top && y <= r.bottom;
+  });
+  if (rahmen) {
+    const kinder = [...rahmen.querySelectorAll<HTMLElement>(":scope > ul > li[data-fe-knoten]")];
+    const letztesKind = kinder[kinder.length - 1];
+    if (letztesKind && y > letztesKind.getBoundingClientRect().bottom) return { bezug: s(letztesKind), lage: "nach" };
+    return { bezug: s(rahmen), lage: "anfang" };
+  }
+
+  // In einer Luecke zwischen zwei Zeilen: die naechstgelegene gilt.
+  let naechste: HTMLElement | null = null;
+  let abstand = Infinity;
+  for (const z of zeilen) {
+    const r = z.getBoundingClientRect();
+    const d = Math.min(Math.abs(y - r.top), Math.abs(y - r.bottom));
+    if (d < abstand) [naechste, abstand] = [z, d];
+  }
+  return naechste ? fuerZeile(naechste) : null;
+}
+
+function scrollbarerVorfahr(el: HTMLElement): HTMLElement {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
 }
 
 /**
@@ -274,8 +373,10 @@ export function FormularEditor({
     setGewaehlt(null);
   }
 
-  function verschieben(richtung: -1 | 1) {
-    if (!pfad || !auswahl) return;
+  function verschieben(richtung: -1 | 1, schluessel = gewaehlt) {
+    const pfad = schluessel ? finde(definition.bausteine, schluessel) : null;
+    if (!pfad) return;
+    const auswahl = holen(definition.bausteine, pfad);
     const eltern = pfad.slice(0, -1);
     const i = pfad[pfad.length - 1];
     const geschwister = eltern.length ? (holen(definition.bausteine, eltern) as Extract<Baustein, { typ: "abschnitt" }>).kinder : definition.bausteine;
@@ -296,6 +397,87 @@ export function FormularEditor({
         return c;
       }),
     });
+  }
+
+  // Die Definition kann sich waehrend eines Zugs aendern (Speichern im
+  // Hintergrund liefert eine neue Fassung) -- losgelassen wird auf die neueste.
+  const definitionRef = useRef(definition);
+  definitionRef.current = definition;
+  const baumRef = useRef<HTMLUListElement>(null);
+  const [zug, setZug] = useState<{ schluessel: string; ziel: Ziel | null } | null>(null);
+
+  function griffRunter(e: ReactPointerEvent<HTMLButtonElement>, b: Baustein) {
+    if (e.button !== 0) return;
+    // Sonst markiert die Maus Text bzw. der Finger scrollt die Seite.
+    e.preventDefault();
+    const griff = e.currentTarget;
+    griff.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    let y = startY;
+    let aktiv = false;
+    let ziel: Ziel | null = null;
+    let bild = 0;
+    const scroller = scrollbarerVorfahr(griff);
+
+    const messen = () => {
+      ziel = baumRef.current ? zielBei(baumRef.current, y, b.typ === "abschnitt") : null;
+      // Ein Ziel, das nichts aendert, wird gar nicht erst angezeigt.
+      if (ziel && !einsetzen(definitionRef.current.bausteine, b.schluessel, ziel)) ziel = null;
+      setZug({ schluessel: b.schluessel, ziel });
+    };
+    // Am Rand des sichtbaren Bereichs weiterscrollen, auch wenn der Zeiger
+    // stillsteht -- sonst kaeme man in langen Formularen nicht ans Ende.
+    const rand = () => {
+      const r = scroller === document.scrollingElement ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
+      const zone = 48;
+      const schritt = y < r.top + zone ? -10 : y > r.bottom - zone ? 10 : 0;
+      if (schritt) {
+        scroller.scrollBy(0, schritt);
+        messen();
+      }
+      bild = requestAnimationFrame(rand);
+    };
+    const bewegen = (ev: PointerEvent) => {
+      y = ev.clientY;
+      if (!aktiv) {
+        if (Math.abs(y - startY) < 4) return;
+        aktiv = true;
+        bild = requestAnimationFrame(rand);
+      }
+      messen();
+    };
+    const aufhoeren = (uebernehmen: boolean) => {
+      cancelAnimationFrame(bild);
+      griff.removeEventListener("pointermove", bewegen);
+      griff.removeEventListener("pointerup", los);
+      griff.removeEventListener("pointercancel", abbruch);
+      window.removeEventListener("keydown", taste);
+      setZug(null);
+      if (!uebernehmen || !aktiv || !ziel) return;
+      const def = definitionRef.current;
+      const neu = einsetzen(def.bausteine, b.schluessel, ziel);
+      if (neu) onAendern({ ...def, bausteine: neu });
+    };
+    const los = () => aufhoeren(true);
+    const abbruch = () => aufhoeren(false);
+    const taste = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") aufhoeren(false);
+    };
+    griff.addEventListener("pointermove", bewegen);
+    griff.addEventListener("pointerup", los);
+    griff.addEventListener("pointercancel", abbruch);
+    window.addEventListener("keydown", taste);
+  }
+
+  /** Tastatur-Alternative am selben Griff: Pfeil hoch/runter. */
+  function griffTaste(e: ReactKeyboardEvent<HTMLButtonElement>, schluessel: string) {
+    const richtung = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+    if (!richtung) return;
+    e.preventDefault();
+    verschieben(richtung, schluessel);
+    // Beim Wechsel in/aus einem Abschnitt wird die Zeile neu aufgebaut und
+    // der Fokus ginge verloren.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-fe-griff="${CSS.escape(schluessel)}"]`)?.focus());
   }
 
   function verlegen(abschnitt: string | "") {
@@ -352,9 +534,18 @@ export function FormularEditor({
           definition.bausteine.length === 0 ? (
             <div className="zv-fe-leer">Noch leer. Wählen Sie links einen Baustein, z. B. einen Abschnitt oder eine Frage.</div>
           ) : (
-            <ul className="zv-fe-baum">
+            <ul ref={baumRef} className={`zv-fe-baum${zug ? " zv-fe-baum-zug" : ""}`}>
               {definition.bausteine.map((b) => (
-                <BaumKnoten key={b.schluessel} b={b} definition={definition} gewaehlt={gewaehlt} onWaehlen={setGewaehlt} />
+                <BaumKnoten
+                  key={b.schluessel}
+                  b={b}
+                  definition={definition}
+                  gewaehlt={gewaehlt}
+                  zug={zug}
+                  onWaehlen={setGewaehlt}
+                  onGriff={griffRunter}
+                  onGriffTaste={griffTaste}
+                />
               ))}
             </ul>
           )
@@ -450,12 +641,18 @@ function BaumKnoten({
   b,
   definition,
   gewaehlt,
+  zug,
   onWaehlen,
+  onGriff,
+  onGriffTaste,
 }: {
   b: Baustein;
   definition: FormularDefinition;
   gewaehlt: string | null;
+  zug: { schluessel: string; ziel: Ziel | null } | null;
   onWaehlen: (s: string) => void;
+  onGriff: (e: ReactPointerEvent<HTMLButtonElement>, b: Baustein) => void;
+  onGriffTaste: (e: ReactKeyboardEvent<HTMLButtonElement>, schluessel: string) => void;
 }) {
   const merkmale: string[] = [];
   if (istEingabe(b)) {
@@ -468,27 +665,61 @@ function BaumKnoten({
   if (definition.bezugsdatumFeld === b.schluessel) merkmale.push("Bezugsdatum");
   if (ausrichtungVon(b) !== "links") merkmale.push(ausrichtungVon(b) === "mitte" ? "mittig" : "rechts");
   return (
-    <li className={b.typ === "abschnitt" ? "zv-fe-knoten zv-fe-knoten-abschnitt" : "zv-fe-knoten"}>
-      <button
-        type="button"
-        className={`zv-fe-zeile${gewaehlt === b.schluessel ? " active" : ""}`}
-        aria-pressed={gewaehlt === b.schluessel}
-        onClick={() => onWaehlen(b.schluessel)}
-      >
-        <span className="zv-fe-typ">{BAUSTEIN_LABEL[b.typ]}</span>
-        <span className="zv-fe-beschriftung">{b.beschriftung || <em>ohne Beschriftung</em>}</span>
-        {merkmale.map((m) => (
-          <span key={m} className="zv-pill zv-fe-merkmal">
-            {m}
-          </span>
-        ))}
-        {b.sichtbarWenn && <span className="zv-fe-logik">nur wenn {bedingungAlsSatz(definition, b.sichtbarWenn)}</span>}
-      </button>
+    <li
+      className={[
+        "zv-fe-knoten",
+        b.typ === "abschnitt" ? "zv-fe-knoten-abschnitt" : "",
+        zug?.schluessel === b.schluessel ? "zv-fe-gezogen" : "",
+        zug?.ziel?.bezug === b.schluessel ? `zv-fe-ziel-${zug.ziel.lage}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-fe-knoten={b.schluessel}
+      data-fe-abschnitt={b.typ === "abschnitt" ? "1" : undefined}
+    >
+      <div className="zv-fe-zeilen-rahmen" data-fe-zeile={b.schluessel} data-fe-abschnitt={b.typ === "abschnitt" ? "1" : undefined}>
+        <button
+          type="button"
+          className={`zv-fe-zeile${gewaehlt === b.schluessel ? " active" : ""}`}
+          aria-pressed={gewaehlt === b.schluessel}
+          onClick={() => onWaehlen(b.schluessel)}
+        >
+          <span className="zv-fe-typ">{BAUSTEIN_LABEL[b.typ]}</span>
+          <span className="zv-fe-beschriftung">{b.beschriftung || <em>ohne Beschriftung</em>}</span>
+          {merkmale.map((m) => (
+            <span key={m} className="zv-pill zv-fe-merkmal">
+              {m}
+            </span>
+          ))}
+          {b.sichtbarWenn && <span className="zv-fe-logik">nur wenn {bedingungAlsSatz(definition, b.sichtbarWenn)}</span>}
+        </button>
+        <button
+          type="button"
+          className="zv-fe-griff"
+          data-fe-griff={b.schluessel}
+          aria-label={`${b.beschriftung || BAUSTEIN_LABEL[b.typ]} verschieben (ziehen oder Pfeiltasten)`}
+          title="Ziehen zum Verschieben"
+          onPointerDown={(e) => onGriff(e, b)}
+          onKeyDown={(e) => onGriffTaste(e, b.schluessel)}
+          onClick={() => onWaehlen(b.schluessel)}
+        >
+          <IGriff />
+        </button>
+      </div>
       {b.typ === "abschnitt" && (
         <ul className="zv-fe-baum">
-          {b.kinder.length === 0 && <li className="zv-fe-leer-abschnitt">Leer. Abschnitt wählen und links Bausteine hinzufügen.</li>}
+          {b.kinder.length === 0 && <li className="zv-fe-leer-abschnitt">Leer. Abschnitt wählen und links Bausteine hinzufügen oder hierher ziehen.</li>}
           {b.kinder.map((k) => (
-            <BaumKnoten key={k.schluessel} b={k} definition={definition} gewaehlt={gewaehlt} onWaehlen={onWaehlen} />
+            <BaumKnoten
+              key={k.schluessel}
+              b={k}
+              definition={definition}
+              gewaehlt={gewaehlt}
+              zug={zug}
+              onWaehlen={onWaehlen}
+              onGriff={onGriff}
+              onGriffTaste={onGriffTaste}
+            />
           ))}
         </ul>
       )}
