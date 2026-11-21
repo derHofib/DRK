@@ -7,6 +7,7 @@ import {
   beispielDaten,
   pdfGestaltungMitVorgaben,
   pdfGestaltungVorgabe,
+  pdfMitAnschriftfeld,
   STANDORT_ANGEBOTSFORM_LABEL,
   type FeldWerte,
   type FormularDefinition,
@@ -25,7 +26,18 @@ import { requireTenantContext } from "../common/tenant-context";
 import { heuteBerlin } from "../common/heute";
 import { RechteService } from "../rechte/rechte.service";
 import { ProtokollService } from "../protokolle/protokoll.service";
-import { pdfExportRendern } from "./pdf-export-render";
+import { pdfExportRendern, pdfExportRendernMitBericht, type PdfRenderBericht } from "./pdf-export-render";
+
+const MASKE = "Beispieltext";
+/**
+ * Laenge eines echten Werts behalten, Inhalt verwerfen: jedes Zeichen ausser
+ * Leerraum wird durch Beispieltext ersetzt. Wortlaengen und Zeilenumbrueche
+ * bleiben, damit der Umbruch im PDF derselbe ist.
+ */
+export function laengeOhneInhalt(text: string): string {
+  let i = 0;
+  return text.replace(/\S/g, () => MASKE[i++ % MASKE.length]);
+}
 
 /**
  * PDF-Exporte je Formular (Migration 0082). Rollenpruefungen stehen hier
@@ -345,6 +357,30 @@ export class PdfExportService {
     formularId: string,
     e: ExportSpeichern & { protokollId: string | null; standortId: string | null; empfaenger: string | null }
   ): Promise<Uint8Array> {
+    return (await this.vorschauBericht(formularId, e, false)).pdf;
+  }
+
+  /**
+   * "Passt es?" im Designer: dieselbe Erzeugung wie die Vorschau, aber
+   * zurueck geht nur, WELCHE Bausteine nicht passen -- nie ein Inhalt.
+   * Mit "laengste" bekommt jedes Textfeld die Laenge (Woerter, Zeilen) seines
+   * laengsten Werts aus den letzten 50 Protokollen dieses Formulars, die
+   * Buchstaben selbst werden durch Beispieltext ersetzt. So prueft man mit
+   * echten Laengen, ohne dass echte Sozialdaten im Designer landen.
+   */
+  async pruefen(
+    formularId: string,
+    e: ExportSpeichern & { protokollId: string | null; standortId: string | null; empfaenger: string | null; laengste: boolean }
+  ): Promise<{ ueberlauf: string[]; seiten: number }> {
+    const r = await this.vorschauBericht(formularId, e, e.laengste);
+    return { ueberlauf: r.ueberlauf, seiten: r.seiten };
+  }
+
+  private async vorschauBericht(
+    formularId: string,
+    e: ExportSpeichern & { protokollId: string | null; standortId: string | null; empfaenger: string | null },
+    laengste: boolean
+  ): Promise<PdfRenderBericht> {
     await this.braucheGestalten();
     let protokoll: ProtokollDto | null = null;
     if (e.protokollId) {
@@ -358,6 +394,27 @@ export class PdfExportService {
         ? { name: protokoll.formularName, version: protokoll.versionNummer, definition: protokoll.definition }
         : await neuesteDefinition(c, formularId);
       const beispiel = protokoll ? null : beispielDaten(formular.definition);
+      if (beispiel && laengste) {
+        // Kein WHERE mandant_id: RLS (CLAUDE.md Regel 2). Nur Text-Werte, nur
+        // die laengste Fassung je Feld, und sie verlaesst diese Funktion nicht.
+        const { rows } = await c.query<{ feld_schluessel: string; wert_text: string }>(
+          `WITH p AS (
+             SELECT p.id FROM protokoll p
+               JOIN formular_version v ON v.id = p.formular_version_id
+              WHERE v.formular_id = $1
+              ORDER BY p.erstellt_am DESC
+              LIMIT 50
+           )
+           SELECT DISTINCT ON (w.feld_schluessel) w.feld_schluessel, w.wert_text
+             FROM protokoll_wert w JOIN p ON p.id = w.protokoll_id
+            WHERE w.wert_text IS NOT NULL
+            ORDER BY w.feld_schluessel, length(w.wert_text) DESC`,
+          [formularId]
+        );
+        for (const r of rows) {
+          if (typeof beispiel.werte[r.feld_schluessel] === "string") beispiel.werte[r.feld_schluessel] = laengeOhneInhalt(r.wert_text);
+        }
+      }
       const kontext = await ladeKontext(c, {
         benutzerId,
         logoId: e.logoId,
@@ -368,7 +425,7 @@ export class PdfExportService {
       const klient = protokoll
         ? kontext.klient
         : { "klient.name": "Mira Beispiel", "klient.geburtsdatum": "06.05.2004", "klient.aktenzeichen": "AZ-0000" };
-      return pdfExportRendern({
+      return pdfExportRendernMitBericht({
         gestaltung: e.gestaltung,
         zielgruppe: e.zielgruppe,
         traegerfarbe: kontext.akzentfarbe,
@@ -386,7 +443,7 @@ export class PdfExportService {
           "protokoll.abgeschlossen_von": protokoll?.autorName ?? "A. Beispiel",
           pruefnummer: "0000-0000",
         },
-        empfaenger: e.empfaenger ?? (e.gestaltung.anschriftfeld ? "Bezirksamt Beispiel\nSoziale Dienste\nMusterstraße 1\n10000 Berlin" : null),
+        empfaenger: e.empfaenger ?? (pdfMitAnschriftfeld(e.gestaltung) ? "Bezirksamt Beispiel\nSoziale Dienste\nMusterstraße 1\n10000 Berlin" : null),
         beispiel: !protokoll,
       });
     });
@@ -413,7 +470,7 @@ export class PdfExportService {
           name: x.name,
           zielgruppe: x.zielgruppe,
           istStandard: x.istStandard,
-          mitAnschriftfeld: x.gestaltung.vorlage === "brief" && x.gestaltung.anschriftfeld,
+          mitAnschriftfeld: pdfMitAnschriftfeld(x.gestaltung),
           empfaengerVorschlag: vorschlag,
         }));
     });
@@ -495,12 +552,12 @@ export class PdfExportService {
         "protokoll.abgeschlossen_von": p.autorName,
         pruefnummer: nr,
       },
-      empfaenger: g.anschriftfeld ? empfaenger : null,
+      empfaenger: pdfMitAnschriftfeld(g) ? empfaenger : null,
     });
     await c.query(
       `INSERT INTO pdf_export_erzeugt (mandant_id, pdf_export_version_id, protokoll_id, standort_id, empfaenger, sha256, erzeugt_von)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [mandantId, r.version_id, p.id, kontext.standortId, g.anschriftfeld ? empfaenger : null, createHash("sha256").update(pdf).digest("hex"), benutzerId]
+      [mandantId, r.version_id, p.id, kontext.standortId, pdfMitAnschriftfeld(g) ? empfaenger : null, createHash("sha256").update(pdf).digest("hex"), benutzerId]
     );
     const datei = `${p.formularName} ${p.bezugsdatum} ${r.name}`.replace(/[^\p{L}\p{N} ._-]+/gu, "").replace(/\s+/g, "-");
     return { pdf, dateiname: `${datei}.pdf` };
