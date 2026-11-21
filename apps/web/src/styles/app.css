@@ -7199,6 +7199,12 @@ button.zv-achtung-eintrag:hover {
 }
 .zv-kachel-karte .zv-sub { overflow-wrap: break-word; }
 
+/* Kachel "Kostenübernahmen" (Heute): Zimmer klein unter dem Namen, wenn es
+   nur einen Standort gibt und die Standortspalte deshalb fehlt; Datum und
+   Restzeit duerfen in schmalen Kacheln untereinander rutschen. */
+.zv-ku-zimmer { display: block; font-weight: normal; }
+.zv-ku-ende { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--zv-space-1) var(--zv-space-2); }
+
 /* Tabellen in Kacheln: ohne eigenen Rahmen (die Kachel ist der Rahmen),
    Zellen duerfen umbrechen statt sich zu ueberlappen. */
 .zv-kachel-karte .zv-karten-liste { box-shadow: none; }
