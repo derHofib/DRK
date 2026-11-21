@@ -41,6 +41,7 @@ import {
   IPosition,
   ISpeichern,
   IStabsstelle,
+  IStandort,
   ITabelle,
   ITraeger,
   IVergroessern,
@@ -53,6 +54,7 @@ import {
   IZuklappen,
 } from "../components/icons";
 import { Datumsfeld } from "../components/Datumsfeld";
+import { FilterMehrfachAuswahl, FilterPille } from "../components/Filterleiste";
 
 /**
  * Ein Knoten im Organigramm -- entweder eine Organisationseinheit oder eine
@@ -383,6 +385,62 @@ function entferneEinheiten(wurzel: Knoten): Knoten {
   const ergebnisse = bereinige(wurzel);
   if (ergebnisse.length === 1) return ergebnisse[0];
   return { schluessel: "wurzel:unsichtbar", art: "position", kinder: ergebnisse, tiefe: 0, x: 0, unsichtbar: true };
+}
+
+/**
+ * Rueckmeldung 1d0d9f97: "nach den Unterkuenften filtern und nur die
+ * dazugehoerigen Mitarbeiter und Leiter sehen -- Geschaeftsfuehrer und
+ * Bereichsleiter sollen beibehalten werden."
+ *
+ * Arbeitet auf dem Anzeige-Baum NACH wendeLeitungsStruktur() und VOR
+ * entferneEinheiten(): Die Einheiten-Knoten sind dort noch da und markieren,
+ * was zu welcher Einrichtung gehoert, und die Leitung einer Einrichtung steht
+ * bereits ueber ihr. Behalten wird:
+ *   1. alles unter einer gewaehlten Einheit (samt Bereichen/Teams darin und
+ *      den Besetzungs-Karten "Mitarbeiter an Haus A");
+ *   2. jeder Knoten, unter dem etwas Behaltenes haengt -- das ist der Weg
+ *      nach oben: Einrichtungsleitung, Bereichsleitung, Geschaeftsfuehrung;
+ *   3. Positionen, deren Heimat-Einheit gewaehlt ist, auch wenn sie neben
+ *      statt unter der Einheit stehen (direkt der Einrichtungsleitung
+ *      unterstellte Stellen derselben Einrichtung);
+ *   4. Leitungsstellen oberhalb der gewaehlten Einrichtungen, die nicht auf
+ *      dem Weg liegen (z.B. eine Bereichsleitung als Geschwister der
+ *      Geschaeftsfuehrung): Linienposition mit fester Sollzahl an einer
+ *      uebergeordneten Einheit, die nicht ausdruecklich nur fuer ANDERE
+ *      Einrichtungen zustaendig ist. Sammelraenge (Sollzahl leer, z.B.
+ *      "Mitarbeiter" am Traeger) fallen hier bewusst heraus: deren Leute
+ *      erscheinen ueber ihre Besetzungs-Standorte bereits unter Regel 1.
+ *      Stabsstellen ebenso -- sie gehoeren keiner Einrichtung.
+ */
+function filtereNachStandorten(wurzel: Knoten, gewaehlt: Set<string>, orgUnits: OrgUnitDto[]): Knoten | null {
+  const elternVon = new Map(orgUnits.map((u) => [u.id, u.parentId]));
+  const oberhalb = new Set<string>();
+  for (const id of gewaehlt) {
+    for (let x = elternVon.get(id) ?? null; x; x = elternVon.get(x) ?? null) oberhalb.add(x);
+  }
+  function imZiel(id: string): boolean {
+    for (let x: string | null = id; x; x = elternVon.get(x) ?? null) if (gewaehlt.has(x)) return true;
+    return false;
+  }
+  const betrifft = (id: string) => imZiel(id) || oberhalb.has(id);
+
+  function istUebergeordneteLeitung(k: Knoten): boolean {
+    const p = k.position;
+    if (!p || k.istWeitereZuordnung || p.typ !== "linie" || p.sollBesetzung === null) return false;
+    if (!oberhalb.has(p.orgUnitId)) return false;
+    return p.weitereOrgUnitIds.length === 0 || p.weitereOrgUnitIds.some(betrifft);
+  }
+
+  function besuch(k: Knoten): Knoten | null {
+    if (k.art === "einheit" && gewaehlt.has(k.einheit!.id)) return k;
+    const kinder = k.kinder.map(besuch).filter((x): x is Knoten => x !== null);
+    if (kinder.length > 0) return { ...k, kinder };
+    if (k.art !== "position" || !k.position) return null;
+    if (!k.istWeitereZuordnung && imZiel(k.position.orgUnitId)) return { ...k, kinder };
+    if (istUebergeordneteLeitung(k)) return { ...k, kinder };
+    return null;
+  }
+  return besuch(wurzel);
 }
 
 const BOX_BREITE = 212;
@@ -2221,10 +2279,28 @@ export function Organigramm() {
   // bewusst weiterhin auf wurzelVoll auf (nicht auf diesem Zweig hier),
   // damit Drag&Drop/Geschwister/Zyklenschutz die echte Containment-
   // Struktur sehen.
-  const wurzelAnzeige = useMemo(
-    () => (wurzelSichtbar ? entferneEinheiten(wendeLeitungsStruktur(wurzelSichtbar)) : null),
-    [wurzelSichtbar]
+  // Standortfilter (Rueckmeldung 1d0d9f97, siehe filtereNachStandorten()).
+  // Solange er gesetzt ist, zeigt der Baum alles ausgeklappt: ein
+  // eingeklappter Knoten oberhalb der Einrichtung wuerde sie sonst
+  // verschlucken und der Filter liefe ins Leere.
+  const [standortFilter, setStandortFilter] = useState<string[]>([]);
+  const einrichtungen = useMemo(
+    () => organisationseinheitenSortiert.filter((u) => u.typ === "einrichtung" && u.aktiv),
+    [organisationseinheitenSortiert]
   );
+  // Ein inzwischen deaktivierter/geloeschter Standort darf nicht unsichtbar weiterfiltern.
+  const standortFilterGueltig = useMemo(
+    () => standortFilter.filter((id) => einrichtungen.some((u) => u.id === id)),
+    [standortFilter, einrichtungen]
+  );
+  const gefiltert = standortFilterGueltig.length > 0;
+  const wurzelAnzeige = useMemo(() => {
+    const basis = gefiltert ? wurzelVoll : wurzelSichtbar;
+    if (!basis) return null;
+    const struktur = wendeLeitungsStruktur(basis);
+    const auswahl = gefiltert ? filtereNachStandorten(struktur, new Set(standortFilterGueltig), orgUnits) : struktur;
+    return auswahl ? entferneEinheiten(auswahl) : null;
+  }, [gefiltert, wurzelVoll, wurzelSichtbar, standortFilterGueltig, orgUnits]);
 
   const { breite, hoehe, yJeTiefe, knoten } = useMemo(() => {
     if (!wurzelAnzeige) return { breite: 0, hoehe: 0, yJeTiefe: [] as number[], knoten: [] as Knoten[] };
@@ -2565,6 +2641,29 @@ export function Organigramm() {
             Details und Aktionen.
           </p>
 
+          {einrichtungen.length > 0 && (
+            <div className="zv-filterleiste" role="search" aria-label="Organigramm filtern">
+              <FilterPille
+                icon={<IStandort />}
+                label="Standort"
+                wert={
+                  gefiltert
+                    ? `: ${standortFilterGueltig.length === 1 ? einrichtungen.find((u) => u.id === standortFilterGueltig[0])!.name : `${standortFilterGueltig.length} gewählt`}`
+                    : null
+                }
+                onEntfernen={() => setStandortFilter([])}
+              >
+                {() => (
+                  <FilterMehrfachAuswahl
+                    optionen={einrichtungen.map((u) => ({ wert: u.id, label: u.name }))}
+                    gewaehlt={standortFilterGueltig}
+                    onAendern={setStandortFilter}
+                  />
+                )}
+              </FilterPille>
+            </div>
+          )}
+
           {organisationseinheitenSortiert.length > 0 && (
             <div className="zv-vorschau-zeile" style={{ marginBottom: 16 }}>
               <select
@@ -2588,6 +2687,8 @@ export function Organigramm() {
 
           {!wurzelVoll && geladen && !fehler ? (
             <Leerzustand icon={ILeerOrganigramm}>Noch keine Organisationsstruktur angelegt.</Leerzustand>
+          ) : gefiltert && !wurzelAnzeige ? (
+            <Leerzustand icon={ILeerOrganigramm}>Für diesen Standort ist im Organigramm niemand eingetragen.</Leerzustand>
           ) : wurzelSichtbar ? (
             <>
               <div className="zv-organigramm-zoom-leiste">
@@ -2626,7 +2727,7 @@ export function Organigramm() {
                         onDrop={(e) => beiDrop(e, k)}
                         onDragEnd={beiDragEnd}
                         onKollabierenUmschalten={
-                          k.kinder.length > 0 || k.versteckteNachkommen ? () => kollabierenUmschalten(k.schluessel) : null
+                          !gefiltert && (k.kinder.length > 0 || k.versteckteNachkommen) ? () => kollabierenUmschalten(k.schluessel) : null
                         }
                       />
                     ))}
