@@ -7881,13 +7881,64 @@ button.zv-achtung-eintrag:hover {
   flex: none;
 }
 
+/*
+ * Skala: die Endbeschriftungen ("sehr schlecht" / "sehr gut") muessen genau
+ * unter dem ersten und dem letzten Knopf stehen. Frueher hatte die Zeile eine
+ * feste Hoechstbreite (22rem) -- bei 1 bis 10 stand "sehr gut" dadurch mitten
+ * unter der 6 (Rueckmeldung 49154ec7). Jetzt ist der innere Block genau so
+ * breit wie die Knopfreihe, und die Reihe bricht NICHT um: bei einem Umbruch
+ * stuende die hoechste Zahl in der zweiten Zeile links, und keine Beschriftung
+ * koennte mehr richtig sitzen.
+ *
+ * Die Breite rechnet das CSS aus der Stufenzahl (--zv-skala-stufen, gesetzt
+ * im TSX): Wunsch 3rem je Knopf, bei wenig Platz bis 1.75rem -- damit passt
+ * 1 bis 10 auch auf 390 px. Reicht auch das nicht (sehr lange Skalen), rollt
+ * der aeussere Block waagerecht, Knoepfe und Beschriftung gemeinsam.
+ * Bewusst KEIN inline-flex mit Knopfbreite 3rem: eine feste Knopfbreite zaehlt
+ * als min-content, die Knoepfe schrumpfen dann nie und das Handy rollt schon
+ * bei 1 bis 10 (im Browser gemessen).
+ */
+.zv-protokoll-skala {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.zv-protokoll-skala-innen {
+  display: flex;
+  flex-direction: column;
+  width: calc(var(--zv-skala-stufen) * 3rem + (var(--zv-skala-stufen) - 1) * var(--zv-space-1));
+  max-width: 100%;
+  min-width: calc(var(--zv-skala-stufen) * 1.75rem + (var(--zv-skala-stufen) - 1) * var(--zv-space-1));
+}
+
+.zv-protokoll-skala .zv-protokoll-knoepfe {
+  flex-wrap: nowrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-protokoll-skala .zv-protokoll-knoepfe button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+}
+
 .zv-protokoll-skala-enden {
   display: flex;
   justify-content: space-between;
+  gap: var(--zv-space-3);
   font-size: var(--zv-text-xs);
   color: var(--zv-text-muted);
   margin-top: var(--zv-space-1);
-  max-width: 22rem;
+  /* Breite kommt allein von der Knopfreihe: lange Beschriftungen brechen um,
+     statt den Block breiter als die Knoepfe zu machen. */
+  width: 0;
+  min-width: 100%;
+}
+
+/* Die rechte Beschriftung steht rechtsbuendig unter dem letzten Knopf, auch
+   wenn sie zweizeilig umbricht. */
+.zv-protokoll-skala-enden span:last-child {
+  text-align: right;
 }
 
 .zv-protokoll-personen {

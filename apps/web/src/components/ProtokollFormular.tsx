@@ -1,4 +1,4 @@
-import { useMemo, type ReactElement } from "react";
+import { useMemo, type CSSProperties, type ReactElement } from "react";
 import {
   alleBausteine,
   istEingabe,
@@ -306,13 +306,15 @@ function EingabeFeld({
       const stufen = Array.from({ length: b.max - b.min + 1 }, (_, i) => b.min + i);
       eingabe = (
         <div className="zv-protokoll-skala">
-          <Knoepfe id={id} optionen={stufen.map((s) => ({ wert: s, label: String(s) }))} aktiv={typeof wert === "number" ? wert : null} onWahl={(w) => onAendern(w === wert ? null : w)} />
-          {(b.labelMin || b.labelMax) && (
-            <div className="zv-protokoll-skala-enden">
-              <span>{b.labelMin}</span>
-              <span>{b.labelMax}</span>
-            </div>
-          )}
+          <div className="zv-protokoll-skala-innen" style={{ "--zv-skala-stufen": stufen.length } as CSSProperties}>
+            <Knoepfe id={id} optionen={stufen.map((s) => ({ wert: s, label: String(s) }))} aktiv={typeof wert === "number" ? wert : null} onWahl={(w) => onAendern(w === wert ? null : w)} />
+            {(b.labelMin || b.labelMax) && (
+              <div className="zv-protokoll-skala-enden">
+                <span>{b.labelMin}</span>
+                <span>{b.labelMax}</span>
+              </div>
+            )}
+          </div>
         </div>
       );
       break;
