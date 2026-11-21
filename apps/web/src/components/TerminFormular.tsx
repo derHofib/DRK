@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import type { ChatKontaktDto, KalenderStundenEinstellungenDto, Leistungsart, TerminAnlegenEingabe, TerminArt, TerminDto } from "@zimmerakte/shared";
 import {
   LEISTUNGSARTEN,
@@ -49,8 +49,8 @@ export function TerminFormular({
   standardUhrzeit?: string;
   /**
    * Wenn gesetzt, kann der Termin gleich Teilnehmenden zugewiesen werden (nur
-   * beim Anlegen). Mit `hatZugang` (Termin-Auswahl der Mitarbeitenden) stehen
-   * Klient:innen und Mitarbeitende in getrennten Listen.
+   * beim Anlegen). Klient:innen und Mitarbeitende stehen in einer Liste;
+   * `hatZugang === false` markiert Klient:innen, die die Einladung nicht sehen.
    */
   kontakte?: (ChatKontaktDto & { hatZugang?: boolean })[];
   mitBeschreibung?: boolean;
@@ -207,14 +207,7 @@ export function TerminFormular({
           <textarea id="termin-beschreibung" rows={3} value={beschreibung} onChange={(e) => setBeschreibung(e.target.value)} maxLength={5000} />
         </div>
       )}
-      {kontakte && kontakte.some((k) => k.hatZugang !== undefined) ? (
-        <TeilnehmerGetrennt kontakte={kontakte} auswahl={auswahl} onToggle={umschalten} />
-      ) : kontakte ? (
-        <div className="zv-field">
-          <span className="zv-feldtitel">Teilnehmende (optional)</span>
-          <KontaktAuswahl idPraefix="termin" kontakte={kontakte} ausgewaehlt={new Set(auswahl.keys())} onToggle={umschalten} />
-        </div>
-      ) : null}
+      {kontakte && <TeilnehmerAuswahl kontakte={kontakte} auswahl={auswahl} onToggle={umschalten} />}
       {mitStunden && (
         <StundenKasten
           aktiv={stundenAktiv}
@@ -235,13 +228,18 @@ export function TerminFormular({
 }
 
 /**
- * Klient:innen und Mitarbeitende getrennt (Rueckmeldung „Termine Kalender“,
- * Konzept termine-klienten 2.1): Klient:innen stehen hier auch ohne Zugang,
+ * Klient:innen und Mitarbeitende in EINER Liste, die Pille sagt, wer wer ist
+ * (Wunsch Dennis, 21.11.2026: zwei getrennte Listen mit je eigener Suche
+ * bedeuteten zweimal suchen, obwohl man meist nur einen Namen im Kopf hat).
+ * Alphabetisch gemischt statt nach Art gruppiert -- gesucht wird nach dem
+ * Namen, nicht nach der Rolle.
+ *
+ * Klient:innen stehen hier auch ohne Zugang (Konzept termine-klienten 2.1),
  * damit ein Termin mit ihnen als Betreuungszeit zaehlen kann. Wer keinen
- * Zugang hat, sieht die Einladung nicht selbst -- das sagt der Hinweis, statt
- * eine Benachrichtigung vorzutaeuschen, die es nicht gibt.
+ * Zugang hat, sieht die Einladung nicht selbst -- das sagen die zweite Pille
+ * und der Hinweis, statt eine Benachrichtigung vorzutaeuschen, die es nicht gibt.
  */
-function TeilnehmerGetrennt({
+function TeilnehmerAuswahl({
   kontakte,
   auswahl,
   onToggle,
@@ -250,45 +248,40 @@ function TeilnehmerGetrennt({
   auswahl: Map<string, ChatKontaktDto & { hatZugang?: boolean }>;
   onToggle: (k: ChatKontaktDto) => void;
 }) {
-  const klienten = kontakte.filter((k) => k.art === "klient");
-  const mitarbeitende = kontakte.filter((k) => k.art === "benutzer");
-  const zugang = new Map(kontakte.map((k) => [kontaktSchluessel(k), k.hatZugang]));
-  const gewaehlt = new Set(auswahl.keys());
+  const sortiert = useMemo(() => [...kontakte].sort((a, b) => a.name.localeCompare(b.name, "de-DE")), [kontakte]);
+  const ohneZugangSchluessel = new Set(kontakte.filter((k) => k.hatZugang === false).map(kontaktSchluessel));
   const ohneZugang = [...auswahl.values()].filter((k) => k.art === "klient" && k.hatZugang === false).map((k) => k.name);
   return (
-    <>
-      <div className="zv-field">
-        <span className="zv-feldtitel">Klient:innen (optional)</span>
-        <KontaktAuswahl
-          idPraefix="termin-klient"
-          suchLabel="Klient:in suchen"
-          kontakte={klienten}
-          ausgewaehlt={gewaehlt}
-          onToggle={onToggle}
-          zusatz={(k) =>
-            zugang.get(kontaktSchluessel(k)) ? (
-              <span className="zv-pill zv-pill-ok">Einladung in der App</span>
+    <div className="zv-field">
+      <span className="zv-feldtitel">Teilnehmende (optional)</span>
+      <KontaktAuswahl
+        idPraefix="termin"
+        suchLabel="Klient:in oder Mitarbeiter:in suchen"
+        kontakte={sortiert}
+        ausgewaehlt={new Set(auswahl.keys())}
+        onToggle={onToggle}
+        zusatz={(k) => (
+          <span className="zv-kontakt-pillen">
+            {k.art === "klient" ? (
+              <span className="zv-pill zv-pill-info">Klient:in</span>
             ) : (
-              <span className="zv-pill zv-pill-frist">ohne Zugang</span>
-            )
-          }
-        />
-        {ohneZugang.length > 0 && (
-          <div className="zv-hinweis zv-hinweis-info" role="status" style={{ marginTop: "var(--zv-space-2)" }}>
-            <IInfo />
-            <span>
-              <strong>{namenListe(ohneZugang)}</strong> {ohneZugang.length === 1 ? "hat" : "haben"} keinen Zugang und{" "}
-              {ohneZugang.length === 1 ? "sieht" : "sehen"} die Einladung nicht selbst. Gib den Termin bitte persönlich weiter, zum Beispiel
-              mit der Kalenderdatei aus dem Termin.
-            </span>
-          </div>
+              <span className="zv-pill zv-pill-vergeben">Mitarbeiter:in</span>
+            )}
+            {ohneZugangSchluessel.has(kontaktSchluessel(k)) && <span className="zv-pill zv-pill-frist">ohne Zugang</span>}
+          </span>
         )}
-      </div>
-      <div className="zv-field">
-        <span className="zv-feldtitel">Mitarbeitende (optional)</span>
-        <KontaktAuswahl idPraefix="termin-team" kontakte={mitarbeitende} ausgewaehlt={gewaehlt} onToggle={onToggle} zusatz={() => null} />
-      </div>
-    </>
+      />
+      {ohneZugang.length > 0 && (
+        <div className="zv-hinweis zv-hinweis-info" role="status" style={{ marginTop: "var(--zv-space-2)" }}>
+          <IInfo />
+          <span>
+            <strong>{namenListe(ohneZugang)}</strong> {ohneZugang.length === 1 ? "hat" : "haben"} keinen Zugang und{" "}
+            {ohneZugang.length === 1 ? "sieht" : "sehen"} die Einladung nicht selbst. Gib den Termin bitte persönlich weiter, zum Beispiel
+            mit der Kalenderdatei aus dem Termin.
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
