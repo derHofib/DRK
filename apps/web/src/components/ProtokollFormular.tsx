@@ -4,6 +4,7 @@ import {
   istEingabe,
   PROTOKOLL_QUELLE_LABEL,
   werteAus,
+  zeichenGrenze,
   type Baustein,
   type EingabeBaustein,
   type FeldWert,
@@ -206,14 +207,23 @@ function EingabeFeld({
     );
   }
 
+  // Sichtbar machen, warum das Tippen aufhoert: ohne Zaehler wirkt ein volles
+  // Feld wie ein kaputtes (Rueckmeldung 95d08c6a).
+  const grenze = b.typ === "kurztext" || b.typ === "langtext" ? zeichenGrenze(b) : undefined;
+  const zaehler = grenze !== undefined && (
+    <p className="zv-protokoll-hilfe zv-protokoll-zaehler" aria-live="polite">
+      {typeof wert === "string" ? wert.length : 0} von höchstens {grenze} Zeichen
+    </p>
+  );
+
   let eingabe;
   switch (b.typ) {
     case "kurztext":
-      eingabe = <input id={id} {...aria} value={typeof wert === "string" ? wert : ""} maxLength={b.maxLaenge} onChange={(e) => onAendern(e.target.value || null)} />;
+      eingabe = <input id={id} {...aria} value={typeof wert === "string" ? wert : ""} maxLength={grenze} onChange={(e) => onAendern(e.target.value || null)} />;
       break;
     case "langtext":
       eingabe = (
-        <textarea id={id} {...aria} rows={4} value={typeof wert === "string" ? wert : ""} maxLength={b.maxLaenge} onChange={(e) => onAendern(e.target.value || null)} />
+        <textarea id={id} {...aria} rows={4} value={typeof wert === "string" ? wert : ""} maxLength={grenze} onChange={(e) => onAendern(e.target.value || null)} />
       );
       break;
     case "zahl":
@@ -359,6 +369,7 @@ function EingabeFeld({
       {kopf}
       {hilfe}
       {eingabe}
+      {zaehler}
       {meldung}
     </div>
   );

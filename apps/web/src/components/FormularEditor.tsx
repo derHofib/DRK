@@ -762,7 +762,23 @@ function Eigenschaften({
   );
 }
 
-function ZahlFeld({ id, label, wert, onAendern, ganz }: { id: string; label: string; wert: number | undefined; onAendern: (w: number | undefined) => void; ganz?: boolean }) {
+function ZahlFeld({
+  id,
+  label,
+  wert,
+  onAendern,
+  ganz,
+  min,
+  hilfe,
+}: {
+  id: string;
+  label: string;
+  wert: number | undefined;
+  onAendern: (w: number | undefined) => void;
+  ganz?: boolean;
+  min?: number;
+  hilfe?: string;
+}) {
   return (
     <div className="zv-field">
       <label htmlFor={id}>{label}</label>
@@ -770,9 +786,11 @@ function ZahlFeld({ id, label, wert, onAendern, ganz }: { id: string; label: str
         id={id}
         type="number"
         step={ganz ? 1 : "any"}
+        min={min}
         value={wert ?? ""}
         onChange={(e) => onAendern(e.target.value === "" ? undefined : ganz ? Math.trunc(Number(e.target.value)) : Number(e.target.value))}
       />
+      {hilfe && <p className="zv-protokoll-hilfe">{hilfe}</p>}
     </div>
   );
 }
@@ -821,7 +839,17 @@ function TypEinstellungen({
       );
     case "kurztext":
     case "langtext":
-      return <ZahlFeld id={id("max")} label="Höchstens Zeichen" ganz wert={b.maxLaenge} onAendern={(maxLaenge) => onAendern({ ...b, maxLaenge })} />;
+      return (
+        <ZahlFeld
+          id={id("max")}
+          label="Höchstens Zeichen"
+          ganz
+          min={1}
+          hilfe="Leer lassen für keine Grenze. Wer ausfüllt, sieht, wie viele Zeichen noch gehen."
+          wert={b.maxLaenge}
+          onAendern={(maxLaenge) => onAendern({ ...b, maxLaenge })}
+        />
+      );
     case "zahl":
       return (
         <div className="zv-fe-zweispaltig">
