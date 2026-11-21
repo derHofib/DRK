@@ -1,6 +1,7 @@
 import { useMemo, type ReactElement } from "react";
 import {
   alleBausteine,
+  ausrichtungVon,
   istEingabe,
   PROTOKOLL_QUELLE_LABEL,
   werteAus,
@@ -14,6 +15,17 @@ import {
 import { formatDatum } from "../format";
 import { IAbbrechen, IInfo } from "./icons";
 import { Datumsfeld } from "./Datumsfeld";
+
+/**
+ * CSS-Klasse zur Ausrichtung eines Bausteins (leer bei "links"). Nur an das
+ * Element des Bausteins selbst haengen, bei Abschnitten nur an Ueberschrift
+ * und Hilfetext: text-align erbt, ein mittiger Abschnitt wuerde sonst jedes
+ * Feld darin mitziehen.
+ */
+export function ausrichtungKlasse(b: Baustein): string {
+  const a = ausrichtungVon(b);
+  return a === "links" ? "" : ` zv-ausgerichtet-${a}`;
+}
 
 export interface PersonAuswahl {
   id: string;
@@ -106,28 +118,28 @@ export function ProtokollEingabe({
       case "abschnitt":
         return (
           <fieldset key={b.schluessel} className="zv-protokoll-abschnitt">
-            <legend>{b.beschriftung}</legend>
-            {b.hilfetext && <p className="zv-protokoll-hilfe">{b.hilfetext}</p>}
+            <legend className={ausrichtungKlasse(b).trim() || undefined}>{b.beschriftung}</legend>
+            {b.hilfetext && <p className={`zv-protokoll-hilfe${ausrichtungKlasse(b)}`}>{b.hilfetext}</p>}
             {b.kinder.map(baustein)}
           </fieldset>
         );
       case "hinweis":
         return (
-          <div key={b.schluessel} className={b.ton === "warnung" ? "zv-hinweis zv-protokoll-warnung" : "zv-hinweis zv-hinweis-info"}>
+          <div key={b.schluessel} className={`${b.ton === "warnung" ? "zv-hinweis zv-protokoll-warnung" : "zv-hinweis zv-hinweis-info"}${ausrichtungKlasse(b)}`}>
             <IInfo />
             {b.beschriftung}
           </div>
         );
       case "anzeige":
         return (
-          <div key={b.schluessel} className="zv-protokoll-anzeige">
+          <div key={b.schluessel} className={`zv-protokoll-anzeige${ausrichtungKlasse(b)}`}>
             <span className="zv-protokoll-label">{b.beschriftung}</span>
             <span>{anzeige[b.schluessel] ? (b.quelle === "klient.geburtsdatum" ? formatDatum(anzeige[b.schluessel]!) : anzeige[b.schluessel]) : "–"}</span>
           </div>
         );
       case "berechnung":
         return (
-          <div key={b.schluessel} className="zv-field">
+          <div key={b.schluessel} className={`zv-field${ausrichtungKlasse(b)}`}>
             <label>{b.beschriftung}</label>
             <div className="zv-protokoll-nurlesen">
               {wertAlsText(b, auswertung.werte[b.schluessel], namen)} <span className="zv-pill">berechnet</span>
@@ -196,7 +208,7 @@ function EingabeFeld({
 
   if (fest) {
     return (
-      <div className="zv-field">
+      <div className={`zv-field${ausrichtungKlasse(b)}`}>
         {kopf}
         <div className="zv-protokoll-nurlesen" id={id}>
           {wertAlsText(b, wert, namen)} <span className="zv-pill">festgehalten</span>
@@ -355,7 +367,7 @@ function EingabeFeld({
   }
 
   return (
-    <div className={`zv-field${fehler ? " zv-field-fehler" : ""}`}>
+    <div className={`zv-field${fehler ? " zv-field-fehler" : ""}${ausrichtungKlasse(b)}`}>
       {kopf}
       {hilfe}
       {eingabe}
@@ -418,7 +430,7 @@ export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen
     if (b.typ === "abschnitt") {
       return (
         <section key={b.schluessel} className="zv-protokoll-abschnitt">
-          <h4>{b.beschriftung}</h4>
+          <h4 className={ausrichtungKlasse(b).trim() || undefined}>{b.beschriftung}</h4>
           {b.kinder.map(zeile)}
         </section>
       );
@@ -428,7 +440,7 @@ export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen
       const w = anzeige[b.schluessel];
       const datum = b.quelle === "klient.geburtsdatum";
       return (
-        <div key={b.schluessel} className="zv-protokoll-zeile">
+        <div key={b.schluessel} className={`zv-protokoll-zeile${ausrichtungKlasse(b) ? ` zv-protokoll-zeile-voll${ausrichtungKlasse(b)}` : ""}`}>
           <span className="zv-protokoll-label">{b.beschriftung}</span>
           <span className="zv-protokoll-wertzelle">
             <span className={`zv-protokoll-wert${datum ? " zv-protokoll-wert-einzeilig" : ""}`}>{w ? (datum ? formatDatum(w) : w) : "–"}</span>
@@ -439,9 +451,10 @@ export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen
     const w = werte[b.schluessel];
     const q = quellen?.[b.schluessel];
     // Fliesstext in einer 60-%-Spalte liest sich schlecht: Langtext immer ueber die volle Breite.
-    const voll = b.typ === "langtext";
+    // Ausgerichtet ebenfalls gestapelt: neben einer Beschriftungsspalte haette "mittig" keine erkennbare Mitte.
+    const voll = b.typ === "langtext" || ausrichtungKlasse(b) !== "";
     return (
-      <div key={b.schluessel} className={`zv-protokoll-zeile${voll ? " zv-protokoll-zeile-voll" : ""}`}>
+      <div key={b.schluessel} className={`zv-protokoll-zeile${voll ? " zv-protokoll-zeile-voll" : ""}${ausrichtungKlasse(b)}`}>
         <span className="zv-protokoll-label">
           {b.beschriftung}
           {"intern" in b && b.intern && <span className="zv-pill zv-protokoll-pill">intern</span>}

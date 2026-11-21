@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   alleBausteine,
+  ausrichtungVon,
+  BAUSTEIN_AUSRICHTUNG_LABEL,
   BAUSTEIN_LABEL,
   DATENQUELLEN,
   istEingabe,
@@ -9,6 +11,7 @@ import {
   type FormularDetailDto,
   type FormularKennzahlenDto,
 } from "@zimmerakte/shared";
+import { ausrichtungKlasse } from "../../components/ProtokollFormular";
 import { bedingungText, entfernteFelder, feldStaende, istBreit, type FeldStand } from "./formularHilfen";
 
 /**
@@ -106,7 +109,7 @@ export function FormularAufbau({
     if (b.typ === "abschnitt") {
       return (
         <div key={b.schluessel} className="zv-fa-unterabschnitt">
-          <button type="button" className={`zv-fa-unterabschnitt-titel${gewaehlt?.schluessel === b.schluessel ? " zv-fa-gewaehlt" : ""}`} onClick={() => setGewaehlt(b.schluessel)}>
+          <button type="button" className={`zv-fa-unterabschnitt-titel${ausrichtungKlasse(b)}${gewaehlt?.schluessel === b.schluessel ? " zv-fa-gewaehlt" : ""}`} onClick={() => setGewaehlt(b.schluessel)}>
             {b.beschriftung}
             {b.sichtbarWenn && <span className="zv-pill">sichtbar, wenn {bedingungText(b.sichtbarWenn, def)}</span>}
           </button>
@@ -122,7 +125,9 @@ export function FormularAufbau({
         type="button"
         className={[
           "zv-fa-feld",
-          istBreit(b) ? "zv-fa-breit" : "",
+          // Ausgerichtete Felder stehen auch beim Ausfuellen und im PDF allein in ihrer Zeile.
+          istBreit(b) || ausrichtungKlasse(b) ? "zv-fa-breit" : "",
+          ausrichtungKlasse(b).trim(),
           gewaehlt?.schluessel === b.schluessel ? "zv-fa-gewaehlt" : "",
           zeigeMarkierung && stand !== "gleich" ? `zv-fa-${stand}` : "",
         ]
@@ -192,7 +197,7 @@ export function FormularAufbau({
               {g.titel && (
                 <button
                   type="button"
-                  className={`zv-fa-abschnitt-titel${gewaehlt?.schluessel === g.titel.schluessel ? " zv-fa-gewaehlt" : ""}${zeigeMarkierung && staende.get(g.titel.schluessel) !== "gleich" ? ` zv-fa-${staende.get(g.titel.schluessel)}` : ""}`}
+                  className={`zv-fa-abschnitt-titel${ausrichtungKlasse(g.titel)}${gewaehlt?.schluessel === g.titel.schluessel ? " zv-fa-gewaehlt" : ""}${zeigeMarkierung && staende.get(g.titel.schluessel) !== "gleich" ? ` zv-fa-${staende.get(g.titel.schluessel)}` : ""}`}
                   onClick={() => setGewaehlt(g.titel!.schluessel)}
                 >
                   {g.titel.beschriftung}
@@ -285,6 +290,8 @@ function FeldInfo({
             <dd>{pflicht === true ? "ja" : pflicht && typeof pflicht === "object" ? `wenn ${bedingungText(pflicht, def)}` : "nein"}</dd>
           </>
         )}
+        <dt>Ausrichtung</dt>
+        <dd>{BAUSTEIN_AUSRICHTUNG_LABEL[ausrichtungVon(b)]}</dd>
         <dt>Sichtbar</dt>
         <dd>{b.sichtbarWenn ? `wenn ${bedingungText(b.sichtbarWenn, def)}` : "immer (mit seinem Abschnitt)"}</dd>
         {istEingabe(b) && b.vorausfuellen && (
