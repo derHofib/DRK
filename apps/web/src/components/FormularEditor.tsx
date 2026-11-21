@@ -861,14 +861,21 @@ function TypEinstellungen({
         <div className="zv-fe-zweispaltig">
           <ZahlFeld id={id("min")} label="Von" ganz wert={b.min} onAendern={(min) => onAendern({ ...b, min: min ?? 0 })} />
           <ZahlFeld id={id("max")} label="Bis" ganz wert={b.max} onAendern={(max) => onAendern({ ...b, max: max ?? 0 })} />
+          {/* "Beschriftung unten/oben" war missverstaendlich (Rueckmeldung
+              6af2300c: wo erscheint das, wofuer ist es?). Die Bezeichnung nennt
+              jetzt die Zahl, unter der der Text steht, und der Hilfetext sagt,
+              wo er auftaucht -- und wo bewusst nicht. */}
           <div className="zv-field">
-            <label htmlFor={id("lmin")}>Beschriftung unten</label>
-            <input id={id("lmin")} value={b.labelMin ?? ""} placeholder="z. B. schlecht" onChange={(e) => onAendern({ ...b, labelMin: e.target.value || undefined })} />
+            <label htmlFor={id("lmin")}>Text unter der {b.min}</label>
+            <input id={id("lmin")} value={b.labelMin ?? ""} placeholder="z. B. sehr schlecht" aria-describedby={id("lhilfe")} onChange={(e) => onAendern({ ...b, labelMin: e.target.value || undefined })} />
           </div>
           <div className="zv-field">
-            <label htmlFor={id("lmax")}>Beschriftung oben</label>
-            <input id={id("lmax")} value={b.labelMax ?? ""} placeholder="z. B. sehr gut" onChange={(e) => onAendern({ ...b, labelMax: e.target.value || undefined })} />
+            <label htmlFor={id("lmax")}>Text unter der {b.max}</label>
+            <input id={id("lmax")} value={b.labelMax ?? ""} placeholder="z. B. sehr gut" aria-describedby={id("lhilfe")} onChange={(e) => onAendern({ ...b, labelMax: e.target.value || undefined })} />
           </div>
+          <p className="zv-protokoll-hilfe zv-fe-ganz" id={id("lhilfe")}>
+            Beim Ausfüllen steht dieser Text klein unter der kleinsten und der größten Zahl, damit klar ist, was die Zahlen bedeuten (z. B. {b.min} = sehr schlecht, {b.max} = sehr gut). Beides ist freiwillig. In der Akte, im PDF und in Auswertungen steht nur die gewählte Zahl, etwa „7 von {b.max}“.
+          </p>
         </div>
       );
     case "berechnung":
