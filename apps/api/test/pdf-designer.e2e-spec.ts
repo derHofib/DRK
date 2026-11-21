@@ -52,6 +52,10 @@ async function mitschneiden(e: PdfRenderEingabe) {
   const seiten: PDFPage[] = [];
   const texte: Gezeichnet[] = [];
   const orig = PDFPage.prototype.drawText;
+  // Haengt noch der Spion eines abgebrochenen Tests (Zeitlimit), wuerde der
+  // neue sich selbst aufrufen und mit einem Stackueberlauf statt der
+  // eigentlichen Ursache enden.
+  if (jest.isMockFunction(orig)) throw new Error("drawText ist noch vom vorigen Test umgeleitet.");
   const spion = jest.spyOn(PDFPage.prototype, "drawText").mockImplementation(function (this: PDFPage, text, opt) {
     if (!seiten.includes(this)) seiten.push(this);
     const font = opt?.font as PDFFont;
@@ -91,6 +95,10 @@ function eingabe(g: PdfGestaltung, werte: Record<string, unknown>, zielgruppe: "
 }
 
 const LANG = Array.from({ length: 60 }, (_, i) => `Satz ${i + 1} mit einigen Worten über den Verlauf des Besuchs.`).join(" ");
+
+// Der erste Lauf bettet die Schriften ein und verkleinert schrittweise:
+// lokal 3,4 s, auf dem CI-Runner ueber Jests Standard von 5 s.
+jest.setTimeout(30_000);
 
 describe("PDF-Designer: Renderer fuer frei gestaltete Exporte", () => {
   const frei = (erste: PdfFreiBaustein[], folge: PdfFreiBaustein[] = []): PdfGestaltung => ({
