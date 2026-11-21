@@ -563,6 +563,11 @@ export const api = {
     formularId: string,
     e: PdfExportSpeichernEingabe & { protokollId?: string | null; standortId?: string | null; empfaenger?: string | null }
   ) => pdfAnfordern(`/formulare/${formularId}/pdf-exporte/vorschau`, e),
+  /** „Passt es?“ im PDF-Designer: nur Ids der Bausteine, die nicht passen -- nie Inhalt. */
+  pdfExportPruefen: (
+    formularId: string,
+    e: PdfExportSpeichernEingabe & { empfaenger?: string | null; laengste: boolean }
+  ) => request<{ ueberlauf: string[]; seiten: number }>(`/formulare/${formularId}/pdf-exporte/pruefen`, { method: "POST", body: JSON.stringify(e) }),
   protokollPdfExporte: (protokollId: string) => request<PdfExportAngebotDto[]>(`/protokolle/${protokollId}/pdf-exporte`),
   protokollPdf: (protokollId: string, exportId: string, empfaenger: string | null) =>
     pdfAnfordern(`/protokolle/${protokollId}/pdf`, { exportId, empfaenger }),

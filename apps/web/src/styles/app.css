@@ -10544,3 +10544,723 @@ button.zv-team-name:hover {
     padding: 0;
   }
 }
+
+/* ==================================================================
+   PDF-Designer (Grundform "frei", Konzept pdf-designer 21.11.2026)
+   Das Blatt ist Papier: es bleibt in beiden Themes weiss (Signatur-
+   Tokens, wie die Skizzen der Exportkarten). Druckfarben kommen als
+   Daten des Exports (--pd-akzent, --pd-akzent-druck), nicht aus dem Theme.
+   ================================================================== */
+.zv-hinweis-achtung {
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-text);
+  border-left: 3px solid var(--zv-status-warn);
+}
+.zv-hinweis-achtung svg {
+  color: var(--zv-status-warn);
+}
+
+.zv-pe-skizze-frei {
+  display: block;
+  padding: 0;
+}
+.zv-pe-skizze-frei > .zv-pe-skizze-el {
+  position: absolute;
+  border-radius: 1px;
+}
+.zv-pe-skizze-frei > .zv-pe-skizze-el-fluss {
+  background: repeating-linear-gradient(135deg, var(--zv-signature-ink) 0 1px, transparent 1px 4px);
+  opacity: 0.12;
+}
+.zv-pe-skizze-frei > .zv-pe-skizze-el-flaeche,
+.zv-pe-skizze-frei > .zv-pe-skizze-el-linie {
+  background: var(--zv-accent);
+  opacity: 0.6;
+}
+
+.zv-pe-designer-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2) var(--zv-space-3);
+}
+.zv-pe-designer-schmal {
+  display: none;
+  flex-basis: 100%;
+}
+.zv-pe-frei-frage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface-2);
+}
+/* Unter 1200 px wird der Designer zu eng zum feinen Arbeiten: statt
+   Knopf ein Hinweis (Konzept, Bild 4 D). Ansehen und Erzeugen gehen ueberall. */
+@media (max-width: 1199px) {
+  .zv-pe-designer-knopf {
+    display: none;
+  }
+  .zv-pe-designer-schmal {
+    display: block;
+  }
+}
+
+.zv-pd-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--zv-scrim);
+  padding: var(--zv-space-3);
+}
+.zv-pd {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-3);
+  overflow: hidden;
+}
+.zv-pd-kopf {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2) var(--zv-space-3);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-pd-titel {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+.zv-pd-titel strong {
+  font-size: var(--zv-text-l);
+}
+.zv-pd-sp {
+  flex: 1;
+}
+/* Rechte Knopfgruppe bricht nur als Ganzes um, nie "Übernehmen" allein. */
+.zv-pd-kopf-rechts {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+.zv-pd-titel .zv-sub-inline {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-pd-wahl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  color: var(--zv-text-muted);
+}
+.zv-pd-wahl select {
+  width: auto;
+  padding-block: 5px;
+}
+.zv-pd-einrasten {
+  margin: 0;
+}
+.zv-pd-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.zv-pd-zoom span {
+  min-width: 44px;
+  text-align: center;
+}
+.zv-pd-frage {
+  margin: var(--zv-space-2) var(--zv-space-4) 0;
+  align-items: center;
+}
+.zv-pd-spalten {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  min-height: 0;
+}
+.zv-pd-baukasten,
+.zv-pd-eigenschaften {
+  overflow-y: auto;
+  padding: var(--zv-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+.zv-pd-baukasten {
+  border-right: 1px solid var(--zv-border);
+}
+.zv-pd-eigenschaften {
+  border-left: 1px solid var(--zv-border);
+  gap: var(--zv-space-2);
+}
+.zv-pd-baukasten .zv-gruppenlabel,
+.zv-pd-eigenschaften .zv-gruppenlabel {
+  margin-top: var(--zv-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+.zv-pd-suche {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0 var(--zv-space-2);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-bg);
+  color: var(--zv-text-faint);
+}
+.zv-pd-suche input {
+  border: 0;
+  background: transparent;
+  padding: 7px 0;
+  min-width: 0;
+  flex: 1;
+}
+.zv-pd-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  padding: 6px var(--zv-space-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.zv-pd-chip:hover:not(:disabled) {
+  border-color: var(--zv-border-strong);
+}
+.zv-pd-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.zv-pd-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-pd-chip-typ {
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-xs);
+  white-space: nowrap;
+}
+.zv-pd-chip-fluss {
+  margin-top: var(--zv-space-1);
+  border-color: var(--zv-accent-ring);
+}
+.zv-pd-griff {
+  color: var(--zv-text-faint);
+  letter-spacing: -2px;
+  font-size: var(--zv-text-xs);
+}
+.zv-pd-raster2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-1);
+}
+.zv-pd-gruppe summary {
+  cursor: pointer;
+  padding: var(--zv-space-1) 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+.zv-pd-gruppe .zv-pd-chip {
+  margin-bottom: 3px;
+}
+
+.zv-pd-buehne {
+  overflow: auto;
+  background: var(--zv-surface-gedaempft);
+  padding: var(--zv-space-5);
+  display: flex;
+  justify-content: safe center;
+  align-items: flex-start;
+}
+.zv-pd-blatt {
+  position: relative;
+  flex: none;
+  background-color: var(--zv-signature-paper);
+  color: var(--zv-signature-ink);
+  box-shadow: var(--zv-shadow-2);
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--zv-signature-ink) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--zv-signature-ink) 9%, transparent) 1px, transparent 1px);
+  background-size: var(--pd-raster-5) var(--pd-raster-5);
+  user-select: none;
+  touch-action: none;
+}
+/* Feines Raster nur, wenn es gross genug ist, um es zu sehen -- bei 1 mm
+   und kleinem Zoom waere es eine graue Flaeche. */
+.zv-pd-blatt-fein {
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--zv-signature-ink) 11%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--zv-signature-ink) 11%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in oklch, var(--zv-signature-ink) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--zv-signature-ink) 4%, transparent) 1px, transparent 1px);
+  background-size:
+    var(--pd-raster-5) var(--pd-raster-5),
+    var(--pd-raster-5) var(--pd-raster-5),
+    var(--pd-raster) var(--pd-raster),
+    var(--pd-raster) var(--pd-raster);
+}
+.zv-pd-fenster {
+  position: absolute;
+  border: 1px dashed var(--zv-status-ok);
+  pointer-events: none;
+}
+/* Auf dem (immer weissen) Papier: Statusfarbe mit Tinte gemischt, damit
+   sie auch im dunklen Theme -- dort ist --zv-status-ok hell -- lesbar bleibt. */
+.zv-pd-fenster span {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font: var(--zv-weight-semibold) var(--zv-text-xs) var(--zv-font-ui);
+  color: color-mix(in oklch, var(--zv-status-ok) 45%, var(--zv-signature-ink));
+}
+.zv-pd-marke-falz {
+  position: absolute;
+  left: 0;
+  width: 14px;
+  border-top: 1px solid color-mix(in oklch, var(--zv-signature-ink) 45%, transparent);
+  pointer-events: none;
+}
+
+.zv-pd-el {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 1px dashed color-mix(in oklch, var(--zv-signature-ink) 18%, transparent);
+  cursor: move;
+  overflow: visible;
+}
+.zv-pd-el > :first-child {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+.zv-pd-el-gesperrt {
+  cursor: default;
+}
+.zv-pd-el-sel {
+  outline: 1.5px solid var(--zv-status-info);
+  z-index: 2;
+}
+.zv-pd-el-ueber {
+  outline: 2px solid var(--zv-status-warn);
+  background: color-mix(in oklch, var(--zv-status-warn) 8%, transparent);
+}
+.zv-pd-rahmen-kasten {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--zv-signature-ink) 55%, transparent);
+}
+.zv-pd-rahmen-unten {
+  box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--zv-signature-ink) 30%, transparent);
+}
+.zv-pd-griffpunkt {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--zv-signature-paper);
+  border: 1.5px solid var(--zv-status-info);
+  border-radius: 2px;
+  z-index: 3;
+  touch-action: none;
+}
+.zv-pd-griffpunkt-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.zv-pd-griffpunkt-n { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }
+.zv-pd-griffpunkt-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.zv-pd-griffpunkt-e { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.zv-pd-griffpunkt-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.zv-pd-griffpunkt-s { left: calc(50% - 5px); bottom: -5px; cursor: ns-resize; }
+.zv-pd-griffpunkt-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.zv-pd-griffpunkt-w { left: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+
+.zv-pd-text,
+.zv-pd-feld {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.zv-pd-farbe-schwarz {
+  color: var(--zv-signature-ink);
+}
+.zv-pd-farbe-grau {
+  color: color-mix(in oklch, var(--zv-signature-ink) 75%, var(--zv-signature-paper));
+}
+.zv-pd-farbe-akzent {
+  color: var(--pd-akzent-druck);
+}
+.zv-pd-label {
+  color: color-mix(in oklch, var(--zv-signature-ink) 70%, var(--zv-signature-paper));
+}
+.zv-pd-beschriftung-links {
+  display: grid;
+  grid-template-columns: 38% 1fr;
+  column-gap: 2mm;
+}
+.zv-pd-leer {
+  font: var(--zv-text-xs) var(--zv-font-ui);
+  color: color-mix(in oklch, var(--zv-signature-ink) 50%, transparent);
+  padding: 2px;
+}
+.zv-pd-marke {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  font: var(--zv-weight-semibold) var(--zv-text-xs) var(--zv-font-ui);
+  background: var(--zv-tag-achtung-bg);
+  color: var(--zv-tag-achtung-text);
+  padding: 0 4px;
+  border-radius: var(--zv-radius-s);
+}
+.zv-pd-kreuze {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+.zv-pd-kasten {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border: 1px solid currentColor;
+  position: relative;
+}
+.zv-pd-kasten-an {
+  background:
+    linear-gradient(45deg, transparent 45%, currentColor 45% 55%, transparent 55%),
+    linear-gradient(-45deg, transparent 45%, currentColor 45% 55%, transparent 55%);
+}
+.zv-pd-logo {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.zv-pd-logo-mitte {
+  margin-inline: auto;
+}
+.zv-pd-logo-rechts {
+  margin-left: auto;
+}
+.zv-pd-linie {
+  display: block;
+  position: relative;
+}
+.zv-pd-linie::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.zv-pd-linie-waag::after {
+  left: 0;
+  right: 0;
+  top: calc(50% - var(--pd-staerke) / 2);
+  height: var(--pd-staerke);
+}
+.zv-pd-linie-senk::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - var(--pd-staerke) / 2);
+  width: var(--pd-staerke);
+}
+.zv-pd-linie.zv-pd-farbe-akzent {
+  color: var(--pd-akzent);
+}
+.zv-pd-flaeche {
+  display: block;
+}
+.zv-pd-flaeche-akzent {
+  background: var(--pd-akzent);
+}
+.zv-pd-flaeche-akzent-hell {
+  background: color-mix(in srgb, var(--pd-akzent) 14%, var(--zv-signature-paper));
+}
+.zv-pd-flaeche-grau-hell {
+  background: color-mix(in srgb, var(--zv-signature-ink) 6%, var(--zv-signature-paper));
+}
+.zv-pd-unterschrift {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: color-mix(in oklch, var(--zv-signature-ink) 75%, var(--zv-signature-paper));
+}
+.zv-pd-unterschrift span {
+  border-top: 1px solid var(--zv-signature-ink);
+  margin-bottom: 0.2em;
+}
+.zv-pd-el-fluss {
+  outline: 1.5px dashed var(--zv-status-info);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--zv-status-info) 9%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+}
+.zv-pd-fluss-inhalt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--zv-space-2);
+  font: var(--zv-text-xs)/1.35 var(--zv-font-ui);
+  color: color-mix(in oklch, var(--zv-status-info) 45%, var(--zv-signature-ink));
+}
+.zv-pd-fluss-felder {
+  color: color-mix(in oklch, var(--zv-signature-ink) 60%, transparent);
+}
+
+.zv-pd-fuehrung {
+  position: absolute;
+  background: var(--zv-accent-vivid);
+  pointer-events: none;
+  z-index: 4;
+}
+.zv-pd-fuehrung-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.zv-pd-fuehrung-y {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.zv-pd-mass {
+  position: absolute;
+  z-index: 5;
+  padding: 1px 6px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-vivid);
+  color: var(--zv-accent-contrast);
+  font: var(--zv-weight-bold) var(--zv-text-xs) var(--zv-font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.zv-pd-leiste {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 3px;
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+  font: var(--zv-text-xs) var(--zv-font-ui);
+  white-space: nowrap;
+}
+.zv-pd-leiste span {
+  padding: 0 var(--zv-space-2);
+  color: var(--zv-text-muted);
+}
+.zv-pd-leiste button {
+  border: 0;
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  padding: 4px 7px;
+  border-radius: var(--zv-radius-s);
+  cursor: pointer;
+}
+.zv-pd-leiste button:hover {
+  background: var(--zv-surface-2);
+}
+.zv-pd-geist {
+  position: fixed;
+  z-index: 70;
+  pointer-events: none;
+  border: 1.5px solid var(--zv-status-info);
+  background: color-mix(in oklch, var(--zv-signature-paper) 88%, transparent);
+  color: var(--zv-signature-ink);
+  border-radius: 2px;
+  box-shadow: var(--zv-shadow-2);
+  padding: 2px 6px;
+  font: var(--zv-text-xs) var(--zv-font-ui);
+  overflow: hidden;
+}
+
+.zv-pd-eig {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+.zv-pd-eig h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+}
+.zv-pd-eig .zv-field {
+  margin: 0;
+}
+.zv-pd-eig .zv-segmented {
+  display: flex;
+}
+.zv-pd-eig .zv-segmented button {
+  flex: 1;
+  justify-content: center;
+  padding-inline: var(--zv-space-2);
+}
+.zv-pd-vier {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--zv-space-1);
+}
+.zv-pd-zwei {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-2);
+  align-items: end;
+}
+.zv-pd-zahl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+.zv-pd-zahl input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.zv-pd-farben {
+  display: flex;
+  gap: var(--zv-space-2);
+}
+.zv-pd-farbknopf {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border-strong);
+  background: currentColor;
+  cursor: pointer;
+}
+.zv-pd-farbknopf.zv-pd-farbe-akzent {
+  color: var(--pd-akzent-druck, var(--zv-accent-strong));
+}
+.zv-pd-farbknopf.active {
+  outline: 2px solid var(--zv-accent);
+  outline-offset: 2px;
+}
+.zv-pd-el-aktionen {
+  gap: var(--zv-space-1);
+}
+.zv-pd-pruefung .zv-segmented {
+  display: flex;
+}
+.zv-pd-pruefung .zv-segmented button {
+  flex: 1;
+  justify-content: center;
+}
+.zv-pd-pruefung .zv-hinweis {
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-pd-hinweis {
+  display: block;
+  width: 100%;
+  margin-top: var(--zv-space-2);
+  padding: var(--zv-space-2);
+  border: 1px solid var(--zv-border);
+  border-left: 3px solid var(--zv-status-warn);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  text-align: left;
+  cursor: pointer;
+}
+.zv-pd-hinweis:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.zv-pd-ebenen ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-pd-ebene {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  padding: 4px var(--zv-space-2);
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  text-align: left;
+  cursor: pointer;
+}
+.zv-pd-ebene span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-pd-ebene:hover {
+  background: var(--zv-surface-2);
+}
+.zv-pd-ebene.active {
+  background: var(--zv-accent-soft);
+}
+.zv-pd-ebene-warn {
+  color: var(--zv-status-warn);
+  font-size: var(--zv-text-xs);
+}
+.zv-pd-tasten {
+  margin-top: var(--zv-space-2);
+  line-height: 1.6;
+}
+.zv-pd-vorschau-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--zv-scrim);
+  display: flex;
+  justify-content: center;
+  padding: var(--zv-space-5);
+}
+.zv-pd-vorschau {
+  width: min(900px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--zv-surface);
+  border-radius: var(--zv-radius-l);
+  overflow: hidden;
+}
+.zv-pd-vorschau .zv-modal-kopf {
+  padding: var(--zv-space-3) var(--zv-space-4);
+}
+.zv-pd-vorschau iframe {
+  flex: 1;
+  border: 0;
+  background: var(--zv-surface-gedaempft);
+}
