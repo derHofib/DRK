@@ -4170,9 +4170,16 @@ button.zv-kal-mini-tag:focus-visible {
 .zv-art-frei { --zv-art-h: var(--zv-art-frei-h); --zv-art-c: var(--zv-art-frei-c); }
 .zv-art-fortbildung { --zv-art-h: var(--zv-art-fortbildung-h); --zv-art-c: var(--zv-art-fortbildung-c); }
 .zv-art-abwesend { --zv-art-h: var(--zv-art-abwesend-h); --zv-art-c: var(--zv-art-abwesend-c); }
-.zv-art-klient { --zv-art-h: var(--zv-art-klient-h); --zv-art-c: var(--zv-art-klient-c); }
-.zv-art-besprechung { --zv-art-h: var(--zv-art-besprechung-h); --zv-art-c: var(--zv-art-besprechung-c); }
-.zv-art-termin { --zv-art-h: var(--zv-art-termin-h); --zv-art-c: var(--zv-art-termin-c); }
+/* Termintypen (migrations/0085): dieselben Flaechen-/Farbregeln wie die
+   Abwesenheiten, nur Farbton/Buntheit kommen aus dem gewaehlten Ton. */
+.zv-typ-grau { --zv-art-h: var(--zv-typ-grau-h); --zv-art-c: var(--zv-typ-grau-c); }
+.zv-typ-gruen { --zv-art-h: var(--zv-typ-gruen-h); --zv-art-c: var(--zv-typ-gruen-c); }
+.zv-typ-petrol { --zv-art-h: var(--zv-typ-petrol-h); --zv-art-c: var(--zv-typ-petrol-c); }
+.zv-typ-blau { --zv-art-h: var(--zv-typ-blau-h); --zv-art-c: var(--zv-typ-blau-c); }
+.zv-typ-oliv { --zv-art-h: var(--zv-typ-oliv-h); --zv-art-c: var(--zv-typ-oliv-c); }
+.zv-typ-orange { --zv-art-h: var(--zv-typ-orange-h); --zv-art-c: var(--zv-typ-orange-c); }
+.zv-typ-rose { --zv-art-h: var(--zv-typ-rose-h); --zv-art-c: var(--zv-typ-rose-c); }
+.zv-typ-sand { --zv-art-h: var(--zv-typ-sand-h); --zv-art-c: var(--zv-typ-sand-c); }
 
 .zv-art-flaeche,
 .zv-art-marke {
@@ -10542,5 +10549,250 @@ button.zv-team-name:hover {
   }
   .zv-team-karte-offen .zv-team-fuss {
     padding: 0;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Typen & Listen (Organisatorisch, migrations/0085): links die Listen nach
+   Bereich, rechts die gewaehlte. Auf dem Handy werden die Listen zu einer
+   umbrechenden Knopfreihe ueber dem Inhalt -- eine seitliche Spalte
+   haette dort keinen Platz.
+   ------------------------------------------------------------------ */
+.zv-typen-seite {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+
+.zv-typen-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-4);
+}
+
+.zv-typen-nav-gruppe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-typen-nav-titel {
+  padding: 0 var(--zv-space-3);
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+}
+
+.zv-typen-nav-punkt {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-typen-nav-punkt:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-typen-nav-punkt.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-typen-fest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-left: auto;
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-typen-fest svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+.zv-typen-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-typen-titel {
+  margin: 0 0 var(--zv-space-1);
+  font-size: var(--zv-text-l);
+}
+
+.zv-typen-text {
+  max-width: 60ch;
+  margin: 0 0 var(--zv-space-4);
+}
+
+.zv-typen-kopf .zv-typen-text {
+  margin-bottom: 0;
+}
+
+.zv-typen-liste .zv-info-karte {
+  cursor: default;
+}
+
+/* Bearbeiten und die zwei Pfeile in einer Zeile: umgebrochen machten sie
+   jede Zeile dreimal so hoch (im Browser gemessen). */
+.zv-typen-liste .zv-liste-zelle-aktionen {
+  flex-wrap: nowrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-typen-griff {
+  display: inline-flex;
+  color: var(--zv-text-gedaempft);
+  cursor: grab;
+}
+
+.zv-typen-aus {
+  opacity: 0.65;
+}
+
+.zv-typen-gezogen {
+  outline: 2px dashed var(--zv-accent);
+  outline-offset: -2px;
+}
+
+.zv-typen-liste .zv-liste-zelle-titel .zv-person-punkt {
+  margin-right: var(--zv-space-2);
+}
+
+.zv-typen-feste-liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zv-typen-feste-liste li {
+  display: flex;
+  align-items: center;
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+/* Drei Moeglichkeiten mit Erklaerung: Karten statt Chips, der Text ist
+   die eigentliche Entscheidungshilfe. */
+.zv-typen-wahl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  border: none;
+  margin: 0 0 var(--zv-space-4);
+  padding: 0;
+}
+
+.zv-typen-wahl legend {
+  margin-bottom: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-typen-wahl .zv-typen-wahl-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.zv-typen-wahl-option.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-typen-wahl .zv-typen-wahl-option input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.zv-typen-wahl-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-typen-wahl-option > span > span {
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-s);
+}
+
+.zv-feld-hilfe {
+  margin: var(--zv-space-1) 0 0;
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-s);
+}
+
+.zv-typen-dialog-fuss {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-top: var(--zv-space-4);
+  padding-top: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+
+.zv-link-btn.zv-link-btn-gefahr {
+  color: var(--zv-status-danger);
+}
+
+@media (max-width: 760px) {
+  .zv-typen-seite {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-4);
+  }
+
+  .zv-typen-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--zv-space-2);
+  }
+
+  .zv-typen-nav-gruppe {
+    flex-direction: row;
+  }
+
+  .zv-typen-nav-titel {
+    display: none;
+  }
+
+  .zv-typen-nav-punkt {
+    border: 1px solid var(--zv-border);
+    border-radius: var(--zv-radius-pill);
+  }
+
+  .zv-typen-griff {
+    display: none;
   }
 }

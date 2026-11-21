@@ -19,6 +19,7 @@ import {
   IRueckmeldungen,
   IStandort,
   IStunden,
+  ITag,
   ITagesberichte,
   IVertretung,
   type IconKomponente,
@@ -120,11 +121,15 @@ export const MENUE_GRUPPEN: { id: MenueGruppeId; label: string; reiter: HauptRei
  * Unauffaelligkeit, um die es geht. Jeder Eintrag nennt das Recht, ohne das
  * er nicht erscheint (nur Ausblenden -- verbindlich prueft der Service).
  */
-export type OrganisatorischRecht = "standorte" | "kassenbuch" | "formulare" | "rueckmeldungen";
+/** "typen": Buchungs- ODER Termintypen verwalten (Shell.tsx) -- jede Liste der Seite prueft ihr eigenes Recht. */
+export type OrganisatorischRecht = "standorte" | "typen" | "formulare" | "rueckmeldungen";
 
 export const ORGANISATORISCH: (UnterpunktEintrag & { recht: OrganisatorischRecht; beschreibung: string })[] = [
   { wert: "standorte-verwalten", label: "Standorte", icon: IStandort, recht: "standorte", beschreibung: "Standorte des Trägers anlegen, bearbeiten und stilllegen." },
-  { wert: "buchungstypen", label: "Buchungstypen", icon: IKassenbuch, recht: "kassenbuch", beschreibung: "Buchungstypen für das Kassenbuch." },
+  // Interner Wert bleibt "buchungstypen" (gemerkte Spruenge zeigen darauf);
+  // seit den Termintypen (migrations/0085) buendelt die Seite alle
+  // Auswahllisten des Traegers -- Wunsch Dennis: "nur auf einer Seite".
+  { wert: "buchungstypen", label: "Typen & Listen", icon: ITag, recht: "typen", beschreibung: "Alle Auswahllisten des Trägers an einem Ort: was man bei Terminen, Buchungen und Abwesenheiten auswählen kann." },
   { wert: "formulare", label: "Formulare", icon: IDokument, recht: "formulare", beschreibung: "Formulare für Protokolle und Tagesberichte bauen." },
   { wert: "rueckmeldungen", label: "Rückmeldungen", icon: IRueckmeldungen, recht: "rueckmeldungen", beschreibung: "Ideen und Fehler aus dem Team prüfen und freigeben." },
 ];

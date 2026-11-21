@@ -59,6 +59,9 @@ import type {
   AbwesenheitRechteDto,
   TerminAntwort,
   TerminDto,
+  TerminTypAendernEingabe,
+  TerminTypDto,
+  TerminTypEingabe,
   AnwaerterStatus,
   AccountTypDto,
   AufgabeDto,
@@ -1185,8 +1188,15 @@ export const api = {
     request<TerminDto>("/kalender/termine", { method: "POST", body: JSON.stringify(eingabe) }),
   terminAendern: (
     id: string,
-    payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean; art?: TerminDto["art"] }
+    payload: { titel?: string; beschreibung?: string | null; ort?: string | null; beginn?: string; ende?: string; ganztaegig?: boolean; typId?: string }
   ) => request<TerminDto>(`/kalender/termine/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  terminTypen: () => request<TerminTypDto[]>("/kalender/typen"),
+  terminTypAnlegen: (eingabe: TerminTypEingabe) => request<TerminTypDto>("/kalender/typen", { method: "POST", body: JSON.stringify(eingabe) }),
+  terminTypAendern: (id: string, eingabe: TerminTypAendernEingabe) =>
+    request<TerminTypDto>(`/kalender/typen/${id}`, { method: "PATCH", body: JSON.stringify(eingabe) }),
+  terminTypenReihenfolge: (ids: string[]) =>
+    request<TerminTypDto[]>("/kalender/typen/reihenfolge", { method: "PUT", body: JSON.stringify({ ids }) }),
+  terminTypLoeschen: (id: string) => request<void>(`/kalender/typen/${id}`, { method: "DELETE" }),
   terminAbsagen: (id: string) => request<TerminDto>(`/kalender/termine/${id}/absagen`, { method: "POST" }),
   terminAntworten: (id: string, antwort: TerminAntwort, stundenErfassen?: boolean) =>
     request<TerminDto>(`/kalender/termine/${id}/antwort`, { method: "POST", body: JSON.stringify({ antwort, stundenErfassen }) }),

@@ -10,20 +10,20 @@ import { TerminFormular } from "../components/TerminFormular";
 import { IBearbeiten, IDarstellung, IFehler, IHerunterladen, IInfo, ILeerKalender, INeu, IPerson, IStornieren, IStunden, ITag, IVor, IZurueckPfeil } from "../components/icons";
 import { AbwesenheitDetail, AbwesenheitEintragen, AbwesenheitsZeile, ArtDreieck } from "../kalender/Abwesenheiten";
 import {
-  KALENDER_ARTEN,
-  KALENDER_ART_LABEL,
+  ABWESENHEIT_LABEL,
   KEIN_FILTER,
   abwesenheitArt,
   abwesenheitPasst,
   abwesenheitTage,
   filterAktiv,
   istAbwesenheitsArt,
+  kalenderArten,
+  terminArt,
   terminPasst,
-  wichtigsteArt,
-  type KalenderArt,
   type KalenderFilter,
 } from "../kalender/eintraege";
 import { WochenZeitraster } from "../kalender/WochenZeitraster";
+import { useTerminTypen } from "../kalender/terminTypen";
 import { personFarbStil, useMitarbeitendeMitFarbe } from "../personFarbe";
 import { formatDatum, formatTagTrenner, formatTerminUhrzeit, formatTerminZeit, kalenderwoche, lokalesDatum, terminTag } from "../format";
 
@@ -227,6 +227,11 @@ export function Kalender({
   }, [sichtAbwesenheiten]);
 
   const { liste: mitarbeitende, farbIndizes } = useMitarbeitendeMitFarbe();
+  // Termintypen des Traegers (Reihenfolge aus "Typen & Listen") plus die
+  // Typen an geladenen Terminen -- auch ausgeblendete oder, fuer
+  // Klient:innen, gar nicht ladbare Typen bekommen so Name und Farbe.
+  const typListe = useTerminTypen();
+  const ka = useMemo(() => kalenderArten([...typListe, ...termine.map((t) => t.typ)]), [typListe, termine]);
   /** Personenfarbe eines Termins: nur fuer von Mitarbeitenden angelegte Termine, deren Konto die Liste kennt. */
   const farbIndexVon = (t: TerminDto): number | undefined =>
     t.erstelltVon.art === "benutzer" ? farbIndizes.get(t.erstelltVon.id) : undefined;
@@ -254,9 +259,9 @@ export function Kalender({
         .map((a) => [a.benutzer.id, { name: a.benutzer.name, farbIndex: farbIndizes.get(a.benutzer.id)! }] as const),
     ]),
   ].sort(([, a], [, b]) => a.name.localeCompare(b.name, "de"));
-  const artenImBlick = KALENDER_ARTEN.filter((art) =>
+  const artenImBlick = ka.liste.filter((art) =>
     [...sichtbareTage].some(
-      (tag) => (nachTag.get(tag) ?? []).some((t) => !t.abgesagtAm && t.art === art) || (abwNachTag.get(tag) ?? []).some((a) => abwesenheitArt(a) === art),
+      (tag) => (nachTag.get(tag) ?? []).some((t) => !t.abgesagtAm && terminArt(t) === art) || (abwNachTag.get(tag) ?? []).some((a) => abwesenheitArt(a) === art),
     ),
   );
 
@@ -266,7 +271,7 @@ export function Kalender({
     const liste = nachTag.get(tag) ?? [];
     const abw = abwNachTag.get(tag) ?? [];
     const aktiv = liste.filter((t) => !t.abgesagtAm);
-    const arten = KALENDER_ARTEN.filter((art) => aktiv.some((t) => t.art === art) || abw.some((a) => abwesenheitArt(a) === art));
+    const arten = ka.liste.filter((art) => aktiv.some((t) => terminArt(t) === art) || abw.some((a) => abwesenheitArt(a) === art));
     // Je Person ein Streifen; von Klient:innen angelegte Termine teilen sich einen neutralen.
     const personen = [
       ...new Map([
@@ -276,7 +281,7 @@ export function Kalender({
     ];
     const anzahl = aktiv.length + abw.length;
     const sammel = farbModus === "art" ? arten.length >= SAMMEL_AB : anzahl >= SAMMEL_AB;
-    return { liste, abw, aktiv, anzahl, arten, personen, sammel, ecke: wichtigsteArt(arten) };
+    return { liste, abw, aktiv, anzahl, arten, personen, sammel, ecke: ka.wichtigste(arten) };
   };
   const sammelImJahr = ansicht === "jahr" && [...sichtbareTage].some((tag) => jahresTag(tag).sammel);
 
@@ -292,7 +297,10 @@ export function Kalender({
     .map(([wert, label]) => ({ wert, label }))
     .sort((a, b) => a.label.localeCompare(b.label, "de"));
   // "abwesend" ist nur eine Art fuer alle, die den Grund nicht sehen duerfen.
-  const artOptionen = KALENDER_ARTEN.filter((a) =>
+  // Ausgeblendete Typen nur, wenn sie an geladenen Terminen haengen.
+  const ausgeblendet = new Set(typListe.filter((t) => !t.aktiv).map((t) => `typ:${t.id}`));
+  const geladeneTypen = new Set(termine.map(terminArt));
+  const artOptionen = ka.liste.filter((a) => !ausgeblendet.has(a) || geladeneTypen.has(a)).filter((a) =>
     !mitAbwesenheiten ? !istAbwesenheitsArt(a) : a === "abwesend" ? !abwRechte.artSehen : true,
   );
 
@@ -430,12 +438,12 @@ export function Kalender({
         <FilterPille
           icon={<ITag />}
           label="Art"
-          wert={filter.arten.length > 0 ? `: ${auswahlText(filter.arten.map((a) => KALENDER_ART_LABEL[a]))}` : null}
+          wert={filter.arten.length > 0 ? `: ${auswahlText(filter.arten.map((a) => ka.label(a)))}` : null}
           onEntfernen={() => setFilter((f) => ({ ...f, arten: [] }))}
         >
           {() => (
             <FilterMehrfachAuswahl
-              optionen={artOptionen.map((a) => ({ wert: a, label: istAbwesenheitsArt(a) ? `Abwesenheit: ${KALENDER_ART_LABEL[a]}` : KALENDER_ART_LABEL[a] }))}
+              optionen={artOptionen.map((a) => ({ wert: a, label: istAbwesenheitsArt(a) ? `Abwesenheit: ${ka.label(a)}` : ka.label(a) }))}
               gewaehlt={filter.arten}
               onAendern={(arten) => setFilter((f) => ({ ...f, arten }))}
               durchsuchbar={false}
@@ -524,7 +532,7 @@ export function Kalender({
                     const offen = vorschau?.tag === tag;
                     const zustand = tagAnzahl === 0 ? " abgesagt" : sammel ? " belegt sammel" : ` belegt${farbig ? " personfarbe" : ""}`;
                     const namen = [...new Set(aktiv.map((t) => t.erstelltVon.name))].join(", ");
-                    const abwesendText = abw.map((a) => (a.art ? `${a.benutzer.name} (${KALENDER_ART_LABEL[a.art]})` : a.benutzer.name)).join(", ");
+                    const abwesendText = abw.map((a) => (a.art ? `${a.benutzer.name} (${ABWESENHEIT_LABEL[a.art]})` : a.benutzer.name)).join(", ");
                     // Die Ecke traegt nur im Personenmodus Information: im Artmodus ist die Flaeche selbst schon die Art.
                     const mitEcke = farbModus === "person" && ecke !== null && tagAnzahl > 0;
                     return (
@@ -558,7 +566,7 @@ export function Kalender({
                         {farbig && (
                           <span className="zv-kal-mini-farben" aria-hidden="true">
                             {farbModus === "art"
-                              ? arten.map((a) => <span key={a} className={`zv-art-flaeche zv-art-${a}`} />)
+                              ? arten.map((a) => <span key={a} className={`zv-art-flaeche ${ka.klasse(a)}`} />)
                               : personen.map((fi, j) =>
                                   fi === undefined ? (
                                     <span key={`n${j}`} className="zv-kal-mini-neutral" />
@@ -569,7 +577,7 @@ export function Kalender({
                           </span>
                         )}
                         <span className="zv-kal-mini-zahl">{Number(tag.slice(8))}</span>
-                        {mitEcke && <span className={`zv-kal-ecke zv-art-${ecke}`} aria-hidden="true" />}
+                        {mitEcke && <span className={`zv-kal-ecke ${ka.klasse(ecke!)}`} aria-hidden="true" />}
                       </button>
                     );
                   })}
@@ -643,7 +651,7 @@ export function Kalender({
                           {t.titel}
                         </strong>
                         <span>
-                          {t.art !== "termin" && <span className={`zv-art-marke zv-art-${t.art}`}>{KALENDER_ART_LABEL[t.art]}</span>}
+                          {!t.typ.istStandard && <span className={`zv-art-marke zv-typ-${t.typ.farbe}`}>{t.typ.bezeichnung}</span>}
                           {t.erstelltVon.name}
                           {t.ort && ` · ${t.ort}`}
                         </span>
@@ -671,8 +679,8 @@ export function Kalender({
               <span className="zv-kal-legende-titel">Arten</span>
               {artenImBlick.map((a) => (
                 <span key={a} className="zv-kal-legende-eintrag" role="listitem">
-                  <span className={`zv-person-punkt zv-art-flaeche zv-art-${a}`} aria-hidden="true" />
-                  {KALENDER_ART_LABEL[a]}
+                  <span className={`zv-person-punkt zv-art-flaeche ${ka.klasse(a)}`} aria-hidden="true" />
+                  {ka.label(a)}
                 </span>
               ))}
             </>
@@ -696,8 +704,8 @@ export function Kalender({
               <span className="zv-kal-legende-titel">Ecke = Art</span>
               {artenImBlick.map((a) => (
                 <span key={a} className="zv-kal-legende-eintrag" role="listitem">
-                  <ArtDreieck art={a} />
-                  {KALENDER_ART_LABEL[a]}
+                  <ArtDreieck klasse={ka.klasse(a)} />
+                  {ka.label(a)}
                 </span>
               ))}
             </>
@@ -796,7 +804,7 @@ function TagesVorschau({
               )}
               <span className="zv-kal-vorschau-zeit">ganztägig</span>
               <span className="zv-kal-vorschau-text">
-                <strong>{a.benutzer.name}</strong> <span className={`zv-art-marke zv-art-${art}`}>{KALENDER_ART_LABEL[art]}</span>
+                <strong>{a.benutzer.name}</strong> <span className={`zv-art-marke zv-art-${art}`}>{ABWESENHEIT_LABEL[art]}</span>
               </span>
             </li>
           );
@@ -814,7 +822,7 @@ function TagesVorschau({
               <span className="zv-kal-vorschau-text">
                 <strong className={t.abgesagtAm ? "zv-durchgestrichen" : undefined}>{t.titel}</strong>
                 {t.abgesagtAm && " (abgesagt)"} <span>· {t.erstelltVon.name}</span>{" "}
-                {t.art !== "termin" && <span className={`zv-art-marke zv-art-${t.art}`}>{KALENDER_ART_LABEL[t.art]}</span>}
+                {!t.typ.istStandard && <span className={`zv-art-marke zv-typ-${t.typ.farbe}`}>{t.typ.bezeichnung}</span>}
               </span>
             </li>
           );
@@ -935,7 +943,7 @@ function TerminDetail({
                   beginn: e.beginn,
                   ende: e.ende,
                   ganztaegig: e.ganztaegig,
-                  art: e.art,
+                  typId: e.typId,
                   ...(e.stundenErfassen !== undefined ? { stundenErfassen: e.stundenErfassen, stundenLeistungsart: e.stundenLeistungsart ?? null } : {}),
                 }),
               "Termin konnte nicht gespeichert werden."
