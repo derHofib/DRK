@@ -117,6 +117,7 @@ import type {
   StandortVereinbarungAenderung,
   StandortVereinbarungDto,
   StandortVereinbarungEingabe,
+  MitarbeiterZustaendigkeitDto,
 } from "@zimmerakte/shared";
 
 const TOKEN_KEY = "zimmerakte_token";
@@ -607,6 +608,9 @@ export const api = {
     request<RueckmeldungDetailDto>(`/rueckmeldungen/${id}`, { method: "PATCH", body: JSON.stringify({ status, notiz }) }),
 
   benutzerListe: () => request<BenutzerListEintragDto[]>("/benutzer"),
+  // Bezugsklient:innen und Vertretungen einer Person (Mitarbeiter-Detail).
+  mitarbeiterZustaendigkeit: (benutzerId: string) =>
+    request<MitarbeiterZustaendigkeitDto>(`/benutzer/${benutzerId}/zustaendigkeiten`),
   // Das eigene Konto (Name, Positionen) -- fuer den Benutzerblock der Seitenleiste.
   benutzerIch: () => request<BenutzerListEintragDto>("/benutzer/ich"),
   // Standortregel (Migration 0084): Vorschau "wer sieht danach weniger" und Umschalten.

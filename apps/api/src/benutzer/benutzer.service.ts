@@ -7,7 +7,8 @@ import { neuerResetToken, resetTokenHash } from "../common/reset-token";
 import { isPgError } from "../common/pg-error";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { ladeStandortSicht, siehtWeniger } from "../common/standort-sicht";
-import type { StandortSichtDto, StandortSichtVorschauDto } from "@zimmerakte/shared";
+import type { MitarbeiterZustaendigKurzDto, MitarbeiterZustaendigkeitDto, StandortSichtDto, StandortSichtVorschauDto } from "@zimmerakte/shared";
+import { ladeZustaendigKurz, ladeZustaendigkeit } from "./zustaendigkeit";
 import { RechteService } from "../rechte/rechte.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -29,6 +30,7 @@ export interface BenutzerListEintrag {
   standortIds: string[];
   einheitIds: string[];
   sicht: StandortSichtDto;
+  zustaendig: MitarbeiterZustaendigKurzDto;
 }
 
 // SQLSTATE fuer eine verletzte UNIQUE-Constraint (benutzer_mandant_id_email_key,
@@ -121,6 +123,7 @@ export class BenutzerService {
       );
       const einheitenJeBenutzer = new Map(einheiten.map((e) => [e.benutzer_id, e.einheit_ids]));
       const sichtJeBenutzer = await ladeStandortSicht(client, rows.map((r) => r.id));
+      const zustaendigJeBenutzer = await ladeZustaendigKurz(client, rows.map((r) => r.id));
       return rows.map((r) => ({
         id: r.id,
         email: r.email,
@@ -131,6 +134,7 @@ export class BenutzerService {
         einheitIds: einheitenJeBenutzer.get(r.id) ?? [],
         sicht: sichtJeBenutzer.get(r.id) ?? { alle: false, eintraege: [] },
         positionen: eindeutigePositionen(r.positionen),
+        zustaendig: zustaendigJeBenutzer.get(r.id) ?? { bezugsklienten: 0, vertritt: [], wirdVertretenVon: [] },
       }));
     });
   }
@@ -152,6 +156,18 @@ export class BenutzerService {
   // jemand mit organigramm.manage-permissions ihn auf eine Position setzt
   // (siehe organigramm.service.ts::besetzen(), dort sitzt der eigentliche
   // Eskalationsschutz). Hier reicht deshalb das breite mitarbeitende.anlegen.
+  /**
+   * Detail „Wofür ist die Person zuständig“ (Rueckmeldung 29e0f19d). Ohne
+   * eigene Rechtepruefung, wie die Liste selbst -- Begruendung und die
+   * Filter (Standort-Sicht je Klient:in) in zustaendigkeit.ts.
+   */
+  async zustaendigkeit(benutzerId: string): Promise<MitarbeiterZustaendigkeitDto> {
+    const ctx = requireTenantContext();
+    const ergebnis = await this.db.withTenant((client) => ladeZustaendigkeit(client, ctx.benutzerId, benutzerId));
+    if (!ergebnis) throw new NotFoundException("Person nicht gefunden.");
+    return ergebnis;
+  }
+
   async anlegen(input: { name: string; email: string; passwort: string }) {
     const ctx = requireTenantContext();
     if (!(await this.rechte.hatRecht("mitarbeitende", "anlegen"))) {
