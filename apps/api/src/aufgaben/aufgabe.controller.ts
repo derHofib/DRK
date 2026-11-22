@@ -38,16 +38,21 @@ export class AufgabeController {
     @Query("nurEigene") nurEigene?: string,
     @Query("offen") offen?: string,
     @Query("faelligBis") faelligBis?: string,
+    @Query("erledigtSeit") erledigtSeit?: string,
     @Query("prioritaet") prioritaet?: string,
     @Query("sortierung") sortierung?: string
   ) {
     const prioritaetGeprueft = prioritaetSchema.safeParse(prioritaet);
+    // Ungueltiges Datum wird ignoriert statt 500 (kein globaler
+    // ZodError-Filter) -- gleiches Muster wie bei prioritaet.
+    const erledigtSeitGeprueft = z.string().date().safeParse(erledigtSeit);
     return this.aufgaben.findeAlle({
       zimmerId,
       zugewiesenAn,
       nurEigene: nurEigene === "true",
       offen: offen === "true" ? true : offen === "false" ? false : undefined,
       faelligBis,
+      erledigtSeit: erledigtSeitGeprueft.success ? erledigtSeitGeprueft.data : undefined,
       prioritaet: prioritaetGeprueft.success ? (prioritaetGeprueft.data as AufgabePrioritaet) : undefined,
       sortierung: sortierung === "prioritaet" ? "prioritaet" : "faelligkeit",
     });
