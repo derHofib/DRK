@@ -127,6 +127,23 @@
   }
 }
 
+/* Angedockt (nur ab 1280px gesetzt, siehe Seitenpanel.tsx): schmaler und
+   ohne Schatten, weil es nicht ueber dem Inhalt liegt, sondern daneben --
+   die Seite macht mit .zv-neben-angedocktem-panel Platz. */
+@media (min-width: 1280px) {
+  .zv-seitenpanel.zv-seitenpanel-angedockt {
+    width: var(--zv-seitenpanel-angedockt-breite);
+    box-shadow: none;
+  }
+  /* max-width statt padding-right: der Inhaltsbereich ist je nach Seite
+     auf --zv-content-max begrenzt oder nicht -- ein festes Polster wuerde
+     einen ohnehin schmalen Inhalt unnoetig weiter zusammendruecken. So
+     endet er einfach vor dem Panel, gemessen am Fenster. */
+  .zv-neben-angedocktem-panel {
+    max-width: calc(100vw - var(--zv-sidebar-breite) - var(--zv-seitenpanel-angedockt-breite) - 2 * var(--zv-space-5));
+  }
+}
+
 /* Vollbild ergibt auf dem Handy keinen zusaetzlichen Platz (das Panel deckt
    dort ohnehin schon alles ab) -- der Knopf verschwindet, statt einen
    wirkungslosen Zustand anzubieten. */
@@ -1735,6 +1752,201 @@
 .zv-room-klient {
   font-size: var(--zv-text-m);
   margin-bottom: var(--zv-space-2);
+}
+
+/* Zimmerkarte als Knopf (Rueckmeldung d5f8252d): die ganze Karte oeffnet
+   das Zimmer-Panel. Die Knopf-Grundwerte des Browsers (zentrierter Text,
+   eigene Schrift) werden zurueckgesetzt, damit sie aussieht wie vorher. */
+.zv-room-card-knopf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.zv-room-card-knopf .zv-room-head {
+  margin-bottom: 0;
+}
+.zv-room-card-knopf:focus-visible {
+  outline: 2px solid var(--zv-accent);
+  outline-offset: 2px;
+}
+/* Ausgewaehlt: Akzentkante und -flaeche wie die aktive Zeile bei Klienten,
+   damit klar ist, welches Zimmer rechts offen ist. */
+.zv-room-card-knopf.zv-aktiv,
+.zv-room-card-knopf.zv-aktiv:hover {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+.zv-room-pillen {
+  display: flex;
+  gap: var(--zv-space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.zv-room-namen {
+  font-size: var(--zv-text-m);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-room-namen.zv-room-namen-leer {
+  color: var(--zv-text-muted);
+}
+.zv-room-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+/* Zimmer-Panel: Abschnitte untereinander, Abstand wie in der Klientenakte. */
+.zv-zimmer-kachel {
+  font-size: var(--zv-text-s);
+}
+.zv-zimmer-abschnitte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+}
+.zv-abschnitt-zaehler {
+  font-size: var(--zv-text-meta);
+  font-weight: normal;
+  color: var(--zv-text-muted);
+}
+.zv-zimmer-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-zimmer-liste > li {
+  border-top: 1px solid var(--zv-border);
+  padding: var(--zv-space-3) 0;
+}
+.zv-zimmer-liste > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.zv-zimmer-zeile,
+.zv-zimmer-person {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+}
+.zv-zimmer-person .zv-initialen-kachel {
+  width: 36px;
+  height: 36px;
+  font-size: var(--zv-text-s);
+}
+.zv-zimmer-person-text {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.zv-zimmer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-zimmer-zeilen-aktionen {
+  display: flex;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.zv-zimmer-neu-link {
+  margin-top: var(--zv-space-3);
+}
+.zv-zimmer-aufgabe-neu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-3);
+  padding-top: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-zimmer-aufgabe-neu input[name="titel"] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* Aufgabe im Panel: Prioritaet | Text | Aktionen. Im schmalen Panel (Handy,
+   Container-Abfrage auf .zv-akte) rutschen die Aktionen unter den Text,
+   sonst bleiben fuer den Titel nur wenige Zeichen. */
+.zv-aufgabe-kompakt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--zv-space-3);
+  align-items: start;
+}
+.zv-aufgabe-kompakt.zv-erledigt {
+  opacity: 0.6;
+}
+.zv-aufgabe-kompakt-titel {
+  font-weight: var(--zv-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.zv-aufgabe-kompakt-beschreibung {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+.zv-aufgabe-kompakt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  margin-top: var(--zv-space-1);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-aufgabe-kompakt-zuweisung {
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--zv-text-meta);
+  padding: 2px var(--zv-space-2);
+}
+.zv-aufgabe-kompakt-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+@container akte (max-width: 460px) {
+  /* Kopf im Handy-Panel: Titel bekommt die ganze Zeile neben der Kachel,
+     die Aktionen rutschen darunter -- sonst bricht "Zimmer" mitten im Wort. */
+  .zv-zimmer-panel .zv-akte-kopf {
+    flex-wrap: wrap;
+  }
+  .zv-zimmer-panel .zv-akte-titel {
+    flex: 1 1 0;
+  }
+  .zv-zimmer-panel .zv-akte-aktionen {
+    flex: 1 1 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  .zv-aufgabe-kompakt {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-2);
+  }
+  .zv-aufgabe-kompakt-prio {
+    justify-self: start;
+  }
 }
 
 /* ==================================================================

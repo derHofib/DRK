@@ -1121,6 +1121,8 @@ export interface AufgabeDto {
 export interface AufgabenAnzahlDto {
   /** offene Zimmer-Aufgaben je zimmerId, fuer die Badge in der Zimmeruebersicht. */
   jeZimmer: Record<string, number>;
+  /** davon ueberfaellig (Faelligkeit vor heute, Berliner Zeit); Zimmer ohne Ueberfaelliges fehlen. */
+  ueberfaelligJeZimmer: Record<string, number>;
   /** offene Aufgaben (Zimmer- oder persoenlich), die dem eigenen Benutzer zugewiesen sind. */
   eigene: number;
 }

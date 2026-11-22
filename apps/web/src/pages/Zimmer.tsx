@@ -12,9 +12,12 @@ import type {
 } from "@zimmerakte/shared";
 import { ZIMMERSTATUS_LABEL } from "@zimmerakte/shared";
 import { api, tokenBenutzerId } from "../api/client";
-import { formatDatum, heuteBerlin } from "../format";
+import { formatDatum, heuteBerlin, initialen } from "../format";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
-import { AufgabeZeile } from "../components/AufgabeZeile";
+import { AufgabeKompakt } from "../components/AufgabeZeile";
+import { AktionsMenue } from "../components/AktionsMenue";
+import { Seitenpanel, useAngedockt } from "../components/Seitenpanel";
+import { KlientDetail } from "./KlientDetail";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
@@ -35,6 +38,7 @@ import {
   ILeerVerlauf,
   ILeerZimmer,
   ILoeschen,
+  IOrdnerOffen,
   INeu,
   ISpeichern,
   ISVergeben,
@@ -99,8 +103,12 @@ export function Zimmer({
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [klienten, setKlienten] = useState<KlientListEintragDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [offenesZimmer, setOffenesZimmer] = useState<string | null>(null);
+  // Zimmer-Panel (Rueckmeldung d5f8252d): EIN ausgewaehltes Zimmer statt
+  // je Karte aufklappbarer Bereiche fuer Aufgaben, Verlauf und Warteliste.
+  const [ausgewaehltesZimmerId, setAusgewaehltesZimmerId] = useState<string | null>(null);
+  const [akteKlientId, setAkteKlientId] = useState<string | null>(null);
   const [verlauf, setVerlauf] = useState<BelegungsverlaufEintragDto[]>([]);
+  const [ganzerVerlauf, setGanzerVerlauf] = useState(false);
 
   const [formularOffen, setFormularOffen] = useState(false);
   const eingebettet = standortIds !== undefined;
@@ -119,7 +127,6 @@ export function Zimmer({
   // -- dann ist der Klient schon festgelegt, kein Dropdown noetig.
   const [wartelistenKlient, setWartelistenKlient] = useState<{ id: string; name: string } | null>(null);
 
-  const [offeneWarteliste, setOffeneWarteliste] = useState<string | null>(null);
   const [wartelisteZimmer, setWartelisteZimmer] = useState<ZimmerListEintragDto | null>(null);
   const [wartelisteFehler, setWartelisteFehler] = useState<string | null>(null);
   const [auszugBewohner, setAuszugBewohner] = useState<{ zimmer: ZimmerListEintragDto; bewohner: ZimmerBewohnerDto } | null>(
@@ -136,16 +143,25 @@ export function Zimmer({
 
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
   const [aufgabenAnzahl, setAufgabenAnzahl] = useState<Record<string, number>>({});
-  const [offenesAufgabenZimmer, setOffenesAufgabenZimmer] = useState<string | null>(null);
+  const [ueberfaelligAnzahl, setUeberfaelligAnzahl] = useState<Record<string, number>>({});
   const [aufgabenImZimmer, setAufgabenImZimmer] = useState<AufgabeDto[]>([]);
+  const [aufgabenAnsicht, setAufgabenAnsicht] = useState<"offen" | "erledigt">("offen");
+  const [aufgabeFormOffen, setAufgabeFormOffen] = useState(false);
   const [aufgabeFormFehler, setAufgabeFormFehler] = useState<string | null>(null);
+  const angedockt = useAngedockt();
 
   function ladeZimmer() {
     api.zimmerListe().then(setZimmer).catch((err) => setFehler(err.message));
   }
 
   function ladeAufgabenAnzahl() {
-    api.aufgabenAnzahlOffen().then((a) => setAufgabenAnzahl(a.jeZimmer)).catch(() => {});
+    api
+      .aufgabenAnzahlOffen()
+      .then((a) => {
+        setAufgabenAnzahl(a.jeZimmer);
+        setUeberfaelligAnzahl(a.ueberfaelligJeZimmer);
+      })
+      .catch(() => {});
   }
 
   function ladeKlienten() {
@@ -247,6 +263,7 @@ export function Zimmer({
   async function zimmerDeaktivieren(zimmerId: string) {
     try {
       await api.zimmerDeaktivieren(zimmerId);
+      if (ausgewaehltesZimmerId === zimmerId) panelSchliessen();
       ladeZimmer();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Zimmer konnte nicht deaktiviert werden.");
@@ -269,6 +286,7 @@ export function Zimmer({
       setWartelistenKlient(null);
       ladeZimmer();
       ladeKlienten();
+      ladeVerlauf();
     } catch (err) {
       setZuweisungFehler(err instanceof Error ? err.message : "Klient:in konnte nicht zugewiesen werden.");
     } finally {
@@ -313,6 +331,7 @@ export function Zimmer({
       setAuszugBewohner(null);
       ladeZimmer();
       ladeKlienten();
+      ladeVerlauf();
     } catch (err) {
       setAuszugFehler(err instanceof Error ? err.message : "Auszug konnte nicht eingetragen werden.");
     } finally {
@@ -335,7 +354,7 @@ export function Zimmer({
       setBearbeiteteBelegung(null);
       ladeZimmer();
       ladeKlienten();
-      if (offenesZimmer) setVerlauf(await api.belegungsverlauf(offenesZimmer));
+      ladeVerlauf();
     } catch (err) {
       setBelegungBearbeitenFehler(err instanceof Error ? err.message : "Belegung konnte nicht geändert werden.");
     } finally {
@@ -386,34 +405,81 @@ export function Zimmer({
     return antrag.beantragtVonId !== aktuelleBenutzerId;
   }
 
-  async function verlaufAnzeigen(zimmerId: string) {
-    if (offenesZimmer === zimmerId) {
-      setOffenesZimmer(null);
+  function zimmerOeffnen(zimmerId: string) {
+    // Zweiter Klick auf dieselbe Karte schliesst wieder -- wie ein Umschalter.
+    if (ausgewaehltesZimmerId === zimmerId) {
+      panelSchliessen();
       return;
     }
-    setOffenesZimmer(zimmerId);
-    try {
-      setVerlauf(await api.belegungsverlauf(zimmerId));
-    } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Belegungsverlauf konnte nicht geladen werden.");
-    }
+    setAusgewaehltesZimmerId(zimmerId);
+    setAkteKlientId(null);
+    setGanzerVerlauf(false);
+    setAufgabeFormOffen(false);
+    setAufgabeFormFehler(null);
+    setAufgabenAnsicht("offen");
   }
 
-  async function ladeAufgabenFuerZimmer(zimmerId: string) {
+  function panelSchliessen() {
+    setAusgewaehltesZimmerId(null);
+    setAkteKlientId(null);
+  }
+
+  // Wechselt die Standortwahl der Belegungsseite, gehoert das offene Zimmer
+  // nicht mehr zur sichtbaren Auswahl.
+  const standortSchluessel = standortIds?.join(",") ?? "";
+  useEffect(() => {
+    panelSchliessen();
+  }, [standortSchluessel]);
+
+  /** 90 Tage: genug fuer "was war hier zuletzt los", ohne dass die Liste ueber Jahre waechst. */
+  function erledigtSeit(): string {
+    return new Date(Date.parse(`${heuteBerlin()}T12:00:00Z`) - 90 * 86_400_000).toISOString().slice(0, 10);
+  }
+
+  function aufgabenFilter(zimmerId: string, ansicht: "offen" | "erledigt") {
+    return ansicht === "offen" ? { zimmerId, offen: true } : { zimmerId, offen: false, erledigtSeit: erledigtSeit() };
+  }
+
+  // Abbruch-Flag: wer schnell Zimmer fuer Zimmer durchklickt, darf nicht die
+  // Aufgaben des vorletzten Zimmers sehen, nur weil dessen Antwort spaeter kam.
+  useEffect(() => {
+    if (!ausgewaehltesZimmerId) return;
+    let abgebrochen = false;
+    setAufgabenImZimmer([]);
+    api
+      .aufgabenListe(aufgabenFilter(ausgewaehltesZimmerId, aufgabenAnsicht))
+      .then((liste) => !abgebrochen && setAufgabenImZimmer(liste))
+      .catch((err) => !abgebrochen && setFehler(err instanceof Error ? err.message : "Aufgaben konnten nicht geladen werden."));
+    return () => {
+      abgebrochen = true;
+    };
+  }, [ausgewaehltesZimmerId, aufgabenAnsicht]);
+
+  useEffect(() => {
+    if (!ausgewaehltesZimmerId) return;
+    let abgebrochen = false;
+    setVerlauf([]);
+    api
+      .belegungsverlauf(ausgewaehltesZimmerId)
+      .then((v) => !abgebrochen && setVerlauf(v))
+      .catch((err) => !abgebrochen && setFehler(err instanceof Error ? err.message : "Belegungsverlauf konnte nicht geladen werden."));
+    return () => {
+      abgebrochen = true;
+    };
+  }, [ausgewaehltesZimmerId]);
+
+  function ladeVerlauf() {
+    if (!ausgewaehltesZimmerId) return;
+    api.belegungsverlauf(ausgewaehltesZimmerId).then(setVerlauf).catch(() => {});
+  }
+
+  async function ladeAufgaben() {
+    if (!ausgewaehltesZimmerId) return;
     try {
-      setAufgabenImZimmer(await api.aufgabenListe({ zimmerId }));
+      setAufgabenImZimmer(await api.aufgabenListe(aufgabenFilter(ausgewaehltesZimmerId, aufgabenAnsicht)));
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Aufgaben konnten nicht geladen werden.");
     }
-  }
-
-  async function aufgabenAnzeigen(zimmerId: string) {
-    if (offenesAufgabenZimmer === zimmerId) {
-      setOffenesAufgabenZimmer(null);
-      return;
-    }
-    setOffenesAufgabenZimmer(zimmerId);
-    await ladeAufgabenFuerZimmer(zimmerId);
   }
 
   async function aufgabeImZimmerAnlegen(e: FormEvent<HTMLFormElement>, zimmerId: string) {
@@ -432,36 +498,37 @@ export function Zimmer({
         zugewiesenAn: String(form.get("zugewiesenAn") ?? "") || undefined,
       });
       formElement.reset();
-      await ladeAufgabenFuerZimmer(zimmerId);
+      setAufgabeFormOffen(false);
+      await ladeAufgaben();
       ladeAufgabenAnzahl();
     } catch (err) {
       setAufgabeFormFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht angelegt werden.");
     }
   }
 
-  async function aufgabeErledigen(zimmerId: string, aufgabeId: string) {
+  async function aufgabeErledigen(aufgabeId: string) {
     try {
       await api.aufgabeErledigen(aufgabeId);
-      await ladeAufgabenFuerZimmer(zimmerId);
+      await ladeAufgaben();
       ladeAufgabenAnzahl();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht erledigt werden.");
     }
   }
 
-  async function aufgabeZuweisenAendern(zimmerId: string, aufgabeId: string, zugewiesenAn: string | null) {
+  async function aufgabeZuweisenAendern(aufgabeId: string, zugewiesenAn: string | null) {
     try {
       await api.aufgabeAktualisieren(aufgabeId, { zugewiesenAn });
-      await ladeAufgabenFuerZimmer(zimmerId);
+      await ladeAufgaben();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Zuweisung konnte nicht geändert werden.");
     }
   }
 
-  async function aufgabeImZimmerLoeschen(zimmerId: string, aufgabeId: string) {
+  async function aufgabeImZimmerLoeschen(aufgabeId: string) {
     try {
       await api.aufgabeLoeschen(aufgabeId);
-      await ladeAufgabenFuerZimmer(zimmerId);
+      await ladeAufgaben();
       ladeAufgabenAnzahl();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Aufgabe konnte nicht gelöscht werden.");
@@ -575,8 +642,407 @@ export function Zimmer({
 
   const etagenVorschlaege = Array.from(new Set(zimmer.map((z) => z.etage)));
 
+  /**
+   * Inhalt des Zimmer-Panels. Aufbau wie die Klientenakte (Kopf mit einer
+   * Hauptaktion, seltene Aktionen im Menue), aber Abschnitte untereinander
+   * statt Reiter: ein Zimmer hat wenig Inhalt, und Reiter wuerden die
+   * Aufgaben von der Belegung trennen -- genau den Ueberblick, um den es in
+   * der Rueckmeldung ging. Aufgaben stehen deshalb ganz oben.
+   */
+  function zimmerPanel(z: ZimmerListEintragDto) {
+    const StatusIcon = STATUS_ICON[z.status];
+    const offen = aufgabenAnzahl[z.id] ?? 0;
+    const ueberfaellig = ueberfaelligAnzahl[z.id] ?? 0;
+    const frei = z.bewohner.length < z.kapazitaet;
+    const antrag = z.offenerKapazitaetsantrag;
+    const verlaufSichtbar = ganzerVerlauf ? verlauf : verlauf.slice(0, 3);
+
+    return (
+      <div className="zv-akte zv-zimmer-panel">
+        <header className="zv-akte-kopf">
+          <span className="zv-initialen-kachel zv-zimmer-kachel" aria-hidden="true">
+            {z.nummer}
+          </span>
+          <div className="zv-akte-titel">
+            <h2>
+              Zimmer {z.nummer}
+              <span className={`zv-pill zv-pill-${z.status}`}>
+                <StatusIcon />
+                {ZIMMERSTATUS_LABEL[z.status]}
+              </span>
+            </h2>
+            <p className="zv-akte-meta">
+              {[z.standortName, z.etage, `${z.bewohner.length} von ${z.kapazitaet} ${z.kapazitaet === 1 ? "Platz" : "Plätzen"} belegt`]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <div className="zv-akte-aktionen">
+            <button
+              type="button"
+              className="zv-btn"
+              onClick={() => {
+                setAufgabenAnsicht("offen");
+                setAufgabeFormFehler(null);
+                setAufgabeFormOffen(true);
+              }}
+            >
+              <INeu />
+              Aufgabe
+            </button>
+            <AktionsMenue label={`Weitere Aktionen zu Zimmer ${z.nummer}`}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setBearbeitenFehler(null);
+                  setBearbeitetesZimmer(z);
+                }}
+              >
+                <IBearbeiten />
+                Zimmer bearbeiten
+              </button>
+              {!antrag && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setKapazitaetFehler(null);
+                    setKapazitaetZimmer(z);
+                  }}
+                >
+                  <IKapazitaet />
+                  Kapazität ändern
+                </button>
+              )}
+              {frei && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setZuweisungFehler(null);
+                    setZuweisungsZimmer(z);
+                  }}
+                >
+                  <IEinziehen />
+                  Klient:in zuweisen
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setWartelisteFehler(null);
+                  setWartelisteZimmer(z);
+                }}
+              >
+                <IWarteliste />
+                Zur Warteliste hinzufügen
+              </button>
+              {z.bewohner.length === 0 && (
+                <button type="button" role="menuitem" className="zv-menue-gefahr" onClick={() => zimmerDeaktivieren(z.id)}>
+                  <IDeaktivieren />
+                  Zimmer deaktivieren
+                </button>
+              )}
+            </AktionsMenue>
+          </div>
+        </header>
+
+        {antrag && (
+          <div className="zv-hinweis zv-hinweis-info">
+            Kapazitätsänderung {antrag.alteKapazitaet} → {antrag.neueKapazitaet} beantragt von {antrag.beantragtVonName}
+            {darfKapazitaetEntscheiden(antrag) && (
+              <div className="zv-vorschau-zeile" style={{ marginTop: "var(--zv-space-1)" }}>
+                <button className="zv-link-btn" onClick={() => kapazitaetEntscheiden(antrag, "bestaetigt")}>
+                  <IGenehmigen />
+                  Bestätigen
+                </button>
+                <button className="zv-link-btn" onClick={() => setKapazitaetAblehnenAntrag(antrag)}>
+                  <IAblehnen />
+                  Ablehnen
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="zv-zimmer-abschnitte">
+          <section aria-label="Aufgaben">
+            <div className="zv-abschnittskopf">
+              <h3>
+                Aufgaben{" "}
+                <span className="zv-abschnitt-zaehler">
+                  {offen} offen{ueberfaellig > 0 ? ` · ${ueberfaellig} überfällig` : ""}
+                </span>
+              </h3>
+              <div className="zv-segmented" role="group" aria-label="Aufgaben anzeigen">
+                {(["offen", "erledigt"] as const).map((ansicht) => (
+                  <button
+                    key={ansicht}
+                    type="button"
+                    className={aufgabenAnsicht === ansicht ? "active" : undefined}
+                    aria-pressed={aufgabenAnsicht === ansicht}
+                    onClick={() => setAufgabenAnsicht(ansicht)}
+                  >
+                    {ansicht === "offen" ? "Offen" : "Erledigt"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {aufgabeFormFehler && (
+              <div className="zv-hinweis zv-hinweis-fehler">
+                <IFehler />
+                {aufgabeFormFehler}
+              </div>
+            )}
+            {aufgabenImZimmer.length === 0 ? (
+              <p className="zv-rand-leer">
+                {aufgabenAnsicht === "offen" ? "Keine offenen Aufgaben." : "In den letzten 90 Tagen nichts erledigt."}
+              </p>
+            ) : (
+              <ul className="zv-zimmer-liste">
+                {aufgabenImZimmer.map((a) => (
+                  <AufgabeKompakt
+                    key={a.id}
+                    aufgabe={a}
+                    benutzerListe={benutzerListe}
+                    aktuelleBenutzerId={aktuelleBenutzerId}
+                    onErledigen={() => aufgabeErledigen(a.id)}
+                    onZuweisenAendern={(bid) => aufgabeZuweisenAendern(a.id, bid)}
+                    onLoeschen={() => aufgabeImZimmerLoeschen(a.id)}
+                  />
+                ))}
+              </ul>
+            )}
+            {aufgabenAnsicht === "erledigt" && aufgabenImZimmer.length > 0 && (
+              <p className="zv-rand-leer">Erledigt in den letzten 90 Tagen.</p>
+            )}
+            {aufgabenAnsicht === "offen" &&
+              (aufgabeFormOffen ? (
+                <form className="zv-zimmer-aufgabe-neu" onSubmit={(e) => aufgabeImZimmerAnlegen(e, z.id)}>
+                  <input name="titel" placeholder="Neue Aufgabe, z. B. Fenstergriff defekt" aria-label="Titel der Aufgabe" required autoFocus />
+                  <select name="prioritaet" defaultValue="normal" aria-label="Priorität">
+                    <option value="niedrig">Niedrig</option>
+                    <option value="normal">Normal</option>
+                    <option value="hoch">Hoch</option>
+                  </select>
+                  <Datumsfeld name="faelligAm" aria-label="Fälligkeit" groesse="kompakt" schnellwahl="faelligkeit" />
+                  <select name="zugewiesenAn" defaultValue="" aria-label="Zuweisen an">
+                    <option value="">Niemand</option>
+                    {benutzerListe.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="zv-btn zv-btn-klein" type="submit">
+                    <ISpeichern />
+                    Anlegen
+                  </button>
+                  <button className="zv-btn zv-btn-sekundaer zv-btn-klein" type="button" onClick={() => setAufgabeFormOffen(false)}>
+                    <IAbbrechen />
+                    Abbrechen
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  className="zv-link-btn zv-zimmer-neu-link"
+                  onClick={() => {
+                    setAufgabeFormFehler(null);
+                    setAufgabeFormOffen(true);
+                  }}
+                >
+                  <INeu />
+                  Aufgabe zu Zimmer {z.nummer} anlegen
+                </button>
+              ))}
+          </section>
+
+          <section aria-label="Belegung">
+            <div className="zv-abschnittskopf">
+              <h3>
+                Belegung{" "}
+                <span className="zv-abschnitt-zaehler">
+                  {z.bewohner.length} von {z.kapazitaet} {z.kapazitaet === 1 ? "Platz" : "Plätzen"}
+                </span>
+              </h3>
+              {frei && (
+                <button
+                  type="button"
+                  className="zv-link-btn"
+                  onClick={() => {
+                    setZuweisungFehler(null);
+                    setZuweisungsZimmer(z);
+                  }}
+                >
+                  <IEinziehen />
+                  Klient:in zuweisen
+                </button>
+              )}
+            </div>
+            {z.bewohner.length === 0 ? (
+              <p className="zv-rand-leer">Niemand wohnt in diesem Zimmer.</p>
+            ) : (
+              <ul className="zv-zimmer-liste">
+                {z.bewohner.map((bew) => (
+                  <li key={bew.belegungId} className="zv-zimmer-person">
+                    <span className="zv-initialen-kachel" aria-hidden="true">
+                      {initialen(bew.name)}
+                    </span>
+                    <div className="zv-zimmer-person-text">
+                      <strong>{bew.name}</strong>
+                      <span className="zv-zimmer-meta">
+                        seit {formatDatum(bew.einzug)}
+                        {bew.auszug && (
+                          <span className="zv-pill zv-pill-info">
+                            <IGeplant />
+                            Auszug geplant {formatDatum(bew.auszug)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <span className="zv-zimmer-zeilen-aktionen">
+                      <button type="button" className="zv-link-btn" onClick={() => setAkteKlientId(bew.id)}>
+                        <IOrdnerOffen />
+                        Akte
+                      </button>
+                      <button
+                        type="button"
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setAuszugFehler(null);
+                          setAuszugBewohner({ zimmer: z, bewohner: bew });
+                        }}
+                      >
+                        <IAuszug />
+                        Auszug
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section aria-label="Warteliste">
+            <div className="zv-abschnittskopf">
+              <h3>
+                Warteliste <span className="zv-abschnitt-zaehler">{z.warteliste.length}</span>
+              </h3>
+              <button
+                type="button"
+                className="zv-link-btn"
+                onClick={() => {
+                  setWartelisteFehler(null);
+                  setWartelisteZimmer(z);
+                }}
+              >
+                <INeu />
+                Hinzufügen
+              </button>
+            </div>
+            {z.warteliste.length === 0 ? (
+              <p className="zv-rand-leer">Noch niemand auf der Warteliste.</p>
+            ) : (
+              <ul className="zv-zimmer-liste">
+                {z.warteliste.map((w, i) => (
+                  <li key={w.id} className="zv-zimmer-zeile">
+                    <div className="zv-zimmer-person-text">
+                      <strong>
+                        {i + 1}. {w.klientName}
+                      </strong>
+                      <span className="zv-zimmer-meta">
+                        seit {formatDatum(w.eingetragenAm.slice(0, 10))}
+                        {w.eingetragenVonName ? ` · ${w.eingetragenVonName}` : ""}
+                      </span>
+                    </div>
+                    <span className="zv-zimmer-zeilen-aktionen">
+                      <button
+                        type="button"
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setZuweisungFehler(null);
+                          setWartelistenKlient({ id: w.klientId, name: w.klientName });
+                          setZuweisungsZimmer(z);
+                        }}
+                      >
+                        <IEinziehen />
+                        Einziehen
+                      </button>
+                      <button type="button" className="zv-link-btn" onClick={() => wartelisteEntfernen(z.id, w.id)}>
+                        <ILoeschen />
+                        Entfernen
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section aria-label="Belegungsverlauf">
+            <div className="zv-abschnittskopf">
+              <h3>Belegungsverlauf</h3>
+              {verlauf.length > 3 && (
+                <button type="button" className="zv-link-btn" onClick={() => setGanzerVerlauf((g) => !g)}>
+                  {ganzerVerlauf ? <IZuklappen /> : <IVerlauf />}
+                  {ganzerVerlauf ? "Weniger anzeigen" : `Ganzer Verlauf (${verlauf.length})`}
+                </button>
+              )}
+            </div>
+            {verlauf.length === 0 ? (
+              <p className="zv-rand-leer">Noch keine Belegung erfasst.</p>
+            ) : (
+              <ul className="zv-zimmer-liste">
+                {verlaufSichtbar.map((v) => (
+                  <li key={v.id} className="zv-zimmer-zeile">
+                    <div className="zv-zimmer-person-text">
+                      <strong>{v.name}</strong>
+                      <span className="zv-zimmer-meta">
+                        {v.geplant ? (
+                          <>Geplant ab {formatDatum(v.einzug)}</>
+                        ) : (
+                          <>
+                            {formatDatum(v.einzug)} – {v.istAktuell ? "heute" : formatDatum(v.auszug!)}
+                          </>
+                        )}
+                        {(v.geplant || (v.istAktuell && v.auszug)) && (
+                          <span className="zv-pill zv-pill-info">
+                            <IGeplant />
+                            {v.geplant ? "Geplant" : `Auszug geplant ${formatDatum(v.auszug!)}`}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <span className="zv-zimmer-zeilen-aktionen">
+                      <button
+                        type="button"
+                        className="zv-link-btn"
+                        onClick={() => {
+                          setBelegungBearbeitenFehler(null);
+                          setBearbeiteteBelegung(v);
+                        }}
+                      >
+                        <IBearbeiten />
+                        Bearbeiten
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  const ausgewaehltesZimmer = zimmer.find((z) => z.id === ausgewaehltesZimmerId) ?? null;
+
   return (
-    <div>
+    <div className={ausgewaehltesZimmer && angedockt ? "zv-neben-angedocktem-panel" : undefined}>
       {fehler && (
         <div className="zv-hinweis zv-hinweis-fehler">
           <IFehler />
@@ -675,294 +1141,19 @@ export function Zimmer({
                 {raumInEtage.map((z) => {
                   const StatusIcon = STATUS_ICON[z.status];
                   return (
-                  <div key={z.id} className="zv-room-card">
-                    <div className="zv-room-head">
-                      <span className="zv-room-nummer">{z.nummer}</span>
-                      <span style={{ display: "flex", gap: 6 }}>
-                        {!!aufgabenAnzahl[z.id] && (
-                          <span className="zv-pill zv-pill-offen" title="Offene Zimmer-Aufgaben">
-                            <IAufgaben />
-                            {aufgabenAnzahl[z.id]}
-                          </span>
-                        )}
-                        <span className={`zv-pill zv-pill-${z.status}`}>
-                          <StatusIcon />
-                          {ZIMMERSTATUS_LABEL[z.status]}
-                        </span>
-                      </span>
-                    </div>
-                    <p className="zv-sub-inline" style={{ marginLeft: 0 }}>
-                      {z.bewohner.length} / {z.kapazitaet} {z.kapazitaet === 1 ? "Platz belegt" : "Plätze belegt"}
-                    </p>
-                    {z.bewohner.length === 0 ? (
-                      <div className="zv-room-klient zv-sub-inline">Keine Klient:in zugeordnet</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {z.bewohner.map((bew) => (
-                          <div
-                            key={bew.belegungId}
-                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
-                          >
-                            <span className="zv-room-klient" style={{ margin: 0 }}>
-                              {bew.name}
-                              <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
-                                seit {formatDatum(bew.einzug)}
-                              </span>
-                              {bew.auszug && (
-                                <span className="zv-pill zv-pill-info" style={{ marginLeft: 6 }}>
-                                  <IGeplant />
-                                  Auszug geplant {formatDatum(bew.auszug)}
-                                </span>
-                              )}
-                            </span>
-                            <button
-                              className="zv-link-btn"
-                              onClick={() => {
-                                setAuszugFehler(null);
-                                setAuszugBewohner({ zimmer: z, bewohner: bew });
-                              }}
-                            >
-                              <IAuszug />
-                              Auszug
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {z.offenerKapazitaetsantrag && (
-                      <div className="zv-hinweis zv-hinweis-info" style={{ marginTop: "var(--zv-space-2)" }}>
-                        Kapazitätsänderung {z.offenerKapazitaetsantrag.alteKapazitaet} →{" "}
-                        {z.offenerKapazitaetsantrag.neueKapazitaet} beantragt von{" "}
-                        {z.offenerKapazitaetsantrag.beantragtVonName}
-                        {darfKapazitaetEntscheiden(z.offenerKapazitaetsantrag) && (
-                          <div className="zv-vorschau-zeile" style={{ marginTop: "var(--zv-space-1)" }}>
-                            <button
-                              className="zv-link-btn"
-                              onClick={() => kapazitaetEntscheiden(z.offenerKapazitaetsantrag!, "bestaetigt")}
-                            >
-                              <IGenehmigen />
-                              Bestätigen
-                            </button>
-                            <button
-                              className="zv-link-btn"
-                              onClick={() => setKapazitaetAblehnenAntrag(z.offenerKapazitaetsantrag!)}
-                            >
-                              <IAblehnen />
-                              Ablehnen
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="zv-vorschau-zeile">
-                      <button
-                        className="zv-link-btn"
-                        onClick={() => {
-                          setAufgabeFormFehler(null);
-                          aufgabenAnzeigen(z.id);
-                        }}
-                      >
-                        {offenesAufgabenZimmer === z.id ? <IZuklappen /> : <IAufgaben />}
-                        {offenesAufgabenZimmer === z.id
-                          ? "Aufgaben ausblenden"
-                          : `Aufgaben${aufgabenAnzahl[z.id] ? ` (${aufgabenAnzahl[z.id]})` : ""}`}
-                        {offenesAufgabenZimmer !== z.id && <IAufklappen />}
-                      </button>
-                      <button className="zv-link-btn" onClick={() => verlaufAnzeigen(z.id)}>
-                        {offenesZimmer === z.id ? <IZuklappen /> : <IVerlauf />}
-                        {offenesZimmer === z.id ? "Verlauf ausblenden" : "Belegungsverlauf"}
-                        {offenesZimmer !== z.id && <IAufklappen />}
-                      </button>
-                      <button
-                        className="zv-link-btn"
-                        onClick={() => setOffeneWarteliste(offeneWarteliste === z.id ? null : z.id)}
-                      >
-                        {offeneWarteliste === z.id ? <IZuklappen /> : <IWarteliste />}
-                        {offeneWarteliste === z.id
-                          ? "Warteliste ausblenden"
-                          : `Warteliste${z.warteliste.length ? ` (${z.warteliste.length})` : ""}`}
-                        {offeneWarteliste !== z.id && <IAufklappen />}
-                      </button>
-                      <button
-                        className="zv-link-btn"
-                        onClick={() => {
-                          setBearbeitenFehler(null);
-                          setBearbeitetesZimmer(z);
-                        }}
-                      >
-                        <IBearbeiten />
-                        Bearbeiten
-                      </button>
-                      {!z.offenerKapazitaetsantrag && (
-                        <button
-                          className="zv-link-btn"
-                          onClick={() => {
-                            setKapazitaetFehler(null);
-                            setKapazitaetZimmer(z);
-                          }}
-                        >
-                          <IKapazitaet />
-                          Kapazität ändern
-                        </button>
-                      )}
-                      {z.bewohner.length < z.kapazitaet && (
-                        <button
-                          className="zv-link-btn"
-                          onClick={() => {
-                            setZuweisungFehler(null);
-                            setZuweisungsZimmer(z);
-                          }}
-                        >
-                          <IEinziehen />
-                          Klient zuweisen
-                        </button>
-                      )}
-                      {z.bewohner.length === 0 && (
-                        <button className="zv-link-btn" onClick={() => zimmerDeaktivieren(z.id)}>
-                          <IDeaktivieren />
-                          Deaktivieren
-                        </button>
-                      )}
-                    </div>
-
-                    {offenesZimmer === z.id && (
-                      <ul className="zv-verlauf-liste">
-                        {verlauf.map((v) => (
-                          <li key={v.id}>
-                            <strong>{v.name}</strong>
-                            <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
-                              {v.geplant ? (
-                                <>Geplant ab {formatDatum(v.einzug)}</>
-                              ) : (
-                                <>
-                                  {formatDatum(v.einzug)} – {v.istAktuell ? "heute" : formatDatum(v.auszug!)}
-                                </>
-                              )}
-                            </span>
-                            {(v.geplant || (v.istAktuell && v.auszug)) && (
-                              <span className="zv-pill zv-pill-info" style={{ marginLeft: 6 }}>
-                                <IGeplant />
-                                {v.geplant ? "Geplant" : `Auszug geplant ${formatDatum(v.auszug!)}`}
-                              </span>
-                            )}
-                            <button
-                              className="zv-link-btn"
-                              onClick={() => {
-                                setBelegungBearbeitenFehler(null);
-                                setBearbeiteteBelegung(v);
-                              }}
-                            >
-                              <IBearbeiten />
-                              Bearbeiten
-                            </button>
-                          </li>
-                        ))}
-                        {verlauf.length === 0 && <li className="zv-sub-inline">Noch keine Belegung erfasst.</li>}
-                      </ul>
-                    )}
-
-                    {offeneWarteliste === z.id && (
-                      <ul className="zv-verlauf-liste">
-                        {z.warteliste.map((w, i) => (
-                          <li key={w.id}>
-                            <strong>
-                              {i + 1}. {w.klientName}
-                            </strong>
-                            <span className="zv-sub-inline" style={{ whiteSpace: "nowrap" }}>
-                              seit {formatDatum(w.eingetragenAm.slice(0, 10))}
-                              {w.eingetragenVonName ? ` · ${w.eingetragenVonName}` : ""}
-                            </span>
-                            <span style={{ display: "flex", gap: 8 }}>
-                              <button
-                                className="zv-link-btn"
-                                onClick={() => {
-                                  setZuweisungFehler(null);
-                                  setWartelistenKlient({ id: w.klientId, name: w.klientName });
-                                  setZuweisungsZimmer(z);
-                                }}
-                              >
-                                <IEinziehen />
-                                Einziehen
-                              </button>
-                              <button className="zv-link-btn" onClick={() => wartelisteEntfernen(z.id, w.id)}>
-                                <ILoeschen />
-                                Entfernen
-                              </button>
-                            </span>
-                          </li>
-                        ))}
-                        {z.warteliste.length === 0 && (
-                          <li className="zv-sub-inline">Noch niemand auf der Warteliste.</li>
-                        )}
-                        <li>
-                          <button
-                            className="zv-link-btn"
-                            onClick={() => {
-                              setWartelisteFehler(null);
-                              setWartelisteZimmer(z);
-                            }}
-                          >
-                            <INeu />
-                            Zur Warteliste hinzufügen
-                          </button>
-                        </li>
-                      </ul>
-                    )}
-
-                    {offenesAufgabenZimmer === z.id && (
-                      <div style={{ marginTop: "var(--zv-space-2)" }}>
-                        {aufgabeFormFehler && (
-                          <div className="zv-hinweis zv-hinweis-fehler">
-                            <IFehler />
-                            {aufgabeFormFehler}
-                          </div>
-                        )}
-                        {aufgabenImZimmer.length === 0 ? (
-                          <p className="zv-sub-inline">Noch keine Aufgaben für dieses Zimmer.</p>
-                        ) : (
-                          <div className="zv-karten-liste">
-                            {aufgabenImZimmer.map((a) => (
-                              <AufgabeZeile
-                                key={a.id}
-                                aufgabe={a}
-                                benutzerListe={benutzerListe}
-                                aktuelleBenutzerId={aktuelleBenutzerId}
-                                onErledigen={() => aufgabeErledigen(z.id, a.id)}
-                                onZuweisenAendern={(bid) => aufgabeZuweisenAendern(z.id, a.id, bid)}
-                                onLoeschen={() => aufgabeImZimmerLoeschen(z.id, a.id)}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <form
-                          onSubmit={(e) => aufgabeImZimmerAnlegen(e, z.id)}
-                          style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "var(--zv-space-2)" }}
-                        >
-                          <input name="titel" placeholder="Neue Aufgabe, z. B. Fenstergriff defekt" required style={{ flex: "1 1 200px" }} />
-                          <select name="prioritaet" defaultValue="normal" aria-label="Priorität">
-                            <option value="niedrig">Niedrig</option>
-                            <option value="normal">Normal</option>
-                            <option value="hoch">Hoch</option>
-                          </select>
-                          <Datumsfeld name="faelligAm" aria-label="Fälligkeit" groesse="kompakt" schnellwahl="faelligkeit" />
-                          <select name="zugewiesenAn" defaultValue="" aria-label="Zuweisen an">
-                            <option value="">Niemand</option>
-                            {benutzerListe.map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button className="zv-btn zv-btn-klein" type="submit">
-                            <INeu />
-                            Anlegen
-                          </button>
-                        </form>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    key={z.id}
+                    type="button"
+                    className={`zv-room-card zv-room-card-knopf${ausgewaehltesZimmerId === z.id ? " zv-aktiv" : ""}`}
+                    aria-pressed={ausgewaehltesZimmerId === z.id}
+                    onClick={() => zimmerOeffnen(z.id)}
+                  >
+                    <ZimmerKarteInhalt
+                      zimmer={z}
+                      offeneAufgaben={aufgabenAnzahl[z.id] ?? 0}
+                      ueberfaelligeAufgaben={ueberfaelligAnzahl[z.id] ?? 0}
+                    />
+                  </button>
                   );
                 })}
               </div>
@@ -976,6 +1167,20 @@ export function Zimmer({
           Noch keine Zimmer angelegt.
         </Leerzustand>
       )}
+
+      <Seitenpanel angedockt label="Zimmerdetails" offen={ausgewaehltesZimmer !== null} onSchliessen={panelSchliessen}>
+        {ausgewaehltesZimmer &&
+          (akteKlientId ? (
+            <KlientDetail
+              key={akteKlientId}
+              klientId={akteKlientId}
+              zurueckText={`Zurück zu Zimmer ${ausgewaehltesZimmer.nummer}`}
+              onZurueck={() => setAkteKlientId(null)}
+            />
+          ) : (
+            zimmerPanel(ausgewaehltesZimmer)
+          ))}
+      </Seitenpanel>
 
       <datalist id="zv-etagen-vorschlaege">
         {etagenVorschlaege.map((e) => (
@@ -1333,5 +1538,82 @@ function ZimmerAnschriftFeld({ id, vorgabe }: { id: string; vorgabe?: string | n
         Nur wenn die Wohnung nicht unter der Anschrift des Standorts liegt, etwa im Einzelwohnen.
       </p>
     </div>
+  );
+}
+
+/**
+ * Kurzinfo auf der Zimmerkarte. Alle Handlungen sind ins Panel gewandert
+ * (Rueckmeldung d5f8252d): die Karte hatte bis zu acht Links und wurde beim
+ * Aufklappen der Aufgaben so lang, dass die Nachbarkarten im Raster
+ * mitsprangen. Die ganze Karte ist jetzt ein Knopf.
+ *
+ * Ueberfaellig ist NICHT nur rot (WCAG 1.4.1): eigenes Warn-Icon statt des
+ * Aufgaben-Icons und ein ausgeschriebener Text fuer Screenreader.
+ */
+function ZimmerKarteInhalt({
+  zimmer: z,
+  offeneAufgaben,
+  ueberfaelligeAufgaben,
+}: {
+  zimmer: ZimmerListEintragDto;
+  offeneAufgaben: number;
+  ueberfaelligeAufgaben: number;
+}) {
+  const StatusIcon = STATUS_ICON[z.status];
+  const naechsterAuszug = z.bewohner
+    .map((b) => b.auszug)
+    .filter((a): a is string => Boolean(a))
+    .sort()[0];
+  const aufgabenText =
+    ueberfaelligeAufgaben > 0
+      ? `${offeneAufgaben} offene Aufgaben, davon ${ueberfaelligeAufgaben} überfällig`
+      : `${offeneAufgaben} offene Aufgaben`;
+
+  return (
+    <>
+      <span className="zv-room-head">
+        <span className="zv-room-nummer">{z.nummer}</span>
+        <span className="zv-room-pillen">
+          {offeneAufgaben > 0 && (
+            <span className={`zv-pill ${ueberfaelligeAufgaben > 0 ? "zv-pill-danger" : "zv-pill-offen"}`} title={aufgabenText}>
+              {ueberfaelligeAufgaben > 0 ? <IFehler /> : <IAufgaben />}
+              <span aria-hidden="true">{offeneAufgaben}</span>
+              <span className="zv-sr-only">{aufgabenText}</span>
+            </span>
+          )}
+          <span className={`zv-pill zv-pill-${z.status}`}>
+            <StatusIcon />
+            {ZIMMERSTATUS_LABEL[z.status]}
+          </span>
+        </span>
+      </span>
+      <span className={`zv-room-namen${z.bewohner.length === 0 ? " zv-room-namen-leer" : ""}`}>
+        {z.bewohner.length === 0 ? "Keine Klient:in zugeordnet" : z.bewohner.map((b) => b.name).join(", ")}
+      </span>
+      <span className="zv-room-fuss">
+        <span>
+          {z.bewohner.length} / {z.kapazitaet} {z.kapazitaet === 1 ? "Platz belegt" : "Plätze belegt"}
+        </span>
+        {naechsterAuszug && (
+          <span className="zv-pill zv-pill-info">
+            <IGeplant />
+            Auszug {formatDatum(naechsterAuszug)}
+          </span>
+        )}
+        {z.warteliste.length > 0 && (
+          <span className="zv-pill" title={`${z.warteliste.length} auf der Warteliste`}>
+            <IWarteliste />
+            <span aria-hidden="true">{z.warteliste.length}</span>
+            <span className="zv-sr-only">{z.warteliste.length} auf der Warteliste</span>
+          </span>
+        )}
+        {z.offenerKapazitaetsantrag && (
+          <span className="zv-pill zv-pill-info">
+            <IKapazitaet />
+            Antrag offen
+          </span>
+        )}
+      </span>
+    </>
   );
 }
