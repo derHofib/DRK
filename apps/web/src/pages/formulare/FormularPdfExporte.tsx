@@ -495,7 +495,11 @@ function PdfExportEditor({
     }
   }
 
-  const felder = alleBausteine(definition).filter((b) => istEingabe(b) || b.typ === "anzeige" || b.typ === "berechnung");
+  // Unterschriften stehen in der Feldauswahl mit drin: der Server waehlt sie
+  // ueber dieselbe Liste ab (pdfBloecke). Fehlten sie hier, verschwaenden sie
+  // still, sobald jemand "nur bestimmte Felder" waehlt.
+  const auswaehlbar = alleBausteine(definition).filter((b) => istEingabe(b) || b.typ === "anzeige" || b.typ === "berechnung" || b.typ === "unterschriften");
+  const felder = auswaehlbar.filter((b) => b.typ !== "unterschriften");
   const brief = g.vorlage === "brief";
   const istFrei = g.vorlage === "frei";
   const internFelder = felder.filter((b) => "intern" in b && b.intern);
@@ -641,12 +645,12 @@ function PdfExportEditor({
 
           <Abschnitt titel="Felder" zusammenfassung={feldAnzahl(g, definition)}>
             <label className="zv-checkbox-zeile">
-              <input type="checkbox" checked={g.felder === "alle"} onChange={(e) => setG({ felder: e.target.checked ? "alle" : felder.map((b) => b.schluessel) })} />
+              <input type="checkbox" checked={g.felder === "alle"} onChange={(e) => setG({ felder: e.target.checked ? "alle" : auswaehlbar.map((b) => b.schluessel) })} />
               Alle Felder, auch künftig hinzukommende
             </label>
             {g.felder !== "alle" && (
               <div className="zv-pe-felder">
-                {felder.map((b) => {
+                {auswaehlbar.map((b) => {
                   const auswahl = g.felder as string[];
                   const intern = "intern" in b && !!b.intern;
                   return (

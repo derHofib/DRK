@@ -10,8 +10,10 @@ import {
   type FeldWert,
   type FeldWerte,
   type FormularDefinition,
+  type ProtokollUnterschriftDto,
   type ProtokollWertQuelle,
 } from "@zimmerakte/shared";
+import { UnterschriftenAnzeige, UnterschriftenVorschau } from "./Unterschriften";
 import { formatDatum } from "../format";
 import { IAbbrechen, IInfo } from "./icons";
 import { Datumsfeld } from "./Datumsfeld";
@@ -126,6 +128,8 @@ export function ProtokollEingabe({
             <span>{anzeige[b.schluessel] ? (b.quelle === "klient.geburtsdatum" ? formatDatum(anzeige[b.schluessel]!) : anzeige[b.schluessel]) : "–"}</span>
           </div>
         );
+      case "unterschriften":
+        return <UnterschriftenVorschau key={b.schluessel} b={b} />;
       case "berechnung":
         return (
           <div key={b.schluessel} className="zv-field">
@@ -424,7 +428,19 @@ const EINZEILIG = new Set<Baustein["typ"]>(["datum", "uhrzeit", "zahl", "skala",
  * Ob gestapelt oder zweispaltig, entscheidet die Breite der Ansicht selbst
  * (Container-Abfrage in app.css), nicht die Fensterbreite.
  */
-export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen }: Gemeinsam) {
+export function ProtokollAnsicht({
+  definition,
+  werte,
+  anzeige,
+  quellen,
+  personen,
+  unterschriften,
+  onUnterschreiben,
+}: Gemeinsam & {
+  /** Stand der Unterschriften; ohne (z. B. "Ausprobieren" im Editor) zeigt der Baustein die leeren Plaetze. */
+  unterschriften?: ProtokollUnterschriftDto[];
+  onUnterschreiben?: (e: ProtokollUnterschriftDto) => void;
+}) {
   const auswertung = useMemo(() => werteAus(definition, werte), [definition, werte]);
   const zeile = (b: Baustein): ReactElement | null => {
     if (!auswertung.sichtbar.has(b.schluessel)) return null;
@@ -437,6 +453,13 @@ export function ProtokollAnsicht({ definition, werte, anzeige, quellen, personen
       );
     }
     if (b.typ === "hinweis") return null;
+    if (b.typ === "unterschriften") {
+      return unterschriften ? (
+        <UnterschriftenAnzeige key={b.schluessel} b={b} eintraege={unterschriften} onUnterschreiben={onUnterschreiben} />
+      ) : (
+        <UnterschriftenVorschau key={b.schluessel} b={b} />
+      );
+    }
     if (b.typ === "anzeige") {
       const w = anzeige[b.schluessel];
       const datum = b.quelle === "klient.geburtsdatum";

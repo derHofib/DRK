@@ -5,6 +5,7 @@ import {
   DATENQUELLEN,
   istEingabe,
   type Baustein,
+  platzBeschriftung,
   type FormularDefinition,
   type FormularDetailDto,
   type FormularKennzahlenDto,
@@ -235,6 +236,8 @@ function feldArt(b: Baustein): string {
       return `Anzeige: ${DATENQUELLEN[b.quelle].label}`;
     case "hinweis":
       return "Hinweis";
+    case "unterschriften":
+      return `Unterschriften: ${b.plaetze.map((p) => platzBeschriftung(p)).join(", ")}`;
     default:
       return istEingabe(b) && b.vorausfuellen ? `${BAUSTEIN_LABEL[b.typ]} · vorausgefüllt` : BAUSTEIN_LABEL[b.typ];
   }

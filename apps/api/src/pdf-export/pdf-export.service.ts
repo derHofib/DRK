@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import {
+  alleBausteine,
   beispielDaten,
   pdfGestaltungMitVorgaben,
   pdfGestaltungVorgabe,
@@ -26,7 +27,25 @@ import { requireTenantContext } from "../common/tenant-context";
 import { heuteBerlin } from "../common/heute";
 import { RechteService } from "../rechte/rechte.service";
 import { ProtokollService } from "../protokolle/protokoll.service";
-import { pdfExportRendern, pdfExportRendernMitBericht, type PdfRenderBericht } from "./pdf-export-render";
+import { pdfExportRendern, pdfExportRendernMitBericht, type PdfRenderBericht, type PdfUnterschriftStand } from "./pdf-export-render";
+
+const DATUM_BERLIN = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", year: "numeric" });
+
+/** Stand der Unterschriftsplaetze aus dem Protokoll (Migration 0086) fuer den Renderer. */
+function pdfUnterschriften(p: ProtokollDto | null): Record<string, PdfUnterschriftStand> {
+  const out: Record<string, PdfUnterschriftStand> = {};
+  for (const u of p?.unterschriften ?? []) {
+    const g = u.geleistet;
+    out[`${u.baustein}:${u.platz}`] = {
+      name: g?.name ?? u.name,
+      bild: g ? Buffer.from(g.bild.slice(g.bild.indexOf(",") + 1), "base64") : null,
+      ort: g?.ort ?? null,
+      datum: g ? DATUM_BERLIN.format(new Date(g.am)) : null,
+      pruefnummer: g?.pruefnummer ?? null,
+    };
+  }
+  return out;
+}
 
 const MASKE = "Beispieltext";
 /**
@@ -286,6 +305,10 @@ export class PdfExportService {
       await formularDa(c, formularId);
       let zielgruppe: PdfZielgruppe = eingabe.vorlage === "brief" ? "extern" : "intern";
       let gestaltung: PdfGestaltung = pdfGestaltungVorgabe(eingabe.vorlage ?? "akte");
+      // Hat das Formular eigene Unterschriftsplaetze (0086), waere die
+      // Absender-Linie am Ende eine zweite, verwirrende Unterschrift.
+      const def = (await neuesteDefinition(c, formularId)).definition;
+      if (alleBausteine(def).some((b) => b.typ === "unterschriften")) gestaltung = { ...gestaltung, unterschrift: "keine" };
       let logoId: string | null = null;
       let kopiertAus: string | null = null;
       if (eingabe.kopieVon) {
@@ -445,6 +468,7 @@ export class PdfExportService {
         },
         empfaenger: e.empfaenger ?? (pdfMitAnschriftfeld(e.gestaltung) ? "Bezirksamt Beispiel\nSoziale Dienste\nMusterstraße 1\n10000 Berlin" : null),
         beispiel: !protokoll,
+        unterschriften: pdfUnterschriften(protokoll),
       });
     });
   }
@@ -553,6 +577,7 @@ export class PdfExportService {
         pruefnummer: nr,
       },
       empfaenger: pdfMitAnschriftfeld(g) ? empfaenger : null,
+      unterschriften: pdfUnterschriften(p),
     });
     await c.query(
       `INSERT INTO pdf_export_erzeugt (mandant_id, pdf_export_version_id, protokoll_id, standort_id, empfaenger, sha256, erzeugt_von)

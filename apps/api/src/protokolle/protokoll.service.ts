@@ -32,6 +32,9 @@ import {
   type ProtokollKurzDto,
   type ProtokollWertQuelle,
   type DokumentationsAngebotDto,
+  type ZuUnterschreibenDto,
+  istLeitungsRolle,
+  platzBeschriftung,
   ZUORDNUNG_LABEL,
   type FormularZuordnung,
 } from "@zimmerakte/shared";
@@ -47,6 +50,7 @@ import {
   standortIstErlaubt,
 } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { leitungFuerStandort, sichtbarePlaetze, unterschriftenFuerAnsicht, unterschriftSpeichern, geleisteteLesen } from "./protokoll-unterschrift";
 
 interface WertZeile {
   feld_schluessel: string;
@@ -683,6 +687,106 @@ export class ProtokollService {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Unterschriften (Migration 0086)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Einen Platz in der App unterschreiben. Lesen-Recht und sichtbarer Bezug
+   * wie beim Ansehen; Klient:in und eigene Rolle zusaetzlich nur mit
+   * Ausfuell-Recht und schreibbarem Bezug (erfasst wird auf dem Geraet der
+   * Mitarbeiter:in). Leitungsplaetze nur die Leitung selbst -- auch ohne
+   * Ausfuell-Recht, denn abzeichnen ist nicht ausfuellen.
+   */
+  async unterschreiben(
+    id: string,
+    input: { baustein: string; platz: string; bildBase64: string; ort: string | null; name: string | null }
+  ): Promise<ProtokollDto> {
+    await this.brauche("ansehen", "Keine Berechtigung, Protokolle zu sehen.");
+    const { mandantId, benutzerId } = requireTenantContext();
+    const darfFremde = await this.rechte.hatRecht("protokolle", "korrigieren-fremde");
+    const darfAusfuellen = await this.rechte.hatRecht("protokolle", "ausfuellen");
+    return this.db.withTenant(async (client) => {
+      const kopf = await this.sichtbarerKopf(client, id, benutzerId);
+      const alt = await ladeWerte(client, id);
+      const werte: Record<string, FeldWert> = Object.fromEntries(Object.entries(alt).map(([k, v]) => [k, v.wert]));
+      const zielPlatz = sichtbarePlaetze(kopf.definition, werte).find(({ b, p }) => b.schluessel === input.baustein && p.id === input.platz);
+      if (zielPlatz && !istLeitungsRolle(zielPlatz.p.rolle) && zielPlatz.p.rolle !== "mitarbeiter") await schreibbarerBezug(client, benutzerId, kopf);
+      await unterschriftSpeichern(client, {
+        mandantId,
+        benutzerId,
+        darfAusfuellen,
+        protokollId: id,
+        definition: kopf.definition,
+        werte,
+        abgeschlossen: !!kopf.abgeschlossen_am,
+        ...input,
+      });
+      return ladeDetail(client, id, { benutzerId, darfFremde, darfAusfuellen });
+    });
+  }
+
+  /**
+   * Offene Leitungs-Unterschriften der angemeldeten Person fuer "Heute".
+   * Erst die Standorte, an denen sie heute Leitung ist (Organigramm), dann nur
+   * abgeschlossene Protokolle dort, deren Formular ueberhaupt einen
+   * Unterschriften-Baustein hat. Begrenzt auf ein Jahr: eine Unterschrift, die
+   * seit einem Jahr fehlt, gehoert nicht mehr auf die Tagesliste.
+   */
+  async zuUnterschreiben(): Promise<ZuUnterschreibenDto[]> {
+    await this.brauche("ansehen", "Keine Berechtigung, Protokolle zu sehen.");
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const st = await client.query<{ id: string; name: string }>("SELECT id, name FROM standort WHERE aktiv");
+      const standortName = new Map(st.rows.map((x) => [x.id, x.name]));
+      const meine = new Map<string, Set<string>>();
+      for (const { id: standortId } of st.rows) {
+        const l = await leitungFuerStandort(client, standortId);
+        const rollen = new Set<string>();
+        if (l.einrichtungsleitung.some((p) => p.id === benutzerId)) rollen.add("einrichtungsleitung");
+        if (l.bereichsleitung.some((p) => p.id === benutzerId)) rollen.add("bereichsleitung");
+        if (rollen.size > 0) meine.set(standortId, rollen);
+      }
+      if (meine.size === 0) return [];
+      const erlaubte = await ermittleErlaubteStandortIds(client, benutzerId);
+      const params: unknown[] = [[...meine.keys()]];
+      const { rows } = await client.query(
+        `SELECT q.* FROM (
+           ${KURZ_AUSWAHL.replace("SELECT p.id,", `SELECT ${PROTOKOLL_STANDORT} AS standort_eff, v.definition AS definition, p.id,`)}
+           WHERE p.abgeschlossen_am IS NOT NULL
+             AND p.abgeschlossen_am > now() - interval '1 year'
+             AND jsonb_path_exists(v.definition, 'lax $.** ? (@.typ == "unterschriften")')
+         ) q
+         WHERE q.standort_eff = ANY($1::uuid[])
+         ORDER BY q.abgeschlossen_am DESC
+         LIMIT 200`,
+        params
+      );
+      const out: ZuUnterschreibenDto[] = [];
+      for (const r of rows) {
+        const kurz = kurzDto(r);
+        if (!(await bezugIstSichtbar(client, benutzerId, { klient_id: r.klient_id, standort_id: r.standort_id } as ProtokollKopf))) continue;
+        if (erlaubte !== null && !erlaubte.includes(r.standort_eff)) continue;
+        const rollen = meine.get(r.standort_eff)!;
+        const werte = Object.fromEntries(Object.entries(await ladeWerte(client, r.id)).map(([k, v]) => [k, v.wert]));
+        const geleistet = await geleisteteLesen(client, r.id);
+        const plaetze = sichtbarePlaetze(r.definition, werte)
+          .filter(({ b, p }) => rollen.has(p.rolle) && !p.nurPapier && !geleistet.has(`${b.schluessel}:${p.id}`))
+          .map(({ b, p }) => ({ baustein: b.schluessel, platz: p.id, beschriftung: platzBeschriftung(p) }));
+        if (plaetze.length === 0) continue;
+        out.push({
+          protokollId: kurz.id,
+          formularName: kurz.formularName,
+          bezugsdatum: kurz.bezugsdatum,
+          klientName: kurz.klientName,
+          standortName: standortName.get(r.standort_eff) ?? kurz.standortName,
+          plaetze,
+        });
+      }
+      return out;
+    });
+  }
+
   async entwurfLoeschen(id: string): Promise<void> {
     await this.brauche("ausfuellen", "Keine Berechtigung, Protokolle auszufüllen.");
     const { benutzerId } = requireTenantContext();
@@ -1000,6 +1104,16 @@ async function ladeDetail(
   );
   const eigenes = kopf.autor_id === wer.benutzerId;
   const bearbeitbar = kurz.abgeschlossen ? (eigenes && wer.darfAusfuellen) || wer.darfFremde : eigenes && wer.darfAusfuellen;
+  const unterschriften = await unterschriftenFuerAnsicht(client, {
+    protokollId: id,
+    definition: kopf.definition,
+    werte,
+    abgeschlossen: kurz.abgeschlossen,
+    klientName: kurz.klientName,
+    autorName: kurz.autorName,
+    benutzerId: wer.benutzerId,
+    darfAusfuellen: wer.darfAusfuellen,
+  });
   return {
     ...kurz,
     autorId: kopf.autor_id,
@@ -1010,6 +1124,7 @@ async function ladeDetail(
     personen,
     bearbeitbar,
     neuereVersion: neuer.rows.length > 0,
+    unterschriften,
   };
 }
 
@@ -1403,6 +1518,9 @@ function strukturFehler(def: unknown): string | null {
       if ((x.typ === "auswahl" || x.typ === "mehrfachauswahl") && !Array.isArray(x.optionen)) return "Eine Auswahl hat keine Optionen.";
       if (x.typ === "berechnung" && (x.ausdruck === undefined || x.ausdruck === null)) return "Eine Berechnung hat keine Formel.";
       if (x.typ === "anzeige" && typeof x.quelle !== "string") return "Eine Anzeige hat keine Quelle.";
+      if (x.typ === "unterschriften" && (!Array.isArray(x.plaetze) || x.plaetze.some((p) => !p || typeof p !== "object"))) {
+        return "Ein Unterschriften-Baustein hat keine gültigen Plätze.";
+      }
     }
     return null;
   };

@@ -22,6 +22,7 @@ import type {
   FormularVerwaltungDto,
   ProtokollAenderungDto,
   ProtokollDto,
+  ZuUnterschreibenDto,
   ProtokolleRechteDto,
   ProtokollKurzDto,
   DokumentationsAngebotDto,
@@ -526,6 +527,9 @@ export const api = {
   protokollKorrigieren: (id: string, werte: FeldWerte, grund: string) =>
     request<ProtokollDto>(`/protokolle/${id}/korrektur`, { method: "POST", body: JSON.stringify({ werte, grund }) }),
   protokollEntwurfLoeschen: (id: string) => request<{ ok: true }>(`/protokolle/${id}`, { method: "DELETE" }),
+  protokollUnterschreiben: (id: string, u: { baustein: string; platz: string; bild: string; ort: string | null; name: string | null }) =>
+    request<ProtokollDto>(`/protokolle/${id}/unterschriften`, { method: "POST", body: JSON.stringify(u) }),
+  zuUnterschreiben: () => request<ZuUnterschreibenDto[]>("/protokolle/zu-unterschreiben"),
   // PDF-Exporte je Formular (Migration 0082)
   pdfExportRechte: () => request<{ angabenBearbeiten: boolean; gestalten: boolean; extern: boolean }>("/pdf-exporte/rechte"),
   dokumentAngaben: () => request<TraegerAngabenDto>("/dokument-angaben"),

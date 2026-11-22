@@ -21,6 +21,8 @@ import {
   type PdfFreiArt,
   type PdfFreiBaustein,
   type PdfFreiHilfslinien,
+  platzBeschriftung,
+  type UnterschriftRolle,
   type PdfFreiSeitenart,
   type PdfGestaltung,
   type PdfZielgruppe,
@@ -240,6 +242,18 @@ export function PdfDesigner({
     [definition]
   );
   const feldMap = useMemo(() => new Map(felder.map((f) => [f.schluessel, f])), [felder]);
+  // Unterschriftsplaetze aus den Unterschriften-Bausteinen, je einzeln setzbar.
+  // Was nicht gesetzt ist, laeuft im Fliessbereich mit (wie im Renderer).
+  const unterschriftPlaetze = useMemo(
+    () =>
+      alleBausteine(definition).flatMap((b) =>
+        b.typ === "unterschriften"
+          ? b.plaetze.map((p) => ({ baustein: b.schluessel, platz: p.id, label: platzBeschriftung(p), rolle: p.rolle, schluessel: `${b.schluessel}:${p.id}` }))
+          : []
+      ),
+    [definition]
+  );
+  const platzMap = useMemo(() => new Map<string, PlatzInfo>(unterschriftPlaetze.map((p) => [p.schluessel, p])), [unterschriftPlaetze]);
   const beispiel = useMemo(() => {
     const d = beispielDaten(definition);
     const werte: Record<string, string> = {};
@@ -253,6 +267,10 @@ export function PdfDesigner({
   }, [definition, felder]);
   const platziert = useMemo(
     () => new Set([...frei.erste, ...frei.folge].filter((x) => x.art === "feld" || x.art === "ankreuz").map((x) => x.feld)),
+    [frei]
+  );
+  const gesetztePlaetze = useMemo(
+    () => new Set([...frei.erste, ...frei.folge].filter((x) => x.art === "unterschrift" && x.platz).map((x) => `${x.feld}:${x.platz}`)),
     [frei]
   );
 
@@ -730,13 +748,16 @@ export function PdfDesigner({
         return <span className={`zv-pd-linie zv-pd-linie-${el.b >= el.h ? "waag" : "senk"} zv-pd-farbe-${el.farbe}`} style={{ "--pd-staerke": `${Math.max(1, el.staerke * PT_MM * zoom)}px` } as CSSProperties} />;
       case "flaeche":
         return <span className={`zv-pd-flaeche zv-pd-flaeche-${el.flaeche}`} />;
-      case "unterschrift":
+      case "unterschrift": {
+        const pl = el.platz ? platzMap.get(`${el.feld}:${el.platz}`) : undefined;
+        if (el.platz && !pl) return <span className="zv-pd-leer">Unterschriftsplatz fehlt</span>;
         return (
           <div className="zv-pd-unterschrift" style={{ fontSize: ptPx(Math.max(PDF_FREI_MIN_PT, el.pt - 1.5)) }}>
             <span />
-            Anna Berger, 21.11.2026
+            {pl ? `${pl.rolle === "eigene" ? "" : "Anna Berger, "}${pl.label}` : "Anna Berger, 21.11.2026"}
           </div>
         );
+      }
       case "anschrift":
         return (
           <div className="zv-pd-text" style={schrift}>
@@ -748,11 +769,12 @@ export function PdfDesigner({
         );
       case "fluss": {
         const offen = felder.filter((f) => !platziert.has(f.schluessel) && !(zielgruppe === "extern" && f.intern) && (gestaltung.felder === "alle" || gestaltung.felder.includes(f.schluessel)));
+        const offenePlaetze = unterschriftPlaetze.filter((p) => !gesetztePlaetze.has(p.schluessel) && (gestaltung.felder === "alle" || gestaltung.felder.includes(p.baustein)));
         return (
           <div className="zv-pd-fluss-inhalt">
             <strong>Fließbereich</strong>
             <span>{seite === "erste" ? "beginnt hier" : "Fortsetzung auf jeder Folgeseite"} · {offen.length} Feld{offen.length === 1 ? "" : "er"}</span>
-            <span className="zv-pd-fluss-felder">{offen.map((f) => f.label).join(" · ")}</span>
+            <span className="zv-pd-fluss-felder">{[...offen.map((f) => f.label), ...offenePlaetze.map((p) => `Unterschrift ${p.label}`)].join(" · ")}</span>
           </div>
         );
       }
@@ -877,6 +899,23 @@ export function PdfDesigner({
                 </button>
               );
             })}
+            {unterschriftPlaetze.some((p) => passt(p.label)) && <div className="zv-gruppenlabel">Unterschriften</div>}
+            {unterschriftPlaetze.filter((p) => passt(p.label)).map((p) => {
+              const vorlage = v({ art: "unterschrift", feld: p.baustein, platz: p.platz, b: 65, h: 18 });
+              return (
+                <button
+                  key={p.schluessel}
+                  type="button"
+                  className="zv-pd-chip"
+                  onPointerDown={(e) => neuZiehen(e, vorlage)}
+                  onKeyDown={(e) => e.key === "Enter" && hinzufuegen(vorlage)}
+                >
+                  <span className="zv-pd-griff" aria-hidden="true">⋮⋮</span>
+                  <span className="zv-pd-chip-name">{p.label}</span>
+                  <span className="zv-pd-chip-typ">{gesetztePlaetze.has(p.schluessel) ? "gesetzt" : "im Fluss"}</span>
+                </button>
+              );
+            })}
             <div className="zv-gruppenlabel">Angaben</div>
             {gruppen.map(([gruppe, liste]) => {
               const sichtbar = liste.filter((p) => passt(`${gruppe} ${p.schluessel} ${p.beispiel}`));
@@ -983,7 +1022,7 @@ export function PdfDesigner({
 
           <aside className="zv-pd-eigenschaften" aria-label="Eigenschaften">
             {eins ? (
-              <Eigenschaften el={eins} felder={felder} zielgruppe={zielgruppe} ueberlauf={passtNicht.has(eins.id)} laengste={laengste} onSetze={(t) => setze(eins.id, t)} />
+              <Eigenschaften el={eins} felder={felder} plaetze={unterschriftPlaetze} zielgruppe={zielgruppe} ueberlauf={passtNicht.has(eins.id)} laengste={laengste} onSetze={(t) => setze(eins.id, t)} />
             ) : gewaehlt.length > 1 ? (
               <p className="zv-sub">{gewaehlt.length} Bausteine ausgewählt. Ausrichten über die Leiste auf dem Blatt; Pfeiltasten verschieben alle.</p>
             ) : (
@@ -1062,7 +1101,7 @@ export function PdfDesigner({
                       className={`zv-pd-ebene${auswahl.includes(el.id) ? " active" : ""}`}
                       onClick={(e) => setAuswahl(e.shiftKey ? (auswahl.includes(el.id) ? auswahl.filter((x) => x !== el.id) : [...auswahl, el.id]) : [el.id])}
                     >
-                      <span>{ebenenName(el, feldMap, beispiel)}</span>
+                      <span>{ebenenName(el, feldMap, beispiel, platzMap)}</span>
                       {passtNicht.has(el.id) && <span className="zv-pd-ebene-warn">passt nicht</span>}
                       {el.gesperrt && <ISperre />}
                     </button>
@@ -1115,8 +1154,9 @@ export function PdfDesigner({
   );
 }
 
-function ebenenName(el: PdfFreiBaustein, feldMap: Map<string, FeldInfo>, beispiel: Record<string, string>): string {
+function ebenenName(el: PdfFreiBaustein, feldMap: Map<string, FeldInfo>, beispiel: Record<string, string>, platzMap: Map<string, PlatzInfo>): string {
   if (el.art === "feld" || el.art === "ankreuz") return feldMap.get(el.feld)?.label ?? "Feld (fehlt)";
+  if (el.art === "unterschrift" && el.platz) return `Unterschrift ${platzMap.get(`${el.feld}:${el.platz}`)?.label ?? "(fehlt)"}`;
   if (el.art === "text") {
     // Mit Beispielwerten statt "{traeger.name}": so erkennt man den Baustein wieder.
     const t = pdfTextZeilen(el.text, { ...beispiel, seite: "1", seiten: "2" })[0]?.text.trim() ?? "";
@@ -1125,9 +1165,18 @@ function ebenenName(el: PdfFreiBaustein, feldMap: Map<string, FeldInfo>, beispie
   return PDF_FREI_ART_LABEL[el.art];
 }
 
+interface PlatzInfo {
+  baustein: string;
+  platz: string;
+  label: string;
+  rolle: UnterschriftRolle;
+  schluessel: string;
+}
+
 function Eigenschaften({
   el,
   felder,
+  plaetze,
   zielgruppe,
   ueberlauf,
   laengste,
@@ -1135,6 +1184,7 @@ function Eigenschaften({
 }: {
   el: PdfFreiBaustein;
   felder: FeldInfo[];
+  plaetze: PlatzInfo[];
   zielgruppe: PdfZielgruppe;
   ueberlauf: boolean;
   laengste: boolean;
@@ -1201,6 +1251,31 @@ function Eigenschaften({
           {feld?.typ === "ja_nein" &&
             seg("Darstellung", el.art, [["feld", "als Wort"], ["ankreuz", "Ankreuzfelder"]] as [PdfFreiArt, string][], (art) => onSetze({ art }))}
         </>
+      )}
+
+      {el.art === "unterschrift" && (
+        <div className="zv-field">
+          <label htmlFor="pd-gehoert">Gehört zu</label>
+          <select
+            id="pd-gehoert"
+            value={el.platz ? `${el.feld}:${el.platz}` : ""}
+            onChange={(e) => {
+              const p = plaetze.find((x) => x.schluessel === e.target.value);
+              onSetze(p ? { feld: p.baustein, platz: p.platz } : { feld: "", platz: "" });
+            }}
+          >
+            <option value="">Absender:in des Exports</option>
+            {el.platz && !plaetze.some((x) => x.baustein === el.feld && x.platz === el.platz) && <option value={`${el.feld}:${el.platz}`}>(fehlt im Formular)</option>}
+            {plaetze.map((p) => (
+              <option key={p.schluessel} value={p.schluessel}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <span className="zv-sub-inline">
+            {el.platz ? "Steht hier statt im Fließbereich. Geleistete Unterschriften erscheinen auf der Linie, sonst bleibt sie leer zum Unterschreiben auf Papier." : "Name der Person, die das PDF erzeugt."}
+          </span>
+        </div>
       )}
 
       {el.art === "text" && (

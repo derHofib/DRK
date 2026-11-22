@@ -1,7 +1,8 @@
 import { CSSProperties, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StandortSichtDto } from "@zimmerakte/shared";
 import { SichtHinweis } from "../components/StandortSicht";
-import type { DashboardDto, StandortDto, StandortUebersichtDto, TerminDto } from "@zimmerakte/shared";
+import type { DashboardDto, ProtokollDto, ProtokollUnterschriftDto, StandortDto, StandortUebersichtDto, TerminDto, ZuUnterschreibenDto } from "@zimmerakte/shared";
+import { UnterschriftDialog } from "../components/UnterschriftDialog";
 import { DIENST_LABEL, dienstNachUhrzeit } from "@zimmerakte/shared";
 import { api } from "../api/client";
 import { KachelRaster, nurAltesLayout, type KachelDef } from "../components/KachelRaster";
@@ -188,6 +189,8 @@ export function Dashboard({
   // dann fehlen nur diese Kacheln, der Rest von Heute bleibt.
   const [standortTeile, setStandortTeile] = useState<StandortUebersichtDto[] | null>(null);
   const [suche, setSuche] = useState("");
+  const [offeneUnterschriften, setOffeneUnterschriften] = useState<ZuUnterschreibenDto[]>([]);
+  const [unterschrift, setUnterschrift] = useState<{ protokoll: ProtokollDto; platz: ProtokollUnterschriftDto } | null>(null);
   const layoutSchluessel = `zimmerakte_heute_layout_${nutzerId}`;
   const [abschnitte, setAbschnitte] = useState<Abschnitt[]>(() => ladeAbschnitte(nutzerId, nurAltesLayout(layoutSchluessel)));
   const [neuerAbschnitt, setNeuerAbschnitt] = useState<string | null>(null);
@@ -224,6 +227,13 @@ export function Dashboard({
       })
       .catch((err) => setFehler(err.message))
       .finally(() => setWirdGeladen(false));
+    // Eigene Anfrage statt Teil des Dashboards: sie haengt am Organigramm
+    // (wer ist hier Leitung?) und darf "Heute" nicht ausbremsen oder mit
+    // einem Fehler leeren -- ohne sie fehlen nur diese Eintraege.
+    api
+      .zuUnterschreiben()
+      .then(setOffeneUnterschriften)
+      .catch(() => setOffeneUnterschriften([]));
     const ids = standortAuswahl ? [standortAuswahl] : standorte.map((s) => s.id);
     if (ids.length === 0) {
       setStandortTeile(null);
@@ -427,8 +437,35 @@ export function Dashboard({
         aktion: { label: "Prüfen", ausfuehren: () => nach("klienten") },
       });
     }
+    // Offene Leitungs-Unterschriften: nur die eigenen (der Server liefert nur
+    // Plaetze, die genau diese Person unterschreiben darf), daher "meine".
+    for (const u of offeneUnterschriften) {
+      for (const pl of u.plaetze) {
+        liste.push({
+          schluessel: `unterschrift:${u.protokollId}:${pl.baustein}:${pl.platz}`,
+          art: "Unterschrift",
+          titel: `${u.formularName} unterschreiben`,
+          meta: [u.klientName ?? u.standortName, formatDatum(u.bezugsdatum), `als ${pl.beschriftung}`].filter(Boolean).join(" · "),
+          frist: null,
+          fristText: "offen",
+          zustaendigkeit: "meine",
+          aktion: {
+            label: "Unterschreiben",
+            ausfuehren: async () => {
+              const p = await api.protokoll(u.protokollId);
+              const platz = p.unterschriften.find((x) => x.baustein === pl.baustein && x.platz === pl.platz && x.darfIch && !x.geleistet);
+              if (!platz) {
+                laden();
+                return;
+              }
+              setUnterschrift({ protokoll: p, platz });
+            },
+          },
+        });
+      }
+    }
     return liste;
-  }, [daten, sichtbarkeit, ichId, heute, laden, navigation.zu]);
+  }, [daten, sichtbarkeit, ichId, heute, laden, navigation.zu, offeneUnterschriften]);
 
   const gefiltert = eintraege.filter((e) => filter === "alle" || e.zustaendigkeit === filter);
   const gruppen = (["heute", "woche", "spaeter"] as Gruppe[])
@@ -977,6 +1014,17 @@ export function Dashboard({
           Abschnitt hinzufügen
         </button>
       </Seitenpanel>
+      {unterschrift && (
+        <UnterschriftDialog
+          protokoll={unterschrift.protokoll}
+          platz={unterschrift.platz}
+          onClose={() => setUnterschrift(null)}
+          onFertig={() => {
+            setUnterschrift(null);
+            laden();
+          }}
+        />
+      )}
     </div>
   );
 }

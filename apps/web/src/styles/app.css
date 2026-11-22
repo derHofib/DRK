@@ -11751,3 +11751,151 @@ button.zv-team-name:hover {
   border: 0;
   background: var(--zv-surface-gedaempft);
 }
+
+/* ---------------------------------------------------------------------------
+ * Unterschriften-Baustein (Migration 0086, Konzept unterschriftenfeld).
+ * Jede Zeile ist ein eigenes Raster mit der eingestellten Spaltenzahl, damit
+ * ein einzelner Platz in der letzten Zeile so breit bleibt wie die darueber.
+ * Unter 480 px Breite der ANSICHT stehen alle Plaetze untereinander -- so
+ * auch im schmalen Akten-Panel auf grossem Bildschirm.
+ * ------------------------------------------------------------------------- */
+.zv-us {
+  container: unterschriften / inline-size;
+  margin: var(--zv-space-3) 0;
+}
+
+.zv-us-titel {
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-us-raster {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-4);
+}
+
+.zv-us-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--zv-space-4) var(--zv-space-5);
+}
+
+@container unterschriften (min-width: 480px) {
+  .zv-us-zeile {
+    grid-template-columns: repeat(var(--zv-us-spalten, 1), minmax(0, 1fr));
+  }
+}
+
+.zv-us-platz {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-1);
+  min-width: 0;
+}
+
+/*
+ * Die Linie traegt das Bild. Papierweiss in BEIDEN Themes, wie die Leinwand
+ * (siehe .zv-signature-canvas): die Tinte ist fest dunkel, auf dunklem Grund
+ * waere eine geleistete Unterschrift unsichtbar.
+ */
+.zv-us-linie {
+  align-self: stretch;
+  height: var(--zv-space-7);
+  border-bottom: 1px solid var(--zv-signature-ink);
+  background: var(--zv-signature-paper);
+  border-radius: var(--zv-radius-s) var(--zv-radius-s) 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.zv-us-linie-leer {
+  background: transparent;
+  border-bottom-color: var(--zv-border-strong);
+}
+
+.zv-us-bild {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+}
+
+.zv-us-beschriftung {
+  font-size: var(--zv-text-s);
+  overflow-wrap: anywhere;
+}
+
+.zv-us-meta {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-us-stand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-us-knopf {
+  margin-top: var(--zv-space-1);
+}
+
+.zv-us-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-us-dialog p {
+  margin: 0;
+}
+
+.zv-us-dialog-label {
+  font-weight: 600;
+  font-size: var(--zv-text-s);
+}
+
+.zv-us-dialog-inhalt {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-3);
+  max-height: 40vh;
+  overflow: auto;
+}
+
+/* Editor: Plaetze als kleine Karten, Schalter in einer umbrechenden Reihe. */
+.zv-fe-plaetze {
+  list-style: none;
+  margin: 0 0 var(--zv-space-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-fe-platz {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-2);
+}
+
+.zv-fe-platz-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-platz-kopf select {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-fe-platz-schalter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--zv-space-3);
+}
