@@ -12208,4 +12208,84 @@ button.zv-team-name:hover {
     width: 40px;
     height: 40px;
   }
+
+/* ==================================================================
+   Ausrichtung von Formular-Bausteinen (Rueckmeldung „Bausteine“)
+   Die Klasse haengt nur am Baustein selbst (bei Abschnitten nur an
+   Ueberschrift und Hilfetext), sonst zoege text-align alle Kinder mit.
+   Flex-Reihen (Knoepfe, Wertzelle, Hinweis) folgen ueber justify-content,
+   weil text-align dort nichts verschiebt.
+   ================================================================== */
+.zv-fe-feldlabel {
+  display: block;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+  margin-bottom: var(--zv-space-1);
+}
+
+.zv-ausgerichtet-mitte {
+  text-align: center;
+}
+.zv-ausgerichtet-rechts {
+  text-align: right;
+}
+/* Eingaben erben text-align nicht in jedem Browser. */
+.zv-ausgerichtet-mitte :is(input, textarea) {
+  text-align: center;
+}
+.zv-ausgerichtet-rechts :is(input, textarea) {
+  text-align: right;
+}
+
+.zv-ausgerichtet-mitte:is(.zv-hinweis, .zv-protokoll-warnung, .zv-fa-abschnitt-titel, .zv-fa-unterabschnitt-titel),
+.zv-ausgerichtet-mitte :is(.zv-protokoll-knoepfe, .zv-protokoll-zahl, .zv-protokoll-nurlesen, .zv-protokoll-personen, .zv-protokoll-wertzelle, .zv-fa-feld-titel) {
+  justify-content: center;
+}
+.zv-ausgerichtet-rechts:is(.zv-hinweis, .zv-protokoll-warnung, .zv-fa-abschnitt-titel, .zv-fa-unterabschnitt-titel),
+.zv-ausgerichtet-rechts :is(.zv-protokoll-knoepfe, .zv-protokoll-zahl, .zv-protokoll-nurlesen, .zv-protokoll-personen, .zv-protokoll-wertzelle, .zv-fa-feld-titel) {
+  justify-content: flex-end;
+}
+
+/* Spalten-Flex: Ankreuzliste, Skala, Anzeige und die Karte im Aufbau. */
+.zv-ausgerichtet-mitte :is(.zv-protokoll-mehrfach, .zv-protokoll-skala),
+.zv-ausgerichtet-mitte.zv-fa-feld {
+  align-items: center;
+}
+.zv-ausgerichtet-rechts :is(.zv-protokoll-mehrfach, .zv-protokoll-skala),
+.zv-ausgerichtet-rechts.zv-fa-feld {
+  align-items: flex-end;
+}
+.zv-ausgerichtet-mitte .zv-protokoll-skala,
+.zv-ausgerichtet-rechts .zv-protokoll-skala {
+  display: flex;
+  flex-direction: column;
+}
+.zv-ausgerichtet-mitte .zv-protokoll-skala-enden,
+.zv-ausgerichtet-rechts .zv-protokoll-skala-enden {
+  width: 100%;
+}
+
+/* Anzeige (Name, Geburtsdatum): ausgerichtet Beschriftung ueber dem Wert, wie in der Ansicht. */
+.zv-protokoll-anzeige.zv-ausgerichtet-mitte,
+.zv-protokoll-anzeige.zv-ausgerichtet-rechts {
+  flex-direction: column;
+  gap: 0;
+}
+.zv-protokoll-anzeige.zv-ausgerichtet-mitte {
+  align-items: center;
+}
+.zv-protokoll-anzeige.zv-ausgerichtet-rechts {
+  align-items: flex-end;
+}
+.zv-protokoll-anzeige:is(.zv-ausgerichtet-mitte, .zv-ausgerichtet-rechts) .zv-protokoll-label {
+  flex-basis: auto;
+}
+
+/* legend reagiert nicht auf text-align des fieldset, nur auf die eigenen Raender. */
+.zv-protokoll-abschnitt legend.zv-ausgerichtet-mitte {
+  margin-inline: auto;
+}
+.zv-protokoll-abschnitt legend.zv-ausgerichtet-rechts {
+  margin-inline: auto 0;
 }
