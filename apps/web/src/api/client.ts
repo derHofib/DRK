@@ -983,6 +983,7 @@ export const api = {
     nurEigene?: boolean;
     offen?: boolean;
     faelligBis?: string;
+    erledigtSeit?: string;
     prioritaet?: AufgabePrioritaet;
     sortierung?: "faelligkeit" | "prioritaet";
   }) => {
@@ -992,6 +993,7 @@ export const api = {
     if (filter?.nurEigene) params.set("nurEigene", "true");
     if (filter?.offen !== undefined) params.set("offen", String(filter.offen));
     if (filter?.faelligBis) params.set("faelligBis", filter.faelligBis);
+    if (filter?.erledigtSeit) params.set("erledigtSeit", filter.erledigtSeit);
     if (filter?.prioritaet) params.set("prioritaet", filter.prioritaet);
     if (filter?.sortierung) params.set("sortierung", filter.sortierung);
     const qs = params.toString();

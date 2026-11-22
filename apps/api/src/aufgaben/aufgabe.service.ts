@@ -4,6 +4,7 @@ import { DatabaseService } from "../database/database.service";
 import { TenantContext, requireTenantContext } from "../common/tenant-context";
 import { ermittleErlaubteStandortIds } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
+import { heuteBerlin } from "../common/heute";
 
 export type AufgabePrioritaet = "niedrig" | "normal" | "hoch";
 
@@ -36,6 +37,7 @@ export interface AufgabeEintrag {
 
 export interface AufgabenAnzahl {
   jeZimmer: Record<string, number>;
+  ueberfaelligJeZimmer: Record<string, number>;
   eigene: number;
 }
 
@@ -46,6 +48,7 @@ interface AufgabeFilter {
   nurEigene?: boolean;
   offen?: boolean;
   faelligBis?: string;
+  erledigtSeit?: string;
   prioritaet?: AufgabePrioritaet;
   sortierung?: "faelligkeit" | "prioritaet";
 }
@@ -79,15 +82,25 @@ export class AufgabeService {
         params.push(erlaubteStandorte);
         bedingungen.push(`z.standort_id = ANY($${params.length})`);
       }
-      const { rows: jeZimmerRows } = await client.query<{ zimmer_id: string; anzahl: number }>(
-        `SELECT a.zimmer_id, count(*)::int AS anzahl
+      // "Heute" in Berliner Zeit, nicht CURRENT_DATE der Datenbank: sonst
+      // kippt eine heute faellige Aufgabe zwischen 0 und 1/2 Uhr falsch
+      // (siehe common/heute.ts).
+      params.push(heuteBerlin());
+      const heuteParam = `$${params.length}`;
+      const { rows: jeZimmerRows } = await client.query<{ zimmer_id: string; anzahl: number; ueberfaellig: number }>(
+        `SELECT a.zimmer_id, count(*)::int AS anzahl,
+                count(*) FILTER (WHERE a.faellig_am < ${heuteParam}::date)::int AS ueberfaellig
          FROM aufgabe a JOIN zimmer z ON z.id = a.zimmer_id
          WHERE ${bedingungen.join(" AND ")}
          GROUP BY a.zimmer_id`,
         params
       );
       const jeZimmer: Record<string, number> = {};
-      for (const r of jeZimmerRows) jeZimmer[r.zimmer_id] = r.anzahl;
+      const ueberfaelligJeZimmer: Record<string, number> = {};
+      for (const r of jeZimmerRows) {
+        jeZimmer[r.zimmer_id] = r.anzahl;
+        if (r.ueberfaellig > 0) ueberfaelligJeZimmer[r.zimmer_id] = r.ueberfaellig;
+      }
 
       // "Eigene" richtet sich nach Zuweisung, nicht nach Standort -- eine
       // zugewiesene Aufgabe soll auch dann in der persoenlichen Badge
@@ -97,7 +110,7 @@ export class AufgabeService {
         "SELECT count(*)::int AS anzahl FROM aufgabe WHERE erledigt_am IS NULL AND zugewiesen_an = $1",
         [ctx.benutzerId]
       );
-      return { jeZimmer, eigene: eigeneRows[0].anzahl };
+      return { jeZimmer, ueberfaelligJeZimmer, eigene: eigeneRows[0].anzahl };
     });
   }
 
@@ -335,6 +348,9 @@ export class AufgabeService {
     if (filter.offen === true) bedingungen.push("a.erledigt_am IS NULL");
     if (filter.offen === false) bedingungen.push("a.erledigt_am IS NOT NULL");
     if (filter.faelligBis) bedingungen.push(`a.faellig_am <= ${param(filter.faelligBis)}`);
+    // Fuer "Erledigt" im Zimmer-Panel: nur die juengere Vergangenheit, damit
+    // die Liste eines Zimmers ueber die Jahre nicht unbegrenzt waechst.
+    if (filter.erledigtSeit) bedingungen.push(`a.erledigt_am >= ${param(filter.erledigtSeit)}::date`);
     if (filter.prioritaet) bedingungen.push(`a.prioritaet = ${param(filter.prioritaet)}`);
 
     const where = bedingungen.length > 0 ? `WHERE ${bedingungen.join(" AND ")}` : "";

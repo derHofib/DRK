@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   alleBausteine,
+  ausrichtungVon,
+  BAUSTEIN_AUSRICHTUNG_LABEL,
+  BAUSTEIN_AUSRICHTUNGEN,
   BAUSTEIN_LABEL,
   bedingungAlsSatz,
   DATENQUELLEN,
@@ -18,6 +21,7 @@ import {
   speichernderBaustein,
   type Ausdruck,
   type Baustein,
+  type BausteinAusrichtung,
   type BausteinTyp,
   type Bedingung,
   type BedingungOperator,
@@ -38,7 +42,20 @@ import {
   UNTERSCHRIFT_ROLLEN,
 } from "@zimmerakte/shared";
 import { ProtokollEingabe } from "./ProtokollFormular";
-import { IBestaetigen, IGriff, ILoeschen, INeu, ISperre, IVerborgen, IVerschiebenHoch, IVerschiebenRunter, ISichtbar } from "./icons";
+import {
+  IAusrichtungLinks,
+  IAusrichtungMitte,
+  IAusrichtungRechts,
+  IBestaetigen,
+  IGriff,
+  ILoeschen,
+  INeu,
+  ISperre,
+  IVerborgen,
+  IVerschiebenHoch,
+  IVerschiebenRunter,
+  ISichtbar,
+} from "./icons";
 import { Datumsfeld } from "./Datumsfeld";
 
 /**
@@ -696,6 +713,7 @@ function BaumKnoten({
     merkmale.push(`${b.plaetze.length} ${b.plaetze.length === 1 ? "Platz" : "Plätze"}`);
     merkmale.push(b.spalten === 1 ? "untereinander" : `${b.spalten} nebeneinander`);
   }
+  if (ausrichtungVon(b) !== "links") merkmale.push(ausrichtungVon(b) === "mitte" ? "mittig" : "rechts");
   return (
     <li
       className={[
@@ -916,6 +934,11 @@ function Eigenschaften({
             </div>
           )}
 
+          {/* Unterschriften stehen im eigenen Raster (Anordnung unten), eine Ausrichtung haette dort keine Wirkung. */}
+          {b.typ !== "unterschriften" && (
+            <AusrichtungWahl labelId={id("ausrichtung")} wert={ausrichtungVon(b)} onWahl={(a) => onAendern({ ...b, ausrichtung: a === "links" ? undefined : a })} />
+          )}
+
           <TypEinstellungen b={b} definition={definition} gesperrt={gesperrt} id={id} onAendern={onAendern} onDefinition={onDefinition} />
 
           {istEingabe(b) && (
@@ -1035,6 +1058,40 @@ function Eigenschaften({
           <p className="zv-protokoll-hilfe">Name, Geburtsdatum und Aktenzeichen gibt es nur als Baustein „Vorausgefüllte Anzeige“: sie werden angezeigt, aber nie mitgespeichert.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+const AUSRICHTUNG_ICON: Record<BausteinAusrichtung, typeof IAusrichtungLinks> = {
+  links: IAusrichtungLinks,
+  mitte: IAusrichtungMitte,
+  rechts: IAusrichtungRechts,
+};
+
+/**
+ * Links/Mitte/Rechts als Knopfreihe statt Ausklappliste: drei Moeglichkeiten,
+ * alle auf einen Blick. "links" wird nicht gespeichert (undefined), damit ein
+ * nie angefasster Baustein in der Definition genauso aussieht wie vorher und
+ * der Versionsvergleich keine Scheinaenderung meldet.
+ */
+function AusrichtungWahl({ labelId, wert, onWahl }: { labelId: string; wert: BausteinAusrichtung; onWahl: (a: BausteinAusrichtung) => void }) {
+  return (
+    <div className="zv-field">
+      <span className="zv-fe-feldlabel" id={labelId}>
+        Ausrichtung
+      </span>
+      <div className="zv-segmented zv-fe-ausrichtung" role="radiogroup" aria-labelledby={labelId}>
+        {BAUSTEIN_AUSRICHTUNGEN.map((a) => {
+          const Icon = AUSRICHTUNG_ICON[a];
+          return (
+            <button key={a} type="button" role="radio" aria-checked={wert === a} className={wert === a ? "active" : ""} onClick={() => onWahl(a)}>
+              <Icon size={15} />
+              {BAUSTEIN_AUSRICHTUNG_LABEL[a]}
+            </button>
+          );
+        })}
+      </div>
+      <p className="zv-protokoll-hilfe">Gilt beim Ausfüllen, in der Ansicht und im PDF. Mittig oder rechts steht der Baustein allein in seiner Zeile.</p>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
+import { heuteBerlin } from "../src/common/heute";
 import { AlteRolle, kontoMitAlterRolle, raeumeKontoMitRolleAuf } from "./support/konto-mit-rolle";
 
 describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () => {
@@ -259,6 +260,56 @@ describe("Aufgaben: Zimmer-Aufgaben, persönliche Aufgaben, Sichtbarkeit", () =>
       expect(anzahl.status).toBe(200);
       expect(anzahl.body.jeZimmer[zimmer1Id]).toBeGreaterThan(0);
       expect(anzahl.body.jeZimmer[zimmer2Id]).toBeUndefined();
+    });
+
+    // Zimmer-Panel (Rueckmeldung d5f8252d): rote Zahl auf der Karte. Gestern
+    // faellig zaehlt, heute faellig nicht, erledigt nicht -- und ein
+    // Zimmer am fremden Standort taucht auch hier nicht auf.
+    it("zählt überfällige Aufgaben je Zimmer: gestern ja, heute nein, erledigt nein, fremder Standort nein", async () => {
+      const heute = heuteBerlin();
+      const gestern = new Date(Date.parse(`${heute}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      const vorher = (await als(tokenBereichsleitung).get("/aufgaben/anzahl-offen")).body;
+      const basis1 = vorher.ueberfaelligJeZimmer[zimmer1Id] ?? 0;
+      const basis2 = vorher.ueberfaelligJeZimmer[zimmer2Id] ?? 0;
+
+      await als(tokenBereichsleitung).post("/aufgaben", { titel: "Überfällig", zimmerId: zimmer1Id, faelligAm: gestern });
+      await als(tokenBereichsleitung).post("/aufgaben", { titel: "Heute fällig", zimmerId: zimmer1Id, faelligAm: heute });
+      const erledigt = await als(tokenBereichsleitung).post("/aufgaben", {
+        titel: "Überfällig, aber erledigt",
+        zimmerId: zimmer1Id,
+        faelligAm: gestern,
+      });
+      await als(tokenBereichsleitung).patch(`/aufgaben/${erledigt.body.id}/erledigen`);
+      await als(tokenBereichsleitung).post("/aufgaben", { titel: "Überfällig S2", zimmerId: zimmer2Id, faelligAm: gestern });
+
+      const nachher = (await als(tokenBereichsleitung).get("/aufgaben/anzahl-offen")).body;
+      expect(nachher.ueberfaelligJeZimmer[zimmer1Id]).toBe(basis1 + 1);
+      expect(nachher.ueberfaelligJeZimmer[zimmer2Id]).toBe(basis2 + 1);
+
+      const fuerS1 = (await als(tokenBetreuerS1).get("/aufgaben/anzahl-offen")).body;
+      expect(fuerS1.ueberfaelligJeZimmer[zimmer2Id]).toBeUndefined();
+    });
+
+    it("erledigtSeit liefert nur Aufgaben, die ab diesem Tag erledigt wurden", async () => {
+      const a = await als(tokenBereichsleitung).post("/aufgaben", { titel: "Alt erledigt", zimmerId: zimmer1Id });
+      await als(tokenBereichsleitung).patch(`/aufgaben/${a.body.id}/erledigen`);
+      // Direkt per Admin in die Vergangenheit legen -- ueber die API laesst
+      // sich erledigt_am absichtlich nicht setzen.
+      await admin.query("UPDATE aufgabe SET erledigt_am = now() - interval '200 days' WHERE id = $1", [a.body.id]);
+      const b = await als(tokenBereichsleitung).post("/aufgaben", { titel: "Frisch erledigt", zimmerId: zimmer1Id });
+      await als(tokenBereichsleitung).patch(`/aufgaben/${b.body.id}/erledigen`);
+
+      const seit = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+      const res = await als(tokenBereichsleitung).get(`/aufgaben?zimmerId=${zimmer1Id}&offen=false&erledigtSeit=${seit}`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((x: { id: string }) => x.id);
+      expect(ids).toContain(b.body.id);
+      expect(ids).not.toContain(a.body.id);
+
+      // Unsinniger Wert wird ignoriert (kein 500): dann ist auch die alte dabei.
+      const ohne = await als(tokenBereichsleitung).get(`/aufgaben?zimmerId=${zimmer1Id}&offen=false&erledigtSeit=kaputt`);
+      expect(ohne.status).toBe(200);
+      expect(ohne.body.map((x: { id: string }) => x.id)).toContain(a.body.id);
     });
   });
 
