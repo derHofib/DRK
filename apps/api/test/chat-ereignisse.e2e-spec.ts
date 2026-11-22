@@ -234,6 +234,33 @@ describe("Chat-Ereignisse (SSE)", () => {
     b.schliesse();
   });
 
+  it("Reaktion: Teilnehmende bekommen {chatId, art 'reaktion', nachrichtId} - ohne Zeichen und Namen; Nicht-Teilnehmende nichts", async () => {
+    const chat = (await als(tokenLeitung).post("/chat/direkt", { benutzerId: betreuerId })).body.id;
+    const nachrichtId = (await als(tokenLeitung).post(`/chat/${chat}/nachrichten`, { art: "text", text: "Reaktionstest" })).body.id;
+    const l = await oeffneStrom(tokenLeitung);
+    const v = await oeffneStrom(tokenVollzugriff);
+    await l.warteAuf(() => l.roh().includes(": verbunden"));
+    await v.warteAuf(() => v.roh().includes(": verbunden"));
+
+    expect((await request(http_()).put(`/chat/nachrichten/${nachrichtId}/reaktion`).set("Authorization", `Bearer ${tokenBetreuer}`).send({ zeichen: "🙏" })).status).toBe(200);
+    await l.warteAuf(() => art(l, chat).includes("reaktion"));
+    expect(l.roh()).toContain(`event: chat\ndata: {"chatId":"${chat}","art":"reaktion","nachrichtId":"${nachrichtId}"}\n\n`);
+    expect(l.roh()).not.toContain("🙏");
+    expect(l.roh()).not.toContain("Bernd");
+
+    // Zuruecknehmen meldet ebenfalls.
+    await als(tokenBetreuer).del(`/chat/nachrichten/${nachrichtId}/reaktion`);
+    await l.warteAuf(() => art(l, chat).filter((a) => a === "reaktion").length >= 2);
+
+    // Kontrolle fuer den Nicht-Teilnehmer: ein spaeteres Ereignis in SEINEM Chat kommt an, das fremde davor nicht.
+    const kontrolle = (await als(tokenLeitung).post("/chat/direkt", { benutzerId: vollzugriffId })).body.id;
+    await als(tokenLeitung).post(`/chat/${kontrolle}/nachrichten`, { art: "text", text: "Kontrolle" });
+    await v.warteAuf(() => art(v, kontrolle).includes("nachricht"));
+    expect(v.ereignisse.some((e) => e.chatId === chat)).toBe(false);
+    l.schliesse();
+    v.schliesse();
+  });
+
   it("Mitgliedschaft wird bei Teilnehmer-Ereignissen neu geprueft: Hinzugefuegte bekommen ab dann Ereignisse, Entfernte einmal 'teilnehmer' und danach nichts mehr", async () => {
     const l = als(tokenLeitung);
     const gruppe = (await l.post("/chat/gruppe", { name: "Ereignisse", teilnehmer: [{ benutzerId: betreuerId }] })).body;

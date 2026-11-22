@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res,
+  BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Throttle } from "@nestjs/throttler";
@@ -13,7 +13,7 @@ import { ChatAnfrageService } from "./chat-anfrage.service";
 import { ChatEreignisService } from "./chat-ereignis.service";
 import { ChatNachrichtService } from "./chat-nachricht.service";
 import { ChatService } from "./chat.service";
-import { ablehnenSchema, anfrageSchema, bildQuerySchema, gruppeAnlegenSchema, kontaktSchema, nachrichtSchema, seiteQuerySchema, umbenennenSchema } from "./chat.schemas";
+import { ablehnenSchema, anfrageSchema, bildQuerySchema, gruppeAnlegenSchema, kontaktSchema, nachrichtSchema, reaktionSchema, seiteQuerySchema, umbenennenSchema } from "./chat.schemas";
 
 const MAX_BILD_BYTES = 8_000_000;
 const ANHANG_CACHE_SEKUNDEN = 7 * 24 * 60 * 60;
@@ -107,6 +107,24 @@ export class ChatController {
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(a.dateiname)}"`);
     res.setHeader("X-Datei-Hash", a.hash);
     res.send(a.inhalt);
+  }
+
+  @Get("nachrichten/:id")
+  async nachricht(@Param("id", id()) nachrichtId: string) {
+    return this.nachrichten.einzeln(nachrichtId);
+  }
+
+  // safeParse statt parse: ein durchgereichter ZodError waere ein 500 (CLAUDE.md, Validierung).
+  @Put("nachrichten/:id/reaktion")
+  async reagieren(@Param("id", id()) nachrichtId: string, @Body() body: unknown) {
+    const eingabe = reaktionSchema.safeParse(body);
+    if (!eingabe.success) throw new BadRequestException(eingabe.error.issues[0]?.message ?? "Ungültige Reaktion.");
+    return this.nachrichten.reagieren(nachrichtId, eingabe.data.zeichen);
+  }
+
+  @Delete("nachrichten/:id/reaktion")
+  async reaktionEntfernen(@Param("id", id()) nachrichtId: string) {
+    return this.nachrichten.reaktionEntfernen(nachrichtId);
   }
 
   @Delete("nachrichten/:id")

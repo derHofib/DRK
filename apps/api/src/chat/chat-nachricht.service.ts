@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type {
   ChatAnhangDto,
@@ -7,6 +7,8 @@ import type {
   ChatNachrichtDto,
   ChatNachrichtEingabe,
   ChatNachrichtenSeiteDto,
+  ChatPersonDto,
+  ChatReaktionDto,
   TerminAntwort,
 } from "@zimmerakte/shared";
 import { verkleinereBild } from "../common/bild";
@@ -43,6 +45,16 @@ interface NachrichtRow {
   t_ganztaegig: boolean | null;
   t_abgesagt_am: Date | null;
   t_meine_antwort: TerminAntwort | null;
+}
+
+interface ReaktionRow {
+  nachricht_id: string;
+  zeichen: string;
+  benutzer_id: string | null;
+  klient_id: string | null;
+  benutzer_name: string | null;
+  klient_vorname: string | null;
+  klient_nachname: string | null;
 }
 
 interface AnhangRow {
@@ -205,6 +217,60 @@ export class ChatNachrichtService {
     });
   }
 
+  /** Eine einzelne Nachricht, z. B. nach einem Reaktions-Ereignis fuer eine aeltere Nachricht im Verlauf. */
+  async einzeln(id: string): Promise<ChatNachrichtDto> {
+    const ich = aktuellerTeilnehmer();
+    return this.db.withTenant((client) => this.ladeEine(client, ich, id));
+  }
+
+  /**
+   * Setzt die eigene Reaktion; eine vorhandene andere wird ersetzt (eine pro
+   * Person und Nachricht, migrations/0086). Wer, ob die Nachricht noch steht
+   * und ob man im Chat ist, entscheidet die Policy chat_reaktion_setzen --
+   * die Vorabpruefungen hier liefern nur die passenden Fehlermeldungen.
+   */
+  async reagieren(id: string, zeichen: string): Promise<ChatNachrichtDto> {
+    const ctx = requireTenantContext();
+    const ich = aktuellerTeilnehmer();
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query<{ art: ChatNachrichtArt; geloescht_am: Date | null }>(
+        "SELECT art, geloescht_am FROM chat_nachricht WHERE id = $1",
+        [id]
+      );
+      if (rows.length === 0) throw new NotFoundException("Nachricht nicht gefunden.");
+      if (rows[0].geloescht_am || rows[0].art === "system") throw new ConflictException("Auf diese Nachricht kann man nicht reagieren.");
+      await client.query("DELETE FROM chat_reaktion WHERE nachricht_id = $1 AND (benutzer_id = $2::uuid OR klient_id = $3::uuid)", [
+        id,
+        ...prinzipalParameter(ich),
+      ]);
+      try {
+        await client.query(
+          "INSERT INTO chat_reaktion (mandant_id, nachricht_id, benutzer_id, klient_id, zeichen) VALUES ($1, $2, $3, $4, $5)",
+          [ctx.mandantId, id, ...prinzipalParameter(ich), zeichen]
+        );
+      } catch (err) {
+        // Zwei gleichzeitige Klicks derselben Person: der Unique-Index haelt "eine pro Person", der zweite verliert.
+        if ((err as { code?: string }).code === "23505") throw new ConflictException("Die Reaktion wurde gerade schon geändert.");
+        throw err;
+      }
+      return this.ladeEine(client, ich, id);
+    });
+  }
+
+  /** Idempotent: ohne eigene Reaktion passiert nichts. */
+  async reaktionEntfernen(id: string): Promise<ChatNachrichtDto> {
+    const ich = aktuellerTeilnehmer();
+    return this.db.withTenant(async (client) => {
+      const { rows } = await client.query("SELECT 1 FROM chat_nachricht WHERE id = $1", [id]);
+      if (rows.length === 0) throw new NotFoundException("Nachricht nicht gefunden.");
+      await client.query("DELETE FROM chat_reaktion WHERE nachricht_id = $1 AND (benutzer_id = $2::uuid OR klient_id = $3::uuid)", [
+        id,
+        ...prinzipalParameter(ich),
+      ]);
+      return this.ladeEine(client, ich, id);
+    });
+  }
+
   async gelesen(chatId: string): Promise<{ gelesen: true }> {
     const ich = aktuellerTeilnehmer();
     if (!UUID_RE.test(chatId)) throw new NotFoundException("Chat nicht gefunden.");
@@ -263,6 +329,7 @@ export class ChatNachrichtService {
     }
 
     const sichtbarkeit = new KlientNamen(client, ich);
+    const reaktionen = await this.ladeReaktionen(client, ich, sichtbarkeit, rows.map((r) => r.id));
     const dtos: ChatNachrichtDto[] = [];
     for (const r of rows) {
       const absender: ChatNachrichtDto["absender"] = r.absender_benutzer_id
@@ -302,8 +369,55 @@ export class ChatNachrichtService {
               }
             : null,
         anhaenge: anhaenge.get(r.id) ?? [],
+        reaktionen: reaktionen.get(r.id) ?? [],
       });
     }
     return dtos;
+  }
+
+  /**
+   * Nach Zeichen gruppiert, haeufigste zuerst; bei Gleichstand das zuerst
+   * gesetzte Zeichen vorn, damit die Reihenfolge nicht bei jedem Laden springt.
+   */
+  private async ladeReaktionen(
+    client: PoolClient,
+    ich: Teilnehmer,
+    sichtbarkeit: KlientNamen,
+    nachrichtIds: string[]
+  ): Promise<Map<string, ChatReaktionDto[]>> {
+    const { rows } = await client.query<ReaktionRow>(
+      `SELECT r.nachricht_id, r.zeichen, r.benutzer_id, r.klient_id,
+              b.name AS benutzer_name, k.vorname AS klient_vorname, k.nachname AS klient_nachname
+       FROM chat_reaktion r
+       LEFT JOIN benutzer b ON b.id = r.benutzer_id
+       LEFT JOIN klient k ON k.id = r.klient_id
+       WHERE r.nachricht_id = ANY($1::uuid[])
+       ORDER BY r.erstellt_am, r.id`,
+      [nachrichtIds]
+    );
+    const je = new Map<string, Map<string, ChatReaktionDto>>();
+    for (const r of rows) {
+      const person: ChatPersonDto = r.benutzer_id
+        ? { art: "benutzer", id: r.benutzer_id, name: r.benutzer_name ?? "" }
+        : { art: "klient", id: r.klient_id!, name: await sichtbarkeit.name(r.klient_id!, r.klient_vorname ?? "", r.klient_nachname ?? "") };
+      const meine = person.art === ich.art && person.id === ich.id;
+      const gruppen = je.get(r.nachricht_id) ?? new Map<string, ChatReaktionDto>();
+      je.set(r.nachricht_id, gruppen);
+      const g = gruppen.get(r.zeichen) ?? { zeichen: r.zeichen, anzahl: 0, meine: false, personen: [] };
+      gruppen.set(r.zeichen, g);
+      g.anzahl += 1;
+      if (meine) {
+        g.meine = true;
+        g.personen.unshift(person);
+      } else {
+        g.personen.push(person);
+      }
+    }
+    const ergebnis = new Map<string, ChatReaktionDto[]>();
+    for (const [nachrichtId, gruppen] of je) {
+      // Array.prototype.sort ist stabil: Gleichstaende behalten die Reihenfolge des ersten Auftretens.
+      ergebnis.set(nachrichtId, [...gruppen.values()].sort((a, b) => b.anzahl - a.anzahl));
+    }
+    return ergebnis;
   }
 }

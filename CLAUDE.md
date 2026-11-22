@@ -182,6 +182,9 @@ if (!ROLLEN_MIT_X.has(ctx.rolle)) throw new ForbiddenException("…");
 **namentlichen Importen**. Kein `import * as`, kein `DynamicIcon`, kein
 `dynamicIconImports` — jedes davon zieht das komplette lucide-Set (>1 MB)
 ins Bundle. Keine Smileys oder Gesichter; das ist eine Fachanwendung.
+Einzige Ausnahme (freigegeben 22.11.2026): `ISmileyHinzufuegen` (SmilePlus),
+der Knopf, der im Chat die Smiley-Auswahl öffnet. Smileys, die Menschen in
+Nachrichten schreiben oder als Reaktion setzen, sind Inhalt, keine Icons.
 
 ---
 

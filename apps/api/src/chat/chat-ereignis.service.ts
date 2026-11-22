@@ -12,7 +12,7 @@ const WIEDERVERBINDEN_MIN_MS = 1_000;
 const WIEDERVERBINDEN_MAX_MS = 30_000;
 // setTimeout vertraegt sich bei Werten ueber 2^31-1 ms zu einem Sofort-Ablauf.
 const MAX_TIMEOUT_MS = 2_147_483_647;
-const CHAT_ARTEN = new Set(["nachricht", "teilnehmer", "chat"]);
+const CHAT_ARTEN = new Set(["nachricht", "teilnehmer", "chat", "reaktion"]);
 
 interface Abonnent {
   mandantId: string;
@@ -188,7 +188,7 @@ export class ChatEreignisService implements OnModuleDestroy {
   }
 
   private eingang(n: Notification): void {
-    let nutzlast: { mandant_id?: unknown; chat_id?: unknown; anfrage_id?: unknown; art?: unknown };
+    let nutzlast: { mandant_id?: unknown; chat_id?: unknown; anfrage_id?: unknown; nachricht_id?: unknown; art?: unknown };
     try {
       nutzlast = JSON.parse(n.payload ?? "");
     } catch {
@@ -201,7 +201,9 @@ export class ChatEreignisService implements OnModuleDestroy {
       const anfrageId = nutzlast.anfrage_id;
       zustellen = (a) => this.zustellenAnfrage(a, anfrageId);
     } else if (typeof nutzlast.chat_id === "string" && CHAT_ARTEN.has(nutzlast.art)) {
-      const ereignis = { chatId: nutzlast.chat_id, art: nutzlast.art as ChatEreignisDto["art"] };
+      const ereignis: ChatEreignisDto & { chatId: string } = { chatId: nutzlast.chat_id, art: nutzlast.art as ChatEreignisDto["art"] };
+      // Nur eine ID, kein Inhalt (wie anfrageId) -- die Nachricht selbst laedt der Client per REST unter RLS.
+      if (nutzlast.art === "reaktion" && typeof nutzlast.nachricht_id === "string") ereignis.nachrichtId = nutzlast.nachricht_id;
       zustellen = (a) => this.zustellen(a, ereignis);
     } else {
       return;
@@ -225,7 +227,7 @@ export class ChatEreignisService implements OnModuleDestroy {
     if (rows.length > 0) this.schreibe(a, eventText({ chatId: null, art: "anfrage", anfrageId }));
   }
 
-  private async zustellen(a: Abonnent, e: { chatId: string; art: ChatEreignisDto["art"] }): Promise<void> {
+  private async zustellen(a: Abonnent, e: ChatEreignisDto & { chatId: string }): Promise<void> {
     if (a.beendet) return;
     const vorher = a.mitgliedschaft.get(e.chatId);
     let senden: boolean;

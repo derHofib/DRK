@@ -465,6 +465,11 @@
      --zv-font-body: die Markenschrift ist Produktidentitaet, nicht die
      Arbeitsschrift der Anwendung. Siehe Kommentar in schrift.css. */
   --zv-font-marke: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Smileys im Chat (Reaktionen, Auswahl): ausdruecklich die farbigen
+     Emoji-Schriften der Systeme. Ueber die normale Kette landen einzelne
+     Zeichen (✔, ☀, ✏) sonst in einer Symbolschrift und erscheinen schwarz-
+     weiss -- dann sieht dieselbe Reaktion je nach Stelle anders aus. */
+  --zv-font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", var(--zv-font-body);
   /* UI und Fliesstext teilen sich eine Schrift (Nunito Sans): runde,
      ruhige Formen, auf kleinen Bildschirmen lesbar. Eigene Variable bleibt,
      damit UI und Text bei Bedarf wieder getrennt werden koennen. */
