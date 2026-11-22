@@ -2588,12 +2588,26 @@ export interface FeldFehler {
  * Abschluss -- ein Entwurf darf unvollstaendig sein, aber nie falsch getypt
  * (sonst landet in einer Zahlenspalte ein Text).
  */
+/**
+ * Die wirksame Zeichengrenze eines Textfelds. 0, negative oder krumme Werte
+ * gelten als "keine Grenze": ein maxlength="0" im Browser laesst gar keine
+ * Eingabe zu -- das Feld wirkte kaputt (Rueckmeldung 95d08c6a), waehrend die
+ * Pruefung hier 0 schon immer als "keine Grenze" las. Eine Stelle fuer beide.
+ */
+export function zeichenGrenze(b: { maxLaenge?: number }): number | undefined {
+  const m = b.maxLaenge;
+  return typeof m === "number" && Number.isInteger(m) && m >= 1 ? m : undefined;
+}
+
 export function typFehler(b: EingabeBaustein, w: FeldWert, optionen: { erlaubeAusgeblendet?: string[] } = {}): string | null {
   switch (b.typ) {
     case "kurztext":
     case "langtext":
       if (typeof w !== "string") return "Bitte einen Text eingeben.";
-      if (b.maxLaenge && w.length > b.maxLaenge) return `Höchstens ${b.maxLaenge} Zeichen.`;
+      {
+        const grenze = zeichenGrenze(b);
+        if (grenze !== undefined && w.length > grenze) return `Höchstens ${grenze} Zeichen.`;
+      }
       if (b.typ === "kurztext" && w.includes("\n")) return "Bitte nur eine Zeile.";
       return null;
     case "zahl":
@@ -2771,6 +2785,9 @@ export function pruefeDefinition(def: FormularDefinition): string[] {
       if ((b.typ === "auswahl" || b.typ === "mehrfachauswahl") && b.optionen.length === 0) fehler.push(`${wo} hat keine Optionen.`);
       if ((b.typ === "auswahl" || b.typ === "mehrfachauswahl") && new Set(b.optionen.map((o) => o.wert)).size !== b.optionen.length) {
         fehler.push(`${wo}: eine Option kommt doppelt vor.`);
+      }
+      if ((b.typ === "kurztext" || b.typ === "langtext") && b.maxLaenge !== undefined && zeichenGrenze(b) === undefined) {
+        fehler.push(`${wo}: „Höchstens Zeichen“ muss mindestens 1 sein oder leer bleiben.`);
       }
       if (b.typ === "skala" && !(Number.isInteger(b.min) && Number.isInteger(b.max) && b.min < b.max)) fehler.push(`${wo}: ungültige Skala.`);
     }

@@ -15,7 +15,7 @@ import { Test } from "@nestjs/testing";
 import * as bcrypt from "bcryptjs";
 import { Client } from "pg";
 import request from "supertest";
-import { pruefeDefinition, werteAus, type FormularDefinition } from "@zimmerakte/shared";
+import { pruefeDefinition, typFehler, werteAus, zeichenGrenze, type FormularDefinition, type TextBaustein } from "@zimmerakte/shared";
 import { FORMULAR_VORLAGEN } from "./support/formular-beispiele";
 import { AppModule } from "../src/app.module";
 import { kontoMitAlterRolle, raeumeKontoMitRolleAuf, type AlteRolle } from "./support/konto-mit-rolle";
@@ -173,6 +173,20 @@ describe("Protokolle", () => {
       const fehler = pruefeDefinition(def);
       expect(fehler.some((f) => f.includes("darf nur angezeigt"))).toBe(true);
       expect(fehler.some((f) => f.includes("weiter oben"))).toBe(true);
+    });
+
+    it("„Höchstens Zeichen“ 0 sperrt das Feld nicht, sondern gilt als keine Grenze -- und wird vor dem Veroeffentlichen gemeldet", () => {
+      // Rueckmeldung 95d08c6a: maxLaenge 0 landete als maxlength="0" im Feld, man konnte nichts tippen.
+      const null0: TextBaustein = { typ: "langtext", schluessel: "t", beschriftung: "T", maxLaenge: 0 };
+      expect(zeichenGrenze(null0)).toBeUndefined();
+      expect(zeichenGrenze({ maxLaenge: -3 })).toBeUndefined();
+      expect(zeichenGrenze({ maxLaenge: 2.5 })).toBeUndefined();
+      expect(zeichenGrenze({ maxLaenge: 1 })).toBe(1);
+      expect(typFehler(null0, "beliebig lang")).toBeNull();
+      expect(typFehler({ ...null0, maxLaenge: 3 }, "vier")).toMatch(/Höchstens 3/);
+      expect(pruefeDefinition({ bausteine: [null0] }).join(" ")).toMatch(/Höchstens Zeichen/);
+      expect(pruefeDefinition({ bausteine: [{ ...null0, maxLaenge: 200 }] })).toEqual([]);
+      expect(pruefeDefinition({ bausteine: [{ ...null0, maxLaenge: undefined }] })).toEqual([]);
     });
 
     it("verborgener Abschnitt verbirgt Kinder; Dauer rechnet ueber Mitternacht", () => {

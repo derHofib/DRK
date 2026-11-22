@@ -320,6 +320,17 @@ export function FormularEditor({
   status: ReactNode;
 }) {
   const [gewaehlt, setGewaehlt] = useState<string | null>(null);
+  // Kennung der AUSWAHL, nicht des Schluessels: das Eigenschaften-Panel darf
+  // nur neu aufgebaut werden, wenn jemand einen anderen Baustein waehlt. Am
+  // Schluessel festgemacht (frueher key={auswahl.schluessel}) baute es sich
+  // bei jedem Buchstaben neu auf, weil der Schluessel der Beschriftung folgt --
+  // das Feld verlor nach einem Buchstaben den Fokus (Rueckmeldungen „Formular
+  // Schlüssel“ und „beschriftung Skala fehlerhaft“, 21.11.2026).
+  const [auswahlNr, setAuswahlNr] = useState(0);
+  function waehlen(schluessel: string | null) {
+    setGewaehlt(schluessel);
+    setAuswahlNr((n) => n + 1);
+  }
   const [ansicht, setAnsicht] = useState<"aufbau" | "ausprobieren">("aufbau");
 
   const gesperrt = useMemo(() => {
@@ -347,7 +358,7 @@ export function FormularEditor({
       bausteine = mitKindern(definition.bausteine, eltern, (k) => [...k.slice(0, i + 1), b, ...k.slice(i + 1)]);
     }
     onAendern({ ...definition, bausteine });
-    setGewaehlt(b.schluessel);
+    waehlen(b.schluessel);
     setAnsicht("aufbau");
   }
 
@@ -370,7 +381,7 @@ export function FormularEditor({
     const def = { ...definition, bausteine: mitKindern(definition.bausteine, eltern, (k) => k.filter((_, j) => j !== i)) };
     if (def.bezugsdatumFeld === auswahl.schluessel) delete def.bezugsdatumFeld;
     onAendern(def);
-    setGewaehlt(null);
+    waehlen(null);
   }
 
   function verschieben(richtung: -1 | 1, schluessel = gewaehlt) {
@@ -542,7 +553,7 @@ export function FormularEditor({
                   definition={definition}
                   gewaehlt={gewaehlt}
                   zug={zug}
-                  onWaehlen={setGewaehlt}
+                  onWaehlen={(s) => s !== gewaehlt && waehlen(s)}
                   onGriff={griffRunter}
                   onGriffTaste={griffTaste}
                 />
@@ -567,7 +578,7 @@ export function FormularEditor({
       <aside className="zv-fe-eigenschaften" aria-label="Eigenschaften">
         {auswahl && pfad ? (
           <Eigenschaften
-            key={auswahl.schluessel}
+            key={auswahlNr}
             b={auswahl}
             definition={definition}
             gesperrt={gesperrt.get(auswahl.schluessel) ?? null}
@@ -929,17 +940,14 @@ function Eigenschaften({
                 <span className="zv-sub-inline">fest, seit es veröffentlicht ist</span>
               </div>
             ) : (
-              <input
-                id={id("schluessel")}
-                className="zv-mono"
-                value={b.schluessel}
-                onChange={(e) => {
-                  const s = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
-                  if (s && !andereSchluessel.has(s)) onAendern({ ...b, schluessel: s });
-                }}
-              />
+              <SchluesselEingabe id={id("schluessel")} wert={b.schluessel} vergeben={andereSchluessel} onAendern={(schluessel) => onAendern({ ...b, schluessel })} />
             )}
-            <p className="zv-protokoll-hilfe">Name der Spalte in Auswertungen. Nach dem Veröffentlichen nicht mehr änderbar.</p>
+            <p className="zv-protokoll-hilfe">
+              Der interne Name dieses Feldes, den nur das System sieht. Ausfüllende sehen immer die Beschriftung. Gebraucht wird er als
+              Spaltenname in Auswertungen und Listen-Exporten und als Bezug in Bedingungen und Berechnungen. Er entsteht von selbst aus der
+              Beschriftung; ändern müssen Sie ihn nur, wenn Sie einen bestimmten Spaltennamen wollen. Nur Kleinbuchstaben, Ziffern und
+              Unterstrich. Nach dem Veröffentlichen fest, damit alte Protokolle ihre Antworten behalten.
+            </p>
           </div>
         </>
       )}
@@ -1046,7 +1054,66 @@ function AusrichtungWahl({ labelId, wert, onWahl }: { labelId: string; wert: Bau
   );
 }
 
-function ZahlFeld({ id, label, wert, onAendern, ganz }: { id: string; label: string; wert: number | undefined; onAendern: (w: number | undefined) => void; ganz?: boolean }) {
+/**
+ * Der Schluessel wird beim Tippen durchlaufen ("a", "ab", ...): ein
+ * Zwischenstand darf leer oder schon vergeben sein, ohne dass das Feld die
+ * Eingabe verweigert. Deshalb ein eigener Entwurf; nach oben geht nur ein
+ * gueltiger Stand, beim Verlassen springt ein ungueltiger auf den letzten
+ * gueltigen zurueck.
+ */
+function SchluesselEingabe({ id, wert, vergeben, onAendern }: { id: string; wert: string; vergeben: Set<string>; onAendern: (s: string) => void }) {
+  const [entwurf, setEntwurf] = useState(wert);
+  // Aendert sich der Schluessel von aussen (er folgt der Beschriftung), zieht der Entwurf mit.
+  const [zuletzt, setZuletzt] = useState(wert);
+  if (wert !== zuletzt) {
+    setZuletzt(wert);
+    setEntwurf(wert);
+  }
+  const problem = !entwurf ? "Bitte einen Schlüssel eingeben." : vergeben.has(entwurf) ? "Diesen Schlüssel hat schon ein anderes Feld." : null;
+  return (
+    <>
+      <input
+        id={id}
+        className="zv-mono"
+        value={entwurf}
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={problem ? `${id}-problem` : undefined}
+        onChange={(e) => {
+          const s = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+          setEntwurf(s);
+          if (s && !vergeben.has(s)) {
+            setZuletzt(s);
+            onAendern(s);
+          }
+        }}
+        onBlur={() => setEntwurf(wert)}
+      />
+      {problem && (
+        <p id={`${id}-problem`} className="zv-protokoll-hilfe zv-fe-schluessel-problem">
+          {problem} Beim Verlassen des Feldes gilt wieder „{wert}“.
+        </p>
+      )}
+    </>
+  );
+}
+
+function ZahlFeld({
+  id,
+  label,
+  wert,
+  onAendern,
+  ganz,
+  min,
+  hilfe,
+}: {
+  id: string;
+  label: string;
+  wert: number | undefined;
+  onAendern: (w: number | undefined) => void;
+  ganz?: boolean;
+  min?: number;
+  hilfe?: string;
+}) {
   return (
     <div className="zv-field">
       <label htmlFor={id}>{label}</label>
@@ -1054,9 +1121,11 @@ function ZahlFeld({ id, label, wert, onAendern, ganz }: { id: string; label: str
         id={id}
         type="number"
         step={ganz ? 1 : "any"}
+        min={min}
         value={wert ?? ""}
         onChange={(e) => onAendern(e.target.value === "" ? undefined : ganz ? Math.trunc(Number(e.target.value)) : Number(e.target.value))}
       />
+      {hilfe && <p className="zv-protokoll-hilfe">{hilfe}</p>}
     </div>
   );
 }
@@ -1105,7 +1174,17 @@ function TypEinstellungen({
       );
     case "kurztext":
     case "langtext":
-      return <ZahlFeld id={id("max")} label="Höchstens Zeichen" ganz wert={b.maxLaenge} onAendern={(maxLaenge) => onAendern({ ...b, maxLaenge })} />;
+      return (
+        <ZahlFeld
+          id={id("max")}
+          label="Höchstens Zeichen"
+          ganz
+          min={1}
+          hilfe="Leer lassen für keine Grenze. Wer ausfüllt, sieht, wie viele Zeichen noch gehen."
+          wert={b.maxLaenge}
+          onAendern={(maxLaenge) => onAendern({ ...b, maxLaenge })}
+        />
+      );
     case "zahl":
       return (
         <div className="zv-fe-zweispaltig">
@@ -1145,14 +1224,21 @@ function TypEinstellungen({
         <div className="zv-fe-zweispaltig">
           <ZahlFeld id={id("min")} label="Von" ganz wert={b.min} onAendern={(min) => onAendern({ ...b, min: min ?? 0 })} />
           <ZahlFeld id={id("max")} label="Bis" ganz wert={b.max} onAendern={(max) => onAendern({ ...b, max: max ?? 0 })} />
+          {/* "Beschriftung unten/oben" war missverstaendlich (Rueckmeldung
+              6af2300c: wo erscheint das, wofuer ist es?). Die Bezeichnung nennt
+              jetzt die Zahl, unter der der Text steht, und der Hilfetext sagt,
+              wo er auftaucht -- und wo bewusst nicht. */}
           <div className="zv-field">
-            <label htmlFor={id("lmin")}>Beschriftung unten</label>
-            <input id={id("lmin")} value={b.labelMin ?? ""} placeholder="z. B. schlecht" onChange={(e) => onAendern({ ...b, labelMin: e.target.value || undefined })} />
+            <label htmlFor={id("lmin")}>Text unter der {b.min}</label>
+            <input id={id("lmin")} value={b.labelMin ?? ""} placeholder="z. B. sehr schlecht" aria-describedby={id("lhilfe")} onChange={(e) => onAendern({ ...b, labelMin: e.target.value || undefined })} />
           </div>
           <div className="zv-field">
-            <label htmlFor={id("lmax")}>Beschriftung oben</label>
-            <input id={id("lmax")} value={b.labelMax ?? ""} placeholder="z. B. sehr gut" onChange={(e) => onAendern({ ...b, labelMax: e.target.value || undefined })} />
+            <label htmlFor={id("lmax")}>Text unter der {b.max}</label>
+            <input id={id("lmax")} value={b.labelMax ?? ""} placeholder="z. B. sehr gut" aria-describedby={id("lhilfe")} onChange={(e) => onAendern({ ...b, labelMax: e.target.value || undefined })} />
           </div>
+          <p className="zv-protokoll-hilfe zv-fe-ganz" id={id("lhilfe")}>
+            Beim Ausfüllen steht dieser Text klein unter der kleinsten und der größten Zahl, damit klar ist, was die Zahlen bedeuten (z. B. {b.min} = sehr schlecht, {b.max} = sehr gut). Beides ist freiwillig. In der Akte, im PDF und in Auswertungen steht nur die gewählte Zahl, etwa „7 von {b.max}“.
+          </p>
         </div>
       );
     case "berechnung":
@@ -1211,7 +1297,9 @@ function OptionenListe({
       <label>Optionen</label>
       <ul className="zv-fe-optionen">
         {b.optionen.map((o, i) => (
-          <li key={o.wert} className={o.ausgeblendet ? "zv-fe-option-aus" : undefined}>
+          // Position statt o.wert als key: der Wert folgt der Beschriftung, ein
+          // key daran baute die Zeile bei jedem Buchstaben neu auf (Fokus weg).
+          <li key={i} className={o.ausgeblendet ? "zv-fe-option-aus" : undefined}>
             <input aria-label={`Option ${i + 1}`} value={o.label} onChange={(e) => beschriften(i, e.target.value)} />
             <button
               type="button"
