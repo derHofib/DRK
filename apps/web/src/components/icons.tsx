@@ -15,6 +15,9 @@
  * brauchen daher zwingend ein eigenes aria-label am <button>.
  */
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Archive,
   Gavel,
   MessagesSquare,
@@ -393,3 +396,7 @@ export const IWiederholen = baue(Redo2);
 export const IRaster = baue(Grid3x3);
 export const IEbenen = baue(Layers);
 export const IEntsperrt = baue(LockOpen);
+/** Ausrichtung eines Formular-Bausteins (stehen immer neben dem Wort Links/Mitte/Rechts). */
+export const IAusrichtungLinks = baue(AlignLeft);
+export const IAusrichtungMitte = baue(AlignCenter);
+export const IAusrichtungRechts = baue(AlignRight);
