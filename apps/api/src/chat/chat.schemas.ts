@@ -54,3 +54,15 @@ export const anfrageSchema = z.union([
 export const ablehnenSchema = z
   .object({ begruendung: z.string().trim().max(500, "Die Begründung ist zu lang (höchstens 500 Zeichen).").nullable().optional() })
   .strict();
+
+// Genau EIN Emoji (auch Hautton, Flagge, ZWJ-Folge), kein Text: per
+// Unicode-Eigenschaft RGI_Emoji, die nur der v-Modus kennt. Als RegExp-Objekt
+// statt Literal, weil das TypeScript-Ziel den v-Modus noch nicht kennt. Der
+// CHECK in migrations/0086 ist die Rueckfallgrenze an der Anwendung vorbei.
+const EIN_EMOJI = new RegExp("^\\p{RGI_Emoji}$", "v");
+
+export const reaktionSchema = z
+  .object({
+    zeichen: z.string().max(16, "Bitte genau ein Emoji wählen.").refine((w) => EIN_EMOJI.test(w), "Bitte genau ein Emoji wählen."),
+  })
+  .strict();
