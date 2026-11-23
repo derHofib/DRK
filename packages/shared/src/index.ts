@@ -1170,6 +1170,8 @@ export interface AufgabeDto {
 export interface AufgabenAnzahlDto {
   /** offene Zimmer-Aufgaben je zimmerId, fuer die Badge in der Zimmeruebersicht. */
   jeZimmer: Record<string, number>;
+  /** davon ueberfaellig (Faelligkeit vor heute, Berliner Zeit); Zimmer ohne Ueberfaelliges fehlen. */
+  ueberfaelligJeZimmer: Record<string, number>;
   /** offene Aufgaben (Zimmer- oder persoenlich), die dem eigenen Benutzer zugewiesen sind. */
   eigene: number;
 }
@@ -1704,7 +1706,27 @@ export interface ChatNachrichtDto {
   standort: ChatStandortDto | null;
   termin: ChatTerminKurzDto | null;
   anhaenge: ChatAnhangDto[];
+  /** Je Zeichen eine Gruppe, haeufigste zuerst (migrations/0086). Leer bei geloeschten Nachrichten. */
+  reaktionen: ChatReaktionDto[];
 }
+
+/** Reaktionen auf eine Nachricht, zusammengefasst nach Zeichen. */
+export interface ChatReaktionDto {
+  zeichen: string;
+  anzahl: number;
+  /** Ich habe mit genau diesem Zeichen reagiert. */
+  meine: boolean;
+  /** Wer so reagiert hat, Namen wie beim Absender (Klient:innen ggf. anonymisiert); die eigene Person zuerst. */
+  personen: ChatPersonDto[];
+}
+
+/**
+ * Die sechs Schnellreaktionen (Konzept Frage 3, freigegeben 22.11.2026):
+ * arbeitsnah, bewusst ohne Lachen und Weinen -- auf eine Nachricht von oder
+ * ueber Klient:innen kann beides leicht falsch ankommen. Ueber "+" bleibt
+ * jedes andere Emoji moeglich; die Liste ist Oberflaeche, keine Grenze.
+ */
+export const CHAT_SCHNELLREAKTIONEN = ["👍", "❤️", "✅", "👀", "😊", "🙏"] as const;
 
 export interface ChatNachrichtenSeiteDto {
   /** Neueste zuerst. Naechste Seite: GET ...?vor=<id der letzten Nachricht dieser Seite>. */
@@ -1733,10 +1755,13 @@ export interface ChatEreignisDto {
   chatId: string | null;
   /**
    * nachricht: neue/geloeschte Nachricht; teilnehmer: Mitgliedschaft oder Adminrechte geaendert
-   * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; resync: Verbindung zur Datenbank
+   * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; reaktion: Reaktion gesetzt oder entfernt
+   * (zaehlt nicht als ungelesen); resync: Verbindung zur Datenbank
    * war unterbrochen -- alles neu laden.
    */
-  art: "nachricht" | "teilnehmer" | "chat" | "anfrage" | "resync";
+  art: "nachricht" | "teilnehmer" | "chat" | "anfrage" | "reaktion" | "resync";
+  /** Nur bei art "reaktion": an welcher Nachricht sich Reaktionen geaendert haben -- der Client laedt genau diese neu. */
+  nachrichtId?: string;
   /**
    * Nur bei art "anfrage": welche Chat-Anfrage sich geaendert hat (neu, beantwortet, zurueckgezogen).
    * Ohne Inhalt -- die Anfragen laedt der Client per GET /chat/anfragen.
@@ -2180,6 +2205,20 @@ export interface Option {
   ausgeblendet?: boolean;
 }
 
+/**
+ * Ausrichtung eines Bausteins (Rueckmeldung „Bausteine“, 21.11.2026: eine
+ * Ueberschrift wie „Abmahnung“ soll auch mittig oder rechts stehen koennen).
+ * Fehlt sie, gilt "links" -- so bleiben alle bestehenden Formulare, wie sie
+ * sind, ohne Migration der gespeicherten Definitionen.
+ */
+export type BausteinAusrichtung = "links" | "mitte" | "rechts";
+export const BAUSTEIN_AUSRICHTUNGEN: readonly BausteinAusrichtung[] = ["links", "mitte", "rechts"];
+export const BAUSTEIN_AUSRICHTUNG_LABEL: Record<BausteinAusrichtung, string> = {
+  links: "Links",
+  mitte: "Mitte",
+  rechts: "Rechts",
+};
+
 interface BausteinBasis {
   /**
    * Fester technischer Name. Bruecke zwischen Formular, Datenpunkt, PDF-Layout
@@ -2189,6 +2228,17 @@ interface BausteinBasis {
   beschriftung: string;
   hilfetext?: string;
   sichtbarWenn?: Bedingung;
+  /**
+   * Gilt beim Ausfuellen, in der Ansicht und im PDF. Ein ausgerichtetes Feld
+   * steht immer allein in seiner Zeile, Beschriftung ueber dem Wert: neben
+   * einer Beschriftungsspalte haette "mittig" keine erkennbare Mitte.
+   */
+  ausrichtung?: BausteinAusrichtung;
+}
+
+/** Ausrichtung mit Vorgabe; unbekannte Werte (Handarbeit an der Definition) gelten als links. */
+export function ausrichtungVon(b: Pick<Baustein, "ausrichtung">): BausteinAusrichtung {
+  return b.ausrichtung === "mitte" || b.ausrichtung === "rechts" ? b.ausrichtung : "links";
 }
 
 interface EingabeBasis extends BausteinBasis {
@@ -2735,6 +2785,9 @@ export function pruefeDefinition(def: FormularDefinition): string[] {
     if (typen.has(b.schluessel)) fehler.push(`Feldschlüssel „${b.schluessel}“ kommt doppelt vor.`);
     typen.set(b.schluessel, b.typ);
     if (!b.beschriftung?.trim() && b.typ !== "hinweis") fehler.push(`„${b.schluessel}“ hat keine Beschriftung.`);
+    if (b.ausrichtung !== undefined && !BAUSTEIN_AUSRICHTUNGEN.includes(b.ausrichtung)) {
+      fehler.push(`„${b.beschriftung || b.schluessel}“ hat eine unbekannte Ausrichtung.`);
+    }
   }
   const position = new Map(alle.map((b, i) => [b.schluessel, i]));
   // Sichtbarkeit und Berechnung werden in Formularreihenfolge ausgewertet
@@ -3130,6 +3183,9 @@ export function formularVergleich(alt: FormularDefinition | null, neu: FormularD
     if (JSON.stringify(a.sichtbarWenn ?? null) !== JSON.stringify(n.sichtbarWenn ?? null)) {
       out.push({ art: "geaendert", text: `„${name(n)}“: Sichtbarkeit geändert` });
     }
+    if (ausrichtungVon(a) !== ausrichtungVon(n)) {
+      out.push({ art: "geaendert", text: `„${name(n)}“: Ausrichtung ${BAUSTEIN_AUSRICHTUNG_LABEL[ausrichtungVon(a)]} → ${BAUSTEIN_AUSRICHTUNG_LABEL[ausrichtungVon(n)]}` });
+    }
     if ((a.typ === "auswahl" || a.typ === "mehrfachauswahl") && (n.typ === "auswahl" || n.typ === "mehrfachauswahl")) {
       for (const o of n.optionen) {
         const ao = a.optionen.find((x) => x.wert === o.wert);
@@ -3139,7 +3195,7 @@ export function formularVergleich(alt: FormularDefinition | null, neu: FormularD
       }
     }
     const rest = (b: Baustein) => {
-      const { beschriftung: _b, sichtbarWenn: _s, kinder: _k, optionen: _o, pflicht: _p, ...r } = b as unknown as Record<string, unknown>;
+      const { beschriftung: _b, sichtbarWenn: _s, kinder: _k, optionen: _o, pflicht: _p, ausrichtung: _a, ...r } = b as unknown as Record<string, unknown>;
       return JSON.stringify(r);
     };
     if (a.typ === n.typ && rest(a) !== rest(n)) out.push({ art: "geaendert", text: `„${name(n)}“: Einstellungen geändert` });

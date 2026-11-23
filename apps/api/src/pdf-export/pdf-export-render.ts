@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, PDFEmbeddedPage, PDFFont, PDFImage, PDFPage, rgb, type RGB } from "pdf-lib";
 import {
+  ausrichtungVon,
   druckUeberschriftFarbe,
   PDF_FREI_MIN_PT,
   PDF_FREI_SEITE,
@@ -9,6 +10,7 @@ import {
   pdfTextZeilen,
   werteAus,
   type Baustein,
+  type BausteinAusrichtung,
   type FeldWert,
   type FeldWerte,
   type FormularDefinition,
@@ -86,8 +88,24 @@ export interface PdfRenderEingabe {
 // --- Inhalt vorbereiten ---------------------------------------------------
 
 type Block =
-  | { art: "ueberschrift"; text: string }
-  | { art: "feld"; schluessel: string; label: string; wert: string | null; lang: boolean; jaNein: boolean | null; typ: Baustein["typ"] };
+  | { art: "ueberschrift"; text: string; ausrichtung: BausteinAusrichtung }
+  | {
+      art: "feld";
+      schluessel: string;
+      label: string;
+      wert: string | null;
+      lang: boolean;
+      jaNein: boolean | null;
+      typ: Baustein["typ"];
+      ausrichtung: BausteinAusrichtung;
+    };
+
+/** x einer Zeile der Breite w zwischen x0 und x1. */
+function ausgerichtetX(ausrichtung: BausteinAusrichtung, x0: number, x1: number, w: number): number {
+  if (ausrichtung === "rechts") return x1 - w;
+  if (ausrichtung === "mitte") return x0 + (x1 - x0 - w) / 2;
+  return x0;
+}
 
 function datumDe(iso: string): string {
   const [j, m, t] = iso.split("-");
@@ -132,7 +150,7 @@ export function pdfBloecke(eingabe: Pick<PdfRenderEingabe, "gestaltung" | "zielg
       if (!sichtbar.has(b.schluessel)) continue;
       if (b.typ === "abschnitt") {
         const kinder = lauf(b.kinder);
-        if (kinder.length > 0) out.push({ art: "ueberschrift", text: b.beschriftung }, ...kinder);
+        if (kinder.length > 0) out.push({ art: "ueberschrift", text: b.beschriftung, ausrichtung: ausrichtungVon(b) }, ...kinder);
         continue;
       }
       if (b.typ === "hinweis") continue;
@@ -150,7 +168,7 @@ export function pdfBloecke(eingabe: Pick<PdfRenderEingabe, "gestaltung" | "zielg
       }
       if (wert === null && g.leereFelder === "ausblenden") continue;
       const lang = b.typ === "langtext" || (wert !== null && (wert.length > 42 || wert.includes("\n")));
-      out.push({ art: "feld", schluessel: b.schluessel, label: b.beschriftung, wert, lang, jaNein, typ: b.typ });
+      out.push({ art: "feld", schluessel: b.schluessel, label: b.beschriftung, wert, lang, jaNein, typ: b.typ, ausrichtung: ausrichtungVon(b) });
     }
     return out;
   };
@@ -262,14 +280,22 @@ class Setzer {
     if (this.y - hoehe < this.unten) this.neueSeite();
   }
 
-  text(zeilen: string[], opt: { x?: number; groesse?: number; font?: PDFFont; farbe?: RGB; zeilenabstand?: number; rechts?: number }) {
+  text(
+    zeilen: string[],
+    opt: { x?: number; x1?: number; ausrichtung?: BausteinAusrichtung; groesse?: number; font?: PDFFont; farbe?: RGB; zeilenabstand?: number; rechts?: number }
+  ) {
     const groesse = opt.groesse ?? this.g.groesseText;
     const lh = groesse * (opt.zeilenabstand ?? 1.35);
     for (const z of zeilen) {
       this.platz(lh);
       this.y -= lh;
       const font = opt.font ?? this.normal;
-      const x = opt.rechts !== undefined ? opt.rechts - font.widthOfTextAtSize(z, groesse) : (opt.x ?? this.spiegel.x0);
+      const w = font.widthOfTextAtSize(z, groesse);
+      // Grenzen erst nach platz() lesen: ein Seitenwechsel kann den Satzspiegel aendern.
+      const x =
+        opt.rechts !== undefined
+          ? opt.rechts - w
+          : ausgerichtetX(opt.ausrichtung ?? "links", opt.x ?? this.spiegel.x0, opt.x1 ?? this.spiegel.x1, w);
       this.seite.drawText(z, { x, y: this.y + groesse * 0.25, size: groesse, font, color: opt.farbe ?? SCHWARZ });
     }
   }
@@ -280,7 +306,7 @@ class Setzer {
     this.y -= opt.abstandDanach ?? groesse * 0.6;
   }
 
-  abschnitt(text: string) {
+  abschnitt(text: string, ausrichtung: BausteinAusrichtung = "links") {
     const g = this.g;
     const groesse = g.ueberschriften === "farbig" ? Math.max(g.groesseText - 1, 7.5) : g.groesseText + 1;
     const vor = g.groesseText * 1.1;
@@ -288,14 +314,22 @@ class Setzer {
     this.platz(vor + groesse * 1.4 + g.groesseText * 2.6);
     this.y -= vor;
     const t = g.ueberschriften === "farbig" ? text.toLocaleUpperCase("de-DE") : text;
-    let x = this.spiegel.x0;
-    if (g.ueberschriften === "balken") {
-      this.seite.drawRectangle({ x, y: this.y - groesse * 1.15, width: 1.2 * MM, height: groesse * 1.15, color: this.linie });
-      x += 2.6 * MM;
-    }
+    const balken = g.ueberschriften === "balken" ? 2.6 * MM : 0;
+    const x = this.spiegel.x0 + balken;
     const zeilen = umbrechen(t, this.fett, groesse, this.spiegel.x1 - x);
-    this.text(zeilen, { x, groesse, font: this.fett, farbe: g.ueberschriften === "farbig" ? this.ueberschrift : SCHWARZ, zeilenabstand: 1.3 });
+    if (balken) {
+      // Der Balken gehoert zur Ueberschrift, nicht an den Seitenrand: mittig/rechts steht er direkt vor der ersten Zeile.
+      const erste = ausgerichtetX(ausrichtung, x, this.spiegel.x1, this.fett.widthOfTextAtSize(zeilen[0] ?? "", groesse));
+      this.seite.drawRectangle({ x: erste - balken, y: this.y - groesse * 1.15, width: 1.2 * MM, height: groesse * 1.15, color: this.linie });
+    }
+    this.text(zeilen, { x, ausrichtung, groesse, font: this.fett, farbe: g.ueberschriften === "farbig" ? this.ueberschrift : SCHWARZ, zeilenabstand: 1.3 });
     this.y -= groesse * 0.35;
+  }
+
+  /** Breite der Ja/Nein-Ankreuzfelder, damit sie sich mittig/rechts ausrichten lassen. */
+  kreuzeBreite(groesse: number): number {
+    const k = groesse * 0.8;
+    return k + 3 + this.normal.widthOfTextAtSize("Ja", groesse) + 10 + k + 3 + this.normal.widthOfTextAtSize("Nein", groesse);
   }
 
   /** Ja/Nein als Ankreuzfelder: gezeichnet, nicht als Zeichen -- nicht jede Schrift hat ☒. */
@@ -359,16 +393,17 @@ class Setzer {
     const wert = kreuz ? [""] : umbrechen(this.wertText(b), this.normal, gr, x1 - x0 - 2 * pad);
     const minZeilen = b.wert === null && g.leereFelder === "platz" ? (b.typ === "langtext" ? 4 : 1) : 1;
     const zeilen = Math.max(wert.length, minZeilen);
+    const a = b.ausrichtung;
     let y = oben - klein * 1.3;
-    this.seite.drawText(label, { x: x0, y: y + klein * 0.25, size: klein, font: this.normal, color: GRAU });
+    this.seite.drawText(label, { x: ausgerichtetX(a, x0, x1, this.normal.widthOfTextAtSize(label, klein)), y: y + klein * 0.25, size: klein, font: this.normal, color: GRAU });
     const boxH = zeilen * gr * 1.35 + 2 * pad;
     y -= 0.8 * MM;
     this.seite.drawRectangle({ x: x0, y: y - boxH, width: x1 - x0, height: boxH, borderColor: RAHMEN, borderWidth: 0.6 });
     let yt = y - pad;
-    if (kreuz) this.kreuze(x0 + pad, yt - gr * 1.1, b.jaNein, gr);
+    if (kreuz) this.kreuze(ausgerichtetX(a, x0 + pad, x1 - pad, this.kreuzeBreite(gr)), yt - gr * 1.1, b.jaNein, gr);
     for (const z of wert) {
       yt -= gr * 1.35;
-      if (z) this.seite.drawText(z, { x: x0 + pad, y: yt + gr * 0.3, size: gr, font: this.normal, color: SCHWARZ });
+      if (z) this.seite.drawText(z, { x: ausgerichtetX(a, x0 + pad, x1 - pad, this.normal.widthOfTextAtSize(z, gr)), y: yt + gr * 0.3, size: gr, font: this.normal, color: SCHWARZ });
     }
     return oben - (y - boxH) + 2 * MM;
   }
@@ -384,18 +419,56 @@ class Setzer {
     return klein * 1.3 + 0.8 * MM + Math.max(wert.length, minZeilen) * gr * 1.35 + 2 * pad + 2 * MM;
   }
 
+  /**
+   * Stil "liste"/"kompakt" fuer ein mittig oder rechts ausgerichtetes Feld:
+   * Beschriftung ueber dem Wert, beides ueber die volle Breite ausgerichtet.
+   * Neben einer Beschriftungsspalte haette "mittig" keine erkennbare Mitte.
+   */
+  ausgerichteteZeile(b: Extract<Block, { art: "feld" }>) {
+    const g = this.g;
+    const gr = g.groesseText;
+    const lh = gr * 1.35;
+    const pad = 1.2 * MM;
+    const label = umbrechen(b.label, this.normal, gr, this.breite);
+    const kreuz = g.jaNein === "kreuz" && b.typ === "ja_nein";
+    let wert = kreuz ? [] : umbrechen(this.wertText(b), this.normal, gr, this.breite);
+    if (b.wert === null && g.leereFelder === "platz") wert = b.typ === "langtext" ? ["", "", ""] : [""];
+    // Beschriftung nie allein am Seitenende.
+    this.platz(pad + (label.length + 1) * lh + pad);
+    this.y -= pad;
+    this.text(label, { ausrichtung: b.ausrichtung, groesse: gr, farbe: GRAU });
+    if (kreuz) {
+      this.platz(lh);
+      this.y -= lh;
+      this.kreuze(ausgerichtetX(b.ausrichtung, this.spiegel.x0, this.spiegel.x1, this.kreuzeBreite(gr)), this.y + gr * 0.25 - 0.5, b.jaNein, gr);
+    } else {
+      this.text(wert, { ausrichtung: b.ausrichtung, groesse: gr });
+    }
+    this.y -= pad;
+    this.seite.drawLine({ start: { x: this.spiegel.x0, y: this.y }, end: { x: this.spiegel.x1, y: this.y }, thickness: 0.4, color: LINIE });
+  }
+
   felder(bloecke: Block[]) {
     const g = this.g;
     let i = 0;
     while (i < bloecke.length) {
       const b = bloecke[i];
       if (b.art === "ueberschrift") {
-        this.abschnitt(b.text);
+        this.abschnitt(b.text, b.ausrichtung);
+        i++;
+        continue;
+      }
+      if (b.ausrichtung !== "links" && g.feldstil !== "kaesten") {
+        this.ausgerichteteZeile(b);
         i++;
         continue;
       }
       const naechster = bloecke[i + 1];
-      const paar = g.feldstil !== "liste" && !b.lang && naechster?.art === "feld" && !naechster.lang ? naechster : null;
+      // Ausgerichtete Felder stehen allein in ihrer Zeile -- auch im Kastenstil.
+      const paar =
+        g.feldstil !== "liste" && !b.lang && b.ausrichtung === "links" && naechster?.art === "feld" && !naechster.lang && naechster.ausrichtung === "links"
+          ? naechster
+          : null;
       if (g.feldstil === "liste") {
         this.listenZeile(b);
         i++;
@@ -413,7 +486,8 @@ class Setzer {
           const h = this.kastenHoehe(b, this.breite);
           if (h > this.spiegel.oben - this.unten) {
             // Laenger als eine Seite: als Liste weiter, statt aus der Seite zu laufen.
-            this.listenZeile(b);
+            if (b.ausrichtung === "links") this.listenZeile(b);
+            else this.ausgerichteteZeile(b);
           } else {
             this.platz(h);
             this.kasten(b, this.spiegel.x0, this.spiegel.x1, this.y);

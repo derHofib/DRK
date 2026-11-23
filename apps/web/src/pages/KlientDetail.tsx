@@ -146,9 +146,12 @@ export function KlientDetail({
   klientId,
   onZurueck,
   startProtokoll,
+  zurueckText = "Zurück zur Liste",
 }: {
   klientId: string;
   onZurueck: () => void;
+  /** Aus dem Zimmer-Panel geoeffnet fuehrt "Zurueck" zum Zimmer, nicht zur Liste. */
+  zurueckText?: string;
   /** Sprung von ausserhalb (Seite Dokumentation, „In der Akte öffnen“). */
   startProtokoll?: ProtokollSprung;
 }) {
@@ -308,7 +311,7 @@ export function KlientDetail({
     <div className="zv-akte">
       <button className="zv-link-btn" onClick={onZurueck} style={{ marginBottom: 14 }}>
         <IZurueck />
-        Zurück zur Liste
+        {zurueckText}
       </button>
 
       {fehler && (

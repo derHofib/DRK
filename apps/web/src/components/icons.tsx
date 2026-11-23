@@ -15,7 +15,11 @@
  * brauchen daher zwingend ein eigenes aria-label am <button>.
  */
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Archive,
+  SmilePlus,
   Gavel,
   MessagesSquare,
   Phone,
@@ -201,6 +205,10 @@ export const IBildAnhaengen = baue(ImagePlus);
 export const IAnhang = baue(Paperclip);
 export const IMail = baue(Mail);
 export const INachrichtLoeschen = baue(Trash2);
+/* Einzige Ausnahme von "keine Smileys oder Gesichter" (CLAUDE.md, freigegeben
+   22.11.2026, Konzept chat-reaktionen Frage 5): der Knopf, der die
+   Smiley-Auswahl oeffnet. Ohne Gesicht ist er kaum als solcher zu erkennen. */
+export const ISmileyHinzufuegen = baue(SmilePlus);
 export const IGruppe = baue(Users);
 
 /* Unterreiter */
@@ -393,3 +401,7 @@ export const IWiederholen = baue(Redo2);
 export const IRaster = baue(Grid3x3);
 export const IEbenen = baue(Layers);
 export const IEntsperrt = baue(LockOpen);
+/** Ausrichtung eines Formular-Bausteins (stehen immer neben dem Wort Links/Mitte/Rechts). */
+export const IAusrichtungLinks = baue(AlignLeft);
+export const IAusrichtungMitte = baue(AlignCenter);
+export const IAusrichtungRechts = baue(AlignRight);

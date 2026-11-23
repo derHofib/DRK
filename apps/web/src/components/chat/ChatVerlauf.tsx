@@ -43,6 +43,11 @@ export function ChatVerlauf({
   const [profilOffen, setProfilOffen] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
+  // Fuer Ereignis-Hoerer, die nicht bei jeder neuen Nachricht neu abonniert werden sollen.
+  const geladeneIds = useRef(new Set<string>());
+  useEffect(() => {
+    geladeneIds.current = new Set(nachrichten.map((n) => n.id));
+  }, [nachrichten]);
   const amEnde = useRef(true);
   const vorherHoehe = useRef<number | null>(null);
   const gemeldet = useRef<string | null>(null);
@@ -88,12 +93,28 @@ export function ChatVerlauf({
     }
   }, [chat.id, meldeGelesen]);
 
+  const reaktionNachladen = useCallback(async (nachrichtId: string) => {
+    if (!geladeneIds.current.has(nachrichtId)) return;
+    try {
+      const n = await api.chatNachricht(nachrichtId);
+      setNachrichten((alt) => (alt.some((x) => x.id === n.id) ? zusammenfuehren(alt, [n]) : alt));
+    } catch {
+      // Z. B. inzwischen per Loeschfrist entfernt: das naechste Nachrichten-Ereignis raeumt auf.
+    }
+  }, []);
+
   useEffect(() => {
     void neuesteLaden();
     return abonnieren((e) => {
+      if (e.art === "reaktion") {
+        // Genau diese Nachricht nachladen -- sie kann weit oben im Verlauf liegen, ausserhalb der
+        // neuesten Seite. Eine Nachricht, die hier (noch) nicht geladen ist, interessiert nicht.
+        if (e.chatId === chat.id && e.nachrichtId) void reaktionNachladen(e.nachrichtId);
+        return;
+      }
       if (e.art === "resync" || e.chatId === chat.id) void neuesteLaden();
     });
-  }, [chat.id, abonnieren, neuesteLaden]);
+  }, [chat.id, abonnieren, neuesteLaden, reaktionNachladen]);
 
   // Kam man mit dem Tab zurueck, sind evtl. Nachrichten eingetroffen, die im Hintergrund nicht als gelesen galten.
   useEffect(() => {
@@ -114,6 +135,12 @@ export function ChatVerlauf({
       el.scrollTop = el.scrollHeight;
     }
   }, [nachrichten, geladen]);
+
+  // Eine Reaktion aendert nur diese Nachricht; ans Ende springen soll der Verlauf dabei nicht.
+  const nachrichtAktualisiert = useCallback((n: ChatNachrichtDto) => {
+    setFehler(null);
+    setNachrichten((alt) => zusammenfuehren(alt, [n]));
+  }, []);
 
   async function aelterLaden() {
     if (aelterLaedt || nachrichten.length === 0) return;
@@ -218,7 +245,13 @@ export function ChatVerlauf({
           return (
             <Fragment key={n.id}>
               {trenner && <div className="zv-chat-tag">{formatTagTrenner(n.erstelltAm)}</div>}
-              <NachrichtBlase n={n} onLoeschen={setLoeschZiel} onBildOeffnen={(url, name) => setBildGross({ url, name })} />
+              <NachrichtBlase
+                n={n}
+                onLoeschen={setLoeschZiel}
+                onBildOeffnen={(url, name) => setBildGross({ url, name })}
+                onAktualisiert={nachrichtAktualisiert}
+                onFehler={setFehler}
+              />
             </Fragment>
           );
         })}

@@ -7,6 +7,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { MarkenIcon } from "../components/MarkenZeichen";
 import { DeineSicht, StandortZeile, sichtKurztext, vertretungKurztext } from "../components/StandortSicht";
 import { useChatEreignisse } from "../components/chat/ereignisse";
+import { initialen } from "../format";
 import {
   IAbmelden,
   IAnwaerter,
@@ -85,13 +86,6 @@ const MOBIL_DIREKT: { wert: HauptReiter; label: string }[] = [
   { wert: "tagesberichte", label: "Doku" },
 ];
 
-/** "Anna Beispiel" -> "AB"; ein einzelnes Wort -> dessen erste zwei Buchstaben. */
-function initialen(name: string): string {
-  const teile = name.trim().split(/\s+/).filter(Boolean);
-  if (teile.length === 0) return "?";
-  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
-  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
-}
 
 /**
  * Rahmen fuer Seiten, die aus den Einstellungen nach "Organisatorisch"

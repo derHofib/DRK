@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   alleBausteine,
+  ausrichtungVon,
   beispielDaten,
   druckUeberschriftFarbe,
   istEingabe,
@@ -19,6 +20,7 @@ import {
   type FormularDefinition,
   type PdfFrei,
   type PdfFreiArt,
+  type PdfFreiAusrichtung,
   type PdfFreiBaustein,
   type PdfFreiHilfslinien,
   type PdfFreiSeitenart,
@@ -117,7 +119,7 @@ function neueId(art: PdfFreiArt, vorhanden: PdfFreiBaustein[]): string {
   }
 }
 
-type FeldInfo = { schluessel: string; label: string; typ: Baustein["typ"]; intern: boolean };
+type FeldInfo = { schluessel: string; label: string; typ: Baustein["typ"]; intern: boolean; ausrichtung: PdfFreiAusrichtung };
 
 export function PdfDesigner({
   formularId,
@@ -236,7 +238,7 @@ export function PdfDesigner({
     () =>
       alleBausteine(definition)
         .filter((b) => istEingabe(b) || b.typ === "anzeige" || b.typ === "berechnung")
-        .map((b) => ({ schluessel: b.schluessel, label: b.beschriftung || b.schluessel, typ: b.typ, intern: "intern" in b && !!b.intern })),
+        .map((b) => ({ schluessel: b.schluessel, label: b.beschriftung || b.schluessel, typ: b.typ, intern: "intern" in b && !!b.intern, ausrichtung: ausrichtungVon(b) })),
     [definition]
   );
   const feldMap = useMemo(() => new Map(felder.map((f) => [f.schluessel, f])), [felder]);
@@ -860,7 +862,8 @@ export function PdfDesigner({
             <div className="zv-gruppenlabel">Felder dieses Formulars</div>
             {felder.filter((f) => passt(f.label)).map((f) => {
               const gesperrt = zielgruppe === "extern" && f.intern;
-              const vorlage = v({ art: "feld", feld: f.schluessel, b: f.typ === "langtext" ? 120 : 60, h: f.typ === "langtext" ? 25 : 9 });
+              // Die Ausrichtung aus dem Formular ist nur der Start; im Designer bleibt sie je Element frei waehlbar.
+              const vorlage = v({ art: "feld", feld: f.schluessel, b: f.typ === "langtext" ? 120 : 60, h: f.typ === "langtext" ? 25 : 9, ausrichtung: f.ausrichtung });
               return (
                 <button
                   key={f.schluessel}

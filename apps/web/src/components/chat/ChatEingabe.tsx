@@ -4,7 +4,8 @@ import { api } from "../../api/client";
 import { bildVerkleinern } from "../../datei";
 import { Modal } from "../Modal";
 import { TerminFormular } from "../TerminFormular";
-import { IAbbrechen, IAnhang, IBildAnhaengen, IFehler, IKalender, ISenden, IStandort } from "../icons";
+import { IAbbrechen, IAnhang, IBildAnhaengen, IFehler, IKalender, ISenden, ISmileyHinzufuegen, IStandort } from "../icons";
+import { SmileyAuswahl } from "./SmileyAuswahl";
 
 const ERLAUBTE_BILDTYPEN = ["image/jpeg", "image/png", "image/webp"];
 const MAX_TEXT = 4000;
@@ -28,6 +29,7 @@ export function ChatEingabe({ chatId, onGesendet }: { chatId: string; onGesendet
   const [text, setText] = useState("");
   const [bild, setBild] = useState<{ datei: File; vorschau: string } | null>(null);
   const [menueOffen, setMenueOffen] = useState(false);
+  const [smileysOffen, setSmileysOffen] = useState(false);
   const [wirdGesendet, setWirdGesendet] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [standortOffen, setStandortOffen] = useState(false);
@@ -35,6 +37,7 @@ export function ChatEingabe({ chatId, onGesendet }: { chatId: string; onGesendet
   const feld = useRef<HTMLTextAreaElement>(null);
   const dateiFeld = useRef<HTMLInputElement>(null);
   const menueRef = useRef<HTMLDivElement>(null);
+  const smileyRef = useRef<HTMLDivElement>(null);
 
   // Hoehe waechst mit dem Inhalt (bis zu einem Deckel), danach scrollt das Feld selbst.
   useEffect(() => {
@@ -59,6 +62,43 @@ export function ChatEingabe({ chatId, onGesendet }: { chatId: string; onGesendet
       document.removeEventListener("keydown", esc);
     };
   }, [menueOffen]);
+
+  useEffect(() => {
+    if (!smileysOffen) return;
+    function aussen(e: MouseEvent) {
+      if (!smileyRef.current?.contains(e.target as Node)) setSmileysOffen(false);
+    }
+    function esc(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") {
+        setSmileysOffen(false);
+        feld.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", aussen);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", aussen);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [smileysOffen]);
+
+  /**
+   * An der Stelle des Schreibcursors einsetzen, nicht ans Ende -- und den
+   * Cursor danach hinter das Zeichen setzen. Die Auswahl bleibt offen, damit
+   * mehrere Smileys hintereinander gehen.
+   */
+  function smileyEinsetzen(zeichen: string) {
+    const el = feld.current;
+    const von = el?.selectionStart ?? text.length;
+    const bis = el?.selectionEnd ?? text.length;
+    const neu = text.slice(0, von) + zeichen + text.slice(bis);
+    setText(neu);
+    const cursor = von + zeichen.length;
+    requestAnimationFrame(() => {
+      if (!feld.current) return;
+      feld.current.setSelectionRange(cursor, cursor);
+    });
+  }
 
   useEffect(
     () => () => {
@@ -187,6 +227,25 @@ export function ChatEingabe({ chatId, onGesendet }: { chatId: string; onGesendet
               e.target.value = "";
             }}
           />
+        </div>
+        {/* Nur mit Maus/Trackpad (siehe app.css): am Handy hat die Tastatur eine Emoji-Taste, ein
+            zweiter Knopf naehme nur dem Textfeld Platz weg (Konzept chat-reaktionen). */}
+        <div className="zv-chat-smileys" ref={smileyRef}>
+          <button
+            type="button"
+            className={`zv-icon-btn${smileysOffen ? " aktiv" : ""}`}
+            onClick={() => setSmileysOffen((v) => !v)}
+            aria-label="Smiley einfügen"
+            title="Smiley einfügen"
+            aria-expanded={smileysOffen}
+          >
+            <ISmileyHinzufuegen />
+          </button>
+          {smileysOffen && (
+            <div className="zv-chat-smiley-aufklapp">
+              <SmileyAuswahl onWahl={smileyEinsetzen} autoFokus />
+            </div>
+          )}
         </div>
         <textarea
           ref={feld}

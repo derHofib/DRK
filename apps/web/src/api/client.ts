@@ -368,8 +368,10 @@ export interface KlientEinladungDto {
 /** Server-Sent-Event aus GET /chat/ereignisse; bewusst offen typisiert, damit neue Arten den Client nicht brechen. */
 export interface ChatEreignis {
   chatId: string | null;
-  art: "nachricht" | "teilnehmer" | "chat" | "resync" | "anfrage" | (string & {});
+  art: "nachricht" | "teilnehmer" | "chat" | "resync" | "anfrage" | "reaktion" | (string & {});
   anfrageId?: string;
+  /** Nur bei art "reaktion": an welcher Nachricht sich etwas geaendert hat. */
+  nachrichtId?: string;
 }
 
 const SSE_BACKOFF_START_MS = 1000;
@@ -983,6 +985,7 @@ export const api = {
     nurEigene?: boolean;
     offen?: boolean;
     faelligBis?: string;
+    erledigtSeit?: string;
     prioritaet?: AufgabePrioritaet;
     sortierung?: "faelligkeit" | "prioritaet";
   }) => {
@@ -992,6 +995,7 @@ export const api = {
     if (filter?.nurEigene) params.set("nurEigene", "true");
     if (filter?.offen !== undefined) params.set("offen", String(filter.offen));
     if (filter?.faelligBis) params.set("faelligBis", filter.faelligBis);
+    if (filter?.erledigtSeit) params.set("erledigtSeit", filter.erledigtSeit);
     if (filter?.prioritaet) params.set("prioritaet", filter.prioritaet);
     if (filter?.sortierung) params.set("sortierung", filter.sortierung);
     const qs = params.toString();
@@ -1187,6 +1191,11 @@ export const api = {
   chatAnhangUrl: (anhangId: string) => blobUrl(`/chat/anhaenge/${anhangId}`),
   chatNachrichtLoeschen: (nachrichtId: string) =>
     request<ChatNachrichtDto>(`/chat/nachrichten/${nachrichtId}`, { method: "DELETE" }),
+  chatNachricht: (nachrichtId: string) => request<ChatNachrichtDto>(`/chat/nachrichten/${nachrichtId}`),
+  chatReagieren: (nachrichtId: string, zeichen: string) =>
+    request<ChatNachrichtDto>(`/chat/nachrichten/${nachrichtId}/reaktion`, { method: "PUT", body: JSON.stringify({ zeichen }) }),
+  chatReaktionEntfernen: (nachrichtId: string) =>
+    request<ChatNachrichtDto>(`/chat/nachrichten/${nachrichtId}/reaktion`, { method: "DELETE" }),
   chatGelesen: (id: string) => request<{ gelesen: true }>(`/chat/${id}/gelesen`, { method: "POST" }),
 
   // Kalender
