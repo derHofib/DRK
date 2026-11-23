@@ -256,6 +256,55 @@ export interface BenutzerListEintragDto {
   // Standorte ihrer Besetzung) -- nicht zu verwechseln mit standortIds, der
   // Sichtbarkeitsbeschraenkung.
   einheitIds: string[];
+  /** Kurzfassung fuer die Spalte „Zuständig für“, aus derselben Abfrage wie das Detail. */
+  zustaendig: MitarbeiterZustaendigKurzDto;
+}
+
+// --- Zustaendigkeiten im Mitarbeiter-Detail (Rueckmeldung 29e0f19d) -------
+// Konzept: /mnt/project-files/mitarbeiter-detail/konzept-mitarbeiter-detail.md
+
+export interface MitarbeiterZustaendigKurzDto {
+  /** Aktive Klient:innen mit dieser Bezugsbetreuung -- auch solche, die die betrachtende Person nicht sieht (nur die Zahl). */
+  bezugsklienten: number;
+  /** Heute laufende, genehmigte Vertretungen, in denen die Person vertritt. */
+  vertritt: { benutzerId: string; name: string; bis: string }[];
+  /** Heute laufende, genehmigte Vertretungen der Person selbst. */
+  wirdVertretenVon: { benutzerId: string; name: string; bis: string }[];
+}
+
+export interface ZustaendigKlientDto {
+  klientId: string;
+  name: string;
+  standortName: string | null;
+  zimmerNummer: string | null;
+}
+
+/** Klient:innen, die die betrachtende Person sehen darf, plus die Zahl der uebrigen. */
+export interface ZustaendigKlientenDto {
+  sichtbar: ZustaendigKlientDto[];
+  verborgen: number;
+}
+
+export interface ZustaendigVertretungDto {
+  delegationId: string;
+  /** Die andere beteiligte Person. */
+  benutzerId: string;
+  name: string;
+  von: string;
+  bis: string;
+  laeuft: boolean;
+  standorte: string[];
+  /** Nur bei „vertritt“: die Bezugsklient:innen der vertretenen Person. */
+  klienten: ZustaendigKlientenDto | null;
+}
+
+export interface MitarbeiterZustaendigkeitDto {
+  benutzerId: string;
+  name: string;
+  aktiv: boolean;
+  bezug: ZustaendigKlientenDto;
+  vertritt: ZustaendigVertretungDto[];
+  wirdVertretenVon: ZustaendigVertretungDto[];
 }
 
 // --- Standort-Sicht (Migration 0084, Konzept standort-sichtbarkeit) --------

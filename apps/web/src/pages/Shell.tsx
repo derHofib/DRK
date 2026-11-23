@@ -1072,7 +1072,12 @@ export function Shell({ onLoggedOut, onUebergabeStarten }: { onLoggedOut: () => 
           {tab === "nachrichten" && <Nachrichten key={navZiel.nonce} startChatId={navZiel.chatId} />}
           {tab === "kalender" && <Kalender />}
           {tab === "aufgaben" && <Aufgaben />}
-          {tab === "mitarbeitende" && <Mitarbeitende />}
+          {tab === "mitarbeitende" && (
+            <Mitarbeitende
+              onKlientOeffnen={(klientId) => geheZu("klienten", { klientId })}
+              onChatOeffnen={(chatId) => geheZu("nachrichten", { chatId })}
+            />
+          )}
           {tab === "vertretung" && <Vertretung />}
           {tab === "organigramm" && <Organigramm />}
           {tab === "formulare" && <Formulare />}

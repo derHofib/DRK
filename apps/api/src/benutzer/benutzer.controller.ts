@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put } from "@nestjs/common";
 import { z } from "zod";
 import { Authenticated } from "../common/authenticated.decorator";
 import { BenutzerService } from "./benutzer.service";
@@ -59,6 +59,11 @@ export class BenutzerController {
     const eingabe = standortRegelSchema.safeParse(body);
     if (!eingabe.success) throw new BadRequestException("Erwartet { ausRang: true | false }.");
     return this.benutzer.standortRegelSetzen(eingabe.data.ausRang);
+  }
+
+  @Get(":id/zustaendigkeiten")
+  async zustaendigkeiten(@Param("id", new ParseUUIDPipe()) id: string) {
+    return this.benutzer.zustaendigkeit(id);
   }
 
   @Post()

@@ -4,7 +4,6 @@ import type {
   AccountTypDto,
   BenutzerListEintragDto,
   OrgUnitDto,
-  MitarbeiterProfilKollegeDto,
   StandortDto,
   StandortSichtDto,
   StandortSichtVorschauDto,
@@ -15,7 +14,7 @@ import { api } from "../api/client";
 import { AktionsMenue } from "../components/AktionsMenue";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
-import { MitarbeiterProfilKarte } from "../components/MitarbeiterProfilKarte";
+import { MitarbeiterDetail } from "../components/MitarbeiterDetail";
 import { Modal } from "../components/Modal";
 import { IAbbrechen, IAktivieren, IDeaktivieren, IFehler, IKopieren, IMitarbeitende, ILeerMitarbeitende, INeu, IPosition, IResetLink, ISpeichern, IStandort, IInfo, IVertretung, IAufklappen, IZuklappen } from "../components/icons";
 
@@ -26,7 +25,13 @@ const MITARBEITENDE_SORTIERUNG_LABEL: Record<MitarbeitendeSortierung, string> = 
   status: "Aktive zuerst",
 };
 
-export function Mitarbeitende() {
+export function Mitarbeitende({
+  onKlientOeffnen,
+  onChatOeffnen,
+}: {
+  onKlientOeffnen?: (klientId: string) => void;
+  onChatOeffnen?: (chatId: string) => void;
+} = {}) {
   const [benutzer, setBenutzer] = useState<BenutzerListEintragDto[]>([]);
   const [standorte, setStandorte] = useState<StandortDto[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -43,7 +48,8 @@ export function Mitarbeitende() {
   const [vorschau, setVorschau] = useState<StandortSichtVorschauDto | null>(null);
   const [vorschauOffen, setVorschauOffen] = useState(false);
   const [regelWirdGeschaltet, setRegelWirdGeschaltet] = useState(false);
-  const [profilAnsicht, setProfilAnsicht] = useState<MitarbeiterProfilKollegeDto | null>(null);
+  // Seitenpanel „wofür ist die Person zuständig“ (Rueckmeldung 29e0f19d).
+  const [detailPerson, setDetailPerson] = useState<BenutzerListEintragDto | null>(null);
   const [statusAenderung, setStatusAenderung] = useState<BenutzerListEintragDto | null>(null);
   const [statusFehler, setStatusFehler] = useState<string | null>(null);
   const [statusWirdGespeichert, setStatusWirdGespeichert] = useState(false);
@@ -227,15 +233,6 @@ export function Mitarbeitende() {
     }
   }
 
-  async function profilOeffnen(b: BenutzerListEintragDto) {
-    setFehler(null);
-    try {
-      setProfilAnsicht(await api.profilKollege(b.id));
-    } catch (err) {
-      setFehler(err instanceof Error ? err.message : "Profil konnte nicht geladen werden.");
-    }
-  }
-
   async function linkKopieren() {
     if (!resetLink) return;
     await navigator.clipboard.writeText(resetLink.url);
@@ -399,13 +396,14 @@ export function Mitarbeitende() {
       ) : (
         <div
           className="zv-karten-liste"
-          style={{ "--zv-liste-spalten": "1.2fr 1.5fr 1.2fr 0.8fr 1.6fr 1.7fr" } as CSSProperties}
+          style={{ "--zv-liste-spalten": "1.2fr 1.4fr 1.1fr 0.7fr 1.3fr 1.5fr 1.4fr" } as CSSProperties}
         >
           <div className="zv-liste-kopf">
             <span>Name</span>
             <span>E-Mail</span>
             <span>Position(en)</span>
             <span>Status</span>
+            <span>Zuständig für</span>
             <span>Sieht</span>
             <span></span>
           </div>
@@ -414,7 +412,9 @@ export function Mitarbeitende() {
               <span className="zv-liste-zelle-titel">
                 {/* Dieselbe Farbe wie im Kalender (personFarbe.ts). */}
                 <span className="zv-person-punkt zv-person-farbe" style={personFarbStil(b.farbIndex)} title="Farbe im Kalender" aria-hidden="true" />
-                {b.name}
+                <button type="button" className="zv-name-link" onClick={() => setDetailPerson(b)}>
+                  {b.name}
+                </button>
               </span>
               <span className="zv-liste-zelle" data-label="E-Mail">
                 <strong>{b.email}</strong>
@@ -435,14 +435,17 @@ export function Mitarbeitende() {
               <span className="zv-liste-zelle" data-label="Status">
                 <strong>{b.aktiv ? "Aktiv" : "Inaktiv"}</strong>
               </span>
+              <span className="zv-liste-zelle" data-label="Zuständig für">
+                <ZustaendigZelle b={b} />
+              </span>
               <span className="zv-liste-zelle" data-label="Sieht">
                 <SichtZelle sicht={b.sicht} />
               </span>
               <span className="zv-liste-zelle-aktionen">
                 <AktionsMenue label={`Aktionen für ${b.name}`}>
-                  <button role="menuitem" onClick={() => profilOeffnen(b)}>
+                  <button role="menuitem" onClick={() => setDetailPerson(b)}>
                     <IMitarbeitende />
-                    Profil
+                    Profil und Zuständigkeiten
                   </button>
                   <button role="menuitem" onClick={() => rangOeffnen(b)}>
                     <IMitarbeitende />
@@ -480,11 +483,12 @@ export function Mitarbeitende() {
         </div>
       )}
 
-      {profilAnsicht && (
-        <Modal titel={`Profil — ${profilAnsicht.name}`} onClose={() => setProfilAnsicht(null)}>
-          <MitarbeiterProfilKarte inhalt={profilAnsicht} leerText={`${profilAnsicht.name} hat noch kein Profil ausgefüllt.`} />
-        </Modal>
-      )}
+      <MitarbeiterDetail
+        person={detailPerson}
+        onSchliessen={() => setDetailPerson(null)}
+        onKlientOeffnen={onKlientOeffnen}
+        onChatOeffnen={onChatOeffnen}
+      />
 
       {rangZiel && (
         <Modal titel={`Rang ändern — ${rangZiel.name}`} onClose={() => setRangZiel(null)}>
@@ -634,6 +638,35 @@ export function Mitarbeitende() {
 }
 
 /** Sichtbare Standorte als Pillen, mit Herkunft. */
+/**
+ * Kurzfassung fuer die Liste. Die Zahl zaehlt auch Klient:innen an Standorten,
+ * die die betrachtende Person nicht sieht (Entscheidung im Konzept): Namen
+ * gibt es erst im Detail, und dort gefiltert.
+ */
+function ZustaendigZelle({ b }: { b: BenutzerListEintragDto }) {
+  const z = b.zustaendig;
+  return (
+    <span className="zv-zustaendig-zelle">
+      <strong>{z.bezugsklienten === 0 ? "—" : z.bezugsklienten === 1 ? "1 Klient:in" : `${z.bezugsklienten} Klient:innen`}</strong>
+      {z.vertritt.map((v) => (
+        <span key={v.benutzerId} className="zv-pill zv-pill-info" title={`Vertritt ${v.name} bis ${formatDatum(v.bis)}`}>
+          <IVertretung />
+          <span className="zv-pill-text">vertritt {v.name}</span>
+        </span>
+      ))}
+      {z.wirdVertretenVon.length > 0 && (
+        <span
+          className="zv-pill zv-pill-info"
+          title={z.wirdVertretenVon.map((v) => `Vertreten von ${v.name} bis ${formatDatum(v.bis)}`).join(", ")}
+        >
+          <IVertretung />
+          <span className="zv-pill-text">wird vertreten</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function SichtZelle({ sicht }: { sicht: StandortSichtDto }) {
   if (sicht.alle) return <span className="zv-sub-inline" style={{ marginLeft: 0 }}>Alle Standorte</span>;
   if (sicht.eintraege.length === 0) {
