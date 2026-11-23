@@ -1,6 +1,6 @@
 /**
  * Browserpruefung "Unterschriften in Formularen" (Rueckmeldung d8e84954,
- * Migration 0086). Misst statt anzusehen:
+ * Migration 0087). Misst statt anzusehen:
  *
  *   1 Editor (Leitung): der Baustein "Unterschriften" bringt die vier Rollen
  *     mit, zwei nebeneinander; "Ausprobieren" zeigt zwei Zeilen mit je zwei

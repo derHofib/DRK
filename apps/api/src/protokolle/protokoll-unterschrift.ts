@@ -16,7 +16,7 @@ import {
 import { erkenneBildTyp } from "../common/datei";
 
 /**
- * Unterschriften in Formularen (Migration 0086, Konzept unterschriftenfeld).
+ * Unterschriften in Formularen (Migration 0087, Konzept unterschriftenfeld).
  *
  * Wer einen Leitungsplatz unterschreiben darf, folgt aus dem Organigramm --
  * wie die Leitung im Standort-Steckbrief (standort.service.ts), aber enger:
@@ -202,13 +202,13 @@ export async function unterschriftenFuerAnsicht(
   });
 }
 
-/** Hoechstens so gross -- ein gezeichnetes PNG aus SignaturePad hat wenige KB. Passt zum CHECK in 0086. */
+/** Hoechstens so gross -- ein gezeichnetes PNG aus SignaturePad hat wenige KB. Passt zum CHECK in 0087. */
 export const UNTERSCHRIFT_BILD_MAX = 300_000;
 
 /**
  * Eine Unterschrift speichern. Prueft, was die Datenbank nicht pruefen kann
  * (Organigramm, Rechte, Bildformat); Platz, Rolle, "erst nach dem
- * Abschliessen" und "einmal und nie wieder" sichert zusaetzlich 0086.
+ * Abschliessen" und "einmal und nie wieder" sichert zusaetzlich 0087.
  */
 export async function unterschriftSpeichern(
   client: PoolClient,

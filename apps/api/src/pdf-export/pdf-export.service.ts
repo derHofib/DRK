@@ -31,7 +31,7 @@ import { pdfExportRendern, pdfExportRendernMitBericht, type PdfRenderBericht, ty
 
 const DATUM_BERLIN = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", year: "numeric" });
 
-/** Stand der Unterschriftsplaetze aus dem Protokoll (Migration 0086) fuer den Renderer. */
+/** Stand der Unterschriftsplaetze aus dem Protokoll (Migration 0087) fuer den Renderer. */
 function pdfUnterschriften(p: ProtokollDto | null): Record<string, PdfUnterschriftStand> {
   const out: Record<string, PdfUnterschriftStand> = {};
   for (const u of p?.unterschriften ?? []) {
@@ -305,7 +305,7 @@ export class PdfExportService {
       await formularDa(c, formularId);
       let zielgruppe: PdfZielgruppe = eingabe.vorlage === "brief" ? "extern" : "intern";
       let gestaltung: PdfGestaltung = pdfGestaltungVorgabe(eingabe.vorlage ?? "akte");
-      // Hat das Formular eigene Unterschriftsplaetze (0086), waere die
+      // Hat das Formular eigene Unterschriftsplaetze (0087), waere die
       // Absender-Linie am Ende eine zweite, verwirrende Unterschrift.
       const def = (await neuesteDefinition(c, formularId)).definition;
       if (alleBausteine(def).some((b) => b.typ === "unterschriften")) gestaltung = { ...gestaltung, unterschrift: "keine" };

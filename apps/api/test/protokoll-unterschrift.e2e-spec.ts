@@ -1,5 +1,5 @@
 /**
- * Unterschriften in Formularen (Rückmeldung d8e84954, Migration 0086).
+ * Unterschriften in Formularen (Rückmeldung d8e84954, Migration 0087).
  *
  * Geprüft wird, was nicht nur die Oberfläche zusichern darf:
  *  - unterschrieben wird erst nach dem Abschließen, jeder Platz genau einmal
@@ -310,7 +310,7 @@ describe("Unterschriften in Formularen", () => {
   });
 
   it("Datenbank: kein Ändern/Löschen, Rolle muss zur Definition passen, Mandanten getrennt", async () => {
-    // GEGENPROBE (durchgeführt): REVOKE in 0086 entfernt -> UPDATE ging durch, Test rot.
+    // GEGENPROBE (durchgeführt): REVOKE in 0087 entfernt -> UPDATE ging durch, Test rot.
     await alsApp(mandantA, async (c) => {
       await expect(c.query("UPDATE protokoll_unterschrift SET ort = 'X' WHERE protokoll_id = $1", [protokollId])).rejects.toThrow(/permission denied/);
     });

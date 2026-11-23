@@ -1657,7 +1657,27 @@ export interface ChatNachrichtDto {
   standort: ChatStandortDto | null;
   termin: ChatTerminKurzDto | null;
   anhaenge: ChatAnhangDto[];
+  /** Je Zeichen eine Gruppe, haeufigste zuerst (migrations/0086). Leer bei geloeschten Nachrichten. */
+  reaktionen: ChatReaktionDto[];
 }
+
+/** Reaktionen auf eine Nachricht, zusammengefasst nach Zeichen. */
+export interface ChatReaktionDto {
+  zeichen: string;
+  anzahl: number;
+  /** Ich habe mit genau diesem Zeichen reagiert. */
+  meine: boolean;
+  /** Wer so reagiert hat, Namen wie beim Absender (Klient:innen ggf. anonymisiert); die eigene Person zuerst. */
+  personen: ChatPersonDto[];
+}
+
+/**
+ * Die sechs Schnellreaktionen (Konzept Frage 3, freigegeben 22.11.2026):
+ * arbeitsnah, bewusst ohne Lachen und Weinen -- auf eine Nachricht von oder
+ * ueber Klient:innen kann beides leicht falsch ankommen. Ueber "+" bleibt
+ * jedes andere Emoji moeglich; die Liste ist Oberflaeche, keine Grenze.
+ */
+export const CHAT_SCHNELLREAKTIONEN = ["👍", "❤️", "✅", "👀", "😊", "🙏"] as const;
 
 export interface ChatNachrichtenSeiteDto {
   /** Neueste zuerst. Naechste Seite: GET ...?vor=<id der letzten Nachricht dieser Seite>. */
@@ -1686,10 +1706,13 @@ export interface ChatEreignisDto {
   chatId: string | null;
   /**
    * nachricht: neue/geloeschte Nachricht; teilnehmer: Mitgliedschaft oder Adminrechte geaendert
-   * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; resync: Verbindung zur Datenbank
+   * (auch fuer gerade Entfernte); chat: Gruppe umbenannt; reaktion: Reaktion gesetzt oder entfernt
+   * (zaehlt nicht als ungelesen); resync: Verbindung zur Datenbank
    * war unterbrochen -- alles neu laden.
    */
-  art: "nachricht" | "teilnehmer" | "chat" | "anfrage" | "resync";
+  art: "nachricht" | "teilnehmer" | "chat" | "anfrage" | "reaktion" | "resync";
+  /** Nur bei art "reaktion": an welcher Nachricht sich Reaktionen geaendert haben -- der Client laedt genau diese neu. */
+  nachrichtId?: string;
   /**
    * Nur bei art "anfrage": welche Chat-Anfrage sich geaendert hat (neu, beantwortet, zurueckgezogen).
    * Ohne Inhalt -- die Anfragen laedt der Client per GET /chat/anfragen.
@@ -2241,7 +2264,7 @@ export interface BerechnungBaustein extends BausteinBasis {
 /**
  * Unterschriften (Konzept unterschriftenfeld, 22.11.2026): ein Block mit
  * Plaetzen, je Platz eine Rolle. Kein Datenfeld -- geleistete Unterschriften
- * stehen in protokoll_unterschrift (Migration 0086), nie in protokoll_wert.
+ * stehen in protokoll_unterschrift (Migration 0087), nie in protokoll_wert.
  *
  * Die Namen unter der Linie stehen bewusst NICHT hier: sie werden beim Lesen
  * aus Klient:in, Autor:in und Organigramm aufgeloest (wie Anzeige-Bausteine),
@@ -3570,7 +3593,7 @@ export interface PdfFreiBaustein {
   h: number;
   /** feld/ankreuz: Feldschluessel des Formulars. unterschrift: Schluessel des Unterschriften-Bausteins ("" = Absender:in). */
   feld: string;
-  /** Nur unterschrift: Platz-Kennung im Unterschriften-Baustein; "" = Absender:in des Exports (wie vor 0086). */
+  /** Nur unterschrift: Platz-Kennung im Unterschriften-Baustein; "" = Absender:in des Exports (wie vor 0087). */
   platz: string;
   /** text: mit Platzhaltern, "**Zeile**" = fett. */
   text: string;

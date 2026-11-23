@@ -19,6 +19,7 @@ import {
   AlignLeft,
   AlignRight,
   Archive,
+  SmilePlus,
   Gavel,
   MessagesSquare,
   Phone,
@@ -204,6 +205,10 @@ export const IBildAnhaengen = baue(ImagePlus);
 export const IAnhang = baue(Paperclip);
 export const IMail = baue(Mail);
 export const INachrichtLoeschen = baue(Trash2);
+/* Einzige Ausnahme von "keine Smileys oder Gesichter" (CLAUDE.md, freigegeben
+   22.11.2026, Konzept chat-reaktionen Frage 5): der Knopf, der die
+   Smiley-Auswahl oeffnet. Ohne Gesicht ist er kaum als solcher zu erkennen. */
+export const ISmileyHinzufuegen = baue(SmilePlus);
 export const IGruppe = baue(Users);
 
 /* Unterreiter */

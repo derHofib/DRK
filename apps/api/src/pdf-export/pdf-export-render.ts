@@ -88,7 +88,7 @@ export interface PdfRenderEingabe {
   beispiel?: boolean;
   /**
    * Stand der Unterschriftsplaetze, Schluessel "<baustein>:<platz>"
-   * (Migration 0086). Fehlt ein Platz, bleibt nur die Rolle unter der Linie.
+   * (Migration 0087). Fehlt ein Platz, bleibt nur die Rolle unter der Linie.
    */
   unterschriften?: Record<string, PdfUnterschriftStand>;
 }
