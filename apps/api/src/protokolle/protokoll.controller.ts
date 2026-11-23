@@ -55,6 +55,14 @@ const einstellungenSchema = z.object({
   aufDokumentation: z.boolean().default(true),
 });
 const angebotSchema = z.object({ klientId: z.string().uuid(), anheftpunkt: anheftpunktSchema.optional() });
+// Die Base64-Grenze liegt ueber dem Bildlimit im Service (300 KB -> ~400 KB Base64).
+const unterschreibenSchema = z.object({
+  baustein: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/, "Ungültiger Baustein."),
+  platz: z.string().regex(/^[a-z0-9]{1,24}$/, "Ungültiger Platz."),
+  bild: z.string().min(1, "Bitte unterschreiben.").max(420_000, "Die Unterschrift ist zu groß."),
+  ort: z.string().trim().max(80, "Der Ort ist zu lang.").nullish(),
+  name: z.string().trim().max(120, "Der Name ist zu lang.").nullish(),
+});
 const listeSchema = z.object({ klientId: z.string().uuid().optional(), formularId: z.string().uuid().optional() });
 
 @Controller()
@@ -150,6 +158,18 @@ export class ProtokollController {
   @Post("protokolle")
   anlegen(@Body() body: unknown) {
     return this.protokolle.anlegen(lies(anlegenSchema, body));
+  }
+
+  // Vor protokolle/:id, sonst faengt die UUID-Route diesen Pfad.
+  @Get("protokolle/zu-unterschreiben")
+  zuUnterschreiben() {
+    return this.protokolle.zuUnterschreiben();
+  }
+
+  @Post("protokolle/:id/unterschriften")
+  unterschreiben(@Param("id", ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const u = lies(unterschreibenSchema, body);
+    return this.protokolle.unterschreiben(id, { baustein: u.baustein, platz: u.platz, bildBase64: u.bild, ort: u.ort || null, name: u.name || null });
   }
 
   @Get("protokolle/:id")

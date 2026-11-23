@@ -9,11 +9,14 @@ import {
   type ProtokollDto,
   type ProtokolleRechteDto,
   type ProtokollKurzDto,
+  type ProtokollUnterschriftDto,
 } from "@zimmerakte/shared";
 import { api, ApiFehler } from "../../api/client";
 import { Leerzustand } from "../../components/Leerzustand";
 import { Modal } from "../../components/Modal";
 import { PdfExportDialog } from "../../components/PdfExportDialog";
+import { UnterschriftDialog } from "../../components/UnterschriftDialog";
+import { unterschriftenStand } from "../../components/Unterschriften";
 import { ProtokollAnsicht, ProtokollEingabe, verworfeneAngaben, wertAlsText, type PersonAuswahl } from "../../components/ProtokollFormular";
 import {
   IBearbeiten,
@@ -199,6 +202,7 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
   const [personen, setPersonen] = useState<PersonAuswahl[]>([]);
   const [verwerfenOffen, setVerwerfenOffen] = useState(false);
   const [pdfOffen, setPdfOffen] = useState(false);
+  const [unterschreibt, setUnterschreibt] = useState<ProtokollUnterschriftDto | null>(null);
   const geaendert = useRef(false);
 
   const uebernehmen = useCallback((neu: ProtokollDto) => {
@@ -341,6 +345,7 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
         </div>
         <div className="zv-protokoll-kopf-aktionen">
           <span className={`zv-pill${p.abgeschlossen ? " zv-pill-ok" : " zv-pill-frist"}`}>{p.abgeschlossen ? "abgeschlossen" : "Entwurf"}</span>
+          {p.abgeschlossen && unterschriftenStand(p.unterschriften) && <span className="zv-pill">{unterschriftenStand(p.unterschriften)}</span>}
           {p.abgeschlossen && modus === "lesen" && (
             <button type="button" className="zv-btn zv-btn-sekundaer" onClick={() => setPdfOffen(true)}>
               <IHerunterladen />
@@ -387,7 +392,26 @@ export function ProtokollDetail({ id, onZurueck, ruecksprung }: { id: string; on
           onAendern={aendern}
         />
       ) : (
-        <ProtokollAnsicht definition={p.definition} werte={p.werte} anzeige={p.anzeige} quellen={p.quellen} personen={namen} />
+        <ProtokollAnsicht
+          definition={p.definition}
+          werte={p.werte}
+          anzeige={p.anzeige}
+          quellen={p.quellen}
+          personen={namen}
+          unterschriften={p.unterschriften}
+          onUnterschreiben={setUnterschreibt}
+        />
+      )}
+      {unterschreibt && (
+        <UnterschriftDialog
+          protokoll={p}
+          platz={unterschreibt}
+          onClose={() => setUnterschreibt(null)}
+          onFertig={(neu) => {
+            setUnterschreibt(null);
+            uebernehmen(neu);
+          }}
+        />
       )}
 
       {bearbeitend && verworfen.length > 0 && (

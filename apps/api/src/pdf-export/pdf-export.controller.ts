@@ -40,7 +40,7 @@ const optText = (max: number) =>
 // zeichnen. Hoechstens EIN Fliessbereich je Seitenart -- zwei waeren
 // mehrdeutig (in welchen fliesst der Inhalt zuerst?).
 const mm = (min: number, max: number) => z.number().min(min).max(max).refine((v) => Number.isInteger(v * 2), "Bitte in Schritten von 0,5 mm.");
-const freiBausteinSchema: z.ZodType<PdfFreiBaustein> = z
+const freiBausteinSchema: z.ZodType<PdfFreiBaustein, z.ZodTypeDef, unknown> = z
   .object({
     id: z.string().regex(/^[a-z0-9]{1,24}$/),
     art: z.enum(["feld", "ankreuz", "text", "logo", "linie", "flaeche", "unterschrift", "anschrift", "fluss"]),
@@ -49,6 +49,8 @@ const freiBausteinSchema: z.ZodType<PdfFreiBaustein> = z
     b: mm(0.5, PDF_FREI_SEITE.b),
     h: mm(0.5, PDF_FREI_SEITE.h),
     feld: z.string().regex(/^([a-z][a-z0-9_]{0,62})?$/),
+    // Aeltere Oberflaechen schicken das Feld nicht: dann wie bisher die Absender-Unterschrift.
+    platz: z.string().regex(/^([a-z0-9]{1,24})?$/).default(""),
     text: text(4000),
     pt: z.number().min(PDF_FREI_MIN_PT, `Schrift mindestens ${PDF_FREI_MIN_PT} pt.`).max(36),
     fett: z.boolean(),
@@ -66,14 +68,14 @@ const freiSeite = z
   .max(PDF_FREI_MAX_BAUSTEINE)
   .refine((l) => l.filter((e) => e.art === "fluss").length <= 1, "Höchstens ein Fließbereich je Seite.")
   .refine((l) => new Set(l.map((e) => e.id)).size === l.length, "Doppelte Baustein-Id.");
-const freiSchema: z.ZodType<PdfFrei> = z.object({
+const freiSchema: z.ZodType<PdfFrei, z.ZodTypeDef, unknown> = z.object({
   raster: z.union([z.literal(0.5), z.literal(1), z.literal(2), z.literal(5)]),
   hilfslinien: z.enum(["din5008b", "din5008a", "keine"]),
   erste: freiSeite,
   folge: freiSeite,
 });
 
-const gestaltungSchema: z.ZodType<PdfGestaltung> = z.object({
+const gestaltungSchema: z.ZodType<PdfGestaltung, z.ZodTypeDef, unknown> = z.object({
   vorlage: z.enum(["akte", "brief", "frei"] as [PdfVorlage, ...PdfVorlage[]]),
   felder: z.union([z.literal("alle"), z.array(z.string().max(63)).max(500)]),
   titel: text(300),

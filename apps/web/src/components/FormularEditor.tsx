@@ -30,7 +30,16 @@ import {
   type FeldWerte,
   type FormularDefinition,
   type Option,
+  type UnterschriftPlatz,
+  type UnterschriftRolle,
   type Vergleichspruefung,
+  neuePlatzId,
+  platzBeschriftung,
+  unterschriftZeilen,
+  UNTERSCHRIFT_MAX_PLAETZE,
+  UNTERSCHRIFT_ROLLE_HERKUNFT,
+  UNTERSCHRIFT_ROLLE_LABEL,
+  UNTERSCHRIFT_ROLLEN,
 } from "@zimmerakte/shared";
 import { ProtokollEingabe } from "./ProtokollFormular";
 import {
@@ -69,6 +78,7 @@ const KASTEN: { titel: string; typen: BausteinTyp[] }[] = [
   { titel: "Aufbau", typen: ["abschnitt", "hinweis", "anzeige"] },
   { titel: "Eingaben", typen: ["kurztext", "langtext", "zahl", "datum", "uhrzeit", "ja_nein", "auswahl", "mehrfachauswahl", "skala", "mitarbeitende"] },
   { titel: "Rechnen", typen: ["berechnung"] },
+  { titel: "Abschluss", typen: ["unterschriften"] },
 ];
 
 /** Beispielwerte fuer "Ausprobieren": erfunden, damit nie echte Daten im Editor stehen. */
@@ -273,7 +283,17 @@ function optionsverweiseUmbenennen(def: FormularDefinition, feld: string, alt: s
 
 function neuerBaustein(typ: BausteinTyp, vorhanden: Set<string>): Baustein {
   const beschriftung =
-    typ === "abschnitt" ? "Neuer Abschnitt" : typ === "hinweis" ? "Hinweistext" : typ === "anzeige" ? "Name" : typ === "berechnung" ? "Ergebnis" : "Neue Frage";
+    typ === "abschnitt"
+      ? "Neuer Abschnitt"
+      : typ === "hinweis"
+        ? "Hinweistext"
+        : typ === "anzeige"
+          ? "Name"
+          : typ === "berechnung"
+            ? "Ergebnis"
+            : typ === "unterschriften"
+              ? "Unterschriften"
+              : "Neue Frage";
   const schluessel = schluesselAusBeschriftung(beschriftung, vorhanden);
   switch (typ) {
     case "abschnitt":
@@ -297,6 +317,21 @@ function neuerBaustein(typ: BausteinTyp, vorhanden: Set<string>): Baustein {
       return { typ, schluessel, beschriftung, min: 1, max: 5 };
     case "berechnung":
       return { typ, schluessel, beschriftung, ausdruck: { fn: "summe", args: [] } };
+    case "unterschriften":
+      // Die vier Rollen aus der Rueckmeldung als Vorschlag: zwei nebeneinander,
+      // Klient:in und Mitarbeiter:in oben, die Leitungen darunter.
+      return {
+        typ,
+        schluessel,
+        beschriftung,
+        spalten: 2,
+        plaetze: [
+          { id: "p1", rolle: "klient", beschriftung: "" },
+          { id: "p2", rolle: "mitarbeiter", beschriftung: "" },
+          { id: "p3", rolle: "einrichtungsleitung", beschriftung: "" },
+          { id: "p4", rolle: "bereichsleitung", beschriftung: "" },
+        ],
+      };
     default:
       return { typ, schluessel, beschriftung } as Baustein;
   }
@@ -674,6 +709,10 @@ function BaumKnoten({
   }
   if ((istEingabe(b) || b.typ === "berechnung") && b.inTagesberichtListe) merkmale.push("in der Liste");
   if (definition.bezugsdatumFeld === b.schluessel) merkmale.push("Bezugsdatum");
+  if (b.typ === "unterschriften") {
+    merkmale.push(`${b.plaetze.length} ${b.plaetze.length === 1 ? "Platz" : "Plätze"}`);
+    merkmale.push(b.spalten === 1 ? "untereinander" : `${b.spalten} nebeneinander`);
+  }
   if (ausrichtungVon(b) !== "links") merkmale.push(ausrichtungVon(b) === "mitte" ? "mittig" : "rechts");
   return (
     <li
@@ -895,7 +934,10 @@ function Eigenschaften({
             </div>
           )}
 
-          <AusrichtungWahl labelId={id("ausrichtung")} wert={ausrichtungVon(b)} onWahl={(a) => onAendern({ ...b, ausrichtung: a === "links" ? undefined : a })} />
+          {/* Unterschriften stehen im eigenen Raster (Anordnung unten), eine Ausrichtung haette dort keine Wirkung. */}
+          {b.typ !== "unterschriften" && (
+            <AusrichtungWahl labelId={id("ausrichtung")} wert={ausrichtungVon(b)} onWahl={(a) => onAendern({ ...b, ausrichtung: a === "links" ? undefined : a })} />
+          )}
 
           <TypEinstellungen b={b} definition={definition} gesperrt={gesperrt} id={id} onAendern={onAendern} onDefinition={onDefinition} />
 
@@ -1255,9 +1297,160 @@ function TypEinstellungen({
     case "auswahl":
     case "mehrfachauswahl":
       return <OptionenListe b={b} definition={definition} gesperrt={gesperrt} onAendern={onAendern} onDefinition={onDefinition} />;
+    case "unterschriften":
+      return <PlaetzeListe b={b} gesperrt={gesperrt} onAendern={onAendern} />;
     default:
       return null;
   }
+}
+
+/**
+ * Plaetze eines Unterschriften-Bausteins. Die Anordnung ist bewusst kein
+ * freies Raster: "wie viele nebeneinander" plus "hier neue Zeile" deckt die
+ * gewuenschten Formen (zwei Leitungen oben, Klient:in allein darunter) ab und
+ * gilt gleich fuer Formular, Akte und PDF (unterschriftZeilen in shared).
+ */
+function PlaetzeListe({
+  b,
+  gesperrt,
+  onAendern,
+}: {
+  b: Extract<Baustein, { typ: "unterschriften" }>;
+  gesperrt: Baustein | null;
+  onAendern: (b: Baustein) => void;
+}) {
+  // Ein veroeffentlichter Platz kann schon unterschrieben sein: Rolle fest,
+  // entfernen nicht moeglich (die Datenbank prueft Platz UND Rolle gegen die
+  // Version des Protokolls, aendern wuerde also nichts kaputt machen -- aber
+  // in der naechsten Version waere es ein anderer Platz unter gleicher Kennung).
+  const fest = new Map(gesperrt?.typ === "unterschriften" ? gesperrt.plaetze.map((p) => [p.id, p.rolle] as const) : []);
+  const setze = (plaetze: UnterschriftPlatz[]) => onAendern({ ...b, plaetze });
+  const aendere = (i: number, teil: Partial<UnterschriftPlatz>) => setze(b.plaetze.map((p, j) => (j === i ? { ...p, ...teil } : p)));
+  const zeilen = unterschriftZeilen(b.plaetze, b.spalten);
+
+  return (
+    <>
+      <div className="zv-field">
+        <label id={`zv-fe-${b.schluessel}-anordnung`}>
+          Nebeneinander
+        </label>
+        <div className="zv-segmented" role="radiogroup" aria-labelledby={`zv-fe-${b.schluessel}-anordnung`}>
+          {([1, 2, 3, 4] as const).map((n) => (
+            <button key={n} type="button" role="radio" aria-checked={b.spalten === n} className={b.spalten === n ? "active" : ""} onClick={() => onAendern({ ...b, spalten: n })}>
+              {n === 1 ? "untereinander" : n}
+            </button>
+          ))}
+        </div>
+        <p className="zv-protokoll-hilfe">
+          {zeilen.length} {zeilen.length === 1 ? "Zeile" : "Zeilen"}: {zeilen.map((z) => z.length).join(" + ")}. Auf dem Handy stehen die Plätze immer untereinander.
+        </p>
+      </div>
+
+      <div className="zv-field">
+        <label>Plätze</label>
+        <ul className="zv-fe-plaetze">
+          {b.plaetze.map((p, i) => {
+            const rolleFest = fest.has(p.id);
+            return (
+              <li key={p.id} className="zv-fe-platz">
+                <div className="zv-fe-platz-kopf">
+                  <select
+                    aria-label={`Rolle von Platz ${i + 1}`}
+                    value={p.rolle}
+                    disabled={rolleFest}
+                    title={rolleFest ? "Schon veröffentlicht: die Rolle bleibt fest." : undefined}
+                    onChange={(e) => aendere(i, { rolle: e.target.value as UnterschriftRolle })}
+                  >
+                    {UNTERSCHRIFT_ROLLEN.map((r) => (
+                      <option key={r} value={r}>
+                        {UNTERSCHRIFT_ROLLE_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="zv-icon-btn"
+                    aria-label="Platz nach vorn"
+                    title="Nach vorn"
+                    disabled={i === 0}
+                    onClick={() => {
+                      const c = [...b.plaetze];
+                      [c[i - 1], c[i]] = [c[i], c[i - 1]];
+                      setze(c);
+                    }}
+                  >
+                    <IVerschiebenHoch size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="zv-icon-btn"
+                    aria-label="Platz nach hinten"
+                    title="Nach hinten"
+                    disabled={i === b.plaetze.length - 1}
+                    onClick={() => {
+                      const c = [...b.plaetze];
+                      [c[i + 1], c[i]] = [c[i], c[i + 1]];
+                      setze(c);
+                    }}
+                  >
+                    <IVerschiebenRunter size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="zv-icon-btn"
+                    aria-label={`${platzBeschriftung(p)} entfernen`}
+                    title={rolleFest ? "Schon veröffentlicht: kann nicht entfernt werden" : "Entfernen"}
+                    disabled={rolleFest || b.plaetze.length <= 1}
+                    onClick={() => setze(b.plaetze.filter((_, j) => j !== i))}
+                  >
+                    <ILoeschen size={14} />
+                  </button>
+                </div>
+                <input
+                  aria-label={`Beschriftung von Platz ${i + 1}`}
+                  value={p.beschriftung}
+                  maxLength={80}
+                  placeholder={p.rolle === "eigene" ? "z. B. Gesetzliche Betreuung" : UNTERSCHRIFT_ROLLE_LABEL[p.rolle]}
+                  onChange={(e) => aendere(i, { beschriftung: e.target.value })}
+                />
+                <p className="zv-protokoll-hilfe">Name: {UNTERSCHRIFT_ROLLE_HERKUNFT[p.rolle]}.</p>
+                <div className="zv-fe-platz-schalter">
+                  <label className="zv-checkbox-zeile">
+                    <input type="checkbox" checked={!!p.neueZeile} disabled={i === 0} onChange={(e) => aendere(i, { neueZeile: e.target.checked || undefined })} />
+                    Neue Zeile
+                  </label>
+                  <label className="zv-checkbox-zeile">
+                    <input type="checkbox" checked={!p.ohneName} onChange={(e) => aendere(i, { ohneName: e.target.checked ? undefined : true })} />
+                    Name
+                  </label>
+                  <label className="zv-checkbox-zeile">
+                    <input type="checkbox" checked={!p.ohneOrtDatum} onChange={(e) => aendere(i, { ohneOrtDatum: e.target.checked ? undefined : true })} />
+                    Ort, Datum
+                  </label>
+                  <label className="zv-checkbox-zeile">
+                    <input type="checkbox" checked={!p.nurPapier} onChange={(e) => aendere(i, { nurPapier: e.target.checked ? undefined : true })} />
+                    In der App
+                  </label>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <button
+          type="button"
+          className="zv-btn zv-btn-still zv-btn-klein"
+          disabled={b.plaetze.length >= UNTERSCHRIFT_MAX_PLAETZE}
+          onClick={() => setze([...b.plaetze, { id: neuePlatzId(b.plaetze.map((p) => p.id)), rolle: "mitarbeiter", beschriftung: "" }])}
+        >
+          <INeu size={14} />
+          Platz hinzufügen
+        </button>
+        <p className="zv-protokoll-hilfe">
+          Leere Plätze werden im PDF als Linie gedruckt. In der App wird erst nach dem Abschließen unterschrieben; Leitungsplätze nur von der Leitung selbst.
+        </p>
+      </div>
+    </>
+  );
 }
 
 function OptionenListe({

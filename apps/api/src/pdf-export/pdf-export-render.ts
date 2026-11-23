@@ -20,6 +20,9 @@ import {
   type PdfGestaltung,
   type PdfSchrift,
   type PdfZielgruppe,
+  type UnterschriftPlatz,
+  platzBeschriftung,
+  unterschriftZeilen,
 } from "@zimmerakte/shared";
 
 /**
@@ -83,6 +86,21 @@ export interface PdfRenderEingabe {
   empfaenger: string | null;
   /** Vorschau mit erfundenen Daten: Hinweis auf jeder Seite. */
   beispiel?: boolean;
+  /**
+   * Stand der Unterschriftsplaetze, Schluessel "<baustein>:<platz>"
+   * (Migration 0087). Fehlt ein Platz, bleibt nur die Rolle unter der Linie.
+   */
+  unterschriften?: Record<string, PdfUnterschriftStand>;
+}
+
+export interface PdfUnterschriftStand {
+  /** Vorgesehener bzw. unterschreibender Name. */
+  name: string | null;
+  /** Nur geleistet: */
+  bild: Buffer | null;
+  ort: string | null;
+  datum: string | null;
+  pruefnummer: string | null;
 }
 
 // --- Inhalt vorbereiten ---------------------------------------------------
@@ -98,7 +116,10 @@ type Block =
       jaNein: boolean | null;
       typ: Baustein["typ"];
       ausrichtung: BausteinAusrichtung;
-    };
+    }
+  // ausrichtung nur der Einheitlichkeit halber: die Plaetze stehen im Raster
+  // (unterschriftZeilen), eine Ausrichtung des ganzen Blocks waere dort sinnlos.
+  | { art: "unterschriften"; schluessel: string; label: string; spalten: number; plaetze: UnterschriftPlatz[]; ausrichtung: BausteinAusrichtung };
 
 /** x einer Zeile der Breite w zwischen x0 und x1. */
 function ausgerichtetX(ausrichtung: BausteinAusrichtung, x0: number, x1: number, w: number): number {
@@ -154,6 +175,14 @@ export function pdfBloecke(eingabe: Pick<PdfRenderEingabe, "gestaltung" | "zielg
         continue;
       }
       if (b.typ === "hinweis") continue;
+      if (b.typ === "unterschriften") {
+        // Auch in externen Exporten: die Unterschriften sind der Zweck des
+        // Dokuments. Abwaehlbar wie ein Feld ueber die Feldauswahl.
+        if (auswahl && !auswahl.has(b.schluessel)) continue;
+        if (!Array.isArray(b.plaetze) || b.plaetze.length === 0) continue;
+        out.push({ art: "unterschriften", schluessel: b.schluessel, label: b.beschriftung, spalten: b.spalten, plaetze: b.plaetze, ausrichtung: "links" });
+        continue;
+      }
       if (zielgruppe === "extern" && "intern" in b && b.intern) continue;
       if (auswahl && !auswahl.has(b.schluessel)) continue;
       let wert: string | null;
@@ -248,6 +277,9 @@ class Setzer {
   spiegel!: Satzspiegel;
   readonly linie: RGB;
   readonly ueberschrift: RGB;
+
+  /** Unterschriftsplaetze "<baustein>:<platz>" mit Stand und Bild -- vorab eingebettet, denn embedPng ist async, der Setzer nicht. */
+  unterschriftDaten: Map<string, PlatzDaten> = new Map();
 
   constructor(
     readonly doc: PDFDocument,
@@ -420,6 +452,38 @@ class Setzer {
   }
 
   /**
+   * Unterschriften im Fluss: Zeilen wie im Formular angeordnet. Eine Zeile
+   * wird nie ueber einen Seitenwechsel geteilt, und der ganze Block bleibt
+   * zusammen, solange er auf eine Seite passt -- eine Unterschrift allein
+   * oben auf der naechsten Seite, getrennt vom Inhalt, waere wertlos.
+   */
+  unterschriften(b: Extract<Block, { art: "unterschriften" }>) {
+    const g = this.g;
+    const gap = 8 * MM;
+    const zeilen = unterschriftZeilen(b.plaetze, b.spalten);
+    const spalten = Math.max(1, Math.min(4, b.spalten));
+    const breite = (this.breite - (spalten - 1) * gap) / spalten;
+    // Untereinander nicht ueber die volle Breite: eine 17 cm lange Linie sieht nach Formularfehler aus.
+    const platzB = spalten === 1 ? Math.min(this.breite, 85 * MM) : breite;
+    const daten = (p: UnterschriftPlatz) => this.unterschriftDaten.get(`${b.schluessel}:${p.id}`);
+    const hoehen = zeilen.map((z) => Math.max(...z.map((p) => platzHoehe(this, p, daten(p)))) + 5 * MM);
+    const titelH = b.label.trim() ? g.groesseText * 4 : 0;
+    const gesamt = titelH + hoehen.reduce((a, h) => a + h, 0);
+    if (gesamt <= this.spiegel.oben - this.unten) this.platz(gesamt);
+    if (b.label.trim()) this.abschnitt(b.label);
+    else this.y -= 3 * MM;
+    zeilen.forEach((z, i) => {
+      this.platz(hoehen[i]);
+      z.forEach((p, j) => {
+        const x0 = this.spiegel.x0 + j * (breite + gap);
+        // Gleiche Linienhoehe fuer die ganze Zeile, auch wenn ein Platz mehr Textzeilen hat.
+        platzZeichnen(this, this.seite, p, daten(p), x0, x0 + platzB, this.y, SIGNATUR_H, g.groesseText);
+      });
+      this.y -= hoehen[i];
+    });
+  }
+
+  /**
    * Stil "liste"/"kompakt" fuer ein mittig oder rechts ausgerichtetes Feld:
    * Beschriftung ueber dem Wert, beides ueber die volle Breite ausgerichtet.
    * Neben einer Beschriftungsspalte haette "mittig" keine erkennbare Mitte.
@@ -455,6 +519,11 @@ class Setzer {
       const b = bloecke[i];
       if (b.art === "ueberschrift") {
         this.abschnitt(b.text, b.ausrichtung);
+        i++;
+        continue;
+      }
+      if (b.art === "unterschriften") {
+        this.unterschriften(b);
         i++;
         continue;
       }
@@ -519,6 +588,93 @@ class Setzer {
       }
     }
   }
+}
+
+// --- Unterschriften ---------------------------------------------------------
+
+interface PlatzDaten {
+  stand: PdfUnterschriftStand | null;
+  bild: PDFImage | null;
+}
+
+const SIGNATUR_H = 14 * MM;
+
+function platzTextZeilen(p: UnterschriftPlatz, d: PlatzDaten | undefined): { teile: { text: string; fett: boolean }[] }[] {
+  const stand = d?.stand ?? null;
+  const rolle = platzBeschriftung(p);
+  const name = p.ohneName ? null : stand?.name ?? null;
+  const zeilen: { teile: { text: string; fett: boolean }[] }[] = [];
+  zeilen.push({ teile: name ? [{ text: name, fett: true }, { text: `, ${rolle}`, fett: false }] : [{ text: rolle, fett: false }] });
+  if (stand?.bild) {
+    const wo = [stand.ort, stand.datum].filter(Boolean).join(", ");
+    if (!p.ohneOrtDatum && wo) zeilen.push({ teile: [{ text: wo, fett: false }] });
+    if (stand.pruefnummer) zeilen.push({ teile: [{ text: `elektronisch unterschrieben · Prüfnr. ${stand.pruefnummer}`, fett: false }] });
+  } else if (!p.ohneOrtDatum) {
+    zeilen.push({ teile: [{ text: "Ort, Datum ____________________", fett: false }] });
+  }
+  return zeilen;
+}
+
+function platzHoehe(s: Setzer, p: UnterschriftPlatz, d: PlatzDaten | undefined): number {
+  const klein = Math.max(s.g.groesseText - 1.5, 7);
+  return SIGNATUR_H + platzTextZeilen(p, d).length * klein * 1.3 + 1.5 * MM;
+}
+
+/**
+ * Ein Platz: Unterschriftsbild (falls in der App geleistet) auf der Linie,
+ * darunter Name und Rolle, dann Ort/Datum bzw. die Leerzeile fuer Papier.
+ * yOben und signaturH in PDF-Punkten; die Linie liegt signaturH unter yOben.
+ */
+function platzZeichnen(
+  s: { normal: PDFFont; fett: PDFFont },
+  seite: PDFPage,
+  p: UnterschriftPlatz,
+  d: PlatzDaten | undefined,
+  x0: number,
+  x1: number,
+  yOben: number,
+  signaturH: number,
+  pt: number
+) {
+  const klein = Math.max(pt - 1.5, 7);
+  const zeilen = platzTextZeilen(p, d);
+  const yLinie = yOben - signaturH;
+  if (d?.bild) {
+    const verfuegbarH = yOben - yLinie - 0.5 * MM;
+    const f = Math.min((x1 - x0) / d.bild.width, verfuegbarH / d.bild.height);
+    seite.drawImage(d.bild, { x: x0, y: yLinie - 0.5 * MM, width: d.bild.width * f, height: d.bild.height * f });
+  }
+  seite.drawLine({ start: { x: x0, y: yLinie }, end: { x: x1, y: yLinie }, thickness: 0.6, color: SCHWARZ });
+  let y = yLinie;
+  zeilen.forEach((z, i) => {
+    y -= klein * 1.3;
+    let x = x0;
+    for (const t of z.teile) {
+      const font = t.fett ? s.fett : s.normal;
+      const text = kuerzen(t.text, font, klein, Math.max(0, x1 - x));
+      if (!text) break;
+      seite.drawText(text, { x, y: y + klein * 0.3, size: klein, font, color: i === 0 && t.fett ? SCHWARZ : GRAU });
+      x += font.widthOfTextAtSize(text, klein);
+    }
+  });
+}
+
+/** Bilder vorab einbetten (embedPng ist async, der Setzer nicht). */
+async function unterschriftBilder(doc: PDFDocument, e: PdfRenderEingabe): Promise<Map<string, PlatzDaten>> {
+  const out = new Map<string, PlatzDaten>();
+  for (const [k, stand] of Object.entries(e.unterschriften ?? {})) {
+    let bild: PDFImage | null = null;
+    if (stand.bild) {
+      try {
+        bild = await doc.embedPng(stand.bild);
+      } catch {
+        // Ein unlesbares Bild darf das ganze PDF nicht verhindern; der Platz bleibt dann leer zum Unterschreiben.
+        bild = null;
+      }
+    }
+    out.set(k, { stand: bild ? stand : { ...stand, bild: null, ort: null, datum: null, pruefnummer: null }, bild });
+  }
+  return out;
 }
 
 // --- Seitenrahmen -----------------------------------------------------------
@@ -621,6 +777,7 @@ export async function pdfExportRendernMitBericht(e: PdfRenderEingabe): Promise<P
   if (e.gestaltung.vorlage === "frei") return freiRendern(e);
   const g = e.gestaltung;
   const { doc, normal, fett, logo } = await dokumentVorbereiten(e);
+  const unterschriftDaten = await unterschriftBilder(doc, e);
 
   const werte: Record<string, string | null> = { ...e.platzhalter, ...feldPlatzhalter(e), seite: "\u0000S", seiten: "\u0000N" };
   const zeilen = (t: string) => pdfTextZeilen(t, werte);
@@ -681,6 +838,7 @@ export async function pdfExportRendernMitBericht(e: PdfRenderEingabe): Promise<P
   };
 
   const s = new Setzer(doc, g, normal, fett, farbe, rahmen);
+  s.unterschriftDaten = unterschriftDaten;
   s.neueSeite();
 
   // Titel bzw. Betreff
@@ -819,6 +977,7 @@ async function freiRendern(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
   const g = e.gestaltung;
   const frei = g.frei;
   const { doc, normal, fett, logo } = await dokumentVorbereiten(e);
+  const unterschriftDaten = await unterschriftBilder(doc, e);
   const fonts = { normal, fett };
   const werte: Record<string, string | null> = { ...e.platzhalter, ...feldPlatzhalter(e), seite: SEITE_NR, seiten: SEITEN_NR };
   const farbe = g.farbe ?? e.traegerfarbe;
@@ -837,9 +996,18 @@ async function freiRendern(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
   const platziert = new Set(
     [...frei.erste, ...frei.folge].filter((x) => x.art === "feld" || x.art === "ankreuz").map((x) => x.feld)
   );
-  const flussRoh = pdfBloecke(e).filter((b) => b.art !== "feld" || !platziert.has(b.schluessel));
+  // Unterschriftsplaetze, die einzeln aufs Blatt gesetzt sind, fehlen im
+  // Fliessbereich; die uebrigen laufen dort mit -- so geht keiner verloren.
+  const alleUnterschriften = new Map<string, Extract<Block, { art: "unterschriften" }>>();
+  for (const b of pdfBloecke({ ...e, gestaltung: { ...g, felder: "alle" } })) if (b.art === "unterschriften") alleUnterschriften.set(b.schluessel, b);
+  const gesetztePlaetze = new Set(
+    [...frei.erste, ...frei.folge].filter((x) => x.art === "unterschrift" && x.platz).map((x) => `${x.feld}:${x.platz}`)
+  );
+  const flussRoh = pdfBloecke(e)
+    .map((b) => (b.art === "unterschriften" ? { ...b, plaetze: b.plaetze.filter((p) => !gesetztePlaetze.has(`${b.schluessel}:${p.id}`)) } : b))
+    .filter((b) => (b.art !== "feld" || !platziert.has(b.schluessel)) && (b.art !== "unterschriften" || b.plaetze.length > 0));
   // Abschnittsueberschrift ohne Feld danach entfaellt (alle Felder des Abschnitts sind frei platziert).
-  const fluss = flussRoh.filter((b, i) => b.art !== "ueberschrift" || flussRoh[i + 1]?.art === "feld");
+  const fluss = flussRoh.filter((b, i) => b.art !== "ueberschrift" || flussRoh[i + 1]?.art === "feld" || flussRoh[i + 1]?.art === "unterschriften");
 
   const anhang: { label: string; text: string }[] = [];
   const ueberlauf: string[] = [];
@@ -973,6 +1141,17 @@ async function freiRendern(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
       return;
     }
 
+    if (el.art === "unterschrift" && el.platz) {
+      const block = alleUnterschriften.get(el.feld);
+      const platz = block?.plaetze.find((p) => p.id === el.platz);
+      if (!platz) return;
+      const d = unterschriftDaten.get(`${el.feld}:${el.platz}`);
+      const klein = Math.max(el.pt, 7);
+      const textH = platzTextZeilen(platz, d).length * klein * 1.3;
+      platzZeichnen(fonts, seite, platz, d, ix0, ix1, iOben, Math.max(iH - textH, 6 * MM), el.pt + 1.5);
+      return;
+    }
+
     if (el.art === "unterschrift") {
       const name = e.platzhalter["benutzer.name"] ?? "";
       const klein = Math.max(PDF_FREI_MIN_PT, el.pt - 1.5);
@@ -1045,6 +1224,7 @@ async function freiRendern(e: PdfRenderEingabe): Promise<PdfRenderBericht> {
   };
 
   const s = new Setzer(doc, g, normal, fett, farbe, rahmen);
+  s.unterschriftDaten = unterschriftDaten;
   s.neueSeite();
 
   if (flussErste) {

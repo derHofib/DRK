@@ -2310,6 +2310,85 @@ export interface BerechnungBaustein extends BausteinBasis {
   inTagesberichtListe?: boolean;
 }
 
+/**
+ * Unterschriften (Konzept unterschriftenfeld, 22.11.2026): ein Block mit
+ * Plaetzen, je Platz eine Rolle. Kein Datenfeld -- geleistete Unterschriften
+ * stehen in protokoll_unterschrift (Migration 0087), nie in protokoll_wert.
+ *
+ * Die Namen unter der Linie stehen bewusst NICHT hier: sie werden beim Lesen
+ * aus Klient:in, Autor:in und Organigramm aufgeloest (wie Anzeige-Bausteine),
+ * sonst stuende nach einem Leitungswechsel der alte Name im neuen Formular.
+ */
+export type UnterschriftRolle = "klient" | "mitarbeiter" | "einrichtungsleitung" | "bereichsleitung" | "eigene";
+export const UNTERSCHRIFT_ROLLEN = ["klient", "mitarbeiter", "einrichtungsleitung", "bereichsleitung", "eigene"] as const;
+export const UNTERSCHRIFT_ROLLE_LABEL: Record<UnterschriftRolle, string> = {
+  klient: "Klient:in",
+  mitarbeiter: "Mitarbeiter:in",
+  einrichtungsleitung: "Einrichtungsleitung",
+  bereichsleitung: "Bereichsleitung",
+  eigene: "Eigene Rolle",
+};
+/** Woher der Name unter der Linie kommt -- fuer Editor und Hilfetexte. */
+export const UNTERSCHRIFT_ROLLE_HERKUNFT: Record<UnterschriftRolle, string> = {
+  klient: "Name der Klient:in",
+  mitarbeiter: "wer das Formular ausgefüllt hat",
+  einrichtungsleitung: "Leitung des Standorts, aus dem Organigramm",
+  bereichsleitung: "aus dem Organigramm",
+  eigene: "ohne Namen, nur die Beschriftung",
+};
+/** Leitungsrollen unterschreiben nur selbst, in der eigenen Anmeldung (Entscheidung 22.11.2026). */
+export function istLeitungsRolle(r: UnterschriftRolle): boolean {
+  return r === "einrichtungsleitung" || r === "bereichsleitung";
+}
+export const UNTERSCHRIFT_MAX_PLAETZE = 8;
+export const UNTERSCHRIFT_PLATZ_RE = /^[a-z0-9]{1,24}$/;
+
+export interface UnterschriftPlatz {
+  /** Fest, nie aendern: verbindet Platz, geleistete Unterschrift und PDF-Designer. */
+  id: string;
+  rolle: UnterschriftRolle;
+  /** Text unter der Linie; leer = Name der Rolle. Bei "eigene" Pflicht. */
+  beschriftung: string;
+  /** Diesen Platz in einer neuen Zeile beginnen (z. B. Klient:in allein unter zwei Leitungen). */
+  neueZeile?: boolean;
+  /** Verneint, damit "an" die Vorgabe ist und alte Definitionen ohne das Feld stimmen. */
+  ohneOrtDatum?: boolean;
+  ohneName?: boolean;
+  /** Nur auf Papier: in der App nicht unterschreibbar (z. B. wo das Gesetz Schriftform verlangt). */
+  nurPapier?: boolean;
+}
+
+export interface UnterschriftenBaustein extends BausteinBasis {
+  typ: "unterschriften";
+  plaetze: UnterschriftPlatz[];
+  /** Wie viele Plaetze nebeneinander; 1 = untereinander. Auf dem Handy immer untereinander. */
+  spalten: 1 | 2 | 3 | 4;
+}
+
+export function platzBeschriftung(p: UnterschriftPlatz): string {
+  return p.beschriftung.trim() || UNTERSCHRIFT_ROLLE_LABEL[p.rolle];
+}
+
+/**
+ * Plaetze in Zeilen: von links nach rechts, nach "spalten" Plaetzen oder bei
+ * "neueZeile" eine neue Zeile. Eine Stelle fuer Formular, Ansicht und PDF.
+ */
+export function unterschriftZeilen<T extends { neueZeile?: boolean }>(plaetze: T[], spalten: number): T[][] {
+  const zeilen: T[][] = [];
+  for (const p of plaetze) {
+    const letzte = zeilen[zeilen.length - 1];
+    if (!letzte || letzte.length >= spalten || p.neueZeile) zeilen.push([p]);
+    else letzte.push(p);
+  }
+  return zeilen;
+}
+
+/** Neue, noch nicht vergebene Platz-Kennung. */
+export function neuePlatzId(vorhanden: Iterable<string>): string {
+  const belegt = new Set(vorhanden);
+  for (let i = 1; ; i++) if (!belegt.has(`p${i}`)) return `p${i}`;
+}
+
 export type EingabeBaustein =
   | TextBaustein
   | ZahlBaustein
@@ -2320,7 +2399,7 @@ export type EingabeBaustein =
   | SkalaBaustein
   | MitarbeitendeBaustein;
 
-export type Baustein = AbschnittBaustein | HinweisBaustein | AnzeigeBaustein | BerechnungBaustein | EingabeBaustein;
+export type Baustein = AbschnittBaustein | HinweisBaustein | AnzeigeBaustein | BerechnungBaustein | UnterschriftenBaustein | EingabeBaustein;
 export type BausteinTyp = Baustein["typ"];
 
 export interface FormularDefinition {
@@ -2380,6 +2459,7 @@ export const BAUSTEIN_LABEL: Record<BausteinTyp, string> = {
   skala: "Skala",
   mitarbeitende: "Mitarbeitende",
   berechnung: "Berechnung",
+  unterschriften: "Unterschriften",
 };
 
 // ---------------------------------------------------------------------------
@@ -2865,8 +2945,26 @@ export function pruefeDefinition(def: FormularDefinition): string[] {
       }
       if (b.typ === "skala" && !(Number.isInteger(b.min) && Number.isInteger(b.max) && b.min < b.max)) fehler.push(`${wo}: ungültige Skala.`);
     }
+    if (b.typ === "unterschriften") fehler.push(...unterschriftenFehler(b, wo));
   });
   return fehler;
+}
+
+function unterschriftenFehler(b: UnterschriftenBaustein, wo: string): string[] {
+  const f: string[] = [];
+  if (![1, 2, 3, 4].includes(b.spalten)) f.push(`${wo}: Anordnung muss 1 bis 4 nebeneinander sein.`);
+  if (!Array.isArray(b.plaetze) || b.plaetze.length === 0) return [...f, `${wo}: mindestens ein Platz.`];
+  if (b.plaetze.length > UNTERSCHRIFT_MAX_PLAETZE) f.push(`${wo}: höchstens ${UNTERSCHRIFT_MAX_PLAETZE} Plätze.`);
+  const ids = new Set<string>();
+  for (const p of b.plaetze) {
+    if (!UNTERSCHRIFT_PLATZ_RE.test(p.id)) f.push(`${wo}: ungültige Platz-Kennung „${p.id}“.`);
+    if (ids.has(p.id)) f.push(`${wo}: Platz „${p.id}“ kommt doppelt vor.`);
+    ids.add(p.id);
+    if (!(UNTERSCHRIFT_ROLLEN as readonly string[]).includes(p.rolle)) f.push(`${wo}: unbekannte Rolle.`);
+    if (typeof p.beschriftung !== "string" || p.beschriftung.length > 80) f.push(`${wo}: Beschriftung eines Platzes ist zu lang.`);
+    else if (p.rolle === "eigene" && !p.beschriftung.trim()) f.push(`${wo}: eine eigene Rolle braucht eine Beschriftung.`);
+  }
+  return f;
 }
 
 // ---------------------------------------------------------------------------
@@ -2917,6 +3015,47 @@ export interface ProtokollDto extends ProtokollKurzDto {
   bearbeitbar: boolean;
   /** Gibt es inzwischen eine neuere veroeffentlichte Version dieses Formulars? */
   neuereVersion: boolean;
+  /** Je Platz aller sichtbaren Unterschriften-Bausteine, in Formularreihenfolge. */
+  unterschriften: ProtokollUnterschriftDto[];
+}
+
+export interface ProtokollUnterschriftDto {
+  baustein: string;
+  platz: string;
+  rolle: UnterschriftRolle;
+  /** Text unter der Linie (Beschriftung oder Name der Rolle). */
+  beschriftung: string;
+  /** Vorgesehener Name (Klient:in, Autor:in, Leitung aus dem Organigramm); null = keiner bekannt. */
+  name: string | null;
+  nurPapier: boolean;
+  /** Darf ich diesen Platz jetzt in der App unterschreiben bzw. die Unterschrift erfassen? */
+  darfIch: boolean;
+  /** true = auf dem Geraet fuer jemand anderen erfassen (Klient:in, eigene Rolle); false = ich unterschreibe selbst. */
+  fuerAndere: boolean;
+  geleistet: GeleisteteUnterschriftDto | null;
+}
+
+export interface GeleisteteUnterschriftDto {
+  am: string;
+  ort: string | null;
+  /** Wer unterschrieben hat (beim Lesen aufgeloest bzw. bei eigener Rolle eingetragen). */
+  name: string | null;
+  /** PNG als data:-URL. */
+  bild: string;
+  /** Das Protokoll wurde nach dieser Unterschrift korrigiert. */
+  vorAenderung: boolean;
+  /** Kurz aus der Pruefsumme von Bild und unterschriebenem Inhalt, z. B. "4F2A-91C0". */
+  pruefnummer: string;
+}
+
+/** Offene Leitungs-Unterschriften fuer "Heute". */
+export interface ZuUnterschreibenDto {
+  protokollId: string;
+  formularName: string;
+  bezugsdatum: string;
+  klientName: string | null;
+  standortName: string | null;
+  plaetze: { baustein: string; platz: string; beschriftung: string }[];
 }
 
 export interface ProtokollAenderungDto {
@@ -3501,8 +3640,10 @@ export interface PdfFreiBaustein {
   y: number;
   b: number;
   h: number;
-  /** feld/ankreuz: Feldschluessel des Formulars. */
+  /** feld/ankreuz: Feldschluessel des Formulars. unterschrift: Schluessel des Unterschriften-Bausteins ("" = Absender:in). */
   feld: string;
+  /** Nur unterschrift: Platz-Kennung im Unterschriften-Baustein; "" = Absender:in des Exports (wie vor 0087). */
+  platz: string;
   /** text: mit Platzhaltern, "**Zeile**" = fett. */
   text: string;
   pt: number;
@@ -3560,6 +3701,7 @@ export const PDF_FREI_DRUCKRAND = 5;
 
 const PDF_FREI_BAUSTEIN_VORGABE: Omit<PdfFreiBaustein, "id" | "art" | "x" | "y" | "b" | "h"> = {
   feld: "",
+  platz: "",
   text: "",
   pt: 9,
   fett: false,
@@ -3616,6 +3758,7 @@ export function pdfFreiMitVorgaben(roh: unknown): PdfFrei {
         b,
         h,
         feld: typeof o.feld === "string" && /^[a-z][a-z0-9_]{0,62}$/.test(o.feld) ? o.feld : "",
+        platz: o.art === "unterschrift" && typeof o.platz === "string" && UNTERSCHRIFT_PLATZ_RE.test(o.platz) ? o.platz : "",
         text: typeof o.text === "string" ? o.text.slice(0, 4000) : "",
         pt: Math.round(zahl(o.pt, PDF_FREI_MIN_PT, 36, v.pt) * 2) / 2,
         fett: typeof o.fett === "boolean" ? o.fett : v.fett,

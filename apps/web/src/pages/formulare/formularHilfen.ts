@@ -67,7 +67,7 @@ export function entfernteFelder(alt: FormularDefinition | null, neu: FormularDef
 
 /** Breite Felder gehen im zweispaltigen Aufbau ueber die ganze Zeile. */
 export function istBreit(b: Baustein): boolean {
-  if (b.typ === "langtext" || b.typ === "mitarbeitende" || b.typ === "hinweis" || b.typ === "abschnitt") return true;
+  if (b.typ === "langtext" || b.typ === "mitarbeitende" || b.typ === "hinweis" || b.typ === "abschnitt" || b.typ === "unterschriften") return true;
   if ((b.typ === "auswahl" || b.typ === "mehrfachauswahl") && b.optionen.filter((o) => !o.ausgeblendet).length > 4) return true;
   return false;
 }
