@@ -76,6 +76,7 @@ import type {
   HilfeplanDto,
   HzlRhythmus,
   KassenbuchungDto,
+  KassenbuchSaldenDto,
   KassenbuchungTypDto,
   KlientDetailDto,
   KlientKontaktDto,
@@ -807,12 +808,17 @@ export const api = {
   belegungBearbeiten: (id: string, payload: { einzug: string; auszug: string | null }) =>
     request(`/belegungen/${id}/bearbeiten`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  kassenbuchungenListe: (filter?: { klientId?: string; standortId?: string }) => {
+  kassenbuchungenListe: (filter?: { klientId?: string; standortId?: string; von?: string; bis?: string }) => {
     const query = new URLSearchParams();
-    if (filter?.klientId) query.set("klientId", filter.klientId);
-    if (filter?.standortId) query.set("standortId", filter.standortId);
+    for (const [k, v] of Object.entries(filter ?? {})) if (v) query.set(k, v);
     const text = query.toString();
     return request<KassenbuchungDto[]>(`/kassenbuchungen${text ? `?${text}` : ""}`);
+  },
+  kassenbuchSalden: (filter: { standortId?: string; vor?: string }) => {
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v) query.set(k, v);
+    const text = query.toString();
+    return request<KassenbuchSaldenDto>(`/kassenbuchungen/salden${text ? `?${text}` : ""}`);
   },
   // idempotenzSchluessel: von der Offline-Warteschlange (offline/warteschlange.ts)
   // beim Erfassen erzeugt und bei jedem Versuch gleich -- der Server legt dafuer

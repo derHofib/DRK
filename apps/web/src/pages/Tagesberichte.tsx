@@ -10,6 +10,7 @@ import { ProtokollAnsicht } from "../components/ProtokollFormular";
 import { useProtokollSprung } from "../components/ProtokollSprung";
 import {
   SCHNELLWAHL_LABEL,
+  STANDARD_ZEITRAUM,
   SORTIERUNG_LABEL,
   gruppiereNachKlient,
   sortiere,
@@ -354,9 +355,11 @@ export function Tagesberichte({
   // Zeitraum wird serverseitig gefiltert (kann ueber Jahre gross werden);
   // Klient-Filter und Sortierung arbeiten auf der geladenen Liste, damit sie
   // ohne Nachladen sofort reagieren.
-  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>("alle");
-  const [von, setVon] = useState("");
-  const [bis, setBis] = useState("");
+  // Start mit den letzten 30 Tagen statt "alle": der Zeitraum wirkt
+  // serverseitig, "alle" holte den kompletten Bestand (siehe STANDARD_ZEITRAUM).
+  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>(STANDARD_ZEITRAUM);
+  const [von, setVon] = useState(() => zeitraumFuer(STANDARD_ZEITRAUM).von);
+  const [bis, setBis] = useState(() => zeitraumFuer(STANDARD_ZEITRAUM).bis);
   const [klientFilter, setKlientFilter] = useState("");
   const [sortierung, setSortierung] = useState<Sortierung>("datum-neu");
   const [suche, setSuche] = useState("");
@@ -421,7 +424,7 @@ export function Tagesberichte({
     : zeitraumKurz(von, bis) || null;
   const klientText = klienten.find((k) => k.id === klientFilter);
   function alleZuruecksetzen() {
-    schnellwahlWaehlen("alle");
+    schnellwahlWaehlen(STANDARD_ZEITRAUM);
     setKlientFilter("");
     setTagFilter("");
     setAutorFilter("");
@@ -460,7 +463,10 @@ export function Tagesberichte({
       ]),
     };
   }
-  const filterAktiv = Boolean(von || bis || klientFilter || tagFilter || autorFilter || suche.trim());
+  // Die Voreinstellung (letzte 30 Tage) zaehlt nicht als Filter: sonst waere
+  // "Zuruecksetzen" schon beim Oeffnen aktiv und fuehrte nirgendwohin.
+  const zeitraumGefiltert = schnellwahl !== STANDARD_ZEITRAUM && Boolean(von || bis);
+  const filterAktiv = Boolean(zeitraumGefiltert || klientFilter || tagFilter || autorFilter || suche.trim());
 
   async function tagEntfernen(berichtId: string, tagId: string) {
     try {
@@ -690,7 +696,9 @@ export function Tagesberichte({
               </button>
             }
           >
-            Noch keine Tagesberichte erfasst.
+            {schnellwahl === STANDARD_ZEITRAUM
+              ? "Keine Tagesberichte in den letzten 30 Tagen. Ältere zeigt der Zeitraum „Alle“."
+              : "Noch keine Tagesberichte erfasst."}
           </Leerzustand>
         )
       ) : (

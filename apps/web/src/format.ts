@@ -118,3 +118,12 @@ export function initialen(name: string): string {
   if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
   return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
 }
+
+/**
+ * Ungelesen-Zaehler: der Server zaehlt hoechstens bis 100 (UNGELESEN_DECKEL
+ * in chat.service.ts), deshalb ab 100 "99+" -- und im Screenreader-Text
+ * "mehr als 99" statt einer Zahl, die nur der Deckel ist.
+ */
+export function ungelesenAnzeige(anzahl: number): { text: string; label: string } {
+  return anzahl > 99 ? { text: "99+", label: "mehr als 99 ungelesen" } : { text: String(anzahl), label: `${anzahl} ungelesen` };
+}

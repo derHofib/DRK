@@ -15,6 +15,16 @@ import { pruefeKontakt } from "../common/kontakt-pruefung";
 import { aktuellerTeilnehmer, requireTenantContext, type Teilnehmer } from "../common/tenant-context";
 import { DatabaseService } from "../database/database.service";
 
+
+/**
+ * Ungelesen wird hoechstens bis hierher gezaehlt -- die Oberflaeche zeigt ab
+ * 100 ohnehin "99+". Messung 24.11.2026: jede ungelesene Nachricht kostet
+ * die Leseregel (RLS, chat_nachricht_lesbar) ~13 µs; 120.000 ungelesene in
+ * 60 Gruppen waren 1,5 s pro Aufruf. Mit dem Deckel hoechstens 100 je Chat.
+ * Die Leseregel selbst bleibt unangetastet.
+ */
+export const UNGELESEN_DECKEL = 100;
+
 export const MAX_TEILNEHMER = 50;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VORSCHAU_LAENGE = 120;
@@ -86,12 +96,15 @@ export class ChatService {
     const ich = aktuellerTeilnehmer();
     return this.db.withTenant(async (client) => {
       const { rows } = await client.query<{ n: number }>(
-        `SELECT count(*)::int AS n
-         FROM chat_nachricht m
-         JOIN chat_teilnehmer me ON me.chat_id = m.chat_id AND me.verlassen_am IS NULL
-              AND (me.benutzer_id = $1::uuid OR me.klient_id = $2::uuid)
-         WHERE m.erstellt_am > me.zuletzt_gelesen_am AND m.geloescht_am IS NULL AND m.art <> 'system'
-           AND NOT (COALESCE(m.absender_benutzer_id = $1::uuid, false) OR COALESCE(m.absender_klient_id = $2::uuid, false))`,
+        `SELECT count(*)::int AS n FROM (
+           SELECT 1
+           FROM chat_nachricht m
+           JOIN chat_teilnehmer me ON me.chat_id = m.chat_id AND me.verlassen_am IS NULL
+                AND (me.benutzer_id = $1::uuid OR me.klient_id = $2::uuid)
+           WHERE m.erstellt_am > me.zuletzt_gelesen_am AND m.geloescht_am IS NULL AND m.art <> 'system'
+             AND NOT (COALESCE(m.absender_benutzer_id = $1::uuid, false) OR COALESCE(m.absender_klient_id = $2::uuid, false))
+           LIMIT ${UNGELESEN_DECKEL}
+         ) x`,
         prinzipalParameter(ich)
       );
       return { ungelesen: rows[0].n };
@@ -307,10 +320,13 @@ export class ChatService {
   private async ladeChats(client: PoolClient, ich: Teilnehmer, chatId: string | null): Promise<ChatDto[]> {
     const { rows } = await client.query<ChatRow>(
       `SELECT c.id, c.art, c.name, c.erstellt_am, me.beigetreten_am, me.ist_admin,
-              (SELECT count(*)::int FROM chat_nachricht u
-               WHERE u.chat_id = c.id AND u.geloescht_am IS NULL AND u.art <> 'system'
-                 AND u.erstellt_am > me.zuletzt_gelesen_am
-                 AND NOT (COALESCE(u.absender_benutzer_id = $1::uuid, false) OR COALESCE(u.absender_klient_id = $2::uuid, false))) AS ungelesen,
+              (SELECT count(*)::int FROM (
+                 SELECT 1 FROM chat_nachricht u
+                 WHERE u.chat_id = c.id AND u.geloescht_am IS NULL AND u.art <> 'system'
+                   AND u.erstellt_am > me.zuletzt_gelesen_am
+                   AND NOT (COALESCE(u.absender_benutzer_id = $1::uuid, false) OR COALESCE(u.absender_klient_id = $2::uuid, false))
+                 LIMIT ${UNGELESEN_DECKEL}
+               ) x) AS ungelesen,
               l.id AS l_id, l.art AS l_art, l.text AS l_text, l.geloescht_am AS l_geloescht_am, l.erstellt_am AS l_erstellt_am,
               l.absender_benutzer_id AS l_absender_benutzer_id, l.absender_klient_id AS l_absender_klient_id,
               l.standort_bezeichnung AS l_standort_bezeichnung, lt.titel AS l_termin_titel,

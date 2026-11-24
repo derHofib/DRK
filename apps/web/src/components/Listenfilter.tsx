@@ -191,10 +191,10 @@ export function OptionenFilter({
  * weil Listen den Zeitraum teils serverseitig (Tagesberichte), teils auf der
  * geladenen Liste (Kassenbuch) anwenden -- der Zustand ist derselbe.
  */
-export function useZeitraum() {
-  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>("alle");
-  const [von, setVon] = useState("");
-  const [bis, setBis] = useState("");
+export function useZeitraum(start: Schnellwahl = "alle") {
+  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>(start);
+  const [von, setVon] = useState(() => zeitraumFuer(start).von);
+  const [bis, setBis] = useState(() => zeitraumFuer(start).bis);
   function waehlen(wahl: Schnellwahl) {
     const z = zeitraumFuer(wahl);
     setSchnellwahl(wahl);
@@ -224,6 +224,9 @@ export function useZeitraum() {
     },
     text,
     aktiv: Boolean(von || bis),
+    /** Weicht vom Startwert ab -- nur dann ist "Zuruecksetzen" sinnvoll. */
+    geaendert: schnellwahl !== start,
+    zuruecksetzen: () => waehlen(start),
     ungueltig: Boolean(von && bis && von > bis),
     /** Liegt der ISO-Tag (yyyy-mm-dd) im gewaehlten Zeitraum? Offene Grenzen zaehlen als unbegrenzt. */
     enthaelt: (tag: string) => (!von || tag >= von) && (!bis || tag <= bis),

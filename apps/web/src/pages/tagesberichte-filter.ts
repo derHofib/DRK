@@ -1,7 +1,7 @@
 import type { TagesberichtDto } from "@zimmerakte/shared";
 import { lokalesDatum } from "../format";
 
-export type Schnellwahl = "alle" | "heute" | "gestern" | "woche" | "letzte7" | "monat" | "vormonat";
+export type Schnellwahl = "alle" | "heute" | "gestern" | "woche" | "letzte7" | "letzte30" | "monat" | "vormonat";
 
 export const SCHNELLWAHL_LABEL: Record<Schnellwahl, string> = {
   alle: "Alle",
@@ -9,9 +9,17 @@ export const SCHNELLWAHL_LABEL: Record<Schnellwahl, string> = {
   gestern: "Gestern",
   woche: "Aktuelle Woche",
   letzte7: "Letzte 7 Tage",
+  letzte30: "Letzte 30 Tage",
   monat: "Dieser Monat",
   vormonat: "Letzter Monat",
 };
+
+/**
+ * Voreinstellung fuer Listen, die sonst den kompletten Bestand laden wuerden
+ * (Tagesberichte, Kassenbuch). Messung 24.11.2026: nach drei Jahren Betrieb
+ * waeren das 72 MB bzw. 25 MB je Seitenaufruf. "Alle" bleibt waehlbar.
+ */
+export const STANDARD_ZEITRAUM: Schnellwahl = "letzte30";
 
 export type Sortierung = "datum-neu" | "datum-alt" | "klient-az" | "klient-za";
 
@@ -39,6 +47,8 @@ export function zeitraumFuer(wahl: Schnellwahl, jetzt: Date = new Date()): { von
       return { von: tag(-1), bis: tag(-1) };
     case "letzte7":
       return { von: tag(-6), bis: tag(0) };
+    case "letzte30":
+      return { von: tag(-29), bis: tag(0) };
     case "woche": {
       const seitMontag = (jetzt.getDay() + 6) % 7;
       return { von: tag(-seitMontag), bis: tag(6 - seitMontag) };

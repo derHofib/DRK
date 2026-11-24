@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ChatDto } from "@zimmerakte/shared";
-import { formatChatZeit } from "../../format";
+import { formatChatZeit, ungelesenAnzeige } from "../../format";
 import { Leerzustand } from "../Leerzustand";
 import { IGruppe, ILeerNachrichten, INeuerChat } from "../icons";
 
@@ -66,8 +66,8 @@ export function ChatListe({
                 <span className="zv-chat-eintrag-fuss">
                   <span className={`zv-chat-vorschau${c.ungelesen > 0 ? " ungelesen" : ""}`}>{vorschauText(c)}</span>
                   {c.ungelesen > 0 && (
-                    <span className="zv-nav-badge zv-nav-badge-inline" aria-label={`${c.ungelesen} ungelesen`}>
-                      {c.ungelesen > 99 ? "99+" : c.ungelesen}
+                    <span className="zv-nav-badge zv-nav-badge-inline" aria-label={ungelesenAnzeige(c.ungelesen).label}>
+                      {ungelesenAnzeige(c.ungelesen).text}
                     </span>
                   )}
                 </span>

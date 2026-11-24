@@ -694,6 +694,25 @@ describe("Chat", () => {
     expect((await l.post(`/chat/${randomUUID()}/gelesen`)).status).toBe(404);
   });
 
+  it("Ungelesen hat einen Deckel bei 100 (Oberflaeche zeigt ab da 99+), je Chat und gesamt", async () => {
+    // Messung 24.11.2026: jede ungelesene Nachricht kostet die Leseregel
+    // einzeln -- ohne Deckel waren es 1,5 s bei 120.000. Gegenprobe:
+    // UNGELESEN_DECKEL auf 1000 setzen -> 105 statt 100, rot.
+    const l = als(tokenLeitung);
+    const gruppe = (await als(tokenVollzugriff).post("/chat/gruppe", { name: "Viel los", teilnehmer: [{ benutzerId: leitungId }] })).body;
+    await admin.query(
+      `INSERT INTO chat_nachricht (mandant_id, chat_id, absender_benutzer_id, art, text)
+       SELECT $1, $2, $3, 'text', 'n' || g FROM generate_series(1, 105) g`,
+      [mandantAId, gruppe.id, vollzugriffId]
+    );
+    expect((await l.get(`/chat/${gruppe.id}`)).body.ungelesen).toBe(100);
+    expect((await l.get("/chat")).body.find((c: any) => c.id === gruppe.id).ungelesen).toBe(100);
+    expect((await l.get("/chat/ungelesen")).body.ungelesen).toBe(100);
+    // Unter dem Deckel weiter genau: nach dem Lesen wieder exakt.
+    expect((await l.post(`/chat/${gruppe.id}/gelesen`)).status).toBe(200);
+    expect((await l.get(`/chat/${gruppe.id}`)).body.ungelesen).toBe(0);
+  });
+
   it("Chatliste: Anzeigename, Vorschau mit Platzhaltern, sortiert nach letzter Aktivitaet", async () => {
     const l = als(tokenLeitung);
     const gruppe = (await l.post("/chat/gruppe", { name: "Ganz neu", teilnehmer: [{ benutzerId: betreuerId }] })).body;

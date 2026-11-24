@@ -7,7 +7,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { MarkenIcon } from "../components/MarkenZeichen";
 import { DeineSicht, StandortZeile, sichtKurztext, vertretungKurztext } from "../components/StandortSicht";
 import { useChatEreignisse } from "../components/chat/ereignisse";
-import { initialen } from "../format";
+import { initialen, ungelesenAnzeige } from "../format";
 import {
   IAbmelden,
   IAnwaerter,
@@ -111,8 +111,8 @@ function OrganisatorischSeite({ eintrag, children }: { eintrag: Tab; children: R
 function NavBadge({ anzahl }: { anzahl: number }) {
   if (anzahl <= 0) return null;
   return (
-    <span className="zv-nav-badge" aria-label={`${anzahl} ungelesen`}>
-      {anzahl > 99 ? "99+" : anzahl}
+    <span className="zv-nav-badge" aria-label={ungelesenAnzeige(anzahl).label}>
+      {ungelesenAnzeige(anzahl).text}
     </span>
   );
 }

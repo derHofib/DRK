@@ -17,6 +17,8 @@ import { isPgError } from "../common/pg-error";
 import { RechteService } from "../rechte/rechte.service";
 import { AuditService } from "../audit/audit.service";
 import { erzeugeMonatsabschlussPdf } from "./kassenbuch-monatsabschluss-pdf";
+import type { KassenbuchSaldenDto } from "@zimmerakte/shared";
+import { type BuchungsFilter, sichtbarkeitsBedingungen } from "./kassenbuch-sichtbarkeit";
 
 // SQLSTATE-Codes, kein geratener String -- siehe
 // https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -517,37 +519,22 @@ export class KassenbuchungService {
    * ein Standort ausserhalb der eigenen Zuordnung ist ein 404 (wie beim
    * Buchen auf einen fremden Standort), kein stilles "keine Treffer".
    */
-  async findeAlle(filter?: { klientId?: string; standortId?: string }): Promise<KassenbuchungDto[]> {
+  async findeAlle(filter?: BuchungsFilter): Promise<KassenbuchungDto[]> {
     const { benutzerId } = requireTenantContext();
     return this.db.withTenant(async (client) => {
-      if (filter?.standortId && !(await standortIstErlaubt(client, benutzerId, filter.standortId))) {
-        throw new NotFoundException("Standort nicht gefunden.");
-      }
-      const erlaubteStandorte = await ermittleErlaubteStandortIds(client, benutzerId);
       const params: unknown[] = [];
-      // Eine Buchung ist sichtbar, wenn ENTWEDER ihr Klient ueber eine
-      // offene Belegung in einem erlaubten Standort wohnt, ODER sie direkt
-      // einem erlaubten Standort zugeordnet ist -- die beiden Faelle
-      // schliessen sich per kassenbuchung_klient_xor_standort gegenseitig aus.
-      const klientBed = klientStandortBedingung(erlaubteStandorte, "k", params);
-      const standortBed = standortIdBedingung(erlaubteStandorte, "b.standort_id", params);
-      const bedingungen = [`((b.klient_id IS NOT NULL AND ${klientBed}) OR (b.standort_id IS NOT NULL AND ${standortBed}))`];
-      if (filter?.klientId) {
-        params.push(filter.klientId);
-        bedingungen.push(`b.klient_id = $${params.length}`);
+      const bedingungen = await sichtbarkeitsBedingungen(client, benutzerId, filter, params);
+      // Zeitraum serverseitig (Messung 24.11.2026): ohne ihn holte die
+      // Kassenbuch-Seite jede Buchung seit Beginn -- bei 50.000 Buchungen
+      // 25 MB und 0,4 s pro Aufruf. Kassenstand und laufenden Saldo ueber
+      // ALLE Buchungen liefert salden().
+      if (filter?.von) {
+        params.push(filter.von);
+        bedingungen.push(`b.datum >= $${params.length}::date`);
       }
-      if (filter?.standortId) {
-        params.push(filter.standortId);
-        const p = params.length;
-        bedingungen.push(`(
-          b.standort_id = $${p}
-          OR (b.klient_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM belegung fb
-            JOIN zimmer fz ON fz.id = fb.zimmer_id
-            WHERE fb.klient_id = k.id AND fb.auszug IS NULL AND fb.einzug <= CURRENT_DATE
-              AND fz.standort_id = $${p}
-          ))
-        )`);
+      if (filter?.bis) {
+        params.push(filter.bis);
+        bedingungen.push(`b.datum <= $${params.length}::date`);
       }
       const { rows } = await client.query(
         `${BUCHUNG_SELECT}
@@ -557,6 +544,46 @@ export class KassenbuchungService {
       );
       const teilnehmerNachBuchung = await holeTeilnehmer(client, rows.map((r) => r.id));
       return rows.map((r) => zuDto(r, teilnehmerNachBuchung.get(r.id) ?? []));
+    });
+  }
+
+  /**
+   * Summen der nicht stornierten Buchungen, getrennt nach Klient- und
+   * Standort-Buchungen: gesamt und vor einem Stichtag. Gegenstueck zu
+   * findeAlle() mit Zeitraum -- Kassenstand und laufender Saldo im Journal
+   * muessen ueber ALLE Buchungen stimmen, auch wenn nur ein Zeitraum geladen
+   * ist. Dieselben Sichtbarkeitsbedingungen wie findeAlle(), damit eine
+   * Summe nie Buchungen enthaelt, die die Liste nicht zeigen duerfte.
+   */
+  async salden(filter: { standortId?: string; vor?: string }): Promise<KassenbuchSaldenDto> {
+    const { benutzerId } = requireTenantContext();
+    return this.db.withTenant(async (client) => {
+      const params: unknown[] = [];
+      const bedingungen = await sichtbarkeitsBedingungen(client, benutzerId, { standortId: filter.standortId }, params);
+      params.push(filter.vor ?? null);
+      const vor = `$${params.length}::date`;
+      const { rows } = await client.query<{ kg: string; kv: string; sg: string; sv: string; ka: number; sa: number }>(
+        `SELECT
+           COALESCE(SUM(b.betrag_cent) FILTER (WHERE b.klient_id IS NOT NULL), 0) AS kg,
+           COALESCE(SUM(b.betrag_cent) FILTER (WHERE b.klient_id IS NOT NULL AND b.datum < ${vor}), 0) AS kv,
+           COALESCE(SUM(b.betrag_cent) FILTER (WHERE b.standort_id IS NOT NULL), 0) AS sg,
+           COALESCE(SUM(b.betrag_cent) FILTER (WHERE b.standort_id IS NOT NULL AND b.datum < ${vor}), 0) AS sv,
+           (count(*) FILTER (WHERE b.klient_id IS NOT NULL))::int AS ka,
+           (count(*) FILTER (WHERE b.standort_id IS NOT NULL))::int AS sa
+         FROM kassenbuchung b
+         LEFT JOIN klient k ON k.id = b.klient_id
+         WHERE NOT b.storniert AND ${bedingungen.join(" AND ")}`,
+        params
+      );
+      const r = rows[0];
+      return {
+        klientGesamtCent: Number(r.kg),
+        klientVorherCent: Number(r.kv),
+        standortGesamtCent: Number(r.sg),
+        standortVorherCent: Number(r.sv),
+        klientAnzahl: r.ka,
+        standortAnzahl: r.sa,
+      };
     });
   }
 
