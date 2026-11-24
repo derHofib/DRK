@@ -1,0 +1,739 @@
+/* ==================================================================
+   Moderne Liste (Office-Ansicht) -- ersetzt .zv-table dort, wo eine Zeile
+   zu viele Spalten fuer eine schmale Tabelle haette (Klienten, Kassenbuch,
+   Mitarbeitende). Das hier ist bewusst die DESKTOP-Grundform: EIN
+   umrandeter Container mit Kopfzeile, echte ausgerichtete Spalten
+   (CSS-Grid, --zv-liste-spalten wird je Seite inline gesetzt) statt
+   umbrechender Fliesstext-Felder -- so stehen "Amt", "HZL" etc. bei jedem
+   Datensatz exakt untereinander, wie man es von einer Tabelle erwartet.
+   Auf dem Handy (Mobil-Query weiter unten) wird pro Zeile wieder eine
+   einzelne Karte daraus: Spalten nebeneinander ergeben auf einem schmalen
+   Bildschirm keinen Sinn, dort traegt jede Zelle ihr Label ueber
+   "data-label" und steht gestapelt untereinander. App-Ansicht und
+   Office-Ansicht duerfen hier bewusst auseinanderlaufen.
+   ================================================================== */
+.zv-karten-liste {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-1);
+  overflow: hidden;
+}
+
+.zv-liste-kopf {
+  display: grid;
+  grid-template-columns: var(--zv-liste-spalten);
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  background: var(--zv-surface-2);
+  border-bottom: 1px solid var(--zv-border);
+  /* Unsichtbarer, aber gleich breiter linker Rand wie .zv-info-karte (dort
+     als Akzentkante) -- sonst haben Kopf- und Datenzeile bei box-sizing:
+     border-box unterschiedlich breite Innenflaechen und die Spalten
+     verschieben sich um ein paar Pixel gegeneinander. */
+  border-left: 3px solid transparent;
+}
+
+.zv-liste-kopf span {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--zv-text-muted);
+  /* Ohne das erzwingt laengerer Kopfzeilentext (z.B. "Aktenzeichen") eine
+     Mindestbreite nach Inhalt und sprengt die fr-Aufteilung der Spalte --
+     ein bekannter CSS-Grid-Stolperstein (Grid-Items haben standardmaessig
+     min-width:auto statt 0). Dieselbe Zeile steht deshalb auch bei
+     .zv-liste-zelle-titel und .zv-liste-zelle weiter unten. */
+  min-width: 0;
+}
+
+.zv-info-karte {
+  display: grid;
+  grid-template-columns: var(--zv-liste-spalten);
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border-bottom: 1px solid var(--zv-border);
+  border-left: 3px solid transparent;
+  transition: background var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-info-karte:last-child {
+  border-bottom: none;
+}
+
+.zv-info-karte-klickbar {
+  cursor: pointer;
+}
+
+.zv-info-karte-klickbar:hover {
+  background: var(--zv-surface-3);
+}
+
+/* Hebt am Desktop die gerade im Panel daneben geoeffnete Zeile hervor --
+   ohne das waere in der Master-Detail-Ansicht nicht erkennbar, welche Zeile
+   der Liste zum offenen Detail gehoert. */
+.zv-info-karte-aktiv {
+  background: var(--zv-accent-soft);
+  border-left-color: var(--zv-accent);
+}
+
+.zv-liste-zelle-titel {
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+  min-width: 0;
+}
+
+.zv-liste-zelle {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  min-width: 0;
+}
+
+/* Ein .zv-pill ist inline-flex und richtet sich sonst nach seinem Inhalt --
+   in einer schmalen Grid-Spalte (z.B. Dashboard-Faelligkeitshinweis mit
+   dynamischer Laenge wie "ueberfaellig seit DD.MM.YYYY") lief der Text
+   dadurch ueber den Kartenrand hinaus und wurde vom "overflow: hidden" der
+   .zv-karten-liste hart abgeschnitten statt sichtbar gekuerzt. */
+.zv-liste-zelle .zv-pill {
+  max-width: 100%;
+}
+
+/* text-overflow wirkt laut Spezifikation nicht auf den Flex-Container
+   .zv-pill selbst, sondern nur auf Block-/Inline-Block-Elemente -- deshalb
+   ein eigenes inneres Element fuer Pill-Text, dessen Laenge variieren und
+   damit ueberlaufen kann (z.B. der Faelligkeits-Hinweis). min-width:0 ist
+   noetig, weil Flex-Items sonst nicht unter ihre Inhaltsbreite schrumpfen. */
+.zv-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.zv-liste-zelle strong {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-liste-zelle-aktionen {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* ==================================================================
+   Listen und Kleinteile
+   ================================================================== */
+.zv-verlauf-liste {
+  list-style: none;
+  padding: var(--zv-space-2) 0 0;
+  margin: var(--zv-space-2) 0 0;
+  border-top: 1px solid var(--zv-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-verlauf-liste li {
+  font-size: var(--zv-text-s);
+}
+
+.zv-sub-inline {
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-s);
+  margin-left: var(--zv-space-1);
+}
+
+/* Eigene Zeile statt Fliesstext-Anhaengsel an den Namen: in schmalen
+   Karten (z. B. zweispaltige Ansichten) reicht die
+   Spaltenbreite oft nicht fuer "Vorname Nachname Zusatzinfo" auf einer
+   Zeile. Der Name bricht dann um, aber CSS Grid schneidet ueberlaufenden
+   Fliesstext nicht an der Spaltenbreite ab -- die inline direkt
+   angehaengte Zusatzinfo landete dadurch sichtbar in der Nachbarspalte
+   (ueberlappend mit "Bis"/Datum). Eine erzwungene eigene Zeile umgeht das
+   unabhaengig von der verfuegbaren Breite. */
+.zv-sub-inline-zeile {
+  display: block;
+  margin-left: 0;
+}
+
+/* "Auch: ..." unter einer Besetzung im Organigramm-Seitenpanel -- die
+   anderen aktiven Positionen derselben Person, siehe
+   organigramm/PositionPanel.tsx. Eigene Zeile (zv-sub-inline-zeile) + Pills statt
+   Fliesstext, weil mehrere Zuordnungen sonst schwer auseinanderzuhalten
+   waeren. */
+.zv-weitere-zuordnungen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-1);
+}
+
+/* white-space: nowrap, weil Bindestriche in Kennungen (Aktenzeichen wie
+   "AZ-2026-001") sonst regulaere Umbruchpunkte sind und der Text in
+   schmalen Spalten mitten im Wort umbricht. */
+.zv-mono {
+  font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+
+/* Seitenkopf: Titel links, Aktion rechts. Loest vier gleichlautende
+   Inline-Flex-Bloecke in den Seiten ab. */
+.zv-seiten-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+/* Seitentitel 32/700: der Screen sagt zuerst, WO man ist; die Aufgabe
+   darunter sagt, was zu tun ist. Der Titel muss dafuer gross genug sein,
+   um in einem Blick zu sitzen, und eng genug gesetzt, um nicht zu
+   schwimmen. Abschnittstitel (h3) bleiben 17/700. */
+.zv-seiten-kopf h2 {
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-titel);
+  font-weight: var(--zv-weight-bold);
+  letter-spacing: var(--zv-laufweite-titel);
+  line-height: 1.15;
+  margin: 0;
+}
+
+/* Kontextzeile ueber dem Seitentitel, z. B. "MO 26.10.2026 · KW 44 ·
+   FRUEHDIENST". Mono, weil sie fast nur aus Daten besteht und sich so
+   von der Ueberschrift absetzt, ohne Farbe zu brauchen. */
+.zv-kontextzeile {
+  display: block;
+  margin: 0 0 var(--zv-space-1);
+  font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
+  font-size: var(--zv-text-meta);
+  line-height: 1.3;
+  color: var(--zv-text-gedaempft);
+  text-transform: uppercase;
+}
+
+/* Etagen-Block innerhalb eines Standorts (Zimmer.tsx) -- bewusst leiser als
+   .zv-seiten-kopf h2: der Standort ist die Ueberschrift, die Etage nur eine
+   Unterteilung innerhalb davon. */
+.zv-etagen-kopf {
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
+/* Kennzahl-Kacheln (Kassenbuch: Gesamtsaldo/Summe gefiltert) */
+.zv-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-stat-karte {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-1);
+  padding: var(--zv-space-4);
+}
+
+.zv-stat-label {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-stat-wert {
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-semibold);
+  margin: 0;
+}
+
+.zv-stat-sub {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-faint);
+  margin: var(--zv-space-1) 0 0;
+}
+
+/* Label/Wert-Raster (Klientenakte, Uebersicht) */
+.zv-datenliste {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--zv-space-2) var(--zv-space-5);
+  font-size: var(--zv-text-m);
+  margin: 0;
+}
+
+.zv-datenliste dt {
+  color: var(--zv-text-muted);
+}
+
+.zv-datenliste dd {
+  margin: 0;
+}
+
+/* Leerzustaende */
+.zv-leer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-6) var(--zv-space-4);
+  color: var(--zv-text-faint);
+  text-align: center;
+}
+
+.zv-leer p {
+  margin: 0;
+  font-size: var(--zv-text-m);
+}
+
+.zv-leer-zelle {
+  /* Der Rahmen der Tabelle traegt die Begrenzung schon. */
+  border-top: 1px solid var(--zv-border);
+}
+
+/* ==================================================================
+   Segmentsteuerung (Theme-Auswahl)
+   ================================================================== */
+.zv-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+}
+
+.zv-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 7px var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-segmented button:hover {
+  color: var(--zv-text);
+}
+
+.zv-segmented button.active {
+  background: var(--zv-surface);
+  color: var(--zv-accent-strong);
+  box-shadow: var(--zv-shadow-1);
+}
+
+/* ==================================================================
+   Farbwahl (Einstellungen)
+   ================================================================== */
+.zv-swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--zv-radius-pill);
+  border: 2px solid var(--zv-border);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  padding: 0;
+  transition: transform var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-swatch:hover {
+  transform: scale(1.08);
+}
+
+.zv-swatch[aria-pressed="true"] {
+  border-color: var(--zv-text);
+}
+
+/* Bewusst Literalwerte (einzige Ausnahme von Regel 7 in dieser Datei): Die
+   Farbfelder zeigen beliebige, vom Nutzer gewaehlte Toene -- der Haken darf
+   deshalb von keinem Theme-Token abhaengen, sonst wuerde er auf manchem Feld
+   unsichtbar. Der Haken sitzt auf dem Pastellton selbst -- dort ist Weiss zu schwach.
+   Deshalb ein dunkler Haken mit heller Aura statt reinem Weiss. */
+.zv-swatch svg {
+  color: oklch(0.25 0 0);
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
+.zv-farbwahl-frei {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+.zv-farbwahl-frei input[type="color"] {
+  width: 44px;
+  height: 40px;
+  padding: 2px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  cursor: pointer;
+}
+
+.zv-farbwahl-frei input[type="text"] {
+  width: 130px;
+  font-family: var(--zv-font-mono);
+}
+
+/*
+ * Vorschaukachel. data-vorschau setzt color-scheme lokal -- dadurch loesen
+ * sich ALLE light-dark()-Tokens innerhalb dieses Teilbaums neu auf, und die
+ * Bereichsleitung sieht das jeweils andere Theme, ohne selbst umzuschalten. Ein
+ * eleganter Nebeneffekt von light-dark(), ohne eine Zeile Sonderlogik.
+ */
+.zv-vorschau {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-vorschau[data-vorschau="hell"] {
+  color-scheme: light;
+}
+
+.zv-vorschau[data-vorschau="dunkel"] {
+  color-scheme: dark;
+}
+
+.zv-vorschau-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-wrap: wrap;
+}
+
+.zv-einstellungen-abschnitt {
+  margin-bottom: var(--zv-space-6);
+}
+
+/*
+ * Einstellungen: eigene Menuespalte (Mein Konto / Traeger) statt Reiterleiste,
+ * rechts der gewaehlte Bereich in voller Breite. Die Abschnitte eines Bereichs
+ * werden zu Karten im Raster -- bei 1780 px waeren einzelne, ueber die ganze
+ * Breite gezogene Formulare kaum lesbar, und eine schmale Spalte liess vorher
+ * die halbe Seite leer (Rueckmeldung "Angepasstes Design Einstellungen").
+ */
+.zv-einstellungen {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+
+.zv-einstellungen-menue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--zv-space-2);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  /* Bleibt beim Scrollen langer Bereiche (Standorte) erreichbar. */
+  position: sticky;
+  top: var(--zv-space-5);
+}
+
+.zv-einstellungen-menue [role="group"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-einstellungen-menue [role="group"]:first-child .zv-gruppenlabel {
+  padding-top: var(--zv-space-2);
+}
+
+.zv-einstellungen-menue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font: inherit;
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-einstellungen-menue button span {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-einstellungen-menue button:hover {
+  background: var(--zv-surface-3);
+  color: var(--zv-text);
+}
+
+.zv-einstellungen-menue button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Der Pfeil sagt nur auf dem Handy "fuehrt weiter"; am Desktop steht der
+   Bereich ohnehin daneben. */
+.zv-einstellungen-menue-pfeil {
+  display: none;
+  color: var(--zv-text-faint);
+}
+
+.zv-einstellungen-inhalt {
+  min-width: 0;
+}
+
+.zv-einstellungen-zurueck {
+  display: none;
+}
+
+.zv-einstellungen-kopf {
+  align-items: flex-start;
+}
+
+.zv-einstellungen-kopf .zv-sub {
+  margin: var(--zv-space-1) 0 0;
+}
+
+.zv-einstellungen-geltung {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: var(--zv-tag-hoehe);
+  padding: var(--zv-space-1) var(--zv-space-3);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-tag-erledigt-bg);
+  color: var(--zv-tag-erledigt-text);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Traeger-Bereiche tragen die Frist-/Achtung-Farbe: eine Aenderung hier
+   trifft alle Mitarbeitenden, das soll man vor dem Speichern sehen. */
+.zv-einstellungen-geltung-traeger {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+.zv-einstellungen-geltung svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zv-einstellungen-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: var(--zv-space-5);
+  align-items: start;
+}
+
+.zv-einstellungen-raster > .zv-einstellungen-abschnitt {
+  margin: 0;
+  min-width: 0;
+  padding: var(--zv-space-5);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+}
+
+.zv-einstellungen-raster > .zv-einstellungen-abschnitt-breit {
+  grid-column: 1 / -1;
+}
+
+/* Die Menuegruppen nebeneinander, sobald Platz ist -- jede Liste bleibt
+   dabei hoechstens 420 px breit (.zv-reihenfolge-liste). */
+.zv-reihenfolge-gruppen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  column-gap: var(--zv-space-5);
+}
+
+/* Titel kommt aus dem Kopf der Einstellungen; der "Neu"-Knopf bleibt rechts. */
+.zv-seiten-kopf-ohne-titel {
+  justify-content: flex-end;
+}
+
+/* Handy: erst die Liste, ein Tipp oeffnet den Bereich, "Einstellungen" fuehrt
+   zurueck -- zwei Spalten passen bei 390 px nicht nebeneinander. */
+@media (max-width: 760px) {
+  .zv-einstellungen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zv-einstellungen-menue {
+    position: static;
+  }
+
+  .zv-einstellungen-menue-pfeil {
+    display: block;
+  }
+
+  .zv-einstellungen-menue button.active {
+    background: none;
+    color: var(--zv-text-sekundaer);
+    font-weight: var(--zv-weight-medium);
+  }
+
+  .zv-einstellungen[data-ansicht="liste"] .zv-einstellungen-inhalt,
+  .zv-einstellungen[data-ansicht="bereich"] .zv-einstellungen-menue {
+    display: none;
+  }
+
+  .zv-einstellungen-zurueck {
+    display: inline-flex;
+    margin-bottom: var(--zv-space-4);
+  }
+
+  .zv-einstellungen-raster > .zv-einstellungen-abschnitt {
+    padding: var(--zv-space-4);
+  }
+}
+
+.zv-einstellungen-abschnitt > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+  margin: 0 0 var(--zv-space-1);
+}
+
+/* Reihenfolge der Hauptmenuepunkte (Einstellungen > Darstellung) -- Zeilen
+   sind per Drag & Drop sortierbar, die Pfeil-Knoepfe daneben sind kein
+   Fallback, sondern gleichwertig (siehe Kommentar in Einstellungen.tsx). */
+.zv-reihenfolge-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--zv-space-3) 0;
+  padding: 0;
+  list-style: none;
+  max-width: 420px;
+}
+
+.zv-reihenfolge-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  border: 1px solid transparent;
+  cursor: grab;
+}
+
+.zv-reihenfolge-zieht {
+  opacity: 0.5;
+}
+
+.zv-reihenfolge-ziel {
+  border-color: var(--zv-accent);
+}
+
+.zv-reihenfolge-griff {
+  display: inline-flex;
+  color: var(--zv-text-faint);
+}
+
+.zv-reihenfolge-label {
+  flex: 1;
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-reihenfolge-aktionen {
+  display: flex;
+  gap: 2px;
+}
+
+.zv-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: none;
+  color: var(--zv-text-muted);
+}
+
+/* ==================================================================
+   Unterschrift
+   ================================================================== */
+.zv-signature-canvas {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: 140px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  /*
+   * Bleibt in BEIDEN Themes weiss (siehe --zv-signature-paper). Das PNG ist
+   * ein Auszahlungsnachweis und wird archiviert -- eine themenabhaengige
+   * Leinwand liesse archivierte Belege je nach Erfassungszeitpunkt
+   * unterschiedlich aussehen. Aus demselben Grund bleibt auch die
+   * Stiftfarbe in SignaturePad.tsx fest.
+   */
+  background: var(--zv-signature-paper);
+  touch-action: none;
+  cursor: crosshair;
+  margin-bottom: var(--zv-space-1);
+}
+
+/* Zielgroesse: der Textlink ist sonst nur ~22px hoch (gemessen). */
+.zv-signature-leeren {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.zv-signature-canvas-gross {
+  /* Breite statt max-height begrenzen, damit das Seitenverhaeltnis stimmt
+     (eine geklemmte Hoehe wuerde die Leinwand verzerrt darstellen). */
+  width: min(100%, calc(42vh * 2.5));
+  max-width: none;
+  height: auto;
+  aspect-ratio: 5 / 2;
+  margin-bottom: var(--zv-space-2);
+}

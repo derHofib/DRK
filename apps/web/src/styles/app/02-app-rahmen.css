@@ -1,0 +1,808 @@
+/* ==================================================================
+   App-Rahmen: Sidebar (Desktop) + .zv-shell-app (Rest)
+   ==================================================================
+   .zv-app-layout ist ab hier die eigentliche Fensteraufteilung: Sidebar
+   links, .zv-shell-app (Kopfzeile/Reiterleiste/Inhalt aus Shell.tsx) nimmt
+   den Rest. Auf dem Handy verschwindet die Sidebar komplett (display:none
+   in der Mobil-Query unten) -- dort uebernimmt .zv-tabbar-app unveraendert,
+   siehe deren Kommentar weiter unten fuer den Grund (kein position:fixed).
+   .zv-topbar und .zv-tabbar-app werden deshalb hier per Default (Desktop)
+   ausgeblendet und erst in der Mobil-Query wieder eingeblendet -- ihre
+   eigentlichen Regeln bleiben dabei unangetastet. */
+.zv-app-layout {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.zv-shell-app {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-shell-app > .zv-topbar,
+.zv-shell-app > .zv-tabbar.zv-tabbar-app {
+  display: none;
+}
+
+/*
+ * .zv-sidebar reserviert nur noch die Breite im Flex-Layout (248px/68px) --
+ * ihr eigentlicher Inhalt sitzt in .zv-sidebar-inner, absolut positioniert
+ * ueber ihr. Das ist keine Spielerei: nur so kann die "Beim Ueberfahren
+ * ausklappen"-Einstellung (weiter unten) den Inhalt breiter zeichnen als
+ * die reservierte Spalte, OHNE dass .zv-shell-app daneben bei jedem
+ * Hover/Verlassen nachrueckt. Ohne die Trennung muesste die Breite von
+ * .zv-sidebar selbst waechst, und das ist ein echter Reflow des gesamten
+ * Layouts, keine reine Optik.
+ */
+.zv-sidebar {
+  width: var(--zv-sidebar-breite);
+  flex: none;
+  /* Sticky mit Viewport-Hoehe statt "streckt sich auf die Seitenhoehe":
+     so bleiben Einstellungen, Benutzerblock und Abmelden immer im Bild,
+     auch auf langen Seiten, und die Hauptnavigation scrollt bei Bedarf
+     fuer sich. align-self, weil Flex-Kinder sonst auf Seitenhoehe
+     gestreckt werden und sticky ins Leere liefe. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.zv-sidebar-inner {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--zv-sidebar-breite);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-5) var(--zv-space-3);
+  background: var(--zv-surface);
+  border-right: 1px solid var(--zv-border);
+}
+
+.zv-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0 var(--zv-space-1);
+}
+
+.zv-brand-mark {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zv-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+/* hecaso-Schriftzug: eigene Markenschrift/-farbe, siehe tokens.css
+   --zv-font-marke/--zv-marke-haus -- bewusst nicht --zv-weight-semibold
+   (Nunito Sans), Figtree hat ein eigenes Gewicht dafuer. */
+.zv-brand-text strong {
+  font-family: var(--zv-font-marke);
+  font-size: var(--zv-text-2xl);
+  font-weight: var(--zv-weight-bold);
+  letter-spacing: -0.02em;
+  color: var(--zv-marke-haus);
+}
+
+.zv-brand-text span {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-sidebar-nav button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  /* 44 px: Mindestgroesse fuer Touch und zugleich die Hoehe, bei der eine
+     Gruppe aus drei, vier Punkten ruhig wirkt statt gedraengt. */
+  min-height: 44px;
+  padding: 0 var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  border: none;
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-basis);
+  font-family: var(--zv-font-ui);
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-sidebar-nav button:hover {
+  background: var(--zv-surface-3);
+  color: var(--zv-text);
+}
+
+/* Aktiv = die EINE Stelle, an der accent-soft in der Navigation steht. */
+.zv-sidebar-nav button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Gruppenlabel (ARBEIT / MENSCHEN / HAUS): Struktur ueber Typografie statt
+   ueber Kaesten. Auch in den Einstellungen und in Listen verwendbar. */
+.zv-gruppenlabel {
+  margin: 0;
+  padding: var(--zv-space-5) var(--zv-space-3) var(--zv-space-2);
+  font-family: var(--zv-font-ui);
+  font-size: 11px;
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zv-text-gedaempft);
+}
+
+.zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  padding-top: var(--zv-space-3);
+}
+
+.zv-mandant-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-knopf);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-mandant-zeile span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzerblock {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3);
+  border-top: 1px solid var(--zv-haarlinie);
+}
+
+/* Kachel statt Kreis: rund waere ein Avatar-Foto-Versprechen, das es hier
+   nicht gibt. Initialen auf accent-soft, wie ein ausgewaehlter Eintrag. */
+.zv-benutzer-kachel {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-bold);
+}
+
+.zv-benutzer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.zv-benutzer-name {
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-benutzer-rolle {
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-gedaempft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Standort unter dem Namen (Migration 0084, Konzept standort-sichtbarkeit).
+   Unten statt im Traeger-Kasten oben: es ist eine Angabe ueber die Person,
+   und dort steht ihr Name; der Kasten oben ist fuer alle gleich. */
+.zv-benutzerblock[data-mit-standort] {
+  align-items: flex-start;
+}
+
+.zv-sicht-zeile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-meta);
+  font-weight: var(--zv-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-sicht-zeile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-sicht-zeile svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  color: var(--zv-accent);
+}
+
+.zv-sicht-zeile:hover span {
+  text-decoration: underline;
+}
+
+.zv-sicht-zeile:focus-visible {
+  outline: 2px solid var(--zv-ring);
+  outline-offset: 2px;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-sicht-zeile-keiner,
+.zv-sicht-zeile-keiner svg {
+  color: var(--zv-achtung-text);
+}
+
+.zv-sicht-pille {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  width: max-content;
+  max-width: 100%;
+  margin-top: var(--zv-space-1);
+  padding: 1px var(--zv-space-2);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-size: var(--zv-text-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-sicht-pille svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+/* Punkt an der Kachel: nur im eingeklappten Menueband, wo die Pille fehlt. */
+.zv-benutzer-kachel {
+  position: relative;
+}
+
+.zv-benutzer-kachel-punkt {
+  display: none;
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--zv-accent);
+  border: 2px solid var(--zv-bg);
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-benutzer-kachel-punkt {
+  display: block;
+}
+
+/* "Deine Sicht": am Desktop ein Aufklapper neben dem Namensblock. Fixiert
+   statt in der Seitenleiste verankert, weil dieselbe Komponente am Handy
+   (Seitenleiste ausgeblendet) als Blatt von unten erscheint, siehe unten. */
+.zv-sicht-scrim {
+  display: none;
+}
+
+.zv-sicht-blatt {
+  position: fixed;
+  left: calc(var(--zv-sidebar-breite) + var(--zv-space-3));
+  bottom: var(--zv-space-6);
+  z-index: 45;
+  width: 320px;
+  max-width: calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-5));
+  padding: var(--zv-space-4);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-3);
+  outline: none;
+}
+
+.zv-sicht-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-sicht-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-sicht-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zv-sicht-liste li {
+  display: flex;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-2) 0;
+  border-top: 1px solid var(--zv-haarlinie);
+}
+
+.zv-sicht-liste li:first-child {
+  border-top: 0;
+}
+
+.zv-sicht-liste li > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--zv-accent);
+}
+
+.zv-sicht-liste li > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.zv-sicht-liste .zv-link-btn {
+  padding: 0;
+  justify-content: flex-start;
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+}
+
+.zv-sicht-liste span {
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-meta);
+}
+
+.zv-sicht-text {
+  margin: var(--zv-space-2) 0 0;
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-meta);
+}
+
+/* Handy-Kopfzeile: Standort statt Traeger, Traeger klein darueber. */
+.zv-topbar-ort {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.zv-topbar .zv-topbar-ort small {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-xs);
+}
+
+.zv-topbar-ort small svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+.zv-topbar-ort button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zv-text);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.zv-topbar-ort button svg {
+  flex: none;
+  color: var(--zv-accent);
+}
+
+@media (max-width: 640px) {
+  .zv-sicht-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: var(--zv-scrim);
+  }
+
+  .zv-sicht-blatt {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 80dvh;
+    overflow-y: auto;
+    border-radius: var(--zv-radius-l) var(--zv-radius-l) 0 0;
+    padding-bottom: calc(var(--zv-space-5) + env(safe-area-inset-bottom));
+  }
+}
+
+/* "Klienten" mit aufklappbarem Unterpunkt "Anwärter" (Shell.tsx). Nur im
+   ausgeklappten Menueband sichtbar -- siehe Regel bei
+   data-eingeklappt="true" unten; im eingeklappten Zustand bleibt Anwärter
+   ueber den Reiter in der Klienten-Seite selbst erreichbar. */
+.zv-sidebar-gruppe-zeile {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zv-sidebar-gruppe-zeile button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-sidebar-gruppe-pfeil {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.zv-sidebar-unterpunkte {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px var(--zv-space-4);
+}
+
+.zv-sidebar-unterpunkte button {
+  font-size: var(--zv-text-meta);
+  /* Unterpunkte sind kleiner als Hauptpunkte (44 px): sonst brauchen die
+     drei Gruppen mit ihren Unterpunkten mehr als eine Bildschirmhoehe. */
+  min-height: 36px;
+}
+
+/* Die Hauptnavigation scrollt, der Fuss (Einstellungen, Benutzerblock,
+   Abmelden) bleibt stehen. Nur ausgeklappt: eingeklappt zeichnet
+   .zv-sidebar-nav button:hover::after die Sprechblase ueber den Rand
+   hinaus, ein overflow-Container wuerde sie abschneiden -- und
+   eingeklappt (nur Icons, keine Unterpunkte) passt alles ohnehin. */
+.zv-sidebar[data-eingeklappt="false"] .zv-sidebar-nav-haupt {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.zv-sidebar-foot {
+  margin-top: auto;
+  padding-top: var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-sidebar-foot-icons {
+  display: flex;
+  gap: var(--zv-space-2);
+}
+
+/* "Organisatorisch" als Karteilasche (Shell.tsx): eine kleine Lasche LINKS
+   auf der Trennlinie zum Fuss, buendig mit den Gruppenlabels (Text beginnt
+   bei --zv-space-3 wie dort: Lasche selbst hat --zv-space-2 Innenabstand,
+   daher --zv-space-1 Aussenabstand). Sie ueberdeckt die Linie um 1 px mit der
+   Flaeche der Seitenleiste -- so liest sie sich als Reiter eines Ordners
+   statt als weitere Gruppe. Blasser und kleiner als die Gruppenlabels oben:
+   sie soll im Alltag nicht auffallen.
+
+   Aufgeklappt werden Lasche und Inhalt EINE Karteikarte: gleiche Flaeche
+   (--zv-surface-2), gemeinsamer Rahmen, unter der Lasche kein Strich, die
+   Karte steht UNTER der Lasche und ist oben links eckig, wo die Lasche
+   ansetzt. Frueher erschienen die Eintraege rahmenlos UEBER der Lasche, und
+   man sah nicht, woraus sie kamen (Rueckmeldung "Organisatorisch Reiter
+   links im Menue", 20.11.2026). */
+.zv-einstellungen-umzug {
+  margin: var(--zv-space-4) var(--zv-space-3) 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-sekundaer);
+}
+
+.zv-aktenlippe {
+  margin-top: auto;
+  /* Zugeklappt: den Spalt (gap der Seitenleiste) bis zur Linie schliessen,
+     damit die Lasche auf der Linie sitzt. */
+  margin-bottom: calc(-1 * var(--zv-space-3) - 1px);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
+/* Aufgeklappt sitzt die Karte ueber der Linie, nicht darauf: eine Karte, die
+   mit ihrem Rahmen auf der Trennlinie laege, verschmoelze mit ihr. */
+.zv-aktenlippe[data-offen="true"] {
+  margin-bottom: 0;
+}
+
+.zv-aktenlippe + .zv-sidebar-foot {
+  margin-top: 0;
+}
+
+.zv-aktenlippe-lasche {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-left: var(--zv-space-1);
+  padding: 2px var(--zv-space-2);
+  border: 1px solid var(--zv-haarlinie);
+  border-bottom-color: var(--zv-surface);
+  border-radius: var(--zv-radius-s) var(--zv-radius-s) 0 0;
+  background: var(--zv-surface);
+  color: var(--zv-text-faint);
+  font-family: var(--zv-font-ui);
+  font-size: 10px;
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast), background var(--zv-transition-fast);
+}
+
+.zv-aktenlippe-lasche svg {
+  width: 12px;
+  height: 12px;
+}
+
+.zv-aktenlippe-lasche:hover {
+  color: var(--zv-text-sekundaer);
+  border-color: var(--zv-border);
+  border-bottom-color: var(--zv-surface);
+}
+
+.zv-aktenlippe[data-offen="true"] .zv-aktenlippe-lasche {
+  margin-left: 0;
+  color: var(--zv-text);
+  background: var(--zv-surface-2);
+  border-color: var(--zv-border);
+  border-bottom-color: var(--zv-surface-2);
+  /* 1 px ueber den oberen Rand der Karte: dort deckt die Lasche den Strich ab. */
+  margin-bottom: -1px;
+}
+
+/* Hinweis auf neue Rueckmeldungen an der zugeklappten Lasche -- ohne ihn
+   fiele eine neue Meldung erst auf, wenn man die Karte oeffnet. */
+.zv-aktenlippe-punkt {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zv-accent-vivid);
+}
+
+.zv-aktenlippe-inhalt {
+  padding: var(--zv-space-1);
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+  border-radius: 0 var(--zv-radius-m) var(--zv-radius-m) var(--zv-radius-m);
+  animation: zv-aktenlippe-auf var(--zv-transition-fast);
+}
+
+@keyframes zv-aktenlippe-auf {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zv-aktenlippe-inhalt {
+    animation: none;
+  }
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-aktenlippe-lasche {
+  align-self: center;
+  margin-left: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-aktenlippe-inhalt {
+  border-radius: var(--zv-radius-m);
+}
+
+/* ------------------------------------------------------------------
+   Eingeklapptes Menueband -- Icons bleiben, Beschriftung weicht.
+   width/padding sind ausdruecklich hier (nicht per Inline-Style) gesetzt,
+   damit @media (prefers-reduced-motion: reduce) aus tokens.css automatisch
+   greift und die Transition dort abschaltet.
+   ------------------------------------------------------------------ */
+.zv-sidebar,
+.zv-sidebar-inner {
+  transition: width var(--zv-transition-base), padding var(--zv-transition-base);
+}
+
+.zv-sidebar[data-eingeklappt="true"],
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-inner {
+  width: 68px;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-inner {
+  padding-left: var(--zv-space-2);
+  padding-right: var(--zv-space-2);
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-brand-text,
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-label {
+  display: none;
+}
+
+/* Eingeklappt ersetzt eine Haarlinie das Gruppenlabel: die Gruppen bleiben
+   erkennbar, ohne dass Text in 68 px gequetscht wird. */
+.zv-sidebar[data-eingeklappt="true"] .zv-gruppenlabel {
+  height: 0;
+  padding: 0;
+  margin: var(--zv-space-3) var(--zv-space-2);
+  overflow: hidden;
+  border-top: 1px solid var(--zv-haarlinie);
+  font-size: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-gruppenblock:first-child .zv-gruppenlabel {
+  display: none;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-mandant-zeile,
+.zv-sidebar[data-eingeklappt="true"] .zv-benutzerblock {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-brand {
+  justify-content: center;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-nav button {
+  justify-content: center;
+  padding: var(--zv-space-2);
+  gap: 0;
+  position: relative;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot-icons {
+  flex-direction: column;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-gruppe-pfeil,
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-unterpunkte {
+  display: none;
+}
+
+.zv-sidebar[data-eingeklappt="true"] .zv-sidebar-foot .zv-btn {
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Eigene Sprechblase statt allein auf das title-Attribut zu vertrauen --
+   dessen Verzoegerung (~1s) und Nichtverfuegbarkeit auf Touch waeren bei
+   reiner Icon-Navigation zu unauffaellig. title bleibt zusaetzlich gesetzt
+   (siehe Shell.tsx) und liefert hier den Text via attr(), keine zweite
+   Quelle der Wahrheit. Nur, wenn "beim Ueberfahren ausklappen" AUS ist --
+   sonst zeigt der Hover ohnehin gleich das ganze Menueband, siehe unten. */
+.zv-sidebar[data-eingeklappt="true"]:not([data-hover-ausklappen="true"]) .zv-sidebar-nav button:hover::after,
+.zv-sidebar[data-eingeklappt="true"]:not([data-hover-ausklappen="true"]) .zv-sidebar-nav button:focus-visible::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + var(--zv-space-2));
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--zv-text);
+  color: var(--zv-bg);
+  padding: 4px var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  white-space: nowrap;
+  box-shadow: var(--zv-shadow-2);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------
+   Einstellung "Beim Ueberfahren automatisch ausklappen" (Einstellungen ->
+   Darstellung -> Menueband). Nur .zv-sidebar-inner wird breiter -- die
+   reservierte Spaltenbreite von .zv-sidebar selbst bleibt bei 68px, siehe
+   Kommentar oben bei .zv-sidebar. :focus-within zusaetzlich zu :hover,
+   damit Tastaturnutzung (Tab in die Navigation) dieselbe Beschriftung
+   bekommt wie die Maus -- sonst waere die Navigation per Tastatur nur
+   ueber unbeschriftete Icons bedienbar.
+   ------------------------------------------------------------------ */
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-inner,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-inner {
+  width: var(--zv-sidebar-breite);
+  padding-left: var(--zv-space-4);
+  padding-right: var(--zv-space-4);
+  box-shadow: var(--zv-shadow-3);
+  z-index: 20;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-brand-text,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-brand-text {
+  display: flex;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-label,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-label {
+  display: inline;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-brand,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-brand {
+  justify-content: flex-start;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-nav button,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-nav button {
+  justify-content: flex-start;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  gap: var(--zv-space-2);
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-foot-icons,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-foot-icons {
+  flex-direction: row;
+}
+
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:hover .zv-sidebar-foot .zv-btn,
+.zv-sidebar[data-eingeklappt="true"][data-hover-ausklappen="true"]:focus-within .zv-sidebar-foot .zv-btn {
+  gap: var(--zv-space-2);
+  padding-left: var(--zv-space-4);
+  padding-right: var(--zv-space-4);
+}

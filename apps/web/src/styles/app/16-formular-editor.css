@@ -1,0 +1,665 @@
+/* ==================================================================
+   Formulare (Organisatorisch › Formulare) und Formular-Editor
+   ================================================================== */
+.zv-formulare-einleitung {
+  margin: calc(-1 * var(--zv-space-2)) 0 var(--zv-space-4);
+  max-width: 60rem;
+}
+
+.zv-formular-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-liste-zelle-titel .zv-formular-meta {
+  display: block;
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-formular-detail > .zv-link-btn {
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-formular-kopf {
+  align-items: flex-start;
+}
+
+.zv-formular-kopf h2 {
+  margin: 0;
+}
+
+.zv-formular-kopf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-2);
+}
+
+.zv-formular-detail > .zv-hinweis {
+  margin-bottom: var(--zv-space-3);
+}
+
+/* Frueher 760 px breit: auf 1780 px blieb mehr als die halbe Seite leer
+   (Rueckmeldung „Aufbau Formular“). Jetzt Karten im Raster, siehe .zv-fo / .zv-fe. */
+
+.zv-formular-standorte,
+.zv-formular-anheftung-optionen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  margin: var(--zv-space-2) 0 0 var(--zv-space-6);
+}
+
+.zv-formular-anheftung {
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-formular-anheftung .zv-checkbox-zeile > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-formular-einrueck {
+  margin-left: var(--zv-space-6);
+}
+
+.zv-formular-gefahr {
+  margin-top: var(--zv-space-4);
+}
+
+.zv-formular-veroeffentlichen h4 {
+  margin: var(--zv-space-4) 0 var(--zv-space-2);
+  font-size: var(--zv-text-m);
+}
+
+.zv-formular-veroeffentlichen h4:first-child {
+  margin-top: 0;
+}
+
+.zv-formular-aenderungen,
+.zv-formular-pruefung {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-s);
+}
+
+.zv-formular-aenderungen li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+}
+
+.zv-formular-pruefung li {
+  display: flex;
+  gap: var(--zv-space-2);
+  color: var(--zv-status-danger);
+}
+
+.zv-formular-pruefung-ok {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: 0;
+  color: var(--zv-status-ok);
+}
+
+/* Der Editor ist ein Werkzeug fuer den Rechner (Konzept 5): darunter
+   erscheint ein Hinweis statt drei gequetschter Spalten. */
+.zv-formular-schmal-hinweis {
+  display: none;
+}
+
+.zv-fe {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 320px;
+  gap: var(--zv-space-4);
+  align-items: start;
+}
+
+.zv-fe-kasten,
+.zv-fe-eigenschaften {
+  position: sticky;
+  top: var(--zv-space-4);
+  max-height: calc(100dvh - 2 * var(--zv-space-4));
+  overflow-y: auto;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-fe-kasten .zv-gruppenlabel {
+  padding: var(--zv-space-3) var(--zv-space-1) var(--zv-space-1);
+}
+
+.zv-fe-kasten-gruppe:first-child .zv-gruppenlabel {
+  padding-top: 0;
+}
+
+.zv-fe-kasten-knopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--zv-space-2);
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-sekundaer);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-fe-kasten-knopf:hover {
+  background: var(--zv-surface-3);
+  color: var(--zv-text);
+}
+
+.zv-fe-kasten-tipp {
+  margin: var(--zv-space-3) 0 0;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-mitte {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-fe-mitte-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+}
+
+.zv-fe-status {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-leer {
+  padding: var(--zv-space-6);
+  border: 1px dashed var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text-muted);
+  text-align: center;
+}
+
+.zv-fe-baum {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-knoten-abschnitt {
+  padding: var(--zv-space-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface-2);
+}
+
+.zv-fe-knoten-abschnitt > .zv-fe-baum {
+  margin: var(--zv-space-2) 0 0 var(--zv-space-4);
+}
+
+.zv-fe-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  width: 100%;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile {
+  border-color: transparent;
+  background: none;
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-fe-zeile:hover {
+  border-color: var(--zv-border-strong);
+}
+
+/* Griff zum Verschieben (Rückmeldung 41c5627f): rechts am Ende jeder Zeile.
+   Eigener Knopf NEBEN der Zeile, nicht darin -- ein Knopf im Knopf ist
+   ungültiges HTML und schluckt auf Touchgeräten den Klick. */
+.zv-fe-knoten {
+  position: relative;
+}
+
+.zv-fe-zeilen-rahmen {
+  display: flex;
+  align-items: stretch;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-zeilen-rahmen > .zv-fe-zeile {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-fe-griff {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--zv-space-6);
+  min-height: var(--zv-space-6);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: grab;
+  /* Ohne das scrollt der Finger die Seite, statt den Baustein zu ziehen. */
+  touch-action: none;
+}
+
+.zv-fe-griff:hover,
+.zv-fe-griff:focus-visible {
+  color: var(--zv-text);
+  border-color: var(--zv-border-strong);
+}
+
+.zv-fe-baum-zug,
+.zv-fe-baum-zug .zv-fe-griff {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Unter dem letzten Abschnitt braucht es Platz, um einen Baustein aus ihm
+   heraus ans Ende des Formulars zu ziehen. */
+.zv-fe-baum-zug {
+  padding-bottom: var(--zv-space-7);
+}
+
+.zv-fe-gezogen {
+  opacity: 0.45;
+}
+
+/* Einfügelinie: genau in der Lücke zwischen zwei Zeilen. */
+.zv-fe-ziel-vor::before,
+.zv-fe-ziel-nach::after,
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-accent);
+  pointer-events: none;
+}
+
+.zv-fe-ziel-vor::before {
+  top: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-nach::after {
+  bottom: calc(var(--zv-space-1) / -2 - 2px);
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen {
+  position: relative;
+}
+
+.zv-fe-ziel-anfang > .zv-fe-zeilen-rahmen::after {
+  left: var(--zv-space-4);
+  bottom: calc(var(--zv-space-2) / -2 - 2px);
+}
+
+.zv-fe-zeile.active,
+.zv-fe-knoten-abschnitt > .zv-fe-zeilen-rahmen > .zv-fe-zeile.active {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-fe-typ {
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-beschriftung {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-fe-merkmal {
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-fe-logik {
+  flex-basis: 100%;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-leer-abschnitt {
+  padding: var(--zv-space-2);
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-hinweise {
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-text);
+  font-size: var(--zv-text-s);
+}
+
+.zv-fe-hinweise ul {
+  margin: var(--zv-space-1) 0 0;
+  padding-left: var(--zv-space-5);
+}
+
+.zv-fe-probe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-4);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-fe-probe > .zv-hinweis {
+  margin: 0;
+}
+
+.zv-fe-eig {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-fe-eig .zv-field {
+  margin: 0;
+}
+
+.zv-fe-eig-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+}
+
+.zv-fe-eig-kopf .zv-aktionen-reihe {
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-zweispaltig {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--zv-space-2);
+}
+
+.zv-fe-ganz {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.zv-fe-schluessel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-schluessel-problem {
+  color: var(--zv-status-danger);
+}
+
+.zv-fe-optionen {
+  list-style: none;
+  margin: 0 0 var(--zv-space-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-optionen li {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+
+.zv-fe-optionen li input {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-fe-option-aus input {
+  color: var(--zv-text-muted);
+  text-decoration: line-through;
+}
+
+.zv-fe-radios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-2);
+}
+
+.zv-fe-logik-block {
+  margin: 0;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-fe-logik-block legend {
+  padding: 0 var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-fe-logik-block p {
+  margin: 0;
+}
+
+.zv-fe-logik-block .zv-fe-logik-block {
+  align-self: stretch;
+}
+
+.zv-fe-satz {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-fe-bedingung {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  width: 100%;
+  font-size: var(--zv-text-s);
+}
+
+.zv-fe-eig select,
+.zv-fe-eig input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 34px;
+  padding: 0 var(--zv-space-2);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  max-width: 100%;
+}
+
+.zv-fe-bedingung select,
+.zv-fe-bedingung input {
+  flex: 1 1 6rem;
+  min-width: 0;
+}
+
+.zv-fe-vergleich {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  width: 100%;
+}
+
+.zv-fe-formel-felder {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1199px) {
+  .zv-formular-schmal-hinweis {
+    display: flex;
+  }
+
+  .zv-fe {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zv-fe-kasten,
+  .zv-fe-eigenschaften {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* Angeheftete Formulare im Tagesbericht-Fenster */
+.zv-angeheftet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-angeheftet-formular {
+  position: relative;
+  margin: 0;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  min-width: 0;
+}
+
+.zv-angeheftet-formular legend {
+  padding: 0 var(--zv-space-1);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-angeheftet-weg {
+  position: absolute;
+  top: var(--zv-space-1);
+  right: var(--zv-space-1);
+}
+
+.zv-angeheftet-dazu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-tagesbericht-protokolle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-1);
+}
+
+.zv-tagesbericht-protokoll {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--zv-text-xs);
+}
+
+.zv-protokoll-zum-tagesbericht {
+  margin-left: var(--zv-space-2);
+}
+
+/* Ruecksprung aus einem Protokoll: der Bericht, von dem man kam. Innen
+   liegender Rahmen, damit die Zeile nicht breiter wird als ihre Nachbarn. */
+.zv-info-karte.zv-tagesbericht-markiert {
+  box-shadow: inset 0 0 0 2px var(--zv-accent);
+}
+
+/* Formular-Tagesbericht in der Liste: Formularname als Pille, daneben die
+   beim Lesen abgeleitete Kurzfassung (Migration 0077). Eine Zeile je
+   Protokoll, damit zwei Formulare nicht ineinanderlaufen. */
+.zv-tagesbericht-protokoll-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.zv-tagesbericht-kurzfassung {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Neuer Tagesbericht: Bemerkung zugeklappt unter einem ersetzenden Formular. */
+.zv-ntb-bemerkung {
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-ntb-bemerkung > summary {
+  cursor: pointer;
+  color: var(--zv-text);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-ntb-zusammen {
+  text-align: center;
+  margin-top: var(--zv-space-2);
+}
+
+/* Formular-Einstellungen: Darstellung im Tagesbericht (ergaenzt / ersetzt). */
+.zv-formular-darstellung {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  margin: var(--zv-space-1) 0 var(--zv-space-2);
+  min-inline-size: 0;
+}
+
+.zv-formular-darstellung > legend {
+  font-weight: 600;
+  padding: 0 var(--zv-space-1);
+}

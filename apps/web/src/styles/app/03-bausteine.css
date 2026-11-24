@@ -1,0 +1,982 @@
+/* ==================================================================
+   Karten
+   ================================================================== */
+.zv-card {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  padding: var(--zv-space-6);
+  width: 100%;
+  max-width: 380px;
+  position: relative;
+}
+
+.zv-card-weit {
+  max-width: none;
+}
+
+.zv-card h1 {
+  font-size: var(--zv-text-2xl);
+  line-height: var(--zv-leading-tight);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--zv-space-1);
+}
+
+.zv-card p.zv-sub,
+.zv-sub {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  margin: 0 0 var(--zv-space-5);
+}
+
+/* ==================================================================
+   Modal (kleines Fenster fuer Anlegen-Formulare, siehe components/Modal.tsx)
+   ================================================================== */
+.zv-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--zv-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--zv-space-4);
+  z-index: 50;
+}
+
+.zv-modal {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+  box-shadow: var(--zv-shadow-3);
+  width: 440px;
+  max-width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.zv-modal-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-4) var(--zv-space-4) 0;
+}
+
+.zv-modal-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-modal-inhalt {
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-4);
+}
+
+/*
+ * Ab hier "Office-Ansicht": am Desktop ist genug Platz, um das Formular als
+ * Seitenpanel neben der Liste zu fuehren, statt sie mit einem zentrierten
+ * Fenster zu verdecken -- die Liste bleibt sichtbar, waehrend man ausfuellt.
+ * Auf dem Handy (<=640px, siehe Mobil-Query weiter unten) bleibt es bewusst
+ * beim zentrierten Fenster: fuer ein rechtsbuendiges Panel ist der Bildschirm
+ * dort schlicht zu schmal.
+ */
+@media (min-width: 641px) {
+  .zv-modal-scrim {
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  .zv-modal {
+    width: 440px;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border-top: none;
+    border-bottom: none;
+    border-right: none;
+    animation: zv-panel-einschieben var(--zv-transition-base);
+  }
+}
+
+/* Breites Lesefenster (Protokoll ausserhalb der Akte): Platz fuer zwei
+   Spalten, aber ein Streifen der Seite bleibt sichtbar. */
+@media (min-width: 641px) {
+  .zv-modal.zv-modal-breit {
+    width: min(820px, calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-7) * 2.5));
+  }
+
+  .zv-modal.zv-modal-breit.zv-modal-vollbild {
+    width: calc(100vw - var(--zv-sidebar-breite));
+  }
+}
+
+.zv-modal-knoepfe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+/* Wie beim Seitenpanel: am Handy deckt das Fenster ohnehin alles ab. Zwei
+   Klassen, sonst gewinnt die spaetere .zv-icon-btn-Regel. */
+@media (max-width: 640px) {
+  .zv-icon-btn.zv-modal-vollbild-knopf {
+    display: none;
+  }
+}
+
+@keyframes zv-panel-einschieben {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* ==================================================================
+   Formulare
+   ================================================================== */
+.zv-field {
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-field label {
+  display: block;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+  margin-bottom: var(--zv-space-1);
+}
+
+.zv-field input,
+.zv-field select,
+.zv-field textarea,
+.zv-field-inline {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  /* Faerbt Auswahlkaestchen, Optionsfelder und den nativen Farbwaehler in
+     der Markenfarbe -- eine Zeile statt eigener Nachbauten. */
+  accent-color: var(--zv-accent);
+  transition: border-color var(--zv-transition-fast), box-shadow var(--zv-transition-fast);
+}
+
+.zv-field input:focus,
+.zv-field select:focus,
+.zv-field textarea:focus {
+  border-color: var(--zv-accent);
+}
+
+.zv-field input::placeholder {
+  color: var(--zv-text-faint);
+}
+
+/* iOS Safari rendert input[type=date] (und =time) standardmaessig als
+   natives Steuerelement mit eigener Breitenberechnung, die die deklarierte
+   width:100% ignoriert -- das Feld wird dadurch breiter als sein
+   Elterncontainer und ragt ueber dessen Innenabstand hinaus (im Modal
+   "Auszug eintragen" live auf einem iPhone reproduziert: der rechte
+   Feldrand lief bis an den Bildschirmrand, waehrend der Button darunter
+   korrekt innerhalb der Modal-Polsterung blieb). "appearance: none" schaltet
+   die native Aufmachung ab und erzwingt das normale Boxmodell -- Kalender-
+   Icon und Bedienbarkeit bleiben erhalten, nur die kaputte Breitenrechnung
+   verschwindet. Chromium ist von diesem Fehler nicht betroffen, deshalb liess
+   er sich dort auch nicht nachstellen. */
+.zv-field input[type="date"],
+.zv-field input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.zv-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-3);
+}
+
+.zv-checkbox-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  cursor: pointer;
+}
+
+.zv-checkbox-zeile input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--zv-accent);
+  cursor: pointer;
+}
+
+.zv-inline-form {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+
+/* ==================================================================
+   Knoepfe
+   ================================================================== */
+.zv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-2);
+  padding: 10px var(--zv-space-4);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid transparent;
+  background: var(--zv-accent);
+  color: var(--zv-accent-contrast);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--zv-transition-fast), transform var(--zv-transition-fast),
+    box-shadow var(--zv-transition-fast);
+}
+
+.zv-btn:hover:not(:disabled) {
+  background: var(--zv-accent-hover);
+}
+
+.zv-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.zv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Volle Breite ist die Ausnahme (Anmeldeformular), nicht die Regel --
+   frueher war es andersherum und jede Verwendung ausserhalb brauchte ein
+   style={{width:"auto"}}. */
+.zv-btn-block {
+  width: 100%;
+}
+
+/* Weiss mit Rahmen statt tonaler Akzentflaeche: der Akzent als Flaeche
+   gehoert nur dem Primaerknopf. Zwei Knoepfe in Akzentfarbe nebeneinander
+   wuerden die Frage "was ist die naechste Handlung?" wieder offen lassen. */
+.zv-btn-sekundaer {
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border-color: var(--zv-border-knopf);
+}
+.zv-btn-sekundaer:hover:not(:disabled) {
+  background: var(--zv-surface-3);
+}
+
+.zv-btn-still {
+  background: transparent;
+  color: var(--zv-text-muted);
+  border-color: var(--zv-border-knopf);
+}
+.zv-btn-still:hover:not(:disabled) {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-btn-gefahr {
+  background: var(--zv-status-danger);
+  color: var(--zv-surface);
+}
+.zv-btn-gefahr:hover:not(:disabled) {
+  filter: brightness(0.93);
+}
+
+.zv-btn-klein {
+  padding: 6px var(--zv-space-3);
+  font-size: var(--zv-text-s);
+}
+
+.zv-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  background: none;
+  border: none;
+  color: var(--zv-accent);
+  font-size: var(--zv-text-s);
+  font-family: inherit;
+  font-weight: var(--zv-weight-semibold);
+  cursor: pointer;
+  padding: 2px 0;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-link-btn:hover:not(:disabled) {
+  color: var(--zv-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Gleiche Behandlung wie .zv-btn:disabled -- sonst sieht ein per
+   fieldset[disabled] eingefrorener Link-Knopf (Klient archiviert, siehe
+   KlientDetail.tsx) exakt wie ein normaler, klickbarer Knopf aus. */
+.zv-link-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--zv-text-muted);
+}
+
+/* Rein ikonische Knoepfe -- brauchen immer ein aria-label am Element. */
+.zv-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--zv-radius-s);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--zv-text-muted);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), color var(--zv-transition-fast);
+}
+
+.zv-icon-btn:hover {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+/* ==================================================================
+   Hinweise
+   ================================================================== */
+.zv-hinweis {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-hinweis svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.zv-hinweis-fehler,
+/* Alias: .zv-error war der bisherige Name und steckt noch in mehreren
+   Seiten -- beide fuehren zur selben Darstellung. */
+.zv-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-3);
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+}
+
+.zv-hinweis-erfolg {
+  background: var(--zv-status-ok-bg);
+  color: var(--zv-status-ok);
+}
+
+.zv-hinweis-info {
+  background: var(--zv-status-info-bg);
+  color: var(--zv-status-info);
+}
+
+/* ==================================================================
+   Kopfzeile
+   ================================================================== */
+.zv-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  /* Nur hier, ausserhalb der Mobil-Query: dort wuerde sticky die
+     Flex-Spalten-Hoehenrechnung von .zv-shell-app stoeren. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.zv-topbar-marke {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-topbar strong {
+  font-family: var(--zv-font-marke);
+  font-size: var(--zv-text-l);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--zv-marke-haus);
+}
+
+.zv-topbar span {
+  color: var(--zv-text-faint);
+  font-size: var(--zv-text-s);
+}
+
+.zv-topbar-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
+}
+
+/* ==================================================================
+   Reiterleisten
+   ================================================================== */
+.zv-tabbar {
+  display: flex;
+  gap: var(--zv-space-1);
+  padding: 0 var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  /* Reicht die Reiterbreite (Icon+Text je Reiter, z.B. in KlientDetail.tsx)
+     auf einem schmalen Bildschirm nicht, soll SIE sich scrollen lassen --
+     nicht die ganze Seite in die Breite ziehen. Dasselbe Prinzip wie bei
+     .zv-table (siehe dort): der Container mit dem zu breiten Inhalt
+     bekommt den Scroll, nicht die Seite drumherum. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.zv-tabbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) var(--zv-space-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-m);
+  font-family: inherit;
+  font-weight: var(--zv-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-tabbar button:hover {
+  color: var(--zv-text);
+}
+
+/* Aktiver Reiter: dunkle Schrift und dunkler Strich statt Akzent. Reiter
+   zeigen "wo bist du" -- Akzent ist fuer "was kannst du tun" reserviert. */
+.zv-tabbar button.active {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+/* Unterstrich-Reiter unter dem Seitenkopf (components/Reiterleiste.tsx).
+   Gleiche Optik wie .zv-tabbar, aber ohne Flaeche und Seitenrand, weil sie
+   im Inhalt stehen und nicht am Bildschirmrand. Die Leiste scrollt selbst;
+   gefuehrt wird sie aber ueber Pfeilknoepfe und das Mausrad, nicht ueber
+   den Balken (der ist ausgeblendet -- als einziger Griff war er fuer die
+   Maus zu duenn, Rueckmeldung "Ansicht Klienten"). */
+.zv-reiterleiste {
+  position: relative;
+  margin-bottom: var(--zv-space-5);
+  /* Haarlinie als inset-Schatten statt border-bottom, und die Knoepfe ohne
+     negativen Rand: der alte -1px-Ueberstand ueber die Border hinaus machte
+     den Container (overflow-x:auto erzwingt overflow-y:auto) vertikal
+     scrollbar -- genau der zweite Balken, der dort nicht existieren darf. */
+  box-shadow: inset 0 -1px 0 var(--zv-border);
+}
+
+.zv-reiter {
+  display: flex;
+  gap: var(--zv-space-1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.zv-reiter::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ausblendverlauf am Rand, an dem es weitergeht. Als Maske statt als
+   Farbverlauf in Hintergrundfarbe: die Leiste steht mal auf --zv-bg, mal im
+   Seitenpanel auf --zv-surface. Eine Maske wertet nur Deckkraft aus; die
+   Farbe ist egal, darum genuegt ein beliebiges deckendes Token. */
+.zv-reiterleiste[data-rechts] .zv-reiter {
+  mask-image: linear-gradient(to left, transparent, var(--zv-text) 56px);
+}
+.zv-reiterleiste[data-links] .zv-reiter {
+  mask-image: linear-gradient(to right, transparent, var(--zv-text) 56px);
+}
+.zv-reiterleiste[data-links][data-rechts] .zv-reiter {
+  mask-image: linear-gradient(to right, transparent, var(--zv-text) 56px, var(--zv-text) calc(100% - 56px), transparent);
+}
+
+.zv-reiter-pfeil {
+  position: absolute;
+  top: 0;
+  bottom: 1px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  background: var(--zv-surface-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  cursor: pointer;
+}
+.zv-reiter-pfeil:hover {
+  background: var(--zv-surface-3);
+}
+.zv-reiter-pfeil-links {
+  left: 0;
+}
+.zv-reiter-pfeil-rechts {
+  right: 0;
+}
+
+.zv-reiter button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  flex-shrink: 0;
+  padding: var(--zv-space-3);
+  min-height: 44px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--zv-radius-s) var(--zv-radius-s) 0 0;
+  color: var(--zv-text-sekundaer);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Hover auf der ganzen Flaeche statt nur hellerer Schrift: man sieht vor
+   dem Klick, welche Flaeche man trifft. */
+.zv-reiter button:hover {
+  color: var(--zv-text);
+  background: var(--zv-surface-2);
+}
+
+.zv-reiter button.active {
+  color: var(--zv-text);
+  font-weight: var(--zv-weight-semibold);
+  border-bottom-color: var(--zv-text);
+}
+
+.zv-reiter-zaehler {
+  font-size: var(--zv-text-meta);
+  font-weight: 400;
+  color: var(--zv-text-gedaempft);
+}
+
+/* Schmale, zurueckhaltende Scrollbalken app-weit statt der groben
+   System-Balken (Tab-Leisten, Tabellen, Zeitleiste). Farbe nur ueber Tokens;
+   der Daumen wird erst beim Ueberfahren kraeftiger. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--zv-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+}
+
+/* ==================================================================
+   Tabellen
+   ================================================================== */
+.zv-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  /* Eine Tabelle breiter als der Viewport soll sich selbst scrollen lassen,
+     statt die ganze Seite horizontal aufzureissen -- display:block auf dem
+     table-Element selbst macht das moeglich, waehrend thead/tbody/tr/td
+     ihre eigenen table-*-Display-Werte behalten und intern normal als
+     Tabelle ausgerichtet bleiben.
+     ACHTUNG: genau deshalb funktioniert position:sticky auf thead hier
+     NICHT wie erwartet (der Scrollcontainer ist die Tabelle selbst, die nur
+     horizontal ueberlaeuft). Kein Sticky-Header nachruesten. */
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.zv-table th {
+  text-align: left;
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  font-weight: var(--zv-weight-semibold);
+  /* Bewusst -muted und nicht -faint: die Koepfe stehen auf --zv-surface-2,
+     und dort war die alte Kombination nur 2,87:1. */
+  color: var(--zv-text-muted);
+  background: var(--zv-surface-2);
+  padding: 10px var(--zv-space-4);
+  white-space: nowrap;
+}
+
+.zv-table td {
+  padding: 11px var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+  font-size: var(--zv-text-m);
+}
+
+.zv-table tbody tr {
+  transition: background var(--zv-transition-fast);
+}
+
+.zv-table tbody tr:hover {
+  background: var(--zv-surface-3);
+}
+
+/* Betraege und Datumsangaben rechtsbuendig mit Tabellenziffern -- so
+   stehen die Stellen sauber untereinander. */
+.zv-num {
+  text-align: right;
+  font-family: var(--zv-font-mono);
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+
+/* ==================================================================
+   Pills
+   ================================================================== */
+/*
+ * Status-Tag. Eckig (4 px) statt Pille und neutral als Grundzustand: ein
+ * Tag ist eine Auskunft, kein Knopf -- die runde, akzentfarbene Pille sah
+ * anklickbar aus. Feste Hoehe, damit Tags in Tabellenzeilen auf einer
+ * Linie stehen. Vier Varianten: neutral / erledigt / frist / achtung.
+ */
+.zv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  height: var(--zv-tag-hoehe);
+  font-size: var(--zv-tag-schrift);
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1;
+  padding: 0 var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  border: 0;
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
+  white-space: nowrap;
+}
+
+.zv-pill-vergeben {
+  background: var(--zv-tag-neutral-bg);
+  color: var(--zv-tag-neutral-text);
+}
+
+.zv-pill-zugeordnet,
+.zv-pill-erledigt,
+.zv-pill-ok {
+  background: var(--zv-tag-erledigt-bg);
+  color: var(--zv-tag-erledigt-text);
+}
+
+.zv-pill-frist {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+/* Koralle: heute, ueberfaellig, offen, ungelesen, frei -- nie dekorativ. */
+.zv-pill-achtung {
+  background: var(--zv-tag-achtung-bg);
+  color: var(--zv-tag-achtung-text);
+}
+
+/* Mehrbettzimmer mit noch mindestens einem freien Platz -- zwischen
+   "zugeordnet" (ganz leer) und "vergeben" (voll). */
+.zv-pill-teilweise {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+.zv-pill-danger {
+  background: var(--zv-status-danger-bg);
+  color: var(--zv-status-danger);
+}
+
+.zv-pill-offen {
+  background: var(--zv-tag-frist-bg);
+  color: var(--zv-tag-frist-text);
+}
+
+.zv-pill-info {
+  background: var(--zv-status-info-bg);
+  color: var(--zv-status-info);
+}
+
+/* ==================================================================
+   Zimmerkarten
+   ================================================================== */
+.zv-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--zv-space-3);
+}
+
+.zv-room-card {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  /* Keine Akzentkante und kein Anheben beim Hover mehr: der Akzent ist
+     Handlungsfarbe, eine Karte ist keine Handlung. */
+  transition: border-color var(--zv-transition-fast);
+}
+
+.zv-room-card:hover {
+  border-color: var(--zv-border-strong);
+}
+
+.zv-room-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-room-nummer {
+  font-size: var(--zv-text-xl);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.zv-room-klient {
+  font-size: var(--zv-text-m);
+  margin-bottom: var(--zv-space-2);
+}
+
+/* Zimmerkarte als Knopf (Rueckmeldung d5f8252d): die ganze Karte oeffnet
+   das Zimmer-Panel. Die Knopf-Grundwerte des Browsers (zentrierter Text,
+   eigene Schrift) werden zurueckgesetzt, damit sie aussieht wie vorher. */
+.zv-room-card-knopf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.zv-room-card-knopf .zv-room-head {
+  margin-bottom: 0;
+}
+.zv-room-card-knopf:focus-visible {
+  outline: 2px solid var(--zv-accent);
+  outline-offset: 2px;
+}
+/* Ausgewaehlt: Akzentkante und -flaeche wie die aktive Zeile bei Klienten,
+   damit klar ist, welches Zimmer rechts offen ist. */
+.zv-room-card-knopf.zv-aktiv,
+.zv-room-card-knopf.zv-aktiv:hover {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+.zv-room-pillen {
+  display: flex;
+  gap: var(--zv-space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.zv-room-namen {
+  font-size: var(--zv-text-m);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-room-namen.zv-room-namen-leer {
+  color: var(--zv-text-muted);
+}
+.zv-room-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+/* Zimmer-Panel: Abschnitte untereinander, Abstand wie in der Klientenakte. */
+.zv-zimmer-kachel {
+  font-size: var(--zv-text-s);
+}
+.zv-zimmer-abschnitte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-6);
+}
+.zv-abschnitt-zaehler {
+  font-size: var(--zv-text-meta);
+  font-weight: normal;
+  color: var(--zv-text-muted);
+}
+.zv-zimmer-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zv-zimmer-liste > li {
+  border-top: 1px solid var(--zv-border);
+  padding: var(--zv-space-3) 0;
+}
+.zv-zimmer-liste > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.zv-zimmer-zeile,
+.zv-zimmer-person {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+}
+.zv-zimmer-person .zv-initialen-kachel {
+  width: 36px;
+  height: 36px;
+  font-size: var(--zv-text-s);
+}
+.zv-zimmer-person-text {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.zv-zimmer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-zimmer-zeilen-aktionen {
+  display: flex;
+  gap: var(--zv-space-3);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.zv-zimmer-neu-link {
+  margin-top: var(--zv-space-3);
+}
+.zv-zimmer-aufgabe-neu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-3);
+  padding-top: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-zimmer-aufgabe-neu input[name="titel"] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* Aufgabe im Panel: Prioritaet | Text | Aktionen. Im schmalen Panel (Handy,
+   Container-Abfrage auf .zv-akte) rutschen die Aktionen unter den Text,
+   sonst bleiben fuer den Titel nur wenige Zeichen. */
+.zv-aufgabe-kompakt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--zv-space-3);
+  align-items: start;
+}
+.zv-aufgabe-kompakt.zv-erledigt {
+  opacity: 0.6;
+}
+.zv-aufgabe-kompakt-titel {
+  font-weight: var(--zv-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.zv-aufgabe-kompakt-beschreibung {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow-wrap: anywhere;
+}
+.zv-aufgabe-kompakt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  margin-top: var(--zv-space-1);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-aufgabe-kompakt-zuweisung {
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--zv-text-meta);
+  padding: 2px var(--zv-space-2);
+}
+.zv-aufgabe-kompakt-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+@container akte (max-width: 460px) {
+  /* Kopf im Handy-Panel: Titel bekommt die ganze Zeile neben der Kachel,
+     die Aktionen rutschen darunter -- sonst bricht "Zimmer" mitten im Wort. */
+  .zv-zimmer-panel .zv-akte-kopf {
+    flex-wrap: wrap;
+  }
+  .zv-zimmer-panel .zv-akte-titel {
+    flex: 1 1 0;
+  }
+  .zv-zimmer-panel .zv-akte-aktionen {
+    flex: 1 1 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  .zv-aufgabe-kompakt {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-2);
+  }
+  .zv-aufgabe-kompakt-prio {
+    justify-self: start;
+  }
+}

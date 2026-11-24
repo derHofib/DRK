@@ -219,7 +219,8 @@ apps/api/          NestJS
   src/database/    DatabaseService.withTenant() — der EINZIGE Ort mit DB-Zugriff
   test/            e2e-Specs gegen echte PostgreSQL
 apps/web/          React + Vite (PWA)
-  src/styles/      tokens.css (Designsystem) + app.css (Komponenten)
+  src/styles/      tokens.css (Designsystem) + app.css (Komponenten; importiert
+                   styles/app/NN-*.css in Kaskaden-Reihenfolge, neue Bereiche hinten anhängen)
   src/theme/       Farbableitung (sRGB→OKLCH), ThemeProvider, Hell/Dunkel
   src/components/  icons.tsx, ThemeToggle, Leerzustand
   scripts/         Browser-Prüfskripte

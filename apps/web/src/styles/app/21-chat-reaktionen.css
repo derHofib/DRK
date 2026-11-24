@@ -1,0 +1,456 @@
+/* ==================================================================
+   Chat: Smileys und Reaktionen (migrations/0086, Konzept chat-reaktionen)
+   ================================================================== */
+
+/* Traegt Leiste, Blase und Reaktionsknoepfe. Die Reihe ist so breit wie der
+   Verlauf, damit die Blase ihre 80 % weiter am Verlauf misst und die Maus
+   von der Blase zur Leiste wandern kann, ohne die Reihe zu verlassen. */
+.zv-blase-reihe {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.zv-blase-reihe-eigene {
+  align-items: flex-end;
+}
+
+.zv-blase-aktiv {
+  border-color: var(--zv-accent);
+}
+
+/* Knoepfe haengen halb unter der Blase und gehoeren sichtbar zu ihr. */
+.zv-reaktionen {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1);
+  max-width: min(80%, 520px);
+  margin-top: calc(-1 * var(--zv-space-2));
+  padding: 0 var(--zv-space-3);
+}
+
+.zv-reaktion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-height: 26px;
+  padding: 0 var(--zv-space-2);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  cursor: pointer;
+}
+
+.zv-reaktion:hover {
+  border-color: var(--zv-accent);
+}
+
+.zv-reaktion.meine {
+  background: var(--zv-accent-soft);
+  border-color: var(--zv-accent);
+  color: var(--zv-accent-strong);
+}
+
+.zv-reaktion-mehr {
+  color: var(--zv-text-muted);
+}
+
+.zv-reaktion-zeichen,
+.zv-reaktionsleiste-zeichen,
+.zv-smiley,
+.zv-smiley-reiter button {
+  font-family: var(--zv-font-emoji);
+  font-weight: normal;
+}
+
+.zv-reaktion-zeichen {
+  font-size: var(--zv-text-m);
+  line-height: 1;
+}
+
+/* Schnellreaktionen: schwebend ueber der Blase (Maus) oder im Fenster (Handy). */
+.zv-reaktionsleiste {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--zv-space-1);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+}
+
+.zv-reaktionsleiste-schwebend {
+  position: absolute;
+  z-index: 4;
+  /* Ueberlappt die Blase nur am Rand, damit die erste Textzeile lesbar bleibt. */
+  bottom: calc(100% - var(--zv-space-1));
+  left: var(--zv-space-3);
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-blase-reihe-eigene .zv-reaktionsleiste-schwebend {
+  left: auto;
+  right: var(--zv-space-3);
+}
+
+/* Ganz oben im Verlauf wuerde der Scrollbereich die Leiste abschneiden. */
+.zv-reaktionsleiste-schwebend.unten {
+  bottom: auto;
+  top: calc(100% - var(--zv-space-2));
+}
+
+.zv-reaktionsleiste-zeichen,
+.zv-reaktionsleiste-knopf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--zv-radius-pill);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: pointer;
+}
+
+.zv-reaktionsleiste-zeichen {
+  font-size: var(--zv-text-xl);
+  line-height: 1;
+}
+
+.zv-reaktionsleiste-zeichen:hover,
+.zv-reaktionsleiste-knopf:hover {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-reaktionsleiste-zeichen.gewaehlt {
+  background: var(--zv-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--zv-accent);
+}
+
+.zv-reaktionsleiste-trenner {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--zv-space-1) 2px;
+  background: var(--zv-border-strong);
+}
+
+.zv-reaktionsleiste-fenster {
+  justify-content: space-between;
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-blase-reagieren {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.zv-blase-reagieren:hover {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-blase-reihe:hover .zv-blase-reagieren,
+.zv-blase-reagieren:focus-visible,
+.zv-blase-reagieren[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* Smiley-Auswahl */
+.zv-chat-smileys {
+  position: relative;
+}
+
+.zv-chat-smileys .zv-icon-btn.aktiv {
+  background: var(--zv-accent-soft);
+  border-color: var(--zv-accent);
+  color: var(--zv-accent-strong);
+}
+
+.zv-chat-smiley-aufklapp {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + var(--zv-space-2));
+  left: 0;
+  width: min(360px, calc(100vw - 2 * var(--zv-space-4)));
+  padding: var(--zv-space-2);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  background: var(--zv-surface);
+  box-shadow: var(--zv-shadow-3);
+}
+
+.zv-smiley-auswahl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-smiley-suche {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: 0 var(--zv-space-2);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-smiley-suche:focus-within {
+  border-color: var(--zv-accent);
+}
+
+.zv-smiley-suche input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  border: none;
+  outline: none;
+  /* Der Fokus zeigt sich am Rahmen des Suchfelds (focus-within oben) -- ein zweiter Ring innen waere doppelt. */
+  box-shadow: none;
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+}
+
+.zv-smiley-raster-bereich {
+  max-height: 248px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.zv-smiley-titel {
+  margin: var(--zv-space-2) 2px var(--zv-space-1);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+
+.zv-smiley-raster-bereich > .zv-smiley-titel:first-child,
+.zv-smiley-raster-bereich > section:first-child .zv-smiley-titel {
+  margin-top: 0;
+}
+
+.zv-smiley-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 2px;
+}
+
+.zv-smiley {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  font-size: var(--zv-text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zv-smiley:hover,
+.zv-smiley:focus-visible {
+  background: var(--zv-surface-2);
+}
+
+.zv-smiley-leer {
+  margin: var(--zv-space-3) 0;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  text-align: center;
+}
+
+.zv-smiley-reiter {
+  display: flex;
+  gap: 2px;
+  padding-top: var(--zv-space-2);
+  border-top: 1px solid var(--zv-border);
+}
+
+/* Reiter grau, der aktive farbig: so liest man die Zeile als Navigation, nicht als weitere Smileys. */
+.zv-smiley-reiter button {
+  flex: 1;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  font-size: var(--zv-text-l);
+  filter: grayscale(1);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.zv-smiley-reiter button:hover,
+.zv-smiley-reiter button.aktiv {
+  filter: none;
+  opacity: 1;
+}
+
+.zv-smiley-reiter button.aktiv {
+  background: var(--zv-accent-soft);
+}
+
+/* Wer hat reagiert */
+.zv-reaktionen-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-reaktionen-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-height: 32px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--zv-radius-pill);
+  background: none;
+  color: var(--zv-text-muted);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  cursor: pointer;
+}
+
+.zv-reaktionen-filter button.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+}
+
+.zv-reaktionen-personen {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zv-reaktionen-personen li {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 44px;
+  padding: var(--zv-space-1) var(--zv-space-2);
+  border-top: 1px solid var(--zv-border);
+}
+
+.zv-reaktionen-personen li:first-child {
+  border-top: none;
+}
+
+.zv-reaktionen-personen li.ich {
+  background: var(--zv-surface-2);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-reaktionen-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.zv-reaktionen-name small {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-reaktionen-zeichen {
+  font-size: var(--zv-text-l);
+}
+
+/* Menue nach langem Druecken (Handy) */
+.zv-nachricht-menue-vorschau {
+  margin: 0 0 var(--zv-space-3);
+  color: var(--zv-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.zv-nachricht-menue {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+}
+
+.zv-nachricht-menue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 48px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-top: 1px solid var(--zv-border);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-nachricht-menue button:first-child {
+  border-top: none;
+}
+
+.zv-nachricht-menue button.gefahr {
+  color: var(--zv-status-danger);
+}
+
+/* Geraete ohne Maus: lang druecken statt Ueberfahren, Tastatur-Emojis statt
+   eigenem Knopf. (hover: none) statt einer Breite -- ein Tablet mit Maus
+   behaelt Leiste und Knopf, ein grosses Handy bekommt sie nicht. */
+@media (hover: none) {
+  .zv-chat-smileys,
+  .zv-blase-reagieren {
+    display: none;
+  }
+
+  /* Sonst markiert langes Druecken Text bzw. oeffnet iOS die Link-Vorschau;
+     kopieren geht ueber das Menue. */
+  .zv-blase {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .zv-reaktionsleiste-fenster .zv-reaktionsleiste-zeichen,
+  .zv-reaktionsleiste-fenster .zv-reaktionsleiste-knopf {
+    width: 40px;
+    height: 40px;
+  }
+}

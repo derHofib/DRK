@@ -1,0 +1,153 @@
+/* ==================================================================
+   Grundgeruest
+   ================================================================== */
+.zv-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/*
+ * Frueher lag hier ein Farbverlauf in der Markenfarbe hinter der Anmeldekarte.
+ * Entfernt: ruhige, sachliche Oberflaeche auch auf der Anmeldeseite -- die
+ * Marke traegt das Zeichen in der Karte, nicht eine Flaeche dahinter.
+ */
+.zv-shell > .zv-card {
+  width: min(100% - var(--zv-space-5), 400px);
+  box-shadow: none;
+}
+.zv-login-slogan {
+  margin: 0 0 var(--zv-space-4);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+.zv-content {
+  padding: var(--zv-space-5);
+  max-width: var(--zv-content-max);
+}
+
+/* Kein Deckel mehr auf der Breite -- Kartenlisten (Klienten, Kassenbuch,
+   Mitarbeitende, Tagesberichte) nutzen den gesamten Platz neben der
+   Sidebar, statt bei 1040px stehenzubleiben und rechts Leerflaeche zu
+   lassen. */
+.zv-content-weit {
+  max-width: none;
+}
+
+/*
+ * Seitenpanel (ersetzt das fruehere Master-Detail-Quetsch-Layout): ein
+ * Klick auf einen Klienten schiebt ein Panel von rechts ueber den Inhalt,
+ * statt die Liste zu verschmaelern -- die Liste bleibt exakt so breit wie
+ * sie ist. position:fixed macht das unabhaengig vom Seiteninhalt; die
+ * Sidebar bleibt sichtbar (deshalb "left" nur ab 641px auf ihre Breite
+ * gesetzt, siehe .zv-sidebar { width: 248px }). Auf dem Handy (Sidebar
+ * ohnehin ausgeblendet) deckt das Panel automatisch den ganzen Bildschirm
+ * ab -- entspricht dem bisherigen "Liste ODER Detail"-Verhalten, nur ohne
+ * eigene Sonderregel dafuer.
+ */
+.zv-seitenpanel-hintergrund {
+  position: fixed;
+  inset: 0;
+  background: var(--zv-scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--zv-transition-base);
+  z-index: 40;
+}
+
+.zv-seitenpanel-hintergrund.zv-offen {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zv-seitenpanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--zv-surface);
+  box-shadow: var(--zv-shadow-3);
+  transform: translateX(100%);
+  transition: transform var(--zv-transition-base), left var(--zv-transition-base), width var(--zv-transition-base);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-seitenpanel.zv-offen {
+  transform: translateX(0);
+}
+
+.zv-seitenpanel-kopf {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  flex: none;
+}
+
+.zv-seitenpanel-inhalt {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--zv-space-5);
+}
+
+@media (min-width: 641px) {
+  .zv-seitenpanel-hintergrund {
+    left: var(--zv-sidebar-breite);
+  }
+
+  .zv-seitenpanel {
+    left: auto;
+    border-left: 1px solid var(--zv-border-strong);
+    /* 720px ist genug fuer die Klientenakte samt Tabs; auf schmalen
+       Fenstern (knapp ueber 641px) bleibt trotzdem ein Streifen der
+       abgedunkelten Liste sichtbar, statt das Fenster zu sprengen. */
+    width: min(720px, calc(100vw - var(--zv-sidebar-breite) - var(--zv-space-6)));
+  }
+
+  .zv-seitenpanel.zv-seitenpanel-vollbild {
+    left: var(--zv-sidebar-breite);
+    width: auto;
+  }
+}
+
+/* Angedockt (nur ab 1280px gesetzt, siehe Seitenpanel.tsx): schmaler und
+   ohne Schatten, weil es nicht ueber dem Inhalt liegt, sondern daneben --
+   die Seite macht mit .zv-neben-angedocktem-panel Platz. */
+@media (min-width: 1280px) {
+  .zv-seitenpanel.zv-seitenpanel-angedockt {
+    width: var(--zv-seitenpanel-angedockt-breite);
+    box-shadow: none;
+  }
+  /* max-width statt padding-right: der Inhaltsbereich ist je nach Seite
+     auf --zv-content-max begrenzt oder nicht -- ein festes Polster wuerde
+     einen ohnehin schmalen Inhalt unnoetig weiter zusammendruecken. So
+     endet er einfach vor dem Panel, gemessen am Fenster. */
+  .zv-neben-angedocktem-panel {
+    max-width: calc(100vw - var(--zv-sidebar-breite) - var(--zv-seitenpanel-angedockt-breite) - 2 * var(--zv-space-5));
+  }
+}
+
+/* Vollbild ergibt auf dem Handy keinen zusaetzlichen Platz (das Panel deckt
+   dort ohnehin schon alles ab) -- der Knopf verschwindet, statt einen
+   wirkungslosen Zustand anzubieten. */
+@media (max-width: 640px) {
+  /* Zwei Klassen statt einer -- sonst zieht die spaeter im Stylesheet
+     stehende, unbedingte .zv-icon-btn-Regel (gleiche Spezifitaet, aber
+     nach dieser Media Query im Quelltext) bei gleicher Spezifitaet den
+     Kuerzeren und macht den Knopf trotz "display: none" wieder sichtbar. */
+  .zv-icon-btn.zv-seitenpanel-vollbild-knopf {
+    display: none;
+  }
+}

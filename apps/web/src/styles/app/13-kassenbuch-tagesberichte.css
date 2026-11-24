@@ -1,0 +1,438 @@
+/* ==================================================================
+   Kassenbuch: Kassenstand, HZL-Flaeche, Journal
+   ================================================================== */
+.zv-abschnittstitel {
+  margin: 0;
+  font-size: var(--zv-text-abschnitt);
+  font-weight: var(--zv-weight-bold);
+}
+.zv-kassenstand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-6);
+  padding: var(--zv-space-4) 0 var(--zv-space-5);
+  border-bottom: 1px solid var(--zv-border);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-kassenstand-wert {
+  margin: var(--zv-space-1) 0;
+  font-size: var(--zv-text-titel);
+  font-weight: 500;
+  line-height: 1.1;
+}
+.zv-kassenstand-klein {
+  color: var(--zv-text-sekundaer);
+}
+.zv-journal-werkzeug {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+.zv-journal-hinweis {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-3) 0 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+.zv-hzl-flaeche {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-5);
+}
+.zv-hzl-fortschritt-text {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+.zv-hzl-balken {
+  width: 240px;
+  max-width: 100%;
+}
+
+.zv-journal-wrapper {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+.zv-hzl-flaeche .zv-journal-wrapper {
+  max-height: none;
+}
+.zv-journal {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--zv-text-meta);
+}
+.zv-journal th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: var(--zv-surface);
+  border-bottom: 1px solid var(--zv-border-strong);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.zv-journal td {
+  padding: var(--zv-space-3);
+  border-bottom: 1px solid var(--zv-border);
+  vertical-align: top;
+}
+.zv-journal tbody tr:last-child td {
+  border-bottom: 0;
+}
+.zv-journal .zv-journal-zahl {
+  text-align: right;
+  white-space: nowrap;
+}
+.zv-journal-beleg {
+  color: var(--zv-text-muted);
+  white-space: nowrap;
+}
+.zv-journal-zweck {
+  min-width: 220px;
+}
+.zv-journal-zweck > span {
+  display: block;
+}
+.zv-journal-zweck > .zv-pill {
+  display: inline-flex;
+  margin-top: var(--zv-space-1);
+}
+.zv-journal-text {
+  font-size: var(--zv-text-basis);
+  overflow-wrap: break-word;
+}
+.zv-journal-saldo {
+  font-weight: 500;
+}
+.zv-journal-aktionen {
+  white-space: nowrap;
+}
+.zv-journal-aktionen > * + * {
+  margin-left: var(--zv-space-3);
+}
+/* Storniert: durchgestrichen, aber lesbar -- die Zeile bleibt als Beleg
+   sichtbar (Bauplan Punkt 03), nur ohne Zahlenwirkung. */
+.zv-journal-storniert .zv-journal-text,
+.zv-journal-storniert .zv-journal-zahl {
+  text-decoration: line-through;
+  color: var(--zv-text-muted);
+}
+
+/* ==================================================================
+   Aktionsmenue (AktionsMenue.tsx) -- Drei-Punkte-Popover in Listenzeilen.
+   z-index ueber Seitenleiste/Kopf (40/41), unter Modal (50 und hoeher
+   ist ohnehin nie gleichzeitig offen: ein Klick schliesst das Menue).
+   ================================================================== */
+.zv-aktionsmenue {
+  position: fixed;
+  z-index: 45;
+  min-width: 210px;
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.zv-aktionsmenue button {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  width: 100%;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  background: none;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text);
+  font-family: var(--zv-font-ui);
+  font-size: var(--zv-text-m);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-aktionsmenue button:hover,
+.zv-aktionsmenue button:focus-visible {
+  background: var(--zv-surface-2);
+}
+
+@media (max-width: 720px) {
+  .zv-aktionsmenue button {
+    min-height: 40px;
+  }
+}
+
+/* ==================================================================
+   Tagesberichte: Filterleiste und Klient-Gruppen
+   ================================================================== */
+.zv-filterleiste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+/* Die Schnellwahl hat sechs Eintraege: auf schmalen Bildschirmen muss sie
+   umbrechen statt die Seite aufzureissen. */
+.zv-filterleiste .zv-segmented {
+  flex-wrap: wrap;
+  align-self: flex-start;
+}
+
+.zv-gruppe {
+  display: contents;
+}
+
+.zv-gruppe-kopf {
+  margin: var(--zv-space-4) 0 var(--zv-space-2);
+  padding: 0 var(--zv-space-4);
+  font-size: var(--zv-text-m);
+  color: var(--zv-text);
+}
+
+/* ---- Filterleiste im Stil "Suche + Chips + Dropdown-Pillen" ---- */
+.zv-filterleiste {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-2);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  /* Auf dem Handy scrollt die Leiste waagerecht, statt in viele Zeilen zu
+     brechen und die Liste nach unten zu druecken. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.zv-filterleiste > * {
+  flex: 0 0 auto;
+}
+
+.zv-filter-suche {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-width: 200px;
+  min-height: 36px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-suche:focus-within {
+  border-color: var(--zv-accent);
+  box-shadow: 0 0 0 3px var(--zv-accent-soft, transparent);
+}
+
+.zv-filter-suche svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zv-filter-suche input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--zv-text);
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+}
+
+.zv-filter-pille {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+}
+
+.zv-filter-pille-knopf,
+.zv-filter-x {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 34px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-filter-pille-knopf svg {
+  width: 16px;
+  height: 16px;
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-pille:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-filter-pille.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft, var(--zv-surface-2));
+}
+
+.zv-filter-pille.aktiv .zv-filter-pille-knopf svg {
+  color: var(--zv-accent-strong);
+}
+
+.zv-filter-x {
+  padding: 0 var(--zv-space-2);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-x:hover {
+  color: var(--zv-text);
+}
+
+.zv-filter-wert {
+  color: var(--zv-text-muted);
+}
+
+/* "+ Filter": gleiche Huelle wie die Pillen, nur der Knopf selbst. */
+.zv-filter-plus {
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+}
+
+.zv-filter-trenner {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--zv-space-1) 0;
+  background: var(--zv-border);
+}
+
+.zv-filter-popover {
+  position: fixed;
+  z-index: 45;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-filter-liste {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.zv-filter-liste button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  min-height: 36px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: none;
+  color: var(--zv-text);
+  font-family: inherit;
+  font-size: var(--zv-text-m);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-filter-liste button:hover,
+.zv-filter-liste button:focus-visible {
+  background: var(--zv-surface-2);
+}
+
+.zv-filter-liste button[aria-selected="true"] {
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-filter-datumsfelder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+
+@media (max-width: 720px) {
+  .zv-filter-pille-knopf,
+  .zv-filter-suche {
+    min-height: 44px;
+  }
+  .zv-filter-pille {
+    min-height: 44px;
+  }
+}
+
+.zv-filter-leer {
+  padding: var(--zv-space-3);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-m);
+}
+
+.zv-filter-eingabe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-1) var(--zv-space-1) var(--zv-space-2);
+  padding: 0 var(--zv-space-3);
+  min-height: 36px;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-filter-eingabe:focus-within {
+  border-color: var(--zv-accent);
+}
+
+.zv-filter-eingabe svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.zv-filter-eingabe input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--zv-text);
+  font-family: inherit;
+  /* 16px: unter dieser Groesse zoomt iOS beim Fokus in das Feld hinein. */
+  font-size: 16px;
+}

@@ -1,0 +1,400 @@
+/* ==================================================================
+   Mitarbeiter-Profil (Karte, Klient-Ansicht, Bearbeiten in Einstellungen)
+   ================================================================== */
+.zv-profil-liste {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  margin: var(--zv-space-3) 0 0;
+}
+
+.zv-profil-liste dt {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+}
+
+.zv-profil-liste dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.zv-profil-liste a {
+  color: var(--zv-accent-strong);
+}
+
+.zv-profil-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-profil-freigabe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-1) var(--zv-space-4);
+  margin: var(--zv-space-2) 0 var(--zv-space-4);
+}
+
+@media (max-width: 480px) {
+  .zv-profil-liste {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .zv-profil-liste dd {
+    margin-bottom: var(--zv-space-2);
+  }
+}
+
+/* ==================================================================
+   HZL-Uebergabemodus (pages/HzlUebergabe.tsx)
+   ==================================================================
+   Vollbild ohne Navigation. Farben ausschliesslich aus den Tokens -- der
+   Mandant bestimmt den Akzent, es gibt hier keine eigene Markenfarbe.
+   Alle Knoepfe >= 44px (WCAG 2.2 Zielgroesse), auf dem Tablet bewusst mehr. */
+.zv-aktionen-reihe {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+}
+
+.zv-uebergabe {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: var(--zv-bg);
+  color: var(--zv-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--zv-space-5) var(--zv-space-4);
+}
+
+.zv-uebergabe-block {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-uebergabe-block h1 {
+  font-size: var(--zv-text-2xl);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+.zv-uebergabe-block h1:focus {
+  outline: none;
+}
+
+.zv-uebergabe-block p {
+  margin: 0;
+}
+
+.zv-uebergabe-kicker {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  letter-spacing: 0.04em;
+}
+
+.zv-uebergabe-klient h1 {
+  font-size: 40px;
+}
+
+.zv-uebergabe-betrag {
+  font-size: clamp(56px, 14vw, 120px);
+  line-height: 1.05;
+  font-weight: var(--zv-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.zv-uebergabe-kw {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-xl);
+}
+
+.zv-uebergabe-erklaerung {
+  font-size: var(--zv-text-xl);
+  padding-top: var(--zv-space-3);
+}
+
+.zv-uebergabe-feld {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-m);
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-feld input {
+  min-height: 52px;
+  font-size: 28px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+}
+
+.zv-uebergabe-hinweis {
+  color: var(--zv-status-warn);
+}
+
+.zv-uebergabe-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  padding-top: var(--zv-space-3);
+}
+.zv-uebergabe-knopf {
+  min-height: 56px;
+  min-width: 44px;
+  flex: 1 1 200px;
+  font-size: var(--zv-text-xl);
+}
+
+.zv-uebergabe-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.zv-uebergabe-liste li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-uebergabe-kontrolle {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--zv-space-2) var(--zv-space-5);
+  margin: 0;
+}
+.zv-uebergabe-kontrolle dt {
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-kontrolle dd {
+  margin: 0;
+  font-size: var(--zv-text-xl);
+}
+.zv-uebergabe-vorschau {
+  display: block;
+  max-width: 240px;
+  background: var(--zv-signature-paper);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-uebergabe-status,
+.zv-uebergabe-offline {
+  color: var(--zv-text-muted);
+}
+.zv-uebergabe-offline {
+  position: absolute;
+  top: var(--zv-space-3);
+  right: var(--zv-space-4);
+  margin: 0;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .zv-uebergabe {
+    justify-content: flex-start;
+  }
+  .zv-uebergabe-betrag {
+    font-size: clamp(48px, 10vh, 80px);
+  }
+  .zv-signature-canvas-gross {
+    width: min(100%, calc(32vh * 2.5));
+  }
+}
+
+/* ==================================================================
+   Befehlspalette (components/Befehlspalette.tsx)
+   ==================================================================
+   Strg/Cmd+K oder "/". Nur Tokens, Trennlinien statt Schatten. */
+.zv-palette-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--zv-scrim);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--zv-space-4) var(--zv-space-4);
+}
+
+.zv-palette {
+  width: 100%;
+  max-width: 640px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  overflow: hidden;
+}
+
+.zv-palette-eingabe {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: 0 var(--zv-space-4);
+  border-bottom: 1px solid var(--zv-border);
+  color: var(--zv-text-muted);
+}
+.zv-palette-eingabe input {
+  flex: 1;
+  min-height: 52px;
+  border: none;
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-xl);
+  outline: none;
+}
+.zv-palette-eingabe:focus-within {
+  border-bottom-color: var(--zv-accent);
+}
+
+.zv-palette-status {
+  margin: 0;
+  padding: var(--zv-space-1) var(--zv-space-4);
+  min-height: 1.6em;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-liste {
+  overflow-y: auto;
+  padding-bottom: var(--zv-space-2);
+}
+
+.zv-palette-gruppe {
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-1);
+  font-size: var(--zv-text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-zeile {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-height: 44px;
+  padding: var(--zv-space-2) var(--zv-space-4);
+  cursor: pointer;
+}
+.zv-palette-zeile.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-text);
+  /* Auswahl auch ohne Farbwahrnehmung erkennbar (WCAG 1.4.1). */
+  outline: 2px solid var(--zv-accent);
+  outline-offset: -2px;
+}
+.zv-palette-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.zv-palette-titel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-palette-untertitel {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zv-palette-betrag {
+  font-variant-numeric: tabular-nums;
+  color: var(--zv-text-muted);
+}
+.zv-palette mark {
+  background: var(--zv-accent-soft-strong);
+  color: inherit;
+  border-radius: var(--zv-radius-s);
+  padding: 0 1px;
+}
+
+.zv-palette-meldung {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  color: var(--zv-text-muted);
+}
+
+.zv-palette-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  padding: var(--zv-space-2) var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+.zv-palette-fuss kbd {
+  font-family: var(--zv-font-mono);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-s);
+  padding: 0 4px;
+  margin: 0 2px;
+}
+
+/* Belegnummer unter dem Verwendungszweck (Kassenbuch): gleiche Nummer wie in der Befehlspalette. */
+.zv-beleg-nr {
+  display: block;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+/* ==================================================================
+   Offline-Warteschlange (components/WarteschlangeLeiste.tsx)
+   ================================================================== */
+.zv-warteschlange-kopf {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zv-warteschlange-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.zv-warteschlange-liste {
+  margin: var(--zv-space-1) 0 0;
+  padding-left: var(--zv-space-4);
+}
+
+/* ==================================================================
+   UI-Schrift (Nunito Sans)
+   ==================================================================
+   Ganz am Ende und mit erhoehter Spezifitaet (button[class] > .zv-btn),
+   weil viele Knopf-Klassen weiter oben "font-family: inherit" setzen und
+   sonst gewinnen wuerden. Eingabefelder nutzen dieselbe Schrift ueber body:
+   was Nutzer:innen tippen, ist Text, kein Bedienelement. */
+h1,
+h2,
+h3,
+h4,
+button,
+button[class],
+.zv-btn,
+.zv-pill,
+.zv-nav-badge,
+.zv-sidebar-nav a,
+.zv-tabbar a,
+.zv-segmented button,
+.zv-link-btn {
+  font-family: var(--zv-font-ui);
+}

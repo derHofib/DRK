@@ -1,0 +1,383 @@
+/* ==================================================================
+   Organigramm -- Baum aus Organisationseinheiten und Positionen.
+   Positionierung der Knoten/Pfade kommt aus organigramm/baum.ts (Layout-
+   Algorithmus, echte Pixelkoordinaten, keine Design-Entscheidung) und
+   bleibt deshalb Inline-Style; alles, was hier Farbe/Abstand/Radius ist,
+   kommt wie ueberall aus Tokens (CLAUDE.md Regel 7).
+   ================================================================== */
+/* Randlos/vollbild statt einer festen vh-Zahl (Live-Rueckmeldung): die
+   Hoehe wird von Organigramm.tsx::einpassen() per JS auf den Platz bis
+   zum unteren Seitenrand gesetzt (inline style, neu vermessen bei jedem
+   Einpassen/Laden/Resize) -- min-height hier ist nur das Sicherheitsnetz,
+   bevor dieser Effekt beim allerersten Rendern greift. Beide Achsen
+   scrollbar: Organigramm.tsx::beiWheel() schwenkt per Trackpad/Mausrad
+   direkt per scrollLeft/-Top, die nativen Balken bleiben als
+   Maus-Alternative (Balken ziehen) erhalten. */
+.zv-organigramm-scroll {
+  overflow: auto;
+  min-height: 360px;
+  padding: var(--zv-space-2) 0 var(--zv-space-5);
+}
+
+.zv-organigramm-zoom-leiste {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-organigramm-zoom-wert {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  min-width: 3.5em;
+  text-align: center;
+}
+
+.zv-organigramm-leinwand {
+  position: relative;
+  transform-origin: top left;
+}
+
+.zv-organigramm-verbindungen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.zv-organigramm-linie {
+  fill: none;
+  stroke: var(--zv-border);
+  stroke-width: 1.5;
+}
+
+.zv-organigramm-knoten {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-radius: var(--zv-radius-m);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  overflow: hidden;
+  /* div[role=button] statt <button> (der Ein-/Ausklapp-Knopf steckt als
+     echtes <button> darin, zwei verschachtelte <button> sind ungueltiges
+     HTML) -- trotzdem wie ein Formularelement aussehen und bedienen. */
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-organigramm-knoten:hover,
+.zv-organigramm-knoten:focus-visible {
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-aktiv {
+  border-color: var(--zv-accent);
+  border-width: 2px;
+  box-shadow: 0 0 0 2px var(--zv-accent-soft);
+}
+
+/* Umhaengen per Drag & Drop -- siehe organigramm/baum.ts (gueltigeZiele()).
+   Die gezogene Box bleibt sichtbar, aber gedaempft; JEDES gueltige Ziel
+   bekommt waehrend des Ziehens einen gestrichelten Akzentrahmen (nicht nur
+   das aktuell ueberflogene), damit von Anfang an klar ist, wohin ueberhaupt
+   fallengelassen werden kann -- genau das Prinzip "Information nicht nur
+   ueber Hover", das sonst beim reinen Ausprobieren verloren ginge. */
+.zv-organigramm-knoten-zieht {
+  opacity: 0.45;
+}
+
+.zv-organigramm-knoten-ziel-moeglich {
+  border-style: dashed;
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-ziel-aktuell {
+  background: var(--zv-accent-soft);
+  border-style: solid;
+  border-color: var(--zv-accent);
+}
+
+.zv-organigramm-knoten-griff {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--zv-text-faint);
+  display: flex;
+}
+
+/* Ein-/Ausklappen (Live-Rueckmeldung): eigener Klickbereich, getrennt vom
+   Haupt-Klick der Box (der oeffnet das Seitenpanel) -- dasselbe Prinzip
+   wie der Zieh-Griff oben, zwei unabhaengige Aktionen auf derselben Karte
+   duerfen sich nicht gegenseitig ueberlagern. */
+.zv-organigramm-knoten-kollabieren {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  padding: 2px;
+  border-radius: var(--zv-radius-s);
+  border: none;
+  background: transparent;
+  color: var(--zv-text-faint);
+  cursor: pointer;
+}
+
+.zv-organigramm-knoten-kollabieren:hover,
+.zv-organigramm-knoten-kollabieren:focus-visible {
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+}
+
+.zv-organigramm-knoten-versteckt {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+}
+
+/* Geschwister per Drag sortieren (Live-Rueckmeldung): eine schmale
+   Einfuege-Linie am linken/rechten Rand der ueberflogenen Karte, bewusst
+   als eigene Klasse statt eines generischen "Ziel"-Zustands -- anders als
+   zv-organigramm-knoten-ziel-moeglich/-aktuell (Umhaengen) ist das hier
+   KEIN gueltiges Reparenting-Ziel, sondern eine Positions-Markierung
+   zwischen zwei Geschwistern. */
+.zv-organigramm-knoten-einfuegen-vor,
+.zv-organigramm-knoten-einfuegen-nach {
+  box-shadow: none;
+}
+
+.zv-organigramm-knoten-einfuegen-vor::before,
+.zv-organigramm-knoten-einfuegen-nach::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--zv-accent);
+  border-radius: var(--zv-radius-s);
+}
+
+.zv-organigramm-knoten-einfuegen-vor::before {
+  left: -14px;
+}
+
+.zv-organigramm-knoten-einfuegen-nach::after {
+  right: -14px;
+}
+
+.zv-organigramm-knoten-einheit {
+  background: var(--zv-surface-2);
+  align-items: center;
+  text-align: center;
+}
+
+.zv-organigramm-knoten-stabsstelle {
+  border-style: dashed;
+}
+
+.zv-organigramm-knoten-inaktiv {
+  opacity: 0.55;
+}
+
+.zv-organigramm-knoten-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.zv-organigramm-knoten-titel {
+  font-weight: var(--zv-weight-semibold);
+  font-size: var(--zv-text-s);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * flex-shrink:0 ist hier Pflicht, nicht Kosmetik: ohne overflow:visible
+ * faellt die automatische Flex-Mindesthoehe eines Items per Spezifikation
+ * auf 0 (statt min-content), weil darunter overflow:hidden steht -- ohne
+ * flex-shrink:0 quetscht der Spaltenflex diese Zeilen bei zu wenig Platz
+ * bis auf wenige Pixel zusammen (abgeschnittene Buchstaben OBERHALB der
+ * eigentlich sichtbaren Zeile), statt die Zeile als Ganzes abzuschneiden.
+ * In echten Browser-Tests nachvollzogen -- siehe organigramm/baum.ts fuer die
+ * dazu passend bemessene BOX_HOEHE.
+ */
+.zv-organigramm-knoten-sub,
+.zv-organigramm-knoten-namen,
+.zv-organigramm-knoten > .zv-pill {
+  flex-shrink: 0;
+}
+
+.zv-organigramm-knoten-sub,
+.zv-organigramm-knoten-namen {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Grundriss-Ansicht: Bild mit frei platzierbaren Karten darueber. Positionen
+   sind Prozent der Bildflaeche, nie Pixel -- so bleibt jede Karte bei jeder
+   Anzeigegroesse an derselben Stelle des Plans. */
+.zv-grundriss {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+  background: var(--zv-surface-2);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.zv-grundriss img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+.zv-grundriss-karte {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  max-width: 34%;
+  padding: 3px var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-accent);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  box-shadow: var(--zv-shadow-1);
+  font-size: var(--zv-text-xs);
+  line-height: var(--zv-leading-tight);
+  text-align: left;
+}
+
+.zv-grundriss-karte strong {
+  display: block;
+  font-size: var(--zv-text-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zv-grundriss-karte-gemeinschaft {
+  border-style: dashed;
+  background: var(--zv-surface-2);
+}
+
+.zv-grundriss-karte-bewegbar {
+  cursor: grab;
+  touch-action: none;
+}
+
+.zv-grundriss-karte-zieht {
+  cursor: grabbing;
+  z-index: 2;
+  box-shadow: var(--zv-shadow-2);
+}
+
+.zv-grundriss-ablage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-top: var(--zv-space-3);
+}
+
+/* Eigener kleiner Knopf in der Ecke der Karte statt mitten im Text: sonst
+   liegt der Mittelpunkt der Karte auf dem Knopf, und ein Zugriff dort
+   startet kein Ziehen -- im echten Browser so gemessen, nicht vermutet. */
+.zv-grundriss-karte-entfernen {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  color: var(--zv-text-muted);
+  cursor: pointer;
+}
+
+.zv-grundriss-karte-entfernen:hover,
+.zv-grundriss-karte-entfernen:focus-visible {
+  color: var(--zv-status-danger);
+  border-color: var(--zv-status-danger);
+}
+
+.zv-grundriss-karte-entfernen svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Detail-Seitenpanel eines Zimmers/Raums (StandortRaeume.tsx) */
+.zv-detail-abschnitt {
+  margin-top: var(--zv-space-5);
+}
+
+.zv-detail-abschnitt h3 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-l);
+}
+
+.zv-detail-kennzahlen {
+  display: flex;
+  gap: var(--zv-space-5);
+}
+
+.zv-detail-kennzahlen > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-detail-label {
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-detail-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-detail-liste li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-grundriss-karte-klickbar {
+  cursor: pointer;
+}
+
+.zv-grundriss-karte-klickbar:hover,
+.zv-grundriss-karte-klickbar:focus-visible {
+  border-width: 2px;
+  outline: none;
+  box-shadow: var(--zv-shadow-2);
+}
