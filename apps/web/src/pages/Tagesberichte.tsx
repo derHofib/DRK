@@ -83,8 +83,8 @@ export function TagesberichtZeile({
     setOffenesDokument({ id: dokumentId, url });
   }
 
-  // Gleiches Muster wie bei Rechnungsdokumenten (RechnungenTab in
-  // KlientDetail.tsx): ohne ausdrueckliches revokeObjectURL haelt der
+  // Gleiches Muster wie bei Rechnungsdokumenten (klient-detail/
+  // RechnungenTab.tsx): ohne ausdrueckliches revokeObjectURL haelt der
   // Browser die Blob-URL im Speicher, auch nach dem Schliessen/Wechseln.
   useEffect(() => {
     if (!offenesDokument) return;

@@ -21,7 +21,6 @@ import { KlientDetail } from "./KlientDetail";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { Filterleiste, OptionenFilter, trifftSuche } from "../components/Listenfilter";
 import { Leerzustand } from "../components/Leerzustand";
-import { Modal } from "../components/Modal";
 import {
   IAbbrechen,
   IAblehnen,
@@ -48,10 +47,17 @@ import {
   IWarteliste,
   IZuklappen,
 } from "../components/icons";
-import { Datumsfeld, Zeitraumfeld } from "../components/Datumsfeld";
-
-/** Sentinel-Wert im Standort-Select fuer "einen neuen Standort anlegen". */
-const NEUER_STANDORT = "__neu__";
+import { Datumsfeld } from "../components/Datumsfeld";
+import {
+  AuszugFenster,
+  BelegungBearbeitenFenster,
+  KapazitaetFenster,
+  KlientZuweisenFenster,
+  NEUER_STANDORT,
+  WartelisteFenster,
+  ZimmerAnlegenFenster,
+  ZimmerBearbeitenFenster,
+} from "./zimmer/ZimmerFenster";
 
 /**
  * "teilweise" (Mehrbettzimmer mit noch freiem Platz) bekommt bewusst
@@ -114,30 +120,22 @@ export function Zimmer({
   // Eingebettet mit genau einem Standort: kein Standortbezug in der Oberflaeche noetig.
   const einStandort = standortIds?.length === 1 ? standortIds[0] : undefined;
   const [standortAuswahl, setStandortAuswahl] = useState<string>(standortIds?.[0] ?? NEUER_STANDORT);
-  const [formFehler, setFormFehler] = useState<string | null>(null);
-  const [wirdGespeichert, setWirdGespeichert] = useState(false);
 
   const [bearbeitetesZimmer, setBearbeitetesZimmer] = useState<ZimmerListEintragDto | null>(null);
-  const [bearbeitenFehler, setBearbeitenFehler] = useState<string | null>(null);
 
   const [zuweisungsZimmer, setZuweisungsZimmer] = useState<ZimmerListEintragDto | null>(null);
-  const [zuweisungFehler, setZuweisungFehler] = useState<string | null>(null);
   // Gesetzt, wenn "Klient zuweisen" von einer Warteliste aus geoeffnet wurde
   // -- dann ist der Klient schon festgelegt, kein Dropdown noetig.
   const [wartelistenKlient, setWartelistenKlient] = useState<{ id: string; name: string } | null>(null);
 
   const [wartelisteZimmer, setWartelisteZimmer] = useState<ZimmerListEintragDto | null>(null);
-  const [wartelisteFehler, setWartelisteFehler] = useState<string | null>(null);
   const [auszugBewohner, setAuszugBewohner] = useState<{ zimmer: ZimmerListEintragDto; bewohner: ZimmerBewohnerDto } | null>(
     null
   );
-  const [auszugFehler, setAuszugFehler] = useState<string | null>(null);
 
   const [bearbeiteteBelegung, setBearbeiteteBelegung] = useState<BelegungsverlaufEintragDto | null>(null);
-  const [belegungBearbeitenFehler, setBelegungBearbeitenFehler] = useState<string | null>(null);
 
   const [kapazitaetZimmer, setKapazitaetZimmer] = useState<ZimmerListEintragDto | null>(null);
-  const [kapazitaetFehler, setKapazitaetFehler] = useState<string | null>(null);
   const [kapazitaetAblehnenAntrag, setKapazitaetAblehnenAntrag] = useState<OffenerKapazitaetsantragDto | null>(null);
 
   const [benutzerListe, setBenutzerListe] = useState<BenutzerListEintragDto[]>([]);
@@ -193,70 +191,7 @@ export function Zimmer({
   }, []);
 
   function formularOeffnen() {
-    setFormFehler(null);
     setFormularOffen(true);
-  }
-
-  async function zimmerAnlegen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formElement = e.currentTarget;
-    const form = new FormData(formElement);
-    const nummer = String(form.get("nummer") ?? "").trim();
-    const etage = String(form.get("etage") ?? "").trim();
-    const kapazitaet = Number(form.get("kapazitaet") ?? 1);
-    setFormFehler(null);
-    setWirdGespeichert(true);
-    try {
-      let zielStandortId = standortAuswahl;
-      if (zielStandortId === NEUER_STANDORT) {
-        const name = String(form.get("standortName") ?? "").trim();
-        const neuerStandort = await api.standortAnlegen({
-          name,
-          strasse: String(form.get("standortStrasse") ?? "").trim(),
-          plz: String(form.get("standortPlz") ?? "").trim() || null,
-          ort: String(form.get("standortOrt") ?? "").trim() || null,
-        });
-        zielStandortId = neuerStandort.id;
-      }
-      const anschrift = String(form.get("anschrift") ?? "").trim();
-      await api.zimmerAnlegen({
-        standortId: zielStandortId,
-        nummer,
-        etage: etage || undefined,
-        kapazitaet,
-        anschrift: anschrift || null,
-      });
-      setFormularOffen(false);
-      ladeZimmer();
-      ladeStandorte();
-    } catch (err) {
-      setFormFehler(err instanceof Error ? err.message : "Zimmer konnte nicht angelegt werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
-
-  async function zimmerBearbeiten(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!bearbeitetesZimmer) return;
-    const formElement = e.currentTarget;
-    const form = new FormData(formElement);
-    setBearbeitenFehler(null);
-    setWirdGespeichert(true);
-    try {
-      const etage = String(form.get("etage") ?? "").trim();
-      await api.zimmerAktualisieren(bearbeitetesZimmer.id, {
-        nummer: String(form.get("nummer") ?? "").trim(),
-        etage: etage || undefined,
-        anschrift: String(form.get("anschrift") ?? "").trim() || null,
-      });
-      setBearbeitetesZimmer(null);
-      ladeZimmer();
-    } catch (err) {
-      setBearbeitenFehler(err instanceof Error ? err.message : "Zimmer konnte nicht gespeichert werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
   }
 
   async function zimmerDeaktivieren(zimmerId: string) {
@@ -269,113 +204,12 @@ export function Zimmer({
     }
   }
 
-  async function klientZuweisen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!zuweisungsZimmer) return;
-    const form = new FormData(e.currentTarget);
-    setZuweisungFehler(null);
-    setWirdGespeichert(true);
-    try {
-      await api.belegungEinziehen({
-        zimmerId: zuweisungsZimmer.id,
-        klientId: wartelistenKlient?.id ?? String(form.get("klientId")),
-        einzug: String(form.get("einzug")),
-      });
-      setZuweisungsZimmer(null);
-      setWartelistenKlient(null);
-      ladeZimmer();
-      ladeKlienten();
-      ladeVerlauf();
-    } catch (err) {
-      setZuweisungFehler(err instanceof Error ? err.message : "Klient:in konnte nicht zugewiesen werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
-
-  async function wartelisteHinzufuegen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!wartelisteZimmer) return;
-    const form = new FormData(e.currentTarget);
-    setWartelisteFehler(null);
-    setWirdGespeichert(true);
-    try {
-      await api.zimmerWartelisteHinzufuegen(wartelisteZimmer.id, String(form.get("klientId")));
-      setWartelisteZimmer(null);
-      ladeZimmer();
-    } catch (err) {
-      setWartelisteFehler(err instanceof Error ? err.message : "Klient:in konnte nicht auf die Warteliste gesetzt werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
-
   async function wartelisteEntfernen(zimmerId: string, eintragId: string) {
     try {
       await api.zimmerWartelisteEntfernen(zimmerId, eintragId);
       ladeZimmer();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Eintrag konnte nicht entfernt werden.");
-    }
-  }
-
-  async function auszugEintragen(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!auszugBewohner) return;
-    const form = new FormData(e.currentTarget);
-    setAuszugFehler(null);
-    setWirdGespeichert(true);
-    try {
-      await api.belegungAusziehen(auszugBewohner.bewohner.belegungId, String(form.get("auszug")));
-      setAuszugBewohner(null);
-      ladeZimmer();
-      ladeKlienten();
-      ladeVerlauf();
-    } catch (err) {
-      setAuszugFehler(err instanceof Error ? err.message : "Auszug konnte nicht eingetragen werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
-
-  async function belegungBearbeiten(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!bearbeiteteBelegung) return;
-    const form = new FormData(e.currentTarget);
-    setBelegungBearbeitenFehler(null);
-    setWirdGespeichert(true);
-    try {
-      const auszug = String(form.get("auszug"));
-      await api.belegungBearbeiten(bearbeiteteBelegung.id, {
-        einzug: String(form.get("einzug")),
-        auszug: auszug === "" ? null : auszug,
-      });
-      setBearbeiteteBelegung(null);
-      ladeZimmer();
-      ladeKlienten();
-      ladeVerlauf();
-    } catch (err) {
-      setBelegungBearbeitenFehler(err instanceof Error ? err.message : "Belegung konnte nicht geändert werden.");
-    } finally {
-      setWirdGespeichert(false);
-    }
-  }
-
-  async function kapazitaetAendern(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!kapazitaetZimmer) return;
-    const form = new FormData(e.currentTarget);
-    const neueKapazitaet = Number(form.get("neueKapazitaet"));
-    setKapazitaetFehler(null);
-    setWirdGespeichert(true);
-    try {
-      await api.zimmerKapazitaetAendern(kapazitaetZimmer.id, neueKapazitaet);
-      setKapazitaetZimmer(null);
-      ladeZimmer();
-    } catch (err) {
-      setKapazitaetFehler(err instanceof Error ? err.message : "Kapazitätsänderung konnte nicht beantragt werden.");
-    } finally {
-      setWirdGespeichert(false);
     }
   }
 
@@ -693,10 +527,7 @@ export function Zimmer({
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => {
-                  setBearbeitenFehler(null);
-                  setBearbeitetesZimmer(z);
-                }}
+                onClick={() => setBearbeitetesZimmer(z)}
               >
                 <IBearbeiten />
                 Zimmer bearbeiten
@@ -705,10 +536,7 @@ export function Zimmer({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => {
-                    setKapazitaetFehler(null);
-                    setKapazitaetZimmer(z);
-                  }}
+                  onClick={() => setKapazitaetZimmer(z)}
                 >
                   <IKapazitaet />
                   Kapazität ändern
@@ -718,10 +546,7 @@ export function Zimmer({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => {
-                    setZuweisungFehler(null);
-                    setZuweisungsZimmer(z);
-                  }}
+                  onClick={() => setZuweisungsZimmer(z)}
                 >
                   <IEinziehen />
                   Klient:in zuweisen
@@ -730,10 +555,7 @@ export function Zimmer({
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => {
-                  setWartelisteFehler(null);
-                  setWartelisteZimmer(z);
-                }}
+                onClick={() => setWartelisteZimmer(z)}
               >
                 <IWarteliste />
                 Zur Warteliste hinzufügen
@@ -871,10 +693,7 @@ export function Zimmer({
                 <button
                   type="button"
                   className="zv-link-btn"
-                  onClick={() => {
-                    setZuweisungFehler(null);
-                    setZuweisungsZimmer(z);
-                  }}
+                  onClick={() => setZuweisungsZimmer(z)}
                 >
                   <IEinziehen />
                   Klient:in zuweisen
@@ -910,10 +729,7 @@ export function Zimmer({
                       <button
                         type="button"
                         className="zv-link-btn"
-                        onClick={() => {
-                          setAuszugFehler(null);
-                          setAuszugBewohner({ zimmer: z, bewohner: bew });
-                        }}
+                        onClick={() => setAuszugBewohner({ zimmer: z, bewohner: bew })}
                       >
                         <IAuszug />
                         Auszug
@@ -933,10 +749,7 @@ export function Zimmer({
               <button
                 type="button"
                 className="zv-link-btn"
-                onClick={() => {
-                  setWartelisteFehler(null);
-                  setWartelisteZimmer(z);
-                }}
+                onClick={() => setWartelisteZimmer(z)}
               >
                 <INeu />
                 Hinzufügen
@@ -962,7 +775,6 @@ export function Zimmer({
                         type="button"
                         className="zv-link-btn"
                         onClick={() => {
-                          setZuweisungFehler(null);
                           setWartelistenKlient({ id: w.klientId, name: w.klientName });
                           setZuweisungsZimmer(z);
                         }}
@@ -1019,10 +831,7 @@ export function Zimmer({
                       <button
                         type="button"
                         className="zv-link-btn"
-                        onClick={() => {
-                          setBelegungBearbeitenFehler(null);
-                          setBearbeiteteBelegung(v);
-                        }}
+                        onClick={() => setBearbeiteteBelegung(v)}
                       >
                         <IBearbeiten />
                         Bearbeiten
@@ -1187,322 +996,100 @@ export function Zimmer({
       </datalist>
 
       {formularOffen && (
-        <Modal titel="Neues Zimmer" onClose={() => setFormularOffen(false)}>
-          <form onSubmit={zimmerAnlegen}>
-            {formFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {formFehler}
-              </div>
-            )}
-
-            {!einStandort && (
-              <>
-            <div className="zv-field">
-              <label htmlFor="zimmer-standort">Standort</label>
-              <select
-                id="zimmer-standort"
-                value={standortAuswahl}
-                onChange={(e) => setStandortAuswahl(e.target.value)}
-              >
-                {standorte
-                  .filter((s) => s.aktiv && (!standortIds || standortIds.includes(s.id)))
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                {!eingebettet && <option value={NEUER_STANDORT}>+ Neuen Standort anlegen…</option>}
-              </select>
-            </div>
-
-            {standortAuswahl === NEUER_STANDORT && (
-              <>
-                <div className="zv-field">
-                  <label htmlFor="zimmer-standort-name">Name des Standorts</label>
-                  <input id="zimmer-standort-name" name="standortName" placeholder="z. B. Wohnheim Nordstraße" required autoFocus />
-                </div>
-                <div className="zv-field">
-                  <label htmlFor="zimmer-standort-strasse">Straße und Hausnummer</label>
-                  <input id="zimmer-standort-strasse" name="standortStrasse" autoComplete="street-address" required />
-                </div>
-                <div className="zv-field-row">
-                  <div className="zv-field">
-                    <label htmlFor="zimmer-standort-plz">PLZ</label>
-                    <input id="zimmer-standort-plz" name="standortPlz" inputMode="numeric" pattern="[0-9]{5}" maxLength={5} required />
-                  </div>
-                  <div className="zv-field">
-                    <label htmlFor="zimmer-standort-ort">Ort</label>
-                    <input id="zimmer-standort-ort" name="standortOrt" required />
-                  </div>
-                </div>
-              </>
-            )}
-              </>
-            )}
-
-            <div className="zv-field-row">
-              <div className="zv-field">
-                <label htmlFor="zimmer-nummer">Zimmernummer</label>
-                <input
-                  id="zimmer-nummer"
-                  name="nummer"
-                  placeholder="z. B. 101"
-                  required
-                  autoFocus={standortAuswahl !== NEUER_STANDORT}
-                />
-              </div>
-              <div className="zv-field">
-                <label htmlFor="zimmer-etage">Etage</label>
-                <input id="zimmer-etage" name="etage" list="zv-etagen-vorschlaege" placeholder="z. B. EG" defaultValue="EG" />
-              </div>
-            </div>
-
-            <div className="zv-field">
-              <label htmlFor="zimmer-kapazitaet">Kapazität (Bewohner:innen)</label>
-              <input id="zimmer-kapazitaet" name="kapazitaet" type="number" min={1} max={12} defaultValue={1} />
-            </div>
-
-            <ZimmerAnschriftFeld id="zimmer-anschrift" />
-
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <ISpeichern />
-              {wirdGespeichert ? "Speichert…" : "Zimmer anlegen"}
-            </button>
-          </form>
-        </Modal>
+        <ZimmerAnlegenFenster
+          standorte={standorte}
+          standortIds={standortIds}
+          einStandort={einStandort}
+          eingebettet={eingebettet}
+          standortAuswahl={standortAuswahl}
+          onStandortAuswahl={setStandortAuswahl}
+          onSchliessen={() => setFormularOffen(false)}
+          onAngelegt={() => {
+            setFormularOffen(false);
+            ladeZimmer();
+            ladeStandorte();
+          }}
+        />
       )}
 
       {bearbeitetesZimmer && (
-        <Modal titel="Zimmer bearbeiten" onClose={() => setBearbeitetesZimmer(null)}>
-          <form onSubmit={zimmerBearbeiten}>
-            {bearbeitenFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {bearbeitenFehler}
-              </div>
-            )}
-            <div className="zv-field-row">
-              <div className="zv-field">
-                <label htmlFor="zimmer-bearbeiten-nummer">Zimmernummer</label>
-                <input
-                  id="zimmer-bearbeiten-nummer"
-                  name="nummer"
-                  defaultValue={bearbeitetesZimmer.nummer}
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="zv-field">
-                <label htmlFor="zimmer-bearbeiten-etage">Etage</label>
-                <input
-                  id="zimmer-bearbeiten-etage"
-                  name="etage"
-                  list="zv-etagen-vorschlaege"
-                  defaultValue={bearbeitetesZimmer.etage}
-                />
-              </div>
-            </div>
-            <ZimmerAnschriftFeld id="zimmer-bearbeiten-anschrift" vorgabe={bearbeitetesZimmer.anschrift} />
-            <div className="zv-vorschau-zeile">
-              <button className="zv-btn" type="submit" disabled={wirdGespeichert}>
-                <ISpeichern />
-                {wirdGespeichert ? "Speichert…" : "Speichern"}
-              </button>
-              <button
-                className="zv-btn zv-btn-still"
-                type="button"
-                onClick={() => setBearbeitetesZimmer(null)}
-              >
-                <IAbbrechen />
-                Abbrechen
-              </button>
-            </div>
-          </form>
-        </Modal>
+        <ZimmerBearbeitenFenster
+          zimmer={bearbeitetesZimmer}
+          onSchliessen={() => setBearbeitetesZimmer(null)}
+          onGespeichert={() => {
+            setBearbeitetesZimmer(null);
+            ladeZimmer();
+          }}
+        />
       )}
 
       {zuweisungsZimmer && (
-        <Modal
-          titel={`Klient zuweisen — Zimmer ${zuweisungsZimmer.nummer}`}
-          onClose={() => {
+        <KlientZuweisenFenster
+          zimmer={zuweisungsZimmer}
+          wartelistenKlient={wartelistenKlient}
+          klienten={klienten}
+          onSchliessen={() => {
             setZuweisungsZimmer(null);
             setWartelistenKlient(null);
           }}
-        >
-          <form onSubmit={klientZuweisen}>
-            {zuweisungFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {zuweisungFehler}
-              </div>
-            )}
-            {wartelistenKlient ? (
-              <div className="zv-field">
-                <label>Klient:in</label>
-                <p className="zv-sub" style={{ margin: 0 }}>
-                  {wartelistenKlient.name} (von der Warteliste)
-                </p>
-              </div>
-            ) : (
-              <div className="zv-field">
-                <label htmlFor="zuweisung-klient">Klient:in</label>
-                <select id="zuweisung-klient" name="klientId" required autoFocus defaultValue="">
-                  <option value="" disabled>
-                    Bitte wählen
-                  </option>
-                  {klienten
-                    .filter((k) => k.aktuellesZimmer === null)
-                    .map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.vorname} {k.nachname}
-                      </option>
-                    ))}
-                </select>
-                {klienten.filter((k) => k.aktuellesZimmer === null).length === 0 && (
-                  <span className="zv-sub-inline">Alle Klient:innen haben bereits ein Zimmer.</span>
-                )}
-              </div>
-            )}
-            <div className="zv-field">
-              <label htmlFor="zuweisung-einzug">Einzugsdatum</label>
-              <Datumsfeld id="zuweisung-einzug" name="einzug" required defaultValue={heuteBerlin()} schnellwahl="heute" />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <IEinziehen />
-              {wirdGespeichert ? "Speichert…" : "Einziehen"}
-            </button>
-          </form>
-        </Modal>
+          onGespeichert={() => {
+            setZuweisungsZimmer(null);
+            setWartelistenKlient(null);
+            ladeZimmer();
+            ladeKlienten();
+            ladeVerlauf();
+          }}
+        />
       )}
 
       {wartelisteZimmer && (
-        <Modal
-          titel={`Zur Warteliste — Zimmer ${wartelisteZimmer.nummer}`}
-          onClose={() => setWartelisteZimmer(null)}
-        >
-          <form onSubmit={wartelisteHinzufuegen}>
-            {wartelisteFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {wartelisteFehler}
-              </div>
-            )}
-            <div className="zv-field">
-              <label htmlFor="warteliste-klient">Klient:in</label>
-              <select id="warteliste-klient" name="klientId" required autoFocus defaultValue="">
-                <option value="" disabled>
-                  Bitte wählen
-                </option>
-                {klienten
-                  .filter(
-                    (k) =>
-                      k.aktuellesZimmer?.id !== wartelisteZimmer.id &&
-                      !wartelisteZimmer.warteliste.some((w) => w.klientId === k.id)
-                  )
-                  .map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.vorname} {k.nachname}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <IWarteliste />
-              {wirdGespeichert ? "Speichert…" : "Eintragen"}
-            </button>
-          </form>
-        </Modal>
+        <WartelisteFenster
+          zimmer={wartelisteZimmer}
+          klienten={klienten}
+          onSchliessen={() => setWartelisteZimmer(null)}
+          onGespeichert={() => {
+            setWartelisteZimmer(null);
+            ladeZimmer();
+          }}
+        />
       )}
 
       {auszugBewohner && (
-        <Modal
-          titel={`Auszug eintragen — Zimmer ${auszugBewohner.zimmer.nummer}`}
-          onClose={() => setAuszugBewohner(null)}
-        >
-          <form onSubmit={auszugEintragen}>
-            {auszugFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {auszugFehler}
-              </div>
-            )}
-            <p className="zv-sub" style={{ margin: "0 0 12px" }}>
-              {auszugBewohner.bewohner.name} zieht aus diesem Zimmer aus.
-            </p>
-            <div className="zv-field">
-              <label htmlFor="auszug-datum">Auszugsdatum</label>
-              <Datumsfeld id="auszug-datum" name="auszug" required autoFocus defaultValue={heuteBerlin()} schnellwahl="heute" />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <IAuszug />
-              {wirdGespeichert ? "Speichert…" : "Auszug speichern"}
-            </button>
-          </form>
-        </Modal>
+        <AuszugFenster
+          zimmer={auszugBewohner.zimmer}
+          bewohner={auszugBewohner.bewohner}
+          onSchliessen={() => setAuszugBewohner(null)}
+          onGespeichert={() => {
+            setAuszugBewohner(null);
+            ladeZimmer();
+            ladeKlienten();
+            ladeVerlauf();
+          }}
+        />
       )}
 
       {bearbeiteteBelegung && (
-        <Modal titel={`Belegung bearbeiten — ${bearbeiteteBelegung.name}`} onClose={() => setBearbeiteteBelegung(null)}>
-          <form onSubmit={belegungBearbeiten}>
-            {belegungBearbeitenFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {belegungBearbeitenFehler}
-              </div>
-            )}
-            <p className="zv-sub" style={{ margin: "0 0 12px" }}>
-              Nutzen, wenn sich ein Einzug oder Auszug verzögert oder sich geändert hat.
-            </p>
-            <div className="zv-field-row">
-              <Zeitraumfeld
-                von={{ id: "belegung-bearbeiten-einzug", name: "einzug", label: "Einzugsdatum", required: true }}
-                bis={{ id: "belegung-bearbeiten-auszug", name: "auszug", label: "Auszugsdatum (optional)" }}
-                defaultVon={bearbeiteteBelegung.einzug}
-                defaultBis={bearbeiteteBelegung.auszug ?? ""}
-                autoFocus
-              />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <ISpeichern />
-              {wirdGespeichert ? "Speichert…" : "Speichern"}
-            </button>
-          </form>
-        </Modal>
+        <BelegungBearbeitenFenster
+          belegung={bearbeiteteBelegung}
+          onSchliessen={() => setBearbeiteteBelegung(null)}
+          onGespeichert={() => {
+            setBearbeiteteBelegung(null);
+            ladeZimmer();
+            ladeKlienten();
+            ladeVerlauf();
+          }}
+        />
       )}
 
       {kapazitaetZimmer && (
-        <Modal titel={`Kapazität ändern — Zimmer ${kapazitaetZimmer.nummer}`} onClose={() => setKapazitaetZimmer(null)}>
-          <form onSubmit={kapazitaetAendern}>
-            {kapazitaetFehler && (
-              <div className="zv-hinweis zv-hinweis-fehler">
-                <IFehler />
-                {kapazitaetFehler}
-              </div>
-            )}
-            <p className="zv-sub" style={{ marginTop: 0 }}>
-              Aktuelle Kapazität: {kapazitaetZimmer.kapazitaet}. Die Änderung wirkt erst, wenn die jeweils andere
-              Leitungsrolle sie bestätigt hat.
-            </p>
-            <div className="zv-field">
-              <label htmlFor="kapazitaet-neu">Neue Kapazität</label>
-              <input
-                id="kapazitaet-neu"
-                name="neueKapazitaet"
-                type="number"
-                min={1}
-                max={12}
-                required
-                autoFocus
-                defaultValue={kapazitaetZimmer.kapazitaet}
-              />
-            </div>
-            <button className="zv-btn zv-btn-block" type="submit" disabled={wirdGespeichert}>
-              <ISpeichern />
-              {wirdGespeichert ? "Speichert…" : "Änderung beantragen"}
-            </button>
-          </form>
-        </Modal>
+        <KapazitaetFenster
+          zimmer={kapazitaetZimmer}
+          onSchliessen={() => setKapazitaetZimmer(null)}
+          onGespeichert={() => {
+            setKapazitaetZimmer(null);
+            ladeZimmer();
+          }}
+        />
       )}
 
       {kapazitaetAblehnenAntrag && (
@@ -1517,24 +1104,6 @@ export function Zimmer({
           }}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * Eigene Wohnanschrift einer Wohnung (Einzelwohnen, Migration 0079): dort
- * ist der Standort das Buero, die Klient:innen wohnen verstreut. Jede
- * Wohnung bleibt ein Zimmer, damit Belegung, Plaetze und Raumplan
- * unveraendert funktionieren -- nur die Anschrift kommt dazu.
- */
-function ZimmerAnschriftFeld({ id, vorgabe }: { id: string; vorgabe?: string | null }) {
-  return (
-    <div className="zv-field">
-      <label htmlFor={id}>Eigene Wohnanschrift (optional)</label>
-      <input id={id} name="anschrift" defaultValue={vorgabe ?? ""} placeholder="Straße Nr., PLZ Ort" aria-describedby={`${id}-hinweis`} />
-      <p id={`${id}-hinweis`} className="zv-sub">
-        Nur wenn die Wohnung nicht unter der Anschrift des Standorts liegt, etwa im Einzelwohnen.
-      </p>
     </div>
   );
 }

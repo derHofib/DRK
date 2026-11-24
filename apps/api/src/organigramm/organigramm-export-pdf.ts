@@ -44,7 +44,7 @@ const POSITION_TYP_LABEL: Record<PositionDto["typ"], string> = {
 };
 
 /**
- * Dieselbe Herleitung wie positionsStatus() in Organigramm.tsx (CLAUDE.md
+ * Dieselbe Herleitung wie positionsStatus() in apps/web/src/pages/organigramm/baum.ts (CLAUDE.md
  * Regel 4: Status wird abgeleitet, nie gespeichert) -- hier als reiner
  * Text ohne Pill-Klasse, da ein PDF keine CSS-Klassen kennt. Bewusst
  * dupliziert statt importiert: apps/web und apps/api sind getrennte
@@ -59,7 +59,7 @@ function positionsStatusText(p: PositionDto): string {
 }
 
 /**
- * Dieselbe Namensdarstellung wie KnotenBox in Organigramm.tsx: redigierte
+ * Dieselbe Namensdarstellung wie KnotenBox in apps/web/src/pages/organigramm/KnotenBox.tsx: redigierte
  * Besetzungen (benutzerName=null, siehe organigramm.service.ts::zuPositionDto())
  * zeigen "Namen ausgeblendet" statt eines leeren Werts -- der Unterschied zu
  * "Derzeit nicht besetzt" (besetztMit wirklich leer) bleibt damit auch im

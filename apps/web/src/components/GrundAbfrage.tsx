@@ -8,7 +8,7 @@ import { IBestaetigen } from "./icons";
  * unter iOS im Standalone-Modus -- haeufig unterdrueckt oder ganz ignoriert
  * und folgt ausserdem nicht den Design-Tokens (siehe CLAUDE.md, Regel 7).
  * Ueberall dort, wo bisher prompt() stand (Zimmer.tsx, Kassenbuch.tsx,
- * KlientDetail.tsx), steht seitdem dieses Modal.
+ * klient-detail/RechnungenTab.tsx), steht seitdem dieses Modal.
  */
 export function GrundAbfrage({
   titel,

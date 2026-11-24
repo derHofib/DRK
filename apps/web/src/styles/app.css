@@ -2114,8 +2114,8 @@
 }
 
 /* "Auch: ..." unter einer Besetzung im Organigramm-Seitenpanel -- die
-   anderen aktiven Positionen derselben Person, siehe PositionPanel in
-   Organigramm.tsx. Eigene Zeile (zv-sub-inline-zeile) + Pills statt
+   anderen aktiven Positionen derselben Person, siehe
+   organigramm/PositionPanel.tsx. Eigene Zeile (zv-sub-inline-zeile) + Pills statt
    Fliesstext, weil mehrere Zuordnungen sonst schwer auseinanderzuhalten
    waeren. */
 .zv-weitere-zuordnungen {
@@ -2921,7 +2921,7 @@
 
 /* ==================================================================
    Organigramm -- Baum aus Organisationseinheiten und Positionen.
-   Positionierung der Knoten/Pfade kommt aus Organigramm.tsx (Layout-
+   Positionierung der Knoten/Pfade kommt aus organigramm/baum.ts (Layout-
    Algorithmus, echte Pixelkoordinaten, keine Design-Entscheidung) und
    bleibt deshalb Inline-Style; alles, was hier Farbe/Abstand/Radius ist,
    kommt wie ueberall aus Tokens (CLAUDE.md Regel 7).
@@ -3004,7 +3004,7 @@
   box-shadow: 0 0 0 2px var(--zv-accent-soft);
 }
 
-/* Umhaengen per Drag & Drop -- siehe Organigramm.tsx (gueltigeZiele()).
+/* Umhaengen per Drag & Drop -- siehe organigramm/baum.ts (gueltigeZiele()).
    Die gezogene Box bleibt sichtbar, aber gedaempft; JEDES gueltige Ziel
    bekommt waehrend des Ziehens einen gestrichelten Akzentrahmen (nicht nur
    das aktuell ueberflogene), damit von Anfang an klar ist, wohin ueberhaupt
@@ -3129,7 +3129,7 @@
  * flex-shrink:0 quetscht der Spaltenflex diese Zeilen bei zu wenig Platz
  * bis auf wenige Pixel zusammen (abgeschnittene Buchstaben OBERHALB der
  * eigentlich sichtbaren Zeile), statt die Zeile als Ganzes abzuschneiden.
- * In echten Browser-Tests nachvollzogen -- siehe Organigramm.tsx fuer die
+ * In echten Browser-Tests nachvollzogen -- siehe organigramm/baum.ts fuer die
  * dazu passend bemessene BOX_HOEHE.
  */
 .zv-organigramm-knoten-sub,
@@ -6226,7 +6226,7 @@ button[class],
 }
 
 /* ==================================================================
-   Klientenakte: Kopf, Ueberblick (KlientDetail.tsx)
+   Klientenakte: Kopf, Ueberblick (KlientDetail.tsx, klient-detail/)
    ================================================================== */
 .zv-sr-only {
   position: absolute;
