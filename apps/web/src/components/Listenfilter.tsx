@@ -233,14 +233,33 @@ export function useZeitraum(start: Schnellwahl = "alle") {
   };
 }
 
-export function ZeitraumFilter({ zeitraum, idPrefix, label = "Zeitraum" }: { zeitraum: ReturnType<typeof useZeitraum>; idPrefix: string; label?: string }) {
+/**
+ * Zeitraum-Pille zu useZeitraum(). Zwei Spielarten, je nachdem, ob der
+ * Startwert selbst schon ein Filter ist:
+ *  - Standard: die Pille zeigt jeden gesetzten Zeitraum, "x" fuehrt zu "Alle"
+ *    (Kassenbuch, Tagesberichte, Verlauf).
+ *  - startIstLeer: der Startwert (z. B. "Dieser Monat" bei den Stunden) gilt
+ *    als ungefiltert -- die Pille bleibt dann leer, "x" fuehrt zurueck dorthin.
+ */
+export function ZeitraumFilter({
+  zeitraum,
+  idPrefix,
+  label = "Zeitraum",
+  startIstLeer = false,
+}: {
+  zeitraum: ReturnType<typeof useZeitraum>;
+  idPrefix: string;
+  label?: string;
+  startIstLeer?: boolean;
+}) {
+  const gesetzt = startIstLeer ? zeitraum.geaendert : zeitraum.aktiv;
   return (
     <FilterPille
       icon={<IKalender />}
       label={label}
       breit
-      wert={zeitraum.aktiv ? (zeitraum.text ? `: ${zeitraum.text}` : "") : null}
-      onEntfernen={() => zeitraum.waehlen("alle")}
+      wert={gesetzt ? (zeitraum.text ? `: ${zeitraum.text}` : "") : null}
+      onEntfernen={() => (startIstLeer ? zeitraum.zuruecksetzen() : zeitraum.waehlen("alle"))}
     >
       {(schliessen) => (
         <ZeitraumAuswahl

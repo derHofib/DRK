@@ -21,7 +21,6 @@ describe("Stundenbuchung", () => {
   let admin: Client;
   const passwort = "correct horse battery staple";
   const suffix = randomUUID().slice(0, 8);
-  const heute = new Date().toISOString().slice(0, 10);
   const gestern = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
   interface Mandant {

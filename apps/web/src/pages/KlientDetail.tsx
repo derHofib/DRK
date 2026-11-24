@@ -42,8 +42,6 @@ import {
   IGenehmigen,
   IGeplant,
   IHerunterladen,
-  IKassenbuch,
-  IKostenuebernahme,
   ILeerKassenbuch,
   ILeerKontakte,
   ILeerKostenuebernahmen,
@@ -51,13 +49,11 @@ import {
   ILeerTagesberichte,
   ILoeschen,
   INeu,
-  IRechnung,
   ISErledigt,
   ISOffen,
   ISStorniert,
   ISpeichern,
   ITagesberichte,
-  IUebersicht,
   IWarteliste,
   IZurueck,
 } from "../components/icons";
@@ -2194,8 +2190,6 @@ function TagesberichteTab({
       setFehler(err instanceof Error ? err.message : "Dokument konnte nicht hinzugefügt werden.");
     }
   }
-
-  const heute = heuteBerlin();
 
   return (
     <div>

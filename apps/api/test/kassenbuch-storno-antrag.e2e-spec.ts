@@ -68,9 +68,9 @@ describe("Kassenbuch: Storno-Antragsworkflow", () => {
         passwortHash,
       });
     }
-    const bereichsleitungId = await neuerBenutzer("bereichsleitung", "bereichsleitung");
+    await neuerBenutzer("bereichsleitung", "bereichsleitung");
     const einrichtungsleitungS1Id = await neuerBenutzer("einrichtungsleitung", "einrichtungsleitung-s1");
-    const betreuerId = await neuerBenutzer("betreuer", "betreuer");
+    await neuerBenutzer("betreuer", "betreuer");
 
     const { rows: standort1Rows } = await admin.query<{ id: string }>(
       "INSERT INTO standort (mandant_id, name, adresse) VALUES ($1, 'Standort 1', 'Str. 1') RETURNING id",

@@ -24,7 +24,6 @@ describe("Suche (Befehlspalette)", () => {
   let mandantA: string;
   let mandantB: string;
   let standort1: string;
-  let standort2: string;
   let zimmer1: string;
   let k1: string; // Standort 1
   let k2: string; // Standort 2
@@ -77,7 +76,7 @@ describe("Suche (Befehlspalette)", () => {
 
     const a1 = await standortMitKlient(mandantA, "Haus Eins", "101", "Maria", "Müllerstein");
     const a2 = await standortMitKlient(mandantA, "Haus Zwei", "201", "Martin", "Müllerhof");
-    standort1 = a1.s; standort2 = a2.s; zimmer1 = a1.z; k1 = a1.k; k2 = a2.k;
+    standort1 = a1.s; zimmer1 = a1.z; k1 = a1.k; k2 = a2.k;
     await admin.query("INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)", [mandantA, s1Id, standort1]);
 
     const fremdLeitung = await kontoMitAlterRolle(admin, { mandantId: mandantB, rolle: "bereichsleitung", email: `fremd-${suffix}@s.test`, name: "Fremd Leitung", passwortHash: hash });

@@ -11,6 +11,7 @@
     "emitDecoratorMetadata": true,
     "strict": true,
     "strictPropertyInitialization": false,
+    "noUnusedLocals": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,

@@ -136,7 +136,6 @@ export function HzlUebergabe({ start, onBeendet }: { start: UebergabeStart; onBe
     };
   }, []);
 
-  const offen = eintraege.filter((e) => !ergebnisse[e.klientId]);
   const aktuell = eintraege.find((e) => e.klientId === aktuellerId) ?? null;
 
   // Naechste offene Person vorlegen, sobald keine gewaehlt ist (Start, nach

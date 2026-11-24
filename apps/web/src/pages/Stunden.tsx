@@ -33,10 +33,8 @@ import {
   ISuche,
   IVerknuepft,
 } from "../components/icons";
-import { SCHNELLWAHL_LABEL, zeitraumFuer, type Schnellwahl } from "./tagesberichte-filter";
 import { Datumsfeld } from "../components/Datumsfeld";
-import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
-import { zeitraumKurz } from "../components/datumsfeld-logik";
+import { ZeitraumFilter, useZeitraum } from "../components/Listenfilter";
 
 const HERKUNFT_LABEL: Record<StundenHerkunft, string> = { manuell: "Von Hand", kalender: "Aus dem Kalender" };
 
@@ -65,9 +63,8 @@ export function Stunden() {
   const [formularOffen, setFormularOffen] = useState(false);
   const [stornoZiel, setStornoZiel] = useState<StundenbuchungDto | null>(null);
 
-  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>("monat");
-  const [von, setVon] = useState(() => zeitraumFuer("monat").von);
-  const [bis, setBis] = useState(() => zeitraumFuer("monat").bis);
+  const zeitraum = useZeitraum("monat");
+  const { von, bis } = zeitraum;
   const [klientFilter, setKlientFilter] = useState("");
   const [mitarbeiterFilter, setMitarbeiterFilter] = useState("");
   const [suche, setSuche] = useState("");
@@ -102,14 +99,7 @@ export function Stunden() {
     laden();
   }, [von, bis, klientFilter, mitarbeiterFilter, herkunft, rechte]);
 
-  function schnellwahlWaehlen(wahl: Schnellwahl) {
-    const z = zeitraumFuer(wahl);
-    setSchnellwahl(wahl);
-    setVon(z.von);
-    setBis(z.bis);
-  }
-
-  const zeitraumUngueltig = Boolean(von && bis && von > bis);
+  const zeitraumUngueltig = zeitraum.ungueltig;
   const sichtbar = useMemo(() => {
     const q = suche.trim().toLocaleLowerCase("de");
     if (!q) return buchungen;
@@ -124,13 +114,10 @@ export function Stunden() {
   const nichtGebucht = vormerkungen.filter((v) => v.status === "nicht-gebucht" || v.grund);
   const klientText = klienten.find((k) => k.id === klientFilter);
   const mitarbeiterText = mitarbeitende.find((m) => m.id === mitarbeiterFilter);
-  const zeitraumText = schnellwahl
-    ? SCHNELLWAHL_LABEL[schnellwahl]
-    : zeitraumKurz(von, bis) || null;
-  const filterAktiv = Boolean(klientFilter || mitarbeiterFilter || herkunft || suche.trim() || schnellwahl !== "monat");
+  const filterAktiv = Boolean(klientFilter || mitarbeiterFilter || herkunft || suche.trim() || zeitraum.geaendert);
 
   function alleZuruecksetzen() {
-    schnellwahlWaehlen("monat");
+    zeitraum.zuruecksetzen();
     setHerkunft("");
     setKlientFilter("");
     setMitarbeiterFilter("");
@@ -212,32 +199,7 @@ export function Stunden() {
           <input type="search" value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Suchen…" aria-label="Stundenbuchungen durchsuchen" />
         </label>
 
-        <FilterPille
-          icon={<IKalender />}
-          label="Zeitraum"
-          breit
-          wert={schnellwahl === "monat" ? null : zeitraumText ? `: ${zeitraumText}` : ""}
-          onEntfernen={() => schnellwahlWaehlen("monat")}
-        >
-          {(schliessen) => (
-            <ZeitraumAuswahl
-              idPraefix="std"
-              schnellwahl={schnellwahl}
-              von={von}
-              bis={bis}
-              onSchnellwahl={(w) => {
-                schnellwahlWaehlen(w);
-                schliessen();
-              }}
-              onUebernehmen={(v, b) => {
-                setSchnellwahl(null);
-                setVon(v);
-                setBis(b);
-                schliessen();
-              }}
-            />
-          )}
-        </FilterPille>
+        <ZeitraumFilter zeitraum={zeitraum} idPrefix="std" startIstLeer />
 
         <FilterPille
           icon={<IKlienten />}

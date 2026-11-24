@@ -1,10 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ApiFehler, api } from "../../api/client";
-import { IBestaetigen, IErfolg, IFehler, ISichtbar, IVerborgen } from "../../components/icons";
-import { MarkenZeichen } from "../../components/MarkenZeichen";
-
-const LINK_UNGUELTIG =
-  "Der Link ist ungültig oder abgelaufen. Bitte fordere bei deiner Betreuung einen neuen Link an.";
+import { IBestaetigen } from "../../components/icons";
+import { PasswortEingabe } from "../../components/PasswortEingabe";
+import { FehlerHinweis, LINK_UNGUELTIG, LinkErledigt, LinkKarte } from "../../components/PasswortFestlegen";
 
 /**
  * E-Mail-Adresse des Klient-Zugangs aendern. Die Seite zeigt vorab die
@@ -49,27 +47,13 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
     }
   }
 
-  const kopf = (
-    <h1>
-      <MarkenZeichen iconGroesse={26} />
-    </h1>
-  );
-
   if (erledigt) {
     return (
-      <div className="zv-shell">
-        <div className="zv-card">
-          {kopf}
-          <p className="zv-sub">E-Mail-Adresse geändert</p>
-          <div className="zv-hinweis zv-hinweis-erfolg">
-            <IErfolg />
-            Deine neue E-Mail-Adresse ist gespeichert. Melde dich ab jetzt damit an.
-          </div>
-          <button className="zv-btn zv-btn-block" style={{ marginTop: 14 }} onClick={onFertig}>
-            Zur Anmeldung
-          </button>
-        </div>
-      </div>
+      <LinkErledigt
+        untertitel="E-Mail-Adresse geändert"
+        text="Deine neue E-Mail-Adresse ist gespeichert. Melde dich ab jetzt damit an."
+        onWeiter={onFertig}
+      />
     );
   }
 
@@ -77,15 +61,12 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
     return (
       <div className="zv-shell">
         <div className="zv-card">
-          {kopf}
-          <p className="zv-sub">E-Mail-Adresse ändern</p>
-          <div className="zv-hinweis zv-hinweis-fehler" role="alert">
-            <IFehler />
-            {linkFehler}
-          </div>
-          <button className="zv-btn zv-btn-sekundaer zv-btn-block" style={{ marginTop: 14 }} onClick={onFertig}>
-            Zur Anmeldung
-          </button>
+          <LinkKarte untertitel="E-Mail-Adresse ändern">
+            <FehlerHinweis text={linkFehler} />
+            <button className="zv-btn zv-btn-sekundaer zv-btn-block" style={{ marginTop: 14 }} onClick={onFertig}>
+              Zur Anmeldung
+            </button>
+          </LinkKarte>
         </div>
       </div>
     );
@@ -94,8 +75,7 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
   return (
     <div className="zv-shell">
       <form className="zv-card" onSubmit={submit}>
-        {kopf}
-        <p className="zv-sub">E-Mail-Adresse ändern</p>
+        <LinkKarte untertitel="E-Mail-Adresse ändern">
         {maskiert === null ? (
           <p className="zv-sub">Link wird geprüft…</p>
         ) : (
@@ -104,12 +84,7 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
               Bisherige Adresse: <strong>{maskiert}</strong>
             </p>
 
-            {fehler && (
-              <div className="zv-hinweis zv-hinweis-fehler" role="alert">
-                <IFehler />
-                {fehler}
-              </div>
-            )}
+            {fehler && <FehlerHinweis text={fehler} />}
 
             <div className="zv-field">
               <label htmlFor="neueEmail">Neue E-Mail-Adresse</label>
@@ -117,27 +92,15 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
             </div>
             <div className="zv-field">
               <label htmlFor="passwort">Dein Passwort</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  id="passwort"
-                  type={sichtbar ? "text" : "password"}
-                  value={passwort}
-                  onChange={(e) => setPasswort(e.target.value)}
-                  autoComplete="current-password"
-                  style={{ paddingRight: 44 }}
-                  required
-                />
-                <button
-                  type="button"
-                  className="zv-icon-btn"
-                  style={{ position: "absolute", right: 3, top: 3 }}
-                  onClick={() => setSichtbar((s) => !s)}
-                  aria-label={sichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
-                  title={sichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
-                >
-                  {sichtbar ? <IVerborgen /> : <ISichtbar />}
-                </button>
-              </div>
+              <PasswortEingabe
+                id="passwort"
+                sichtbar={sichtbar}
+                onSichtbarWechseln={() => setSichtbar((s) => !s)}
+                value={passwort}
+                onChange={(e) => setPasswort(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
             </div>
 
             <button className="zv-btn zv-btn-block" type="submit" disabled={ladt}>
@@ -146,6 +109,7 @@ export function KlientEmailAendern({ token, onFertig }: { token: string; onFerti
             </button>
           </>
         )}
+        </LinkKarte>
       </form>
     </div>
   );
