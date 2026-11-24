@@ -63,7 +63,7 @@ export function Vertretung() {
   }, []);
 
   /**
-   * Analog zu Organigramm.tsx (Account-Typ-Verwaltung): GET /rechte/registry
+   * Analog zu organigramm/AccountTypen.tsx (Account-Typ-Verwaltung): GET /rechte/registry
    * haengt an organigramm.manage-permissions, einem deutlich engeren Recht
    * als das, was diese Seite sonst braucht (nur @Authenticated(), siehe
    * delegation.controller.ts) -- heute praktisch nur Geschaeftsfuehrung-

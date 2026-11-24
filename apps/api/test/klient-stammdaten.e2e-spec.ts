@@ -221,7 +221,7 @@ describe("Klienten-Stammdaten und Kontakte", () => {
       expect(res.status).toBe(200);
       // Gespeichert wird ein leerer String (nicht NULL) -- die Spalte hat
       // keinen NOT-NULL-Zwang, "" reicht, damit die Oberflaeche es als
-      // "nicht angegeben" behandelt (siehe anzeigeWert() in KlientDetail.tsx).
+      // "nicht angegeben" behandelt (siehe anzeigeWert() in klient-detail/StammdatenTab.tsx).
       expect(res.body.nationalitaet).toBe("");
       // Unbeteiligte Felder bleiben unberuehrt.
       expect(res.body.geburtsort).toBe("Musterstadt");

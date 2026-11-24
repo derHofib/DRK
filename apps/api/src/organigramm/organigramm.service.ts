@@ -805,7 +805,7 @@ export class OrganigrammService {
    * Geschwister-Reihenfolge fuer Positionen (Organisationseinheiten siehe
    * setzeOrgUnitReihenfolge() oben bei den Organisationseinheiten-Methoden).
    * "Geschwister" heisst hier: gleiche org_unit_id UND gleiche
-   * parent_position_id (siehe Organigramm.tsx::baueBaum() -- genau so
+   * parent_position_id (siehe organigramm/baum.ts::baueBaum() -- genau so
    * werden Positions-Kinder dort gruppiert). parentPositionId=null braucht
    * IS NOT DISTINCT FROM statt "=", sonst matcht NULL=NULL in SQL nie.
    */
