@@ -8,6 +8,7 @@ import { MarkenIcon } from "../../components/MarkenZeichen";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { Kalender } from "../Kalender";
 import { Nachrichten } from "../Nachrichten";
+import { ungelesenAnzeige } from "../../format";
 
 type Bereich = "nachrichten" | "termine";
 
@@ -87,8 +88,8 @@ export function KlientShell({ onLoggedOut }: { onLoggedOut: () => void }) {
             <Icon />
             {label}
             {wert === "nachrichten" && badge > 0 && (
-              <span className="zv-nav-badge" aria-label={`${badge} ungelesen`}>
-                {badge > 99 ? "99+" : badge}
+              <span className="zv-nav-badge" aria-label={ungelesenAnzeige(badge).label}>
+                {ungelesenAnzeige(badge).text}
               </span>
             )}
           </button>

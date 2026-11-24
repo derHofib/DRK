@@ -907,6 +907,20 @@ export interface OffenerStornoantragDto {
 }
 
 /**
+ * GET /kassenbuchungen/salden: Kassenstand über ALLE sichtbaren Buchungen
+ * (ohne stornierte) und der Stand vor dem geladenen Zeitraum, damit der
+ * laufende Saldo im Journal stimmt, obwohl nur ein Zeitraum geladen ist.
+ */
+export interface KassenbuchSaldenDto {
+  klientGesamtCent: number;
+  klientVorherCent: number;
+  standortGesamtCent: number;
+  standortVorherCent: number;
+  klientAnzahl: number;
+  standortAnzahl: number;
+}
+
+/**
  * Genau eins von klientId/standortId ist gesetzt (siehe migrations/0030):
  * die meisten Buchungen gehören einem Klienten, eine Standort-Buchung
  * (Spaßgeld/Freizeitveranstaltung) gehört dem ganzen Haus. HZL ist

@@ -68,7 +68,14 @@ const monatsabschlussSchema = z.object({
   monat: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "monat muss das Format JJJJ-MM haben."),
 });
 
-const entsperrenSchema = z.object({ passwort: z.string().min(1) });
+// Kalendertag. Die Regex allein liesse 2026-02-31 durch, das ::date in der
+// Datenbank wuerde daraus einen 500 machen -- deshalb der Rundlauf ueber Date.
+const tagSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((t) => !Number.isNaN(Date.parse(t)) && new Date(t).toISOString().slice(0, 10) === t);
+
+const entsperrenSchema =z.object({ passwort: z.string().min(1) });
 
 @Controller("kassenbuchungen")
 @Authenticated()
@@ -76,12 +83,32 @@ export class KassenbuchungController {
   constructor(private readonly kassenbuch: KassenbuchungService) {}
 
   @Get()
-  async list(@Query("klientId") klientId?: string, @Query("standortId") standortId?: string) {
+  async list(
+    @Query("klientId") klientId?: string,
+    @Query("standortId") standortId?: string,
+    @Query("von") von?: string,
+    @Query("bis") bis?: string
+  ) {
     // safeParse statt parse: kein globaler ZodError-Filter, ein ZodError waere ein 500.
     if (standortId !== undefined && !z.string().uuid().safeParse(standortId).success) {
       throw new BadRequestException("standortId muss eine gültige ID sein.");
     }
-    return this.kassenbuch.findeAlle(klientId || standortId ? { klientId, standortId } : undefined);
+    if ((von !== undefined && !tagSchema.safeParse(von).success) || (bis !== undefined && !tagSchema.safeParse(bis).success)) {
+      throw new BadRequestException("von/bis müssen ein Datum (JJJJ-MM-TT) sein.");
+    }
+    return this.kassenbuch.findeAlle(klientId || standortId || von || bis ? { klientId, standortId, von, bis } : undefined);
+  }
+
+  /** Kassenstand und Saldo vor einem Stichtag -- fuer die zeitraumgefilterte Liste. */
+  @Get("salden")
+  async salden(@Query("standortId") standortId?: string, @Query("vor") vor?: string) {
+    if (standortId !== undefined && !z.string().uuid().safeParse(standortId).success) {
+      throw new BadRequestException("standortId muss eine gültige ID sein.");
+    }
+    if (vor !== undefined && !tagSchema.safeParse(vor).success) {
+      throw new BadRequestException("vor muss ein Datum (JJJJ-MM-TT) sein.");
+    }
+    return this.kassenbuch.salden({ standortId, vor });
   }
 
   @Get("wochenuebersicht")

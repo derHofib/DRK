@@ -11,12 +11,13 @@ import { ISOffen, ISStorniert } from "./icons";
  * beim Kassenstand (kassenbuchung.service.ts rechnet nur NOT storniert).
  * Bewusst ueber die UNGEFILTERTE Menge gerechnet und nur angezeigt, wo
  * gefiltert wird: ein Saldo, der sich mit dem Filter aendert, waere nicht
- * der Stand der Kasse.
+ * der Stand der Kasse. Ist nur ein Zeitraum geladen, startet der Saldo beim
+ * Stand vor dem Zeitraum (anfangsstand, aus GET /kassenbuchungen/salden).
  */
-export function laufsalden(buchungen: KassenbuchungDto[]): Map<string, number> {
+export function laufsalden(buchungen: KassenbuchungDto[], anfangsstand = 0): Map<string, number> {
   const chronologisch = [...buchungen].sort((a, b) => a.datum.localeCompare(b.datum) || a.belegnummer - b.belegnummer);
   const salden = new Map<string, number>();
-  let stand = 0;
+  let stand = anfangsstand;
   for (const b of chronologisch) {
     if (b.storniert) continue;
     stand += b.betragCent;

@@ -2,6 +2,7 @@ import { CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
 import { formatBelegnummer } from "@zimmerakte/shared";
 import type {
   BenutzerListEintragDto,
+  KassenbuchSaldenDto,
   KassenbuchungDto,
   KassenbuchungTypDto,
   KlientListEintragDto,
@@ -9,6 +10,7 @@ import type {
   WochenuebersichtEintragDto,
 } from "@zimmerakte/shared";
 import { api } from "../api/client";
+import { STANDARD_ZEITRAUM } from "./tagesberichte-filter";
 import { einreihen, entfernen, senden, useWarteschlange } from "../offline/warteschlange";
 import { GrundAbfrage } from "../components/GrundAbfrage";
 import { KassenbuchJournal, laufsalden, neuesterZuerst } from "../components/KassenbuchJournal";
@@ -114,13 +116,6 @@ function formatKwSpanne(jahr: number, woche: number): string {
   return `KW ${woche} - ${formatTagMonat(montag)}-${formatTagMonat(sonntag)}${sonntag.getUTCFullYear()}`;
 }
 
-// Aktiv = nicht storniert. Ein stornierter Eintrag zaehlt weder in den
-// Saldo noch in die Buchungsanzahl -- er ist rueckwirkend ungueltig, bleibt
-// aber (Bauplan Punkt 03) als Zeile in der Historie sichtbar.
-function aktive(buchungen: KassenbuchungDto[]): KassenbuchungDto[] {
-  return buchungen.filter((b) => !b.storniert);
-}
-
 function sortiereJournal(buchungen: KassenbuchungDto[], sortierung: JournalSortierung): KassenbuchungDto[] {
   // Bei gleichem Datum/Betrag entscheidet die Belegnummer -- sonst waere die
   // Reihenfolge von Buchungen desselben Tages nicht stabil nachvollziehbar.
@@ -137,10 +132,6 @@ function sortiereJournal(buchungen: KassenbuchungDto[], sortierung: JournalSorti
         return a.betragCent - b.betragCent || nachDatum(b, a);
     }
   });
-}
-
-function summeCent(buchungen: KassenbuchungDto[]): number {
-  return buchungen.reduce((summe, b) => summe + b.betragCent, 0);
 }
 
 /**
@@ -173,7 +164,11 @@ export function Kassenbuch({
   const [journalSortierung, setJournalSortierung] = useState<JournalSortierung>("datum-neu");
   const [typFilter, setTypFilter] = useState("");
   const [gebuchtVonFilter, setGebuchtVonFilter] = useState("");
-  const journalZeitraum = useZeitraum();
+  // Voreinstellung letzte 30 Tage, serverseitig (siehe STANDARD_ZEITRAUM);
+  // Kassenstand und laufender Saldo kommen trotzdem ueber ALLE Buchungen
+  // (salden, GET /kassenbuchungen/salden).
+  const journalZeitraum = useZeitraum(STANDARD_ZEITRAUM);
+  const [salden, setSalden] = useState<KassenbuchSaldenDto | null>(null);
   const [filterStandortId, setFilterStandortId] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
 
@@ -216,10 +211,18 @@ export function Kassenbuch({
   // angemeldeten Person; die Auswahl unten enthaelt ohnehin nur eigene
   // Standorte (api.standorteListe()).
   function ladeBuchungen(standortId: string = filterStandortId) {
-    if (ansicht === "hzl") return;
-    api
-      .kassenbuchungenListe(standortId ? { standortId } : undefined)
-      .then(setBuchungen)
+    if (ansicht === "hzl" || journalZeitraum.ungueltig) return;
+    const { von, bis } = journalZeitraum;
+    // Liste und Salden zusammen setzen: sonst stuende kurz ein laufender
+    // Saldo neben einem Anfangsstand aus dem vorigen Zeitraum.
+    Promise.all([
+      api.kassenbuchungenListe({ standortId: standortId || undefined, von, bis }),
+      api.kassenbuchSalden({ standortId: standortId || undefined, vor: von || undefined }),
+    ])
+      .then(([liste, s]) => {
+        setBuchungen(liste);
+        setSalden(s);
+      })
       .catch((err) => setFehler(err.message));
   }
 
@@ -243,6 +246,11 @@ export function Kassenbuch({
     ladeUebersicht(uebersichtJahr, uebersichtWoche, filterStandortId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStandortId]);
+
+  useEffect(() => {
+    ladeBuchungen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journalZeitraum.von, journalZeitraum.bis]);
 
   // Der HZL-Systemtyp (kassenbuchung_typ.ist_hzl) ist der Standard beim
   // Oeffnen des Formulars fuer eine Klienten-Buchung -- entspricht dem
@@ -461,19 +469,15 @@ export function Kassenbuch({
   const standortBuchungen = buchungen.filter((b) => b.standortId !== null);
 
   const gefilterteBuchungen = filterKlientId ? klientBuchungen.filter((b) => b.klientId === filterKlientId) : klientBuchungen;
-  const aktiveGesamt = aktive(klientBuchungen);
-  const aktiveGefiltert = aktive(gefilterteBuchungen);
-  const gesamtsaldo = summeCent(aktiveGesamt);
-  const summeFilter = summeCent(aktiveGefiltert);
-
-  const aktiveStandortGesamt = aktive(standortBuchungen);
-  const standortGesamtsaldo = summeCent(aktiveStandortGesamt);
+  // Kassenstand ueber ALLE Buchungen, nicht nur den geladenen Zeitraum.
+  const gesamtsaldo = salden?.klientGesamtCent ?? 0;
+  const standortGesamtsaldo = salden?.standortGesamtCent ?? 0;
 
   // Journal: laufender Saldo ueber die ungefilterte Menge, Filter wirken nur
   // auf die Anzeige (siehe laufsalden()). "Stornos" zeigt auch Buchungen mit
   // offenem Antrag -- die sind auf dem Weg dorthin und sonst nirgends gebuendelt.
-  const klientSalden = laufsalden(klientBuchungen);
-  const standortSalden = laufsalden(standortBuchungen);
+  const klientSalden = laufsalden(klientBuchungen, salden?.klientVorherCent ?? 0);
+  const standortSalden = laufsalden(standortBuchungen, salden?.standortVorherCent ?? 0);
   const zeigeKlientJournal = sortiereJournal(
     gefilterteBuchungen.filter(
       (b) =>
@@ -505,7 +509,7 @@ export function Kassenbuch({
     .map((n) => ({ wert: n, label: n }));
   const journalFilterAktiv = Boolean(
     filterStandortId ||
-    filterKlientId || journalFilter !== "alle" || journalZeitraum.aktiv || typFilter || gebuchtVonFilter || journalSuche.trim(),
+    filterKlientId || journalFilter !== "alle" || journalZeitraum.geaendert || typFilter || gebuchtVonFilter || journalSuche.trim(),
   );
   // Standortwahl als Pille statt der frueheren Reiterleiste -- wie auf Heute
   // und in der Belegung (Rueckmeldung aus dem Betrieb). Wirkt weiter
@@ -521,7 +525,7 @@ export function Kassenbuch({
     setFilterStandortId("");
     setFilterKlientId("");
     setJournalFilter("alle");
-    journalZeitraum.waehlen("alle");
+    journalZeitraum.zuruecksetzen();
     setTypFilter("");
     setGebuchtVonFilter("");
     setJournalSuche("");
@@ -940,12 +944,12 @@ export function Kassenbuch({
         <div>
           <p className="zv-lage-label">Kassenstand</p>
           <p className="zv-kassenstand-wert zv-mono">{formatBetrag(gesamtsaldo)}</p>
-          <p className="zv-lage-folge">{aktiveGesamt.length} Buchungen, ohne stornierte</p>
+          <p className="zv-lage-folge">{salden?.klientAnzahl ?? 0} Buchungen, ohne stornierte</p>
         </div>
         <div>
           <p className="zv-lage-label">Standort-Kasse</p>
           <p className="zv-kassenstand-wert zv-kassenstand-klein zv-mono">{formatBetrag(standortGesamtsaldo)}</p>
-          <p className="zv-lage-folge">{aktiveStandortGesamt.length} Buchungen</p>
+          <p className="zv-lage-folge">{salden?.standortAnzahl ?? 0} Buchungen</p>
         </div>
       </section>
 
