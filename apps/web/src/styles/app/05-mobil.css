@@ -1,0 +1,229 @@
+/* ==================================================================
+   Mobil
+   ==================================================================
+   Die oberste App-Navigation (.zv-tabbar-app, in Shell.tsx) wandert ans
+   untere Bildschirmende -- App-typisches Muster auf schmalen Bildschirmen.
+
+   Bewusst KEIN position:fixed dafuer: das kollidiert auf echten
+   Mobilbrowsern mit dem ein-/ausblendenden Adressleisten-Bereich (Layout-
+   vs. visueller Viewport hat dann eine andere Hoehe als die feste
+   position:fixed-Berechnung erwartet, die Leiste landet ausserhalb des
+   sichtbaren Bereichs -- reproduzierbar in echten Browser-Tests
+   nachvollzogen). Stattdessen: .zv-shell-app wird zur Flex-Spalte ueber die
+   volle (dynamische) Viewporthoehe, .zv-content scrollt fuer sich, die
+   Navigation bleibt ein ganz normales Flex-Kind am Ende -- robust ohne
+   Sonderfaelle.
+
+   Bewusst nur .zv-tabbar-app, nicht .zv-tabbar allgemein -- Unterseiten wie
+   die Klientenakte und die Einstellungen haben eine eigene, zweite
+   .zv-tabbar (Reiter innerhalb der Seite), die normal oben bleiben soll. */
+@media (max-width: 640px) {
+  /* Die Desktop-Sidebar verschwindet komplett -- .zv-topbar und
+     .zv-tabbar-app (per Default oben ausgeblendet, siehe
+     "App-Rahmen: Sidebar (Desktop)") uebernehmen wieder wie eh und je. */
+  .zv-sidebar {
+    display: none;
+  }
+
+  .zv-shell-app > .zv-topbar,
+  .zv-shell-app > .zv-tabbar.zv-tabbar-app {
+    display: flex;
+  }
+
+  .zv-shell-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .zv-topbar {
+    padding: var(--zv-space-3) var(--zv-space-4);
+    flex-wrap: wrap;
+    row-gap: var(--zv-space-1);
+    flex-shrink: 0;
+    /* Sticky wieder aufheben: in der Flex-Spalte oben braucht es das nicht
+       und es stoert die Hoehenrechnung. */
+    position: static;
+  }
+
+  .zv-topbar span {
+    display: block;
+    width: 100%;
+  }
+
+  .zv-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--zv-space-4);
+    /* Reihenfolge im DOM ist topbar/Sammelmenue/tabbar/content (siehe
+       Shell.tsx) -- hier per "order" visuell hinter die Navigation
+       gestellt, ohne die Quellreihenfolge anzufassen. */
+    order: 1;
+  }
+
+  /* Sammelmenue ("Mehr") -- reines Mobile-Muster, siehe Shell.tsx. Sitzt
+     als ganz normales Flex-Kind zwischen Inhalt und Reiterleiste in
+     derselben 100dvh-Spalte -- bewusst KEIN position:fixed, aus demselben
+     Grund wie bei .zv-tabbar-app selbst (Layout- vs. visueller Viewport
+     auf echten Mobilbrowsern, siehe deren Kommentar unten). */
+  .zv-sammelmenue {
+    order: 2;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--zv-surface);
+    border-top: 1px solid var(--zv-border);
+  }
+
+  .zv-sammelmenue button {
+    display: flex;
+    align-items: center;
+    gap: var(--zv-space-2);
+    min-height: 44px;
+    padding: var(--zv-space-2) var(--zv-space-4);
+    font-size: var(--zv-text-m);
+    text-align: left;
+    border-bottom: 1px solid var(--zv-border);
+  }
+
+  .zv-sammelmenue-trenner {
+    padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-1);
+    font-size: 11px;
+    font-weight: var(--zv-weight-semibold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--zv-text-gedaempft);
+  }
+
+  .zv-sammelmenue button.active {
+    color: var(--zv-accent-strong);
+    font-weight: var(--zv-weight-semibold);
+    background: var(--zv-accent-soft);
+  }
+
+  .zv-tabbar-app {
+    order: 3;
+    flex-shrink: 0;
+    justify-content: space-around;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    border-bottom: none;
+    border-top: 1px solid var(--zv-border);
+    box-shadow: 0 -1px 4px var(--zv-schatten-farbe-1);
+  }
+
+  .zv-tabbar-app button {
+    /* Icon ueber Label statt daneben -- bei fuenf Zielen auf 390px ist das
+       die einzige Anordnung, in der beides lesbar bleibt. */
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    padding: var(--zv-space-2) 2px;
+    font-size: var(--zv-text-xs);
+    font-weight: var(--zv-weight-medium);
+    text-align: center;
+    border-bottom: none;
+    border-top: 2px solid transparent;
+  }
+
+  .zv-tabbar-app button.active {
+    border-top-color: var(--zv-accent);
+    border-bottom-color: transparent;
+  }
+
+  .zv-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* iOS Safari zoomt beim Fokussieren eines Eingabefelds automatisch hinein,
+     sobald dessen Schriftgroesse unter 16px liegt (Standardverhalten, nicht
+     abschaltbar) -- und zoomt nach dem Schliessen eines Modals (z. B. "Neues
+     Zimmer") oft nicht zuverlaessig wieder heraus, die Ansicht bleibt dann
+     sichtbar "abgeschnitten". --zv-text-m ist mit 14px kleiner als dieser
+     Schwellwert. Bewusst als literaler Wert (16px = der von iOS geprüfte
+     Schwellwert selbst, kein Design-Token) und nur hier in der mobilen
+     Media Query -- am Desktop soll die normale, kleinere Feldschrift
+     bestehen bleiben. */
+  .zv-field input,
+  .zv-field select,
+  .zv-field textarea {
+    font-size: 16px;
+  }
+
+  /* Fingerfreundliche Trefferflaechen fuer rein ikonische Bedienelemente. */
+  .zv-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .zv-link-btn {
+    min-height: 32px;
+  }
+
+  /* App-Ansicht: aus der durchgehenden Desktop-Liste mit ausgerichteten
+     Spalten werden wieder einzelne Karten -- Spalten nebeneinander ergeben
+     auf einem schmalen Bildschirm keinen Sinn. Jede Zelle traegt ihr Label
+     ueber "data-label" (siehe Klienten.tsx etc.) und steht gestapelt
+     untereinander, siehe Begruendung beim Basis-.zv-karten-liste weiter oben. */
+  .zv-karten-liste {
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    gap: var(--zv-space-3);
+  }
+
+  .zv-liste-kopf {
+    display: none;
+  }
+
+  .zv-info-karte {
+    display: block;
+    background: var(--zv-surface);
+    border: 1px solid var(--zv-border);
+    border-radius: var(--zv-radius-m);
+    padding: var(--zv-space-4);
+  }
+
+  .zv-info-karte-aktiv {
+    border-color: var(--zv-accent);
+  }
+
+  .zv-liste-zelle-titel {
+    display: block;
+    margin-bottom: var(--zv-space-2);
+  }
+
+  .zv-liste-zelle {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--zv-space-3);
+    padding: 3px 0;
+  }
+
+  .zv-liste-zelle[data-label]::before {
+    content: attr(data-label);
+    font-weight: var(--zv-weight-medium);
+    color: var(--zv-text-muted);
+    flex-shrink: 0;
+  }
+
+  .zv-liste-zelle-aktionen {
+    justify-content: flex-end;
+    gap: var(--zv-space-2) var(--zv-space-4);
+    margin-top: var(--zv-space-3);
+    padding-top: var(--zv-space-3);
+    border-top: 1px solid var(--zv-border);
+  }
+
+  /* Zeile ohne jede Aktion (z.B. bereits bezahlt) -- keine leere
+     Trennlinie ohne Inhalt darunter anzeigen. */
+  .zv-liste-zelle-aktionen-leer {
+    display: none;
+  }
+}

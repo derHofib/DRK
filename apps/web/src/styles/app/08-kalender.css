@@ -1,0 +1,1019 @@
+/* ==================================================================
+   Kalender
+   ================================================================== */
+.zv-kal-navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-kal-monat {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  text-transform: capitalize;
+  font-size: var(--zv-text-xl);
+}
+
+.zv-kal-raster {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-wochentag {
+  text-align: center;
+  padding: var(--zv-space-1) 0;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 48px;
+  padding: var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zv-kal-tag:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-tag.fremd {
+  background: var(--zv-bg);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-tag.heute .zv-kal-tag-zahl {
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-tag.gewaehlt {
+  background: var(--zv-accent-soft);
+  border-color: var(--zv-accent);
+}
+
+.zv-kal-punkte {
+  display: flex;
+  gap: 3px;
+}
+
+.zv-kal-punkt {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-accent);
+}
+
+.zv-kal-punkt.abgesagt {
+  background: var(--zv-text-faint);
+}
+
+/* Personenfarbe (personFarbe.ts): der Farbton kommt per --zv-person-h aus
+   dem JavaScript, Helligkeit und Buntheit stehen hier fest je Theme --
+   dieselbe Aufteilung wie bei der Akzentfarbe (CLAUDE.md, Regel 7). Nur
+   fuer Punkte und Streifen, nie als Text- oder Texthintergrundfarbe; die
+   Werte halten >= 3:1 gegen die Flaechen (Nicht-Text-Kontrast). */
+.zv-person-farbe {
+  background: light-dark(oklch(0.58 0.15 var(--zv-person-h)), oklch(0.74 0.13 var(--zv-person-h)));
+}
+
+.zv-person-punkt {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--zv-radius-pill);
+  vertical-align: 0;
+  margin-right: var(--zv-space-2);
+}
+
+.zv-kal-person-streifen {
+  align-self: stretch;
+  flex: none;
+  width: 4px;
+  border-radius: var(--zv-radius-pill);
+}
+
+.zv-kal-legende {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2) var(--zv-space-4);
+  margin-top: var(--zv-space-4);
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  font-size: var(--zv-text-meta);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-legende-titel {
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+}
+
+.zv-kal-legende-eintrag {
+  display: inline-flex;
+  align-items: center;
+}
+
+.zv-kal-umschalter {
+  display: flex;
+  margin-bottom: var(--zv-space-3);
+}
+
+/* Jahresansicht: zwoelf Monate als Miniaturen. Angesprungen wird ueber den
+   Monatsnamen, der als 44-px-Knopf ausgelegt ist. Nur Tage MIT Terminen sind
+   Knoepfe -- sie oeffnen die Tagesvorschau (Hover, Tastaturfokus, Tippen).
+   Leere Tage bleiben Text, sonst laege man per Tab durch 365 Ziele. */
+.zv-kal-jahr {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-mini {
+  position: relative;
+  min-width: 0;
+  padding: var(--zv-space-2);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+.zv-kal-mini.heute {
+  border-color: var(--zv-accent);
+}
+
+.zv-kal-mini-titel {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.zv-kal-mini-titel:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-mini-raster {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  text-align: center;
+  font-size: var(--zv-text-xs);
+}
+
+.zv-kal-mini-kopf {
+  color: var(--zv-text-muted);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-kal-mini-tag {
+  position: relative;
+  min-width: 0;
+  padding: 2px 0;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+  color: var(--zv-text);
+  font: inherit;
+  line-height: inherit;
+}
+
+button.zv-kal-mini-tag {
+  cursor: pointer;
+  overflow: hidden;
+}
+
+button.zv-kal-mini-tag:focus-visible {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+.zv-kal-mini-zahl {
+  position: relative;
+}
+
+.zv-kal-mini-tag.belegt {
+  background: var(--zv-accent-soft);
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Farbstreifen je Person, nebeneinander ueber die ganze Zelle: bei zwei
+   Personen an einem Tag sieht man beide Farben statt nur der ersten. */
+.zv-kal-mini-farben {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.zv-kal-mini-farben > span {
+  flex: 1 1 0;
+}
+
+.zv-kal-mini-tag.personfarbe {
+  color: var(--zv-text-auf-personflaeche);
+}
+
+/* Flaeche in Personenfarbe -- heller als .zv-person-farbe (Punkte), weil
+   hier eine Zahl daraufsteht: Helligkeit fest je Theme im CSS, der Farbton
+   kommt wie ueberall per --zv-person-h (CLAUDE.md, Regel 7). Beide Werte
+   halten mit --zv-text-auf-personflaeche >= 4,5:1 (gemessen, siehe Commit). */
+.zv-person-flaeche {
+  background: light-dark(oklch(0.84 0.1 var(--zv-person-h)), oklch(0.76 0.12 var(--zv-person-h)));
+}
+
+/* Von Klient:innen angelegter Termin neben einer Personenfarbe: unbunt, aber
+   in derselben festen Helligkeit, damit die Zahl darueber lesbar bleibt. */
+.zv-kal-mini-neutral {
+  background: light-dark(oklch(0.84 0 0), oklch(0.76 0 0));
+}
+
+/* ------------------------------------------------------------------
+   Arten im Kalender (Rueckmeldung "Filter Kalender", migrations/0074).
+   Die Klasse .zv-art-<art> setzt nur Farbton/Buntheit aus tokens.css; die
+   Helligkeit steht hier fest je Theme -- dieselben Werte wie bei
+   .zv-person-flaeche bzw. .zv-person-farbe, damit Text darauf denselben
+   gemessenen Kontrast behaelt (CLAUDE.md, Regel 7).
+   ------------------------------------------------------------------ */
+.zv-art-krank { --zv-art-h: var(--zv-art-krank-h); --zv-art-c: var(--zv-art-krank-c); }
+.zv-art-urlaub { --zv-art-h: var(--zv-art-urlaub-h); --zv-art-c: var(--zv-art-urlaub-c); }
+.zv-art-frei { --zv-art-h: var(--zv-art-frei-h); --zv-art-c: var(--zv-art-frei-c); }
+.zv-art-fortbildung { --zv-art-h: var(--zv-art-fortbildung-h); --zv-art-c: var(--zv-art-fortbildung-c); }
+.zv-art-abwesend { --zv-art-h: var(--zv-art-abwesend-h); --zv-art-c: var(--zv-art-abwesend-c); }
+/* Termintypen (migrations/0085): dieselben Flaechen-/Farbregeln wie die
+   Abwesenheiten, nur Farbton/Buntheit kommen aus dem gewaehlten Ton. */
+.zv-typ-grau { --zv-art-h: var(--zv-typ-grau-h); --zv-art-c: var(--zv-typ-grau-c); }
+.zv-typ-gruen { --zv-art-h: var(--zv-typ-gruen-h); --zv-art-c: var(--zv-typ-gruen-c); }
+.zv-typ-petrol { --zv-art-h: var(--zv-typ-petrol-h); --zv-art-c: var(--zv-typ-petrol-c); }
+.zv-typ-blau { --zv-art-h: var(--zv-typ-blau-h); --zv-art-c: var(--zv-typ-blau-c); }
+.zv-typ-oliv { --zv-art-h: var(--zv-typ-oliv-h); --zv-art-c: var(--zv-typ-oliv-c); }
+.zv-typ-orange { --zv-art-h: var(--zv-typ-orange-h); --zv-art-c: var(--zv-typ-orange-c); }
+.zv-typ-rose { --zv-art-h: var(--zv-typ-rose-h); --zv-art-c: var(--zv-typ-rose-c); }
+.zv-typ-sand { --zv-art-h: var(--zv-typ-sand-h); --zv-art-c: var(--zv-typ-sand-c); }
+
+.zv-art-flaeche,
+.zv-art-marke {
+  background: light-dark(oklch(0.84 var(--zv-art-c) var(--zv-art-h)), oklch(0.76 var(--zv-art-c) var(--zv-art-h)));
+}
+
+/* Kraeftiger als die Flaeche: die Ecke muss sich von einer Personenflaeche
+   gleicher Helligkeit abheben. Dass sie das auch bei gleichem Farbton tut
+   (rote Person, krank), leistet der Trennrand unten, nicht die Farbe. */
+.zv-art-farbe,
+.zv-art-dreieck,
+.zv-kal-ecke::after {
+  background: light-dark(oklch(0.58 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)), oklch(0.82 calc(var(--zv-art-c) * 1.2) var(--zv-art-h)));
+}
+
+.zv-art-marke {
+  display: inline-block;
+  padding: 0 var(--zv-space-2);
+  margin-right: var(--zv-space-1);
+  border-radius: var(--zv-radius-pill);
+  color: var(--zv-text-auf-personflaeche);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.zv-art-dreieck {
+  display: inline-block;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-right: var(--zv-space-2);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+/* Statusecke oben rechts in der Tageszelle des Jahresueberblicks. Zwei
+   Dreiecke uebereinander: das aeussere in Kartenfarbe trennt, das innere
+   traegt die Art. Ohne den Trennrand verschwand im Entwurf eine rote
+   "krank"-Ecke auf einer roten Personenflaeche. */
+.zv-kal-ecke {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 13px;
+  height: 13px;
+  background: var(--zv-surface);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+}
+
+.zv-kal-ecke::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+/* Abwesenheiten in Woche/Monat: eine umbrechende Zeile ueber dem Kalender. */
+.zv-kal-abwesend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-kal-abwesend-titel {
+  font-size: var(--zv-text-meta);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-abwesend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.zv-kal-abwesend-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+  max-width: 100%;
+  min-height: 36px;
+  padding: var(--zv-space-1) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-s);
+  cursor: pointer;
+}
+
+.zv-kal-abwesend-chip:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-abwesend-chip .zv-person-punkt {
+  margin-right: 0;
+}
+
+.zv-kal-abwesend-zeit {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-meta);
+}
+
+/* "Farbe nach" sitzt in der Filterleiste; der Titel ist kein Knopf. */
+.zv-kal-farbmodus {
+  align-items: center;
+}
+
+.zv-kal-farbmodus-titel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  padding: 0 var(--zv-space-2);
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+}
+
+.zv-kal-farbmodus-titel svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Art-Auswahl im Dialog "Abwesenheit eintragen": Radios als Chips. */
+.zv-art-wahl {
+  border: none;
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+}
+
+.zv-art-wahl legend {
+  margin-bottom: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-art-wahl-optionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+/* Doppelte Klasse: .zv-field label/input (Formularfelder) wuerden sonst
+   Block-Layout, Abstand und volle Breite auf die Chips legen. */
+.zv-art-wahl .zv-art-wahl-option {
+  display: inline-flex;
+  margin: 0;
+  color: var(--zv-text);
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-pill);
+  cursor: pointer;
+}
+
+.zv-art-wahl-option.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-art-wahl-option:focus-within {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+/* Visuell versteckt, aber per Tastatur und Screenreader bedienbar. */
+.zv-art-wahl .zv-art-wahl-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.zv-kal-mini-tag.sammel {
+  background: var(--zv-kal-sammel-flaeche);
+  color: var(--zv-kal-sammel-text);
+}
+
+.zv-kal-mini-tag.abgesagt {
+  color: var(--zv-text-muted);
+  text-decoration: line-through;
+}
+
+.zv-kal-mini-tag.heute {
+  outline: 1px solid var(--zv-accent);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-kal-mini-tag.heute:not(.personfarbe):not(.sammel) {
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-sammel-punkt {
+  background: var(--zv-kal-sammel-flaeche);
+  box-shadow: 0 0 0 1px var(--zv-border-strong);
+}
+
+/* Tagesvorschau: haengt am Monatskasten, nicht am Tag, und nimmt dessen volle
+   Breite -- so kann sie bei 390 px nie seitlich aus dem Bild ragen, egal ob
+   der Tag ganz links oder ganz rechts steht. */
+.zv-kal-vorschau {
+  position: absolute;
+  left: var(--zv-space-2);
+  right: var(--zv-space-2);
+  z-index: 20;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border-strong);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  box-shadow: var(--zv-shadow-2);
+  color: var(--zv-text);
+  font-size: var(--zv-text-meta);
+  text-align: left;
+  pointer-events: none;
+  /* Platz fuer die untere Navigationsleiste am Handy beim scrollIntoView. */
+  scroll-margin-bottom: var(--zv-space-7);
+}
+
+.zv-kal-vorschau-kopf {
+  display: block;
+  margin-bottom: var(--zv-space-1);
+}
+
+.zv-kal-vorschau ul {
+  display: grid;
+  gap: var(--zv-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zv-kal-vorschau li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+
+.zv-kal-vorschau li .zv-person-punkt {
+  margin-right: 0;
+}
+
+.zv-kal-vorschau-punkt {
+  background: var(--zv-text-faint);
+}
+
+.zv-kal-vorschau-zeit {
+  flex: none;
+  color: var(--zv-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.zv-kal-vorschau-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zv-kal-vorschau-text span {
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-listenkopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+
+.zv-kal-listenkopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+  text-transform: capitalize;
+}
+
+.zv-kal-liste {
+  list-style: none;
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-kal-termin {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-kal-termin:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-zeit {
+  flex-shrink: 0;
+  min-width: 70px;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-termin-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: break-word;
+}
+
+.zv-kal-termin-text span {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+/* Die Marke steht in Zeilen, deren span-Regeln die Schrift dimmen -- auf
+   der hellen Artflaeche waere gedaempfte Schrift kaum lesbar. */
+.zv-kal-termin-text .zv-art-marke,
+.zv-kal-vorschau-text .zv-art-marke {
+  color: var(--zv-text-auf-personflaeche);
+  font-size: var(--zv-text-xs);
+}
+
+.zv-kal-kopf-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+@media (min-width: 1001px) {
+  .zv-kal-tag {
+    min-height: 64px;
+  }
+}
+
+@media (max-width: 640px) {
+  .zv-kal-termin {
+    flex-wrap: wrap;
+  }
+
+  .zv-kal-zeit {
+    min-width: 0;
+  }
+}
+
+/* Abwesenheit als Strahl am Fuss der Tageskacheln (Kalender.tsx,
+   strahlen()). Liegt in denselben Rasterzellen wie die Kacheln und spannt
+   ueber die Luecken dazwischen -- so ist ein Urlaub ein Strich, keine
+   Punktreihe. Die Kacheln machen unten Platz fuer so viele Spuren, wie die
+   sichtbaren Wochen brauchen (--strahl-spuren aus dem JavaScript, nur eine
+   Zahl). */
+.zv-kal-raster {
+  --zv-kal-strahl-hoehe: 5px;
+  --zv-kal-strahl-abstand: 3px;
+}
+
+.zv-kal-raster .zv-kal-tag {
+  padding-bottom: calc(var(--zv-space-1) + var(--strahl-spuren, 0) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+}
+
+.zv-kal-strahl-linie {
+  align-self: end;
+  z-index: 1;
+  height: var(--zv-kal-strahl-hoehe);
+  margin: 0 var(--zv-space-1) calc(var(--zv-space-1) + var(--spur) * (var(--zv-kal-strahl-hoehe) + var(--zv-kal-strahl-abstand)));
+  border-radius: var(--zv-radius-pill);
+  pointer-events: none;
+}
+
+/* Laeuft ueber den Wochenrand hinaus: die Kante bleibt offen, wie beim Balken. */
+.zv-kal-strahl-linie.vorher {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.zv-kal-strahl-linie.nachher {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* ------------------------------------------------------------------
+   Wochenansicht als Zeitraster (kalender/WochenZeitraster.tsx)
+   Kopf und Ganztagszeile stehen ausserhalb des scrollenden Stundenteils,
+   damit sie beim Scrollen stehen bleiben -- ohne position: sticky.
+   scrollbar-gutter auf allen drei Teilen haelt die Spalten buendig, auch
+   wo der Browser eine echte (nicht ueberlagernde) Scrollleiste zeichnet.
+   ------------------------------------------------------------------ */
+.zv-kal-woche {
+  /* Hoehe einer Stunde: die EINZIGE Pixelangabe des Rasters. Die Bloecke
+     rechnen ihre Lage daraus (Minuten aus dem JavaScript mal das hier). */
+  --zv-kal-stunde: 48px;
+  --zv-kal-zeitspalte: 60px;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  overflow: hidden;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-kal-woche-kopf,
+.zv-kal-ganztag,
+.zv-kal-woche-koerper {
+  display: grid;
+  grid-template-columns: var(--zv-kal-zeitspalte) repeat(7, minmax(0, 1fr));
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+
+.zv-kal-woche-kopf {
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-kal-woche-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--zv-space-2) var(--zv-space-1);
+  border: 0;
+  border-left: 1px solid var(--zv-border);
+  background: transparent;
+  color: var(--zv-text-muted);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  cursor: pointer;
+}
+
+.zv-kal-woche-tag strong {
+  font-size: var(--zv-text-xl);
+  color: var(--zv-text);
+}
+
+.zv-kal-woche-tag:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-woche-tag.gewaehlt {
+  background: var(--zv-accent-soft);
+  box-shadow: inset 0 -2px 0 var(--zv-accent);
+}
+
+.zv-kal-woche-tag.heute strong {
+  color: var(--zv-accent-strong);
+}
+
+.zv-kal-woche-tag:focus-visible,
+.zv-kal-balken:focus-visible,
+.zv-kal-block:focus-visible {
+  outline: 2px solid var(--zv-accent-strong);
+  outline-offset: 1px;
+}
+
+.zv-kal-ganztag {
+  grid-template-rows: repeat(var(--spuren), auto);
+  min-height: 32px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-ganztag-label {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: center;
+  padding-right: var(--zv-space-1);
+  text-align: right;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+}
+
+.zv-kal-balken {
+  min-width: 0;
+  margin: 1px 2px;
+  padding: 2px var(--zv-space-2);
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  color: var(--zv-text-auf-personflaeche);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-semibold);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Laeuft ueber den Wochenrand hinaus: die Kante bleibt offen. */
+.zv-kal-balken.vorher {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.zv-kal-balken.nachher {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Abwesenheit im Zeitraster: umrandet statt gefuellt -- gefuellt heisst
+   "hat einen Termin", umrandet "ist nicht da". Der Text steht auf der
+   normalen Flaeche, sein Kontrast haengt also nicht an der Personenfarbe;
+   die Personenfarbe traegt nur Rand und Punkt (Nicht-Text, >= 3:1). */
+.zv-kal-abwesend-zeile {
+  border-bottom-color: var(--zv-border);
+}
+
+.zv-kal-balken.zv-kal-strahl {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  border: 2px solid light-dark(oklch(0.58 0.15 var(--zv-person-h, 0)), oklch(0.74 0.13 var(--zv-person-h, 0)));
+}
+
+.zv-kal-balken.zv-kal-strahl.neutral {
+  background: var(--zv-surface);
+  border-color: var(--zv-border-strong);
+}
+
+/* Offene Kante ueber den Wochenrand: dort auch kein Rand. */
+.zv-kal-balken.zv-kal-strahl.vorher {
+  border-left-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl.nachher {
+  border-right-width: 0;
+}
+
+.zv-kal-balken.zv-kal-strahl > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-kal-balken.zv-kal-strahl > .zv-art-marke {
+  flex: none;
+}
+
+.zv-kal-balken.zv-kal-strahl:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-woche-koerper {
+  /* Bezugspunkt fuer offsetTop der Stundenzeilen (Anfangs-Scrollposition). */
+  position: relative;
+  overflow-y: auto;
+  /* So hoch, dass die Seite selbst nicht scrollen muss, aber nie so
+     niedrig, dass weniger als ein halber Arbeitstag zu sehen ist. */
+  max-height: max(320px, calc(100dvh - 330px));
+}
+
+.zv-kal-stunde {
+  display: block;
+  height: var(--zv-kal-stunde);
+  padding-right: var(--zv-space-1);
+  text-align: right;
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  font-variant-numeric: tabular-nums;
+  /* Beschriftung mittig auf der Stundenlinie statt darunter. */
+  transform: translateY(-0.6em);
+}
+
+.zv-kal-spalte {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--zv-border);
+}
+
+/* Heute nur leicht abgesetzt: eine Akzentflaeche ueber die ganze Hoehe
+   konkurrierte im dunklen Theme mit den Terminen selbst. */
+.zv-kal-spalte.heute {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-slot {
+  flex: none;
+  height: var(--zv-kal-stunde);
+  border: 0;
+  border-top: 1px solid var(--zv-border);
+  background: transparent;
+  cursor: pointer;
+}
+
+.zv-kal-slot:first-child {
+  border-top: 0;
+}
+
+.zv-kal-slot:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-kal-block {
+  position: absolute;
+  top: calc(var(--anfang) * var(--zv-kal-stunde) / 60);
+  height: calc(max(var(--dauer), 30) * var(--zv-kal-stunde) / 60 - 2px);
+  left: calc(var(--spalte) * 100% / var(--spalten) + 2px);
+  width: calc(100% / var(--spalten) - 4px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 2px var(--zv-space-1) 2px var(--zv-space-2);
+  border: 0;
+  border-radius: var(--zv-radius-s);
+  /* Trennt nebeneinanderliegende Bloecke derselben Farbe sichtbar. */
+  box-shadow: 0 0 0 1px var(--zv-surface);
+  color: var(--zv-text-auf-personflaeche);
+  font: inherit;
+  font-size: var(--zv-text-xs);
+  line-height: 1.3;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.zv-kal-block > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zv-kal-block strong {
+  font-weight: var(--zv-weight-semibold);
+}
+
+/* Halbe Stunde: Titel und Uhrzeit in einer Zeile, sonst passt nur der Titel. */
+.zv-kal-block.kurz {
+  flex-direction: row;
+  gap: var(--zv-space-1);
+}
+
+.zv-kal-block.kurz > :nth-child(n + 3) {
+  display: none;
+}
+
+/* Von Klient:innen angelegt (keine Personenfarbe) bzw. abgesagt -- in
+   Flaechen, auf denen der normale Text seinen Kontrast schon hat. */
+.zv-kal-block.neutral,
+.zv-kal-balken.neutral {
+  background: var(--zv-accent-soft-strong);
+  color: var(--zv-text);
+}
+
+.zv-kal-block.abgesagt,
+.zv-kal-balken.abgesagt {
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+  outline: 1px dashed var(--zv-border-strong);
+  outline-offset: -1px;
+}
+
+.zv-kal-jetzt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--anfang) * var(--zv-kal-stunde) / 60);
+  height: 2px;
+  background: var(--zv-status-danger);
+  pointer-events: none;
+}
+
+.zv-kal-jetzt::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--zv-radius-pill);
+  background: var(--zv-status-danger);
+}
+
+/* Unter ~640 px Inhaltsbreite (Handy, schmales Fenster neben der
+   Seitenleiste) sind sieben Stundenspalten zu schmal fuer lesbare Titel:
+   dort bleibt die Wochenansicht Tageskacheln plus Terminliste. Gemessen an
+   der Breite des Kalenders, nicht des Fensters -- die Seitenleiste nimmt
+   je nach Zustand unterschiedlich viel weg. */
+.zv-kal-inhalt {
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
+  .zv-kal-woche {
+    display: none;
+  }
+}
+
+@container (min-width: 641px) {
+  .zv-kal-raster.zv-kal-nur-schmal,
+  .zv-kal-nur-schmal {
+    display: none;
+  }
+}
+
+.zv-zugang-link .zv-field-inline {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-s);
+}
+
+/* Lange Knopfbeschriftungen duerfen auf schmalen Bildschirmen umbrechen,
+   statt die Karte ueber den Rand zu schieben. */
+.zv-aktionszeile > .zv-btn,
+.zv-inline-zeile > .zv-btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}

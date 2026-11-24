@@ -1,0 +1,682 @@
+/* ==================================================================
+   Hilfeplan und Ziele (Klientenakte)
+   ================================================================== */
+.zv-hilfeplan {
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  padding: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-hilfeplan-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-hilfeplan-meta,
+.zv-ziel-faellig {
+  color: var(--zv-text-muted);
+  font-size: 13px;
+}
+
+.zv-hilfeplan-bemerkung {
+  margin: 0 0 var(--zv-space-3);
+  white-space: pre-wrap;
+}
+
+.zv-hilfeplan-verworfen {
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-ziel {
+  background: var(--zv-surface-2);
+  border-radius: var(--zv-radius-s);
+  padding: var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-ziel-verworfen {
+  opacity: 0.7;
+}
+
+.zv-ziel-kopf {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-ziel-titel {
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-ziel-beschreibung {
+  margin: var(--zv-space-2) 0 0;
+  white-space: pre-wrap;
+}
+
+.zv-ziel-fortschritt {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin: var(--zv-space-2) 0;
+}
+
+.zv-ziel-fortschritt progress {
+  flex: 1;
+  height: 8px;
+  accent-color: var(--zv-accent);
+}
+
+.zv-ziel-aktionen {
+  display: flex;
+  gap: var(--zv-space-4);
+  flex-wrap: wrap;
+}
+
+.zv-ziel-verlauf ul {
+  margin: var(--zv-space-2) 0 0;
+  padding-left: var(--zv-space-4);
+}
+
+/* --- Rueckmeldung: Detail im Seitenpanel --------------------------------
+   Rueckmeldung aus dem Betrieb: die Detailansicht wirkte ungeordnet, vor
+   allem die "Rahmenbedingungen" -- das <dl> hatte keine eigenen Regeln und
+   fiel auf die Browser-Vorgabe zurueck (dd 40px eingerueckt, Rohschluessel
+   untereinander). Jetzt: Kopf mit Pillen, Abschnitte durch Linien getrennt,
+   Rahmenbedingungen als zweispaltiges Raster (Bezeichnung | Wert), das im
+   schmalen Panel auf eine Spalte umbricht. */
+.zv-rm-detail-kopf h3 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-xl);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.zv-rm-detail-pillen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+.zv-rm-detail-abschnitt {
+  margin-top: var(--zv-space-5);
+  padding-top: var(--zv-space-4);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-rm-detail-abschnitt h4 {
+  margin: 0 0 var(--zv-space-2);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--zv-laufweite-label);
+  color: var(--zv-text-muted);
+}
+.zv-rm-detail-abschnitt h4:not(:first-child) {
+  margin-top: var(--zv-space-4);
+}
+.zv-rm-detail-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.zv-rm-detail-bild {
+  display: block;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+  background: var(--zv-surface-2);
+}
+.zv-rm-detail-bild img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.zv-rm-detail-hinweis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-kontext-raster {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+  margin: 0;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  overflow: hidden;
+}
+.zv-kontext-raster > div {
+  display: contents;
+}
+.zv-kontext-raster dt,
+.zv-kontext-raster dd {
+  margin: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+.zv-kontext-raster > div:first-child dt,
+.zv-kontext-raster > div:first-child dd {
+  border-top: 0;
+}
+.zv-kontext-raster dt {
+  color: var(--zv-text-muted);
+  background: var(--zv-surface-2);
+}
+.zv-kontext-raster dd {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  .zv-kontext-raster {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .zv-kontext-raster dd {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .zv-kontext-raster dt {
+    background: none;
+    padding-bottom: var(--zv-space-1);
+  }
+}
+.zv-rm-detail-entscheidung .zv-aktionszeile {
+  flex-wrap: wrap;
+}
+
+/* ==================================================================
+   Protokolle (Formular-Baukasten, migrations/0075)
+   ================================================================== */
+.zv-protokoll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  max-width: 760px;
+}
+
+.zv-protokoll-abschnitt {
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+  padding: var(--zv-space-3) var(--zv-space-4) var(--zv-space-1);
+  margin: 0 0 var(--zv-space-3);
+  min-width: 0;
+}
+
+.zv-protokoll-abschnitt legend,
+.zv-protokoll-abschnitt h4 {
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-text);
+  padding: 0 var(--zv-space-1);
+  margin: 0 0 var(--zv-space-2);
+}
+
+.zv-protokoll-hilfe {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  margin: 0 0 var(--zv-space-2);
+}
+
+/* Unter dem Feld statt daneben: auf dem Handy ist neben dem Feld kein Platz. */
+.zv-protokoll-zaehler {
+  margin: var(--zv-space-1) 0 0;
+  text-align: right;
+}
+
+.zv-protokoll-warnung {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  border-radius: var(--zv-radius-s);
+  padding: 10px var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+  background: var(--zv-status-warn-bg);
+  color: var(--zv-status-warn);
+}
+
+.zv-protokoll-anzeige {
+  display: flex;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-1) 0;
+  font-size: var(--zv-text-m);
+}
+
+.zv-protokoll-label {
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  min-width: 0;
+}
+
+.zv-protokoll-anzeige .zv-protokoll-label {
+  flex: 0 0 9.5rem;
+}
+
+.zv-protokoll-nurlesen {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: var(--zv-space-1) 0;
+  color: var(--zv-text);
+}
+
+.zv-protokoll-pill {
+  margin-left: var(--zv-space-2);
+  vertical-align: middle;
+}
+
+.zv-field-fehler input,
+.zv-field-fehler textarea,
+.zv-field-fehler select {
+  border-color: var(--zv-status-danger);
+}
+
+.zv-feld-fehler {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-status-danger);
+}
+
+.zv-protokoll-zahl {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-zahl input {
+  max-width: 12rem;
+}
+
+/* Knoepfe statt Ausklappliste bis fuenf Optionen: am Handy ein Tipp statt
+   drei, und alle Moeglichkeiten sind auf einen Blick sichtbar. */
+.zv-protokoll-knoepfe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-knoepfe button {
+  min-height: 40px;
+  min-width: 3rem;
+  padding: 0 var(--zv-space-4);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border-strong);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  font-size: var(--zv-text-m);
+  cursor: pointer;
+  transition: background var(--zv-transition-fast), border-color var(--zv-transition-fast);
+}
+
+.zv-protokoll-knoepfe button:hover {
+  border-color: var(--zv-accent);
+}
+
+.zv-protokoll-knoepfe button.active {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  border-color: var(--zv-accent);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-protokoll-mehrfach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-field .zv-protokoll-haken {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text);
+  margin: 0;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+/* .zv-field input gibt Eingaben width:100% -- ein Haekchen darf das nicht. */
+.zv-field .zv-protokoll-haken input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  padding: 0;
+  flex: none;
+}
+
+/*
+ * Skala: die Endbeschriftungen ("sehr schlecht" / "sehr gut") muessen genau
+ * unter dem ersten und dem letzten Knopf stehen. Frueher hatte die Zeile eine
+ * feste Hoechstbreite (22rem) -- bei 1 bis 10 stand "sehr gut" dadurch mitten
+ * unter der 6 (Rueckmeldung 49154ec7). Jetzt ist der innere Block genau so
+ * breit wie die Knopfreihe, und die Reihe bricht NICHT um: bei einem Umbruch
+ * stuende die hoechste Zahl in der zweiten Zeile links, und keine Beschriftung
+ * koennte mehr richtig sitzen.
+ *
+ * Die Breite rechnet das CSS aus der Stufenzahl (--zv-skala-stufen, gesetzt
+ * im TSX): Wunsch 3rem je Knopf, bei wenig Platz bis 1.75rem -- damit passt
+ * 1 bis 10 auch auf 390 px. Reicht auch das nicht (sehr lange Skalen), rollt
+ * der aeussere Block waagerecht, Knoepfe und Beschriftung gemeinsam.
+ * Bewusst KEIN inline-flex mit Knopfbreite 3rem: eine feste Knopfbreite zaehlt
+ * als min-content, die Knoepfe schrumpfen dann nie und das Handy rollt schon
+ * bei 1 bis 10 (im Browser gemessen).
+ */
+.zv-protokoll-skala {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.zv-protokoll-skala-innen {
+  display: flex;
+  flex-direction: column;
+  width: calc(var(--zv-skala-stufen) * 3rem + (var(--zv-skala-stufen) - 1) * var(--zv-space-1));
+  max-width: 100%;
+  min-width: calc(var(--zv-skala-stufen) * 1.75rem + (var(--zv-skala-stufen) - 1) * var(--zv-space-1));
+}
+
+.zv-protokoll-skala .zv-protokoll-knoepfe {
+  flex-wrap: nowrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-protokoll-skala .zv-protokoll-knoepfe button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.zv-protokoll-skala-enden {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  font-size: var(--zv-text-xs);
+  color: var(--zv-text-muted);
+  margin-top: var(--zv-space-1);
+  /* Breite kommt allein von der Knopfreihe: lange Beschriftungen brechen um,
+     statt den Block breiter als die Knoepfe zu machen. */
+  width: 0;
+  min-width: 100%;
+}
+
+/* Die rechte Beschriftung steht rechtsbuendig unter dem letzten Knopf, auch
+   wenn sie zweizeilig umbricht. */
+.zv-protokoll-skala-enden span:last-child {
+  text-align: right;
+}
+
+.zv-protokoll-personen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-person {
+  height: auto;
+  padding: var(--zv-space-1) var(--zv-space-1) var(--zv-space-1) var(--zv-space-2);
+}
+
+.zv-protokoll-personen select {
+  flex: 1 1 12rem;
+  width: auto;
+}
+
+/*
+ * Lesende Ansicht (Konzept protokoll-ansicht, Teil 1). Umbruch nach der
+ * Breite der ANSICHT, nicht des Fensters: dieselbe Ansicht steht im 440-px-
+ * Fenster, im Akten-Panel und im Vollbild. Die fruehere @media-Regel galt bei
+ * 1780 px Fensterbreite als "breit", obwohl das Fenster nur 440 px hatte --
+ * dem Wert blieben 36 px. Nur an .zv-protokoll-lesen, nicht an der Eingabe:
+ * inline-size-Containment nimmt dem Element die Breite aus dem Inhalt, und
+ * die Eingabe braucht das nicht.
+ */
+.zv-protokoll-lesen {
+  container: protokoll / inline-size;
+}
+
+/* Schmal (unter 520 px Inhalt): Beschriftung ueber dem Wert. */
+.zv-protokoll-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--zv-space-1);
+  align-items: baseline;
+  padding: var(--zv-space-2) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+/*
+ * Breit: keine feste Beschriftungsspalte mehr, die sich zuerst ihren Platz
+ * nimmt (eine Spur mit fester Obergrenze wird vor den fr-Spuren gefuellt).
+ * Die Beschriftung bekommt hoechstens 40 %, der Wert mindestens 12 rem.
+ */
+@container protokoll (min-width: 520px) {
+  .zv-protokoll-zeile {
+    grid-template-columns: minmax(8rem, 2fr) minmax(12rem, 3fr);
+    gap: var(--zv-space-1) var(--zv-space-3);
+  }
+
+  .zv-protokoll-zeile.zv-protokoll-zeile-voll {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-1);
+  }
+}
+
+.zv-protokoll-abschnitt .zv-protokoll-zeile:last-child {
+  border-bottom: none;
+}
+
+/* Plakette direkt hinter dem Wert; reicht der Platz nicht, rutscht sie in die naechste Zeile. */
+.zv-protokoll-wertzelle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-1) var(--zv-space-2);
+  min-width: 0;
+}
+
+/* break-word statt anywhere: Umbruch an Wortgrenzen, nur ein ueberlanges einzelnes Wort wird geteilt. */
+.zv-protokoll-wert {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.zv-protokoll-wert.zv-protokoll-wert-einzeilig {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabellen (geplante Wiederholgruppe) ueber die volle Breite mit eigenem
+   waagrechtem Scrollen, damit eine breite Tabelle nie das Panel aufreisst. */
+.zv-protokoll-tabelle {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Woher ein ausserhalb der Akte geoeffnetes Protokoll stammt, mit Sprung in die Akte. */
+.zv-protokoll-herkunft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2) var(--zv-space-3);
+  margin-bottom: var(--zv-space-3);
+}
+
+.zv-protokoll-herkunft .zv-protokoll-meta {
+  margin: 0;
+}
+
+.zv-protokoll-ruecksprung {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1) var(--zv-space-3);
+}
+
+.zv-protokoll-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-3);
+}
+
+.zv-protokoll-detail > .zv-link-btn {
+  align-self: flex-start;
+}
+
+.zv-protokoll-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--zv-space-3);
+}
+
+.zv-protokoll-kopf h3 {
+  margin: 0;
+  font-size: var(--zv-text-l);
+}
+
+.zv-protokoll-meta {
+  margin: var(--zv-space-1) 0 0;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-protokoll-kopf-aktionen {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-leiste {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  max-width: 760px;
+  padding-top: var(--zv-space-2);
+  border-top: 1px solid var(--zv-border);
+}
+
+.zv-protokoll-status {
+  margin-right: auto;
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-protokoll-korrektur {
+  max-width: 760px;
+}
+
+.zv-protokoll-historie h4 {
+  font-size: var(--zv-text-m);
+  margin: var(--zv-space-3) 0 var(--zv-space-2);
+}
+
+.zv-protokoll-formularwahl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+
+.zv-protokoll-formularwahl-eintrag {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--zv-space-1);
+  text-align: left;
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-s);
+  border: 1px solid var(--zv-border);
+  background: var(--zv-surface);
+  color: var(--zv-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zv-protokoll-formularwahl-eintrag:hover {
+  border-color: var(--zv-accent);
+}
+
+.zv-protokoll-formularwahl-eintrag span {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+}
+
+.zv-formular-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zv-formular-liste li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  padding: var(--zv-space-3) 0;
+  border-bottom: 1px solid var(--zv-border);
+}
+
+.zv-formular-liste li:last-child {
+  border-bottom: none;
+}
+
+.zv-formular-meta {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .zv-protokoll-abschnitt {
+    padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-1);
+  }
+
+  .zv-protokoll-anzeige .zv-protokoll-label {
+    flex-basis: 7.5rem;
+  }
+
+  .zv-protokoll-leiste .zv-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .zv-formular-liste li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.zv-protokoll-kopfzeile {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-protokoll-kopfzeile h3 {
+  margin: 0;
+  font-size: var(--zv-text-basis);
+}
+
+.zv-protokoll-modal-text {
+  margin-top: 0;
+}
+
+.zv-formular-stillgelegt {
+  margin-left: var(--zv-space-2);
+}

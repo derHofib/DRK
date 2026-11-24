@@ -1,0 +1,971 @@
+/* ==================================================================
+   PDF-Exporte je Formular (FormularPdfExporte.tsx, Migration 0082)
+   ================================================================== */
+.zv-pe-kopf {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-pe-kopf .zv-sub {
+  max-width: 72ch;
+  margin: 0;
+}
+.zv-pe-raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--zv-space-4);
+  align-items: start;
+}
+.zv-pe-zwischen {
+  margin: var(--zv-space-6) 0 var(--zv-space-1);
+  font-size: var(--zv-text-abschnitt);
+}
+.zv-pe-karte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+}
+.zv-pe-karte h3 {
+  margin: var(--zv-space-2) 0 0;
+}
+.zv-pe-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-2);
+}
+.zv-pe-fakten {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--zv-text-muted);
+  font-size: var(--zv-text-s);
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-blatt {
+  display: flex;
+  justify-content: center;
+  padding: var(--zv-space-4);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface-2);
+  cursor: pointer;
+}
+.zv-pe-blatt:focus-visible {
+  outline: 2px solid var(--zv-ring);
+  outline-offset: 2px;
+}
+/* Skizze einer A4-Seite: bewusst Papierweiss/Tinte auch im dunklen Design --
+   es geht um das Aussehen auf Papier (gleiche Tokens wie das Unterschriftsfeld). */
+.zv-pe-skizze {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  width: 120px;
+  aspect-ratio: 210 / 297;
+  padding: var(--zv-space-3);
+  background: var(--zv-signature-paper);
+  box-shadow: var(--zv-shadow-1);
+}
+.zv-pe-skizze > span {
+  display: block;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-ink);
+  opacity: 0.18;
+}
+.zv-pe-skizze-logo {
+  width: 30%;
+  height: 8px;
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-skizze-logo-mitte {
+  align-self: center;
+}
+.zv-pe-skizze-logo-rechts {
+  align-self: flex-end;
+}
+.zv-pe-skizze .zv-pe-skizze-titel {
+  width: 55%;
+  height: 5px;
+  margin: var(--zv-space-1) 0;
+  background: var(--zv-accent);
+  opacity: 1;
+}
+.zv-pe-skizze-zeile {
+  height: 2px;
+  width: 100%;
+}
+.zv-pe-skizze-brief .zv-pe-skizze-zeile {
+  width: 68%;
+}
+.zv-pe-skizze-anschrift {
+  width: 40%;
+  height: 22px;
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-skizze .zv-pe-skizze-info {
+  position: absolute;
+  right: var(--zv-space-3);
+  top: 28%;
+  width: 22%;
+  height: 50%;
+}
+.zv-pe-skizze .zv-pe-skizze-fuss {
+  position: absolute;
+  left: var(--zv-space-3);
+  right: var(--zv-space-3);
+  bottom: var(--zv-space-2);
+  height: 2px;
+}
+.zv-pe-angaben {
+  align-self: stretch;
+}
+.zv-pe-neu {
+  display: grid;
+  gap: var(--zv-space-3);
+}
+.zv-pe-wahl {
+  display: flex;
+  gap: var(--zv-space-3);
+  align-items: flex-start;
+  padding: var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  cursor: pointer;
+}
+.zv-pe-wahl.active {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+.zv-pe-wahl > span {
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-wahl strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zv-space-2);
+  align-items: center;
+}
+.zv-pe-zwei {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--zv-space-3);
+}
+.zv-pe-drei {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--zv-space-2);
+}
+
+/* Editor: Einstellungen | Vorschau | Platzhalter */
+.zv-pe-editor-kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--zv-space-4);
+  margin-bottom: var(--zv-space-4);
+}
+.zv-pe-editor-kopf .zv-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  margin-bottom: var(--zv-space-2);
+}
+.zv-pe-spalten {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(220px, 280px);
+  gap: var(--zv-space-4);
+  align-items: start;
+}
+.zv-pe-einstellungen {
+  padding: var(--zv-space-2) var(--zv-space-4);
+}
+.zv-pe-abschnitt {
+  border-bottom: 1px solid var(--zv-border);
+}
+.zv-pe-abschnitt:last-child {
+  border-bottom: none;
+}
+.zv-pe-abschnitt > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  padding: var(--zv-space-3) 0;
+  cursor: pointer;
+  font-weight: var(--zv-weight-semibold);
+  list-style: none;
+}
+.zv-pe-abschnitt > summary::-webkit-details-marker {
+  display: none;
+}
+.zv-pe-abschnitt > summary .zv-sub-inline {
+  font-weight: var(--zv-weight-medium);
+  text-align: right;
+}
+.zv-pe-abschnitt-inhalt {
+  display: grid;
+  gap: var(--zv-space-3);
+  padding-bottom: var(--zv-space-4);
+}
+.zv-pe-abschnitt-inhalt .zv-field {
+  margin: 0;
+}
+.zv-pe-label {
+  display: block;
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-sekundaer);
+  margin-bottom: var(--zv-space-1);
+}
+.zv-pe-mono {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-s);
+}
+.zv-pe-felder {
+  display: grid;
+  gap: var(--zv-space-1);
+  max-height: 320px;
+  overflow: auto;
+}
+.zv-field .zv-pe-farbe {
+  width: 64px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: transparent;
+}
+.zv-pe-vorschau {
+  display: grid;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-pe-vorschau-leiste {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-3);
+}
+.zv-pe-papier {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: var(--zv-space-3);
+  border-radius: var(--zv-radius-l);
+  background: var(--zv-surface-2);
+}
+.zv-pe-papier iframe {
+  width: 100%;
+  height: 78vh;
+  border: none;
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-paper);
+}
+.zv-pe-platzhalter ul {
+  margin: 0 0 var(--zv-space-3);
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--zv-space-1);
+}
+.zv-pe-platzhalter li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--zv-space-2);
+  min-width: 0;
+}
+.zv-pe-platzhalter li button {
+  padding: 0 var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-surface-2);
+  color: var(--zv-text);
+  cursor: copy;
+  font: inherit;
+}
+.zv-pe-platzhalter code {
+  font-family: var(--zv-font-mono);
+  font-size: var(--zv-text-xs);
+  overflow-wrap: anywhere;
+}
+.zv-pe-platzhalter .zv-sub-inline {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1280px) {
+  .zv-pe-spalten {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  }
+  .zv-pe-platzhalter {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
+  .zv-pe-kopf,
+  .zv-pe-editor-kopf {
+    flex-direction: column;
+  }
+  .zv-pe-spalten,
+  .zv-pe-zwei {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Einstellungen › Angaben für Dokumente */
+.zv-dok-angaben {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--zv-space-3);
+}
+.zv-dok-angaben .zv-field {
+  margin: 0;
+}
+.zv-dok-angaben-breit {
+  grid-column: 1 / -1;
+}
+.zv-dok-logos {
+  margin: var(--zv-space-3) 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--zv-space-2);
+}
+.zv-dok-logos li {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-dok-logo-bild {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 96px;
+  height: 44px;
+  padding: var(--zv-space-1);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-s);
+  background: var(--zv-signature-paper);
+}
+.zv-dok-logo-bild img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.zv-dok-logo-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.zv-dok-logo-text strong {
+  overflow-wrap: anywhere;
+}
+/* .zv-field input (volle Breite, 40 px) soll Kaestchen in den Abschnitten nicht aufblaehen. */
+.zv-pe-abschnitt-inhalt .zv-checkbox-zeile input[type="checkbox"] {
+  flex: none;
+  min-height: 0;
+  padding: 0;
+}
+
+/* Mitarbeitende: Spalte "Sieht" und Vorschau der Standortregel (Migration 0084). */
+.zv-sicht-zelle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--zv-space-1);
+}
+
+.zv-sicht-zelle .zv-pill svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  margin-right: var(--zv-space-1);
+}
+
+.zv-regel-vorschau {
+  align-items: flex-start;
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-regel-vorschau-inhalt {
+  flex: 1;
+  min-width: 0;
+}
+
+.zv-regel-vorschau-inhalt p {
+  margin: var(--zv-space-1) 0 0;
+}
+
+.zv-regel-vorschau-liste {
+  display: grid;
+  gap: var(--zv-space-1);
+  margin-top: var(--zv-space-3);
+}
+
+.zv-regel-vorschau-liste > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--zv-space-3);
+}
+
+.zv-regel-vorschau-aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-top: var(--zv-space-3);
+}
+
+@media (max-width: 640px) {
+  .zv-regel-vorschau-liste > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding-bottom: var(--zv-space-2);
+  }
+}
+
+/* Vertretung beantragen: Standorte, die mitgegeben werden (Migration 0084). */
+.zv-vertretung-standorte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  margin: var(--zv-space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.zv-vertretung-standorte legend {
+  padding: 0;
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-vertretung-standorte .zv-sub {
+  margin: var(--zv-space-1) 0;
+}
+
+/* ------------------------------------------------------------------
+   Standort-Steckbrief: Leitung & Team als Karten (StandortTeam.tsx,
+   Rueckmeldung "Standorte Mitarbeiter"). Raster passt sich der Breite
+   an; schmal (Handy) wird jede Karte zu einer Zeile mit den Knoepfen
+   rechts, damit die Liste kurz bleibt und die Tippflaechen gross.
+   ------------------------------------------------------------------ */
+.zv-team-kopfzahl {
+  margin-left: var(--zv-space-3);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-medium);
+  color: var(--zv-text-muted);
+}
+.zv-team-gruppe {
+  margin: var(--zv-space-2) 0 var(--zv-space-2);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+  color: var(--zv-text-muted);
+}
+.zv-team-leer {
+  margin: 0 0 var(--zv-space-4);
+}
+.zv-team-karten {
+  list-style: none;
+  margin: 0 0 var(--zv-space-4);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: var(--zv-space-3);
+}
+.zv-team-karte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  min-width: 0;
+  padding: var(--zv-space-3) var(--zv-space-3) var(--zv-space-1);
+  background: var(--zv-surface);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-l);
+}
+.zv-team-karte-leitung {
+  border-color: var(--zv-accent-soft-strong);
+}
+/* Offene Stelle: gestrichelt und ohne Flaeche -- sichtbar, aber erkennbar
+   keine Person. */
+.zv-team-karte-offen {
+  background: transparent;
+  border-style: dashed;
+  padding-bottom: var(--zv-space-3);
+}
+.zv-team-kopf {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-3);
+  min-width: 0;
+}
+.zv-team-kuerzel {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--zv-radius-pill);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-bold);
+  color: var(--zv-text-auf-personflaeche);
+}
+.zv-team-kuerzel-offen {
+  background: var(--zv-surface-2);
+  color: var(--zv-text-muted);
+}
+/* Abwesend: Punkt am Kuerzel in der Abwesenheitsfarbe des Kalenders
+   (gleiche feste Helligkeit wie .zv-art-flaeche, CLAUDE.md Regel 7). Er
+   ergaenzt die Pille, ersetzt sie nicht -- Farbe allein traegt keine
+   Information. */
+.zv-team-kuerzel-weg::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--zv-radius-pill);
+  border: 2px solid var(--zv-surface);
+  background: light-dark(
+    oklch(0.84 var(--zv-art-abwesend-c) var(--zv-art-abwesend-h)),
+    oklch(0.76 var(--zv-art-abwesend-c) var(--zv-art-abwesend-h))
+  );
+}
+.zv-team-name-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zv-team-name {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--zv-text-m);
+  font-weight: var(--zv-weight-bold);
+  line-height: var(--zv-leading-tight);
+  color: var(--zv-text);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+button.zv-team-name:hover {
+  color: var(--zv-accent-strong);
+}
+.zv-team-name .zv-sub {
+  font-weight: var(--zv-weight-medium);
+}
+.zv-team-position {
+  font-size: var(--zv-text-s);
+  color: var(--zv-text-muted);
+  line-height: var(--zv-leading-tight);
+  overflow-wrap: anywhere;
+}
+.zv-team-abwesend {
+  align-self: flex-start;
+}
+.zv-team-zeilen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+}
+.zv-team-zeilen li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.zv-team-zeilen svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+  margin-top: 2px;
+  color: var(--zv-text-muted);
+}
+.zv-team-inline-link {
+  padding: 0;
+  font-size: inherit;
+}
+.zv-team-fuss {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--zv-space-2);
+  margin-top: auto;
+  padding-top: var(--zv-space-1);
+  border-top: 1px solid var(--zv-haarlinie);
+}
+.zv-team-karte-offen .zv-team-fuss {
+  padding-top: var(--zv-space-2);
+}
+.zv-team-telefon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  min-width: 0;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+  text-decoration: none;
+}
+.zv-team-telefon svg {
+  flex: none;
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+.zv-team-telefon-nummer {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zv-team-ohne-telefon {
+  margin: 0;
+}
+.zv-team-knoepfe {
+  display: inline-flex;
+  flex: none;
+}
+/* "Am liebsten per Chat" im Profil: der Nachricht-Knopf in Akzentfarbe. */
+.zv-icon-btn.zv-team-bevorzugt {
+  color: var(--zv-accent-strong);
+}
+.zv-team-mehr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--zv-space-1);
+  width: 100%;
+  margin-bottom: var(--zv-space-4);
+  padding: var(--zv-space-2);
+  border: 1px dashed var(--zv-border-strong);
+  border-radius: var(--zv-radius-l);
+  background: none;
+  font: inherit;
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+  color: var(--zv-accent-strong);
+  cursor: pointer;
+}
+
+/* Schmal: eine Zeile je Person -- Kuerzel, Name und Position, darunter
+   ggf. "abwesend", rechts Anrufen/Nachricht/Profil. Bezug, Erreichbarkeit
+   und weitere Standorte stehen dann im Profil, sonst wird die Liste auf
+   dem Handy laenger als der restliche Steckbrief. */
+@container akte (max-width: 520px) {
+  .zv-team-kopfzahl {
+    display: block;
+    margin: var(--zv-space-1) 0 0;
+  }
+  .zv-team-link-text {
+    display: none;
+  }
+  .zv-team-karten {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-2);
+  }
+  .zv-team-karte {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "kopf fuss" "abwesend fuss";
+    align-items: center;
+    gap: var(--zv-space-1) var(--zv-space-2);
+    padding: var(--zv-space-2) var(--zv-space-1) var(--zv-space-2) var(--zv-space-3);
+  }
+  .zv-team-kopf {
+    grid-area: kopf;
+  }
+  .zv-team-abwesend {
+    grid-area: abwesend;
+    justify-self: start;
+    margin-left: calc(36px + var(--zv-space-3));
+  }
+  .zv-team-zeilen {
+    display: none;
+  }
+  .zv-team-fuss {
+    grid-area: fuss;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+  .zv-team-telefon-nummer,
+  .zv-team-ohne-telefon {
+    display: none;
+  }
+  .zv-team-telefon {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+  .zv-team-telefon svg {
+    width: var(--zv-icon-m);
+    height: var(--zv-icon-m);
+  }
+  .zv-team-knoepfe .zv-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .zv-team-karte-offen .zv-team-fuss {
+    padding: 0;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Typen & Listen (Organisatorisch, migrations/0085): links die Listen nach
+   Bereich, rechts die gewaehlte. Auf dem Handy werden die Listen zu einer
+   umbrechenden Knopfreihe ueber dem Inhalt -- eine seitliche Spalte
+   haette dort keinen Platz.
+   ------------------------------------------------------------------ */
+.zv-typen-seite {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--zv-space-6);
+  align-items: start;
+}
+
+.zv-typen-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-4);
+}
+
+.zv-typen-nav-gruppe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-1);
+}
+
+.zv-typen-nav-titel {
+  padding: 0 var(--zv-space-3);
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-label);
+  font-weight: var(--zv-weight-semibold);
+  letter-spacing: var(--zv-laufweite-label);
+  text-transform: uppercase;
+}
+
+.zv-typen-nav-punkt {
+  display: flex;
+  align-items: center;
+  gap: var(--zv-space-2);
+  min-height: 40px;
+  padding: 0 var(--zv-space-3);
+  border: none;
+  border-radius: var(--zv-radius-m);
+  background: none;
+  color: var(--zv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zv-typen-nav-punkt:hover {
+  background: var(--zv-surface-2);
+}
+
+.zv-typen-nav-punkt.aktiv {
+  background: var(--zv-accent-soft);
+  color: var(--zv-accent-strong);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-typen-fest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zv-space-1);
+  margin-left: auto;
+  color: var(--zv-text-gedaempft);
+  font-size: var(--zv-text-xs);
+  font-weight: var(--zv-weight-medium);
+}
+
+.zv-typen-fest svg {
+  width: var(--zv-icon-s);
+  height: var(--zv-icon-s);
+}
+
+.zv-typen-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-bottom: var(--zv-space-4);
+}
+
+.zv-typen-titel {
+  margin: 0 0 var(--zv-space-1);
+  font-size: var(--zv-text-l);
+}
+
+.zv-typen-text {
+  max-width: 60ch;
+  margin: 0 0 var(--zv-space-4);
+}
+
+.zv-typen-kopf .zv-typen-text {
+  margin-bottom: 0;
+}
+
+.zv-typen-liste .zv-info-karte {
+  cursor: default;
+}
+
+/* Bearbeiten und die zwei Pfeile in einer Zeile: umgebrochen machten sie
+   jede Zeile dreimal so hoch (im Browser gemessen). */
+.zv-typen-liste .zv-liste-zelle-aktionen {
+  flex-wrap: nowrap;
+  gap: var(--zv-space-1);
+}
+
+.zv-typen-griff {
+  display: inline-flex;
+  color: var(--zv-text-gedaempft);
+  cursor: grab;
+}
+
+.zv-typen-aus {
+  opacity: 0.65;
+}
+
+.zv-typen-gezogen {
+  outline: 2px dashed var(--zv-accent);
+  outline-offset: -2px;
+}
+
+.zv-typen-liste .zv-liste-zelle-titel .zv-person-punkt {
+  margin-right: var(--zv-space-2);
+}
+
+.zv-typen-feste-liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zv-typen-feste-liste li {
+  display: flex;
+  align-items: center;
+  padding: var(--zv-space-3) var(--zv-space-4);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  background: var(--zv-surface);
+}
+
+/* Drei Moeglichkeiten mit Erklaerung: Karten statt Chips, der Text ist
+   die eigentliche Entscheidungshilfe. */
+.zv-typen-wahl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--zv-space-2);
+  border: none;
+  margin: 0 0 var(--zv-space-4);
+  padding: 0;
+}
+
+.zv-typen-wahl legend {
+  margin-bottom: var(--zv-space-1);
+  font-size: var(--zv-text-s);
+  font-weight: var(--zv-weight-semibold);
+}
+
+.zv-typen-wahl .zv-typen-wahl-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--zv-space-2);
+  margin: 0;
+  padding: var(--zv-space-2) var(--zv-space-3);
+  border: 1px solid var(--zv-border);
+  border-radius: var(--zv-radius-m);
+  color: var(--zv-text);
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.zv-typen-wahl-option.aktiv {
+  border-color: var(--zv-accent);
+  background: var(--zv-accent-soft);
+}
+
+.zv-typen-wahl .zv-typen-wahl-option input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.zv-typen-wahl-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zv-typen-wahl-option > span > span {
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-s);
+}
+
+.zv-feld-hilfe {
+  margin: var(--zv-space-1) 0 0;
+  color: var(--zv-text-sekundaer);
+  font-size: var(--zv-text-s);
+}
+
+.zv-typen-dialog-fuss {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--zv-space-3);
+  margin-top: var(--zv-space-4);
+  padding-top: var(--zv-space-3);
+  border-top: 1px solid var(--zv-border);
+}
+
+.zv-link-btn.zv-link-btn-gefahr {
+  color: var(--zv-status-danger);
+}
+
+@media (max-width: 760px) {
+  .zv-typen-seite {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--zv-space-4);
+  }
+
+  .zv-typen-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--zv-space-2);
+  }
+
+  .zv-typen-nav-gruppe {
+    flex-direction: row;
+  }
+
+  .zv-typen-nav-titel {
+    display: none;
+  }
+
+  .zv-typen-nav-punkt {
+    border: 1px solid var(--zv-border);
+    border-radius: var(--zv-radius-pill);
+  }
+
+  .zv-typen-griff {
+    display: none;
+  }
+}
