@@ -35,7 +35,6 @@ import {
   IGenehmigen,
   IGeplant,
   IKapazitaet,
-  ILeerVerlauf,
   ILeerZimmer,
   ILoeschen,
   IOrdnerOffen,
@@ -1139,7 +1138,6 @@ export function Zimmer({
               <h3 className="zv-etagen-kopf">{etage}</h3>
               <div className="zv-room-grid">
                 {raumInEtage.map((z) => {
-                  const StatusIcon = STATUS_ICON[z.status];
                   return (
                   <button
                     key={z.id}

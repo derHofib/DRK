@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { formatBelegnummer } from "@zimmerakte/shared";
 import type {
   BenutzerListEintragDto,
@@ -26,12 +26,10 @@ import {
   ILeerKassenbuch,
   ILeerStandorte,
   ILeerWoche,
-  IMitarbeitende,
   INeu,
   IPerson,
   ISErledigt,
   ISOffen,
-  ISStorniert,
   ISpeichern,
   ISperre,
   IStandort,

@@ -7,10 +7,9 @@ import {
   IFehler,
   IInfo,
   IKlienten,
-  ISichtbar,
-  IVerborgen,
   IZurueck,
 } from "../components/icons";
+import { PasswortEingabe } from "../components/PasswortEingabe";
 
 export function Login({
   onLoggedIn,
@@ -174,27 +173,14 @@ export function Login({
         </div>
         <div className="zv-field">
           <label htmlFor="passwort">Passwort</label>
-          <div style={{ position: "relative" }}>
-            <input
-              id="passwort"
-              type={passwortSichtbar ? "text" : "password"}
-              value={passwort}
-              onChange={(e) => setPasswort(e.target.value)}
-              style={{ paddingRight: 44 }}
-              required
-            />
-            {/* Rein ikonisch, deshalb zwingend mit aria-label. */}
-            <button
-              type="button"
-              className="zv-icon-btn"
-              style={{ position: "absolute", right: 3, top: 3 }}
-              onClick={() => setPasswortSichtbar((s) => !s)}
-              aria-label={passwortSichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
-              title={passwortSichtbar ? "Passwort verbergen" : "Passwort anzeigen"}
-            >
-              {passwortSichtbar ? <IVerborgen /> : <ISichtbar />}
-            </button>
-          </div>
+          <PasswortEingabe
+            id="passwort"
+            sichtbar={passwortSichtbar}
+            onSichtbarWechseln={() => setPasswortSichtbar((s) => !s)}
+            value={passwort}
+            onChange={(e) => setPasswort(e.target.value)}
+            required
+          />
         </div>
 
         <button className="zv-btn zv-btn-block" type="submit" disabled={ladt}>

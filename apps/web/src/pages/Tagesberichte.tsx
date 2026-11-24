@@ -9,13 +9,10 @@ import { NeuerTagesberichtFenster } from "../components/NeuerTagesbericht";
 import { ProtokollAnsicht } from "../components/ProtokollFormular";
 import { useProtokollSprung } from "../components/ProtokollSprung";
 import {
-  SCHNELLWAHL_LABEL,
   STANDARD_ZEITRAUM,
   SORTIERUNG_LABEL,
   gruppiereNachKlient,
   sortiere,
-  zeitraumFuer,
-  type Schnellwahl,
   type Sortierung,
 } from "./tagesberichte-filter";
 import {
@@ -23,23 +20,20 @@ import {
   IDokument,
   IFehler,
   IFilterLoeschen,
-  IKalender,
   IKlienten,
   ILeerTagesberichte,
   INeu,
   IOrdnerOffen,
   IPerson,
   ISortierung,
-  ISpeichern,
   ISuche,
   ITag,
 } from "../components/icons";
 import { FilterAuswahl, FilterPille } from "../components/Filterleiste";
+import { ZeitraumFilter, useZeitraum } from "../components/Listenfilter";
 import { AktionsMenue } from "../components/AktionsMenue";
 import { ExportMenue } from "../components/ExportMenue";
 import { filterTextAus, type ListenExport } from "../export/listenExport";
-import { ZeitraumAuswahl } from "../components/ZeitraumAuswahl";
-import { zeitraumKurz } from "../components/datumsfeld-logik";
 import { Datumsfeld } from "../components/Datumsfeld";
 
 /**
@@ -357,9 +351,8 @@ export function Tagesberichte({
   // ohne Nachladen sofort reagieren.
   // Start mit den letzten 30 Tagen statt "alle": der Zeitraum wirkt
   // serverseitig, "alle" holte den kompletten Bestand (siehe STANDARD_ZEITRAUM).
-  const [schnellwahl, setSchnellwahl] = useState<Schnellwahl | null>(STANDARD_ZEITRAUM);
-  const [von, setVon] = useState(() => zeitraumFuer(STANDARD_ZEITRAUM).von);
-  const [bis, setBis] = useState(() => zeitraumFuer(STANDARD_ZEITRAUM).bis);
+  const zeitraum = useZeitraum(STANDARD_ZEITRAUM);
+  const { von, bis } = zeitraum;
   const [klientFilter, setKlientFilter] = useState("");
   const [sortierung, setSortierung] = useState<Sortierung>("datum-neu");
   const [suche, setSuche] = useState("");
@@ -389,14 +382,7 @@ export function Tagesberichte({
     api.klientenListe().then(setKlienten).catch((err) => setFehler(err.message));
   }, []);
 
-  function schnellwahlWaehlen(wahl: Schnellwahl) {
-    const z = zeitraumFuer(wahl);
-    setSchnellwahl(wahl);
-    setVon(z.von);
-    setBis(z.bis);
-  }
-
-  const zeitraumUngueltig = Boolean(von && bis && von > bis);
+  const zeitraumUngueltig = zeitraum.ungueltig;
   const sichtbar = useMemo(() => {
     const q = suche.trim().toLocaleLowerCase("de");
     const gefiltert = berichte.filter(
@@ -419,12 +405,10 @@ export function Tagesberichte({
     () => [...new Set(berichte.map((b) => b.autorName).filter((a): a is string => Boolean(a)))].sort((a, b) => a.localeCompare(b, "de")),
     [berichte]
   );
-  const zeitraumText = schnellwahl
-    ? SCHNELLWAHL_LABEL[schnellwahl]
-    : zeitraumKurz(von, bis) || null;
+  const zeitraumText = zeitraum.text;
   const klientText = klienten.find((k) => k.id === klientFilter);
   function alleZuruecksetzen() {
-    schnellwahlWaehlen(STANDARD_ZEITRAUM);
+    zeitraum.zuruecksetzen();
     setKlientFilter("");
     setTagFilter("");
     setAutorFilter("");
@@ -465,7 +449,7 @@ export function Tagesberichte({
   }
   // Die Voreinstellung (letzte 30 Tage) zaehlt nicht als Filter: sonst waere
   // "Zuruecksetzen" schon beim Oeffnen aktiv und fuehrte nirgendwohin.
-  const zeitraumGefiltert = schnellwahl !== STANDARD_ZEITRAUM && Boolean(von || bis);
+  const zeitraumGefiltert = zeitraum.geaendert && zeitraum.aktiv;
   const filterAktiv = Boolean(zeitraumGefiltert || klientFilter || tagFilter || autorFilter || suche.trim());
 
   async function tagEntfernen(berichtId: string, tagId: string) {
@@ -495,8 +479,6 @@ export function Tagesberichte({
       setFehler(err instanceof Error ? err.message : "Dokument konnte nicht hinzugefügt werden.");
     }
   }
-
-  const heute = heuteBerlin();
 
   return (
     <div>
@@ -545,32 +527,7 @@ export function Tagesberichte({
           />
         </label>
 
-        <FilterPille
-          icon={<IKalender />}
-          label="Zeitraum"
-          breit
-          wert={von || bis ? (zeitraumText ? `: ${zeitraumText}` : "") : null}
-          onEntfernen={() => schnellwahlWaehlen("alle")}
-        >
-          {(schliessen) => (
-            <ZeitraumAuswahl
-              idPraefix="tb"
-              schnellwahl={schnellwahl}
-              von={von}
-              bis={bis}
-              onSchnellwahl={(w) => {
-                schnellwahlWaehlen(w);
-                schliessen();
-              }}
-              onUebernehmen={(v, b) => {
-                setSchnellwahl(null);
-                setVon(v);
-                setBis(b);
-                schliessen();
-              }}
-            />
-          )}
-        </FilterPille>
+        <ZeitraumFilter zeitraum={zeitraum} idPrefix="tb" />
 
         <FilterPille
           icon={<IKlienten />}
@@ -696,7 +653,7 @@ export function Tagesberichte({
               </button>
             }
           >
-            {schnellwahl === STANDARD_ZEITRAUM
+            {!zeitraum.geaendert
               ? "Keine Tagesberichte in den letzten 30 Tagen. Ältere zeigt der Zeitraum „Alle“."
               : "Noch keine Tagesberichte erfasst."}
           </Leerzustand>

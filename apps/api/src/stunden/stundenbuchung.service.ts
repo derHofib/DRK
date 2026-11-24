@@ -2,13 +2,12 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Leistungsart, StundenbuchungDto, StundenHerkunft, StundenSummeDto } from "@zimmerakte/shared";
-import { STUNDENBUCHUNG_MINUTEN_MAX } from "@zimmerakte/shared";
 import { DatabaseService } from "../database/database.service";
 import { heuteBerlin } from "../common/heute";
 import { isPgError } from "../common/pg-error";
 import { KlientNamen } from "../common/klient-namen";
 import { requireTenantContext } from "../common/tenant-context";
-import { ermittleErlaubteStandortIds, klientIstArchiviert, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
+import { ermittleErlaubteStandortIds, klientIstErlaubt, klientStandortBedingung } from "../common/standort-restriction";
 import { RechteService } from "../rechte/rechte.service";
 import { buchbarkeitsFehler } from "./stunden-pruefung";
 

@@ -33,7 +33,6 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
   const mandanten: string[] = [];
 
   let mandantA: string;
-  let mandantB: string;
   let leitungA: string;
   let betreuerA: string;
   let leitungB: string;
@@ -41,8 +40,6 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
   let standortB: string;
   const standorte: Record<"lindenweg" | "park" | "sued", string> = { lindenweg: "", park: "", sued: "" };
   let klientLinden: string;
-  let klientSued: string;
-  let klientOhne: string;
 
   async function mandant(name: string) {
     const slug = `test-doku-${name}-${suffix}`;
@@ -101,7 +98,6 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
     const a = await mandant("a");
     const b = await mandant("b");
     mandantA = a.id;
-    mandantB = b.id;
     leitungA = await konto(a, "einrichtungsleitung", "d-leitung-a");
     betreuerA = await konto(a, "betreuer", "d-betreuer-a");
     eingeschraenktA = await konto(a, "betreuer", "d-eingeschraenkt-a");
@@ -112,8 +108,8 @@ describe("Dokumentation: Zuordnung Klient:in, Standort, ohne (Migration 0083)", 
     standorte.sued = await standort(a.id, "WG Südstadt");
     standortB = await standort(b.id, "Fremder Standort");
     klientLinden = await klient(a.id, "Lindenweg", standorte.lindenweg);
-    klientSued = await klient(a.id, "Suedstadt", standorte.sued);
-    klientOhne = await klient(a.id, "OhneBelegung", null);
+    await klient(a.id, "Suedstadt", standorte.sued);
+    await klient(a.id, "OhneBelegung", null);
     const eid = (await admin.query("SELECT id FROM benutzer WHERE email = $1", [`d-eingeschraenkt-a-${suffix}@beispiel.test`])).rows[0].id;
     await admin.query("INSERT INTO benutzer_standort (mandant_id, benutzer_id, standort_id) VALUES ($1, $2, $3)", [a.id, eid, standorte.lindenweg]);
   });

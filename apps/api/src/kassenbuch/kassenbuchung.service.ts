@@ -10,7 +10,6 @@ import {
   klientIstArchiviert,
   klientIstErlaubt,
   klientStandortBedingung,
-  standortIdBedingung,
   standortIstErlaubt,
 } from "../common/standort-restriction";
 import { isPgError } from "../common/pg-error";

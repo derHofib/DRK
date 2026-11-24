@@ -7,7 +7,6 @@ import {
   formularStatus,
   pruefeVeroeffentlichung,
   istEingabe,
-  pruefeDefinition,
   pruefeWerte,
   speichernderBaustein,
   typFehler,

@@ -72,10 +72,6 @@ export interface BelegungsverlaufEintrag {
   geplant: boolean;
 }
 
-// Custom-SQLSTATE aus dem Trigger belegung_kapazitaet_pruefen()
-// (migrations/0032), kein Standard-Code -- siehe dort.
-const KAPAZITAET_UEBERSCHRITTEN = "ZA001";
-
 @Injectable()
 export class ZimmerService {
   constructor(

@@ -668,7 +668,7 @@ export function Dashboard({
             inhalt: <h3 className="zv-abschnitt-titel">{a.titel.trim() || "Abschnitt"}</h3>,
           }),
         ),
-        ...lageSpalten.map((sp, i): KachelDef => ({
+        ...lageSpalten.map((sp): KachelDef => ({
           id: `lage-${sp.schluessel}`,
           titel: sp.label,
           standard: standardPlatz(`lage-${sp.schluessel}`, { w: 3, h: 3 }),

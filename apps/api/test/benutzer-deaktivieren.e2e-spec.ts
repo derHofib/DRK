@@ -26,9 +26,8 @@ describe("Benutzer: Deaktivieren/Reaktivieren", () => {
   const suffix = randomUUID().slice(0, 8);
 
   let leitungId: string; // mitarbeitende.deaktivieren, KEIN Vollzugriff, KEIN manage-permissions
-  let verwalterId: string; // deaktivieren + manage-permissions, KEIN Vollzugriff
+  // Verwalter: deaktivieren + manage-permissions, KEIN Vollzugriff (nur per Token benutzt)
   let zielId: string; // Mitarbeiter ohne Rechte
-  let ohneRechtId: string;
   let vollzugriffAId: string;
   let vollzugriffBId: string;
 
@@ -108,12 +107,12 @@ describe("Benutzer: Deaktivieren/Reaktivieren", () => {
       passwortHash,
     });
     leitungId = await accountMitRechten("Leitung", "leitung", [["mitarbeitende", "deaktivieren"]]);
-    verwalterId = await accountMitRechten("Verwalter", "verwalter", [
+    await accountMitRechten("Verwalter", "verwalter", [
       ["mitarbeitende", "deaktivieren"],
       ["organigramm", "manage-permissions"],
     ]);
     zielId = await accountMitRechten("Ziel", "ziel", []);
-    ohneRechtId = await accountMitRechten("Ohne Recht", "ohne-recht", [["mitarbeitende", "ansehen"]]);
+    await accountMitRechten("Ohne Recht", "ohne-recht", [["mitarbeitende", "ansehen"]]);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
